@@ -8,21 +8,21 @@
    set of tasks running in parallel (a scan collecting evidence), and `checklist`
    for steps that run one after another. Off a terminal (a pipe, cron) it prints
    each item once with no cursor tricks."
-  (:require [gumshoe.stdout :as stdout]))
-
-(def ^:private frames ["⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏"])
+  (:require [gumshoe.stdout :as stdout]
+            [gumshoe.theme :as theme]))
 
 (defn- spinner
   [frame]
-  (stdout/blue (nth frames (mod frame (count frames)))))
+  (let [frames (theme/token :spinner)]
+    (stdout/blue (nth frames (mod frame (count frames))))))
 
 (defn- icon
   [status frame]
   (case status
-    :done (stdout/green "✓")
-    :failed (stdout/red "✗")
+    :done (stdout/green (theme/token :check-ok))
+    :failed (stdout/red (theme/token :check-error))
     :running (spinner frame)
-    (stdout/blue "○")))
+    (stdout/blue (theme/token :pending))))
 
 (defn- line
   [status frame label]
@@ -63,7 +63,7 @@
         (mapv deref futures))
 
       :else
-      (do (doseq [label labels] (stdout/err-println (str "  " (stdout/blue "▸") " " label)))
+      (do (doseq [label labels] (stdout/err-println (str "  " (stdout/blue (theme/token :bullet)) " " label)))
           (mapv deref futures)))))
 
 (defn checklist

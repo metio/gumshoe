@@ -25,6 +25,7 @@
             [gumshoe.secrets :as secrets]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]
+            [gumshoe.theme :as theme]
             [gumshoe.upterm :as upterm]
             [gumshoe.utils :as utils]))
 
@@ -213,10 +214,13 @@
         ;; every plugin - the flat :plugins plus the ones extensions declare - so
         ;; all seams are registered before anything in this run reaches for them
         (plugins/load! (concat (config/value [:plugins] []) (extensions/activate!)))
+        ;; select the output theme from env.edn (or a plugin theme just loaded)
+        ;; before anything prints
+        (theme/apply!)
         (when-not (prerequisites? prerequisites opts)
-          (stdout/print-banner stdout/red "❌ PREREQUISITES NOT MET - nothing was attempted")
+          (stdout/print-banner stdout/red (str (theme/token :error) " PREREQUISITES NOT MET - nothing was attempted"))
           (stdout/err-println "Next: install the missing tools, connect to the right cluster/VPN, or fix the")
-          (stdout/err-println "      access shown with a ✗ above, then run this book again.")
+          (stdout/err-println (str "      access shown with a " (theme/token :check-error) " above, then run this book again."))
           (System/exit 1))
         (let [ctx (when announce? {:announcement-data (announcement-data)})]
           (stdout/print-section "🚀 Runbook")
@@ -237,8 +241,8 @@
                                                  :meta (:announcement-data ctx)})]
             ;; the final banner leaves no doubt about the outcome, even at 3am
             (if (= :ok outcome)
-              (stdout/print-banner stdout/green "✅ DONE - everything verified")
-              (stdout/print-banner stdout/red "❌ FAILED or ABORTED - read the messages above, nothing more was changed"))
+              (stdout/print-banner stdout/green (str (theme/token :ok) " DONE - everything verified"))
+              (stdout/print-banner stdout/red (str (theme/token :error) " FAILED or ABORTED - read the messages above, nothing more was changed")))
             ;; run summary: where the record is, how to reproduce, how to dig in together
             (when recording-path
               (stdout/err-println (format "📼 Recording: %s" recording-path)))

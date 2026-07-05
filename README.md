@@ -204,6 +204,9 @@ sidesteps that, which matters when your users run bare babashka.) Copy
 - **Summary providers** - where a scan's findings can be sent. The clipboard and
   a HedgeDoc pad are built in; a plugin adds more with
   `(summary/register-provider! { … })` - Slack, a ticket, a file, a Matrix post.
+- **Themes** - how output looks. `:default` (emoji + colour), `:ascii` (no emoji,
+  for logs/CI), and `:plain` (no colour) are built in; a plugin registers more
+  with `(theme/register! { … })`. Selected by `env.edn :theme`.
 
 [`examples/example/plugin.clj`](examples/example/plugin.clj) is a worked plugin
 that extends several seams at once.
