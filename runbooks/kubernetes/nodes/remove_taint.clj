@@ -5,13 +5,13 @@
   "Removes a single taint from a single node. Two-step selection (node, then
    one of its taints) keeps this hand-written, but the mutation is an :effect
    plan, so it dry-runs and its plan is tested."
-  (:require [infra.effect :as effect]
-            [infra.flow :as flow]
-            [infra.interact :as interact]
-            [infra.kubectl :as kubectl]
-            [infra.announce :as announce]
-            [infra.runbook :as runbook]
-            [infra.stdout :as stdout]))
+  (:require [gumshoe.effect :as effect]
+            [gumshoe.flow :as flow]
+            [gumshoe.interact :as interact]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.announce :as announce]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   {:node {:desc "The node to remove a taint from - interactive selection when omitted"

@@ -3,8 +3,8 @@
 
 (ns runbooks.detectives.platform
   "Investigates the platform scope: control plane, nodes, calico, and the CSI storage layer."
-  (:require [infra.detective :as detective]
-            [infra.detectives.registry :as registry]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.registry :as registry]))
 
 (detective/book
  {:description "Investigates the platform scope: control plane, nodes, calico network, CSI storage"

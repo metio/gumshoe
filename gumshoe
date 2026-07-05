@@ -11,11 +11,11 @@
 
 (require '[babashka.cli :as cli]
          '[clojure.string :as str]
-         '[infra.catalog :as catalog]
-         '[infra.extensions :as extensions]
-         '[infra.fuzzy-finder :as fuzzy]
-         '[infra.shell :as shell]
-         '[infra.stdout :as stdout])
+         '[gumshoe.catalog :as catalog]
+         '[gumshoe.extensions :as extensions]
+         '[gumshoe.fuzzy-finder :as fuzzy]
+         '[gumshoe.shell :as shell]
+         '[gumshoe.stdout :as stdout])
 
 (def cli-spec
   {:spec {:host {:desc "Drill down from a hostname a user reported" :coerce :string}

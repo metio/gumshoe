@@ -4,9 +4,9 @@
 (ns runbooks.kubernetes.namespaces.remove-finalizers
   "Removes the kubernetes finalizer from a namespace stuck in Terminating."
   (:require [cheshire.core :as json]
-            [infra.effect :as effect]
-            [infra.kubectl :as kubectl]
-            [infra.mutation :as mutation]))
+            [gumshoe.effect :as effect]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.mutation :as mutation]))
 
 (defn terminating-namespaces
   [context]

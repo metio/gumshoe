@@ -6,13 +6,13 @@
    Nextcloud, ...). Name the app's namespace and it auto-detects the web and
    PHP containers, reads their effective config, and shows what an upload
    actually maxes out at - and which layer is the bottleneck."
-  (:require [infra.detective :as detective]
-            [infra.detectives.upload :as upload]
-            [infra.interact :as interact]
-            [infra.kubectl :as kubectl]
-            [infra.phpstack :as phpstack]
-            [infra.runbook :as runbook]
-            [infra.stdout :as stdout]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.upload :as upload]
+            [gumshoe.interact :as interact]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.phpstack :as phpstack]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   (merge {:namespace {:desc "The namespace of the app - interactive selection when omitted"

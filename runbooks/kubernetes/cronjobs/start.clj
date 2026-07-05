@@ -3,9 +3,9 @@
 
 (ns runbooks.kubernetes.cronjobs.start
   "Starts a Job from a CronJob right now instead of waiting for its schedule."
-  (:require [infra.effect :as effect]
-            [infra.kubectl :as kubectl]
-            [infra.mutation :as mutation]))
+  (:require [gumshoe.effect :as effect]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.mutation :as mutation]))
 
 (defn cronjobs
   [context]

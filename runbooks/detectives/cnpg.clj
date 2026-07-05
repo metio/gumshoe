@@ -3,8 +3,8 @@
 
 (ns runbooks.detectives.cnpg
   "Investigates CloudNativePG: unhealthy clusters, missing replicas, failing WAL archiving."
-  (:require [infra.detective :as detective]
-            [infra.detectives.cnpg :as cnpg]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.cnpg :as cnpg]))
 
 (detective/book
  {:description "Investigates CloudNativePG: cluster phase, ready instances, WAL archiving"

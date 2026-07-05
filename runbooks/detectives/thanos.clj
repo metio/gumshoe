@@ -4,13 +4,13 @@
 (ns runbooks.detectives.thanos
   "Investigates Thanos Query over a port-forward: readiness, connected store
    endpoints, and rule evaluation health."
-  (:require [infra.detective :as detective]
-            [infra.detectives.thanos :as thanos-detectives]
-            [infra.interact :as interact]
-            [infra.kubectl :as kubectl]
-            [infra.runbook :as runbook]
-            [infra.stdout :as stdout]
-            [infra.thanos :as thanos]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.thanos :as thanos-detectives]
+            [gumshoe.interact :as interact]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.stdout :as stdout]
+            [gumshoe.thanos :as thanos]))
 
 (def options
   (merge {:namespace {:desc "The namespace of the Thanos Query service - interactive selection when omitted"

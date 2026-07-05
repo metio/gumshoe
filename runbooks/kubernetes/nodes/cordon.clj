@@ -5,12 +5,12 @@
   "Marks a single node as unschedulable.
 
    Reference for the declarative mutation style: the whole book is data, the
-   select/confirm/announce/verify flow is provided by infra.mutation, and the
+   select/confirm/announce/verify flow is provided by gumshoe.mutation, and the
    bespoke bits (candidates, effect, check) are small named functions - so it
    composes, supports --dry-run, and is tested without a cluster."
-  (:require [infra.effect :as effect]
-            [infra.kubectl :as kubectl]
-            [infra.mutation :as mutation]))
+  (:require [gumshoe.effect :as effect]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.mutation :as mutation]))
 
 (defn schedulable-nodes
   [context]

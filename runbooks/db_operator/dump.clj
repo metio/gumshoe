@@ -6,11 +6,11 @@
    to be complete before the runbook calls it a success, and an existing file
    is never overwritten."
   (:require [babashka.fs :as fs]
-            [infra.kubectl :as kubectl]
-            [infra.postgres :as postgres]
-            [infra.runbook :as runbook]
-            [infra.stdout :as stdout]
-            [infra.verify :as verify]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.postgres :as postgres]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.stdout :as stdout]
+            [gumshoe.verify :as verify]))
 
 (def options
   {:namespace {:desc "The namespace of the Database - interactive selection when omitted"

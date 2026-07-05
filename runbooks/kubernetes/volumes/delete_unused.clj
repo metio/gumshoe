@@ -3,9 +3,9 @@
 
 (ns runbooks.kubernetes.volumes.delete-unused
   "Deletes a PersistentVolumeClaim that no pod uses."
-  (:require [infra.effect :as effect]
-            [infra.kubectl :as kubectl]
-            [infra.mutation :as mutation]))
+  (:require [gumshoe.effect :as effect]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.mutation :as mutation]))
 
 (defn unused-pvcs
   [context]

@@ -3,9 +3,9 @@
 
 (ns runbooks.prometheus.list-scaling-metrics
   "Lists every metric used by HorizontalPodAutoscalers for scaling decisions."
-  (:require [infra.kubectl :as kubectl]
-            [infra.runbook :as runbook]
-            [infra.stdout :as stdout]))
+  (:require [gumshoe.kubectl :as kubectl]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.stdout :as stdout]))
 
 (def prerequisites
   {:installed-tools ["kubectl"]

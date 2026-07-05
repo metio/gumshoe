@@ -5,13 +5,13 @@
   "Exports a single dashboard as JSON via Grafana's app-platform API. The
    dashboard model goes to stdout, so it pipes and redirects cleanly."
   (:require [cheshire.core :as json]
-            [infra.config :as config]
-            [infra.secrets :as secrets]
-            [infra.grafana :as grafana]
-            [infra.interact :as interact]
-            [infra.runbook :as runbook]
-            [infra.shell :as shell]
-            [infra.stdout :as stdout]))
+            [gumshoe.config :as config]
+            [gumshoe.secrets :as secrets]
+            [gumshoe.grafana :as grafana]
+            [gumshoe.interact :as interact]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.shell :as shell]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   {:folder {:desc "The folder containing the dashboard - interactive selection when omitted"

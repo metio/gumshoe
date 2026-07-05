@@ -3,8 +3,8 @@
 
 (ns runbooks.detectives.pods
   "Investigates pod health: crash loops, image pull errors, OOM kills, restarts, Pending/Failed, stuck terminating."
-  (:require [infra.detective :as detective]
-            [infra.detectives.pods :as pods]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.pods :as pods]))
 
 (detective/book
  {:description "Investigates pod health: crash loops, image pull errors, OOM kills, restarts, Pending/Failed"

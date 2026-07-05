@@ -3,13 +3,13 @@
 
 (ns runbooks.db-operator.admin-connect
   "Opens an interactive psql session as the admin user of a DbInstance."
-  (:require [infra.flow :as flow]
-            [infra.interact :as interact]
-            [infra.kubectl :as kubectl]
-            [infra.announce :as announce]
-            [infra.postgres :as postgres]
-            [infra.runbook :as runbook]
-            [infra.stdout :as stdout]))
+  (:require [gumshoe.flow :as flow]
+            [gumshoe.interact :as interact]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.announce :as announce]
+            [gumshoe.postgres :as postgres]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   {:instance {:desc "The DbInstance to connect to - interactive selection when omitted"

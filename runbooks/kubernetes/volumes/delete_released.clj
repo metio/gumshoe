@@ -7,9 +7,9 @@
    according to each volume's reclaim policy - which is shown right in the
    confirmation, since a 'Delete' policy also destroys the backing storage."
   (:require [clojure.string :as str]
-            [infra.effect :as effect]
-            [infra.kubectl :as kubectl]
-            [infra.mutation :as mutation]))
+            [gumshoe.effect :as effect]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.mutation :as mutation]))
 
 (defn released-volumes
   [context]

@@ -6,9 +6,9 @@
 ;; Every entry maps to a detective runbook that also works standalone.
 
 (require '[babashka.cli :as cli]
-         '[infra.extensions :as extensions]
-         '[infra.fuzzy-finder :as fuzzy]
-         '[infra.stdout :as stdout])
+         '[gumshoe.extensions :as extensions]
+         '[gumshoe.fuzzy-finder :as fuzzy]
+         '[gumshoe.stdout :as stdout])
 
 (def investigations
   [{:label "🔦 Drill down - follow the thread from a hostname, namespace, node, or pod"

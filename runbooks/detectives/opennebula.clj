@@ -5,13 +5,13 @@
   "Investigates OpenNebula over SSH to the frontend: hosts in error or offline
    states, failed VMs, and datastores running out of space."
   (:require [clojure.string :as str]
-            [infra.detective :as detective]
-            [infra.detectives.opennebula :as opennebula-detectives]
-            [infra.inputs :as inputs]
-            [infra.opennebula :as opennebula]
-            [infra.runbook :as runbook]
-            [infra.ssh :as ssh]
-            [infra.stdout :as stdout]))
+            [gumshoe.detective :as detective]
+            [gumshoe.detectives.opennebula :as opennebula-detectives]
+            [gumshoe.inputs :as inputs]
+            [gumshoe.opennebula :as opennebula]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.ssh :as ssh]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   ;; The frontend is not a hard-required flag: it resolves from --frontend, then

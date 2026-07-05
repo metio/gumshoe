@@ -6,12 +6,12 @@
    validated before anything happens: it must exist and carry pg_dump's
    completion marker, because restoring a truncated dump destroys data."
   (:require [babashka.fs :as fs]
-            [infra.flow :as flow]
-            [infra.kubectl :as kubectl]
-            [infra.announce :as announce]
-            [infra.postgres :as postgres]
-            [infra.runbook :as runbook]
-            [infra.stdout :as stdout]))
+            [gumshoe.flow :as flow]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.announce :as announce]
+            [gumshoe.postgres :as postgres]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   {:namespace {:desc "The namespace of the Database - interactive selection when omitted"

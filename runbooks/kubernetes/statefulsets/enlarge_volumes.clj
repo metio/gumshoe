@@ -8,15 +8,15 @@
    which everything matches again. The full plan is validated first, and the
    result is verified volume by volume."
   (:require [cheshire.core :as json]
-            [infra.flow :as flow]
-            [infra.interact :as interact]
-            [infra.kubectl :as kubectl]
-            [infra.announce :as announce]
-            [infra.runbook :as runbook]
-            [infra.shell :as shell]
-            [infra.stdout :as stdout]
-            [infra.storage :as storage]
-            [infra.watch :as watch]))
+            [gumshoe.flow :as flow]
+            [gumshoe.interact :as interact]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.announce :as announce]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.shell :as shell]
+            [gumshoe.stdout :as stdout]
+            [gumshoe.storage :as storage]
+            [gumshoe.watch :as watch]))
 
 (def options
   {:namespace {:desc "The namespace of the StatefulSet - interactive selection when omitted"

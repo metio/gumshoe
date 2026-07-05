@@ -3,9 +3,9 @@
 
 (ns runbooks.kubernetes.helmreleases.reconcile
   "Triggers a flux reconciliation of a single HelmRelease."
-  (:require [infra.effect :as effect]
-            [infra.kubectl :as kubectl]
-            [infra.mutation :as mutation]))
+  (:require [gumshoe.effect :as effect]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.mutation :as mutation]))
 
 (def helmrelease-type "helmreleases.helm.toolkit.fluxcd.io")
 

@@ -3,14 +3,14 @@
 
 (ns runbooks.ceph.osd-in
   "Brings a single OSD back into the cluster, so data migrates back onto it."
-  (:require [infra.ceph :as ceph]
-            [infra.effect :as effect]
-            [infra.flow :as flow]
-            [infra.interact :as interact]
-            [infra.announce :as announce]
-            [infra.runbook :as runbook]
-            [infra.ssh :as ssh]
-            [infra.stdout :as stdout]))
+  (:require [gumshoe.ceph :as ceph]
+            [gumshoe.effect :as effect]
+            [gumshoe.flow :as flow]
+            [gumshoe.interact :as interact]
+            [gumshoe.announce :as announce]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.ssh :as ssh]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   (merge ceph/ssh-options

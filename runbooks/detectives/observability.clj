@@ -3,8 +3,8 @@
 
 (ns runbooks.detectives.observability
   "Investigates the observability scope: the prometheus-operator managed monitoring stack."
-  (:require [infra.detective :as detective]
-            [infra.detectives.registry :as registry]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.registry :as registry]))
 
 (detective/book
  {:description "Investigates the observability scope: Prometheus, Alertmanager, ThanosRuler"

@@ -3,8 +3,8 @@
 
 (ns runbooks.detectives.cluster
   "Runs every registered detective against the current cluster - the full investigation."
-  (:require [infra.detective :as detective]
-            [infra.detectives.registry :as registry]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.registry :as registry]))
 
 (detective/book
  {:description "Runs every registered detective against the current cluster"

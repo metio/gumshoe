@@ -3,8 +3,8 @@
 
 (ns runbooks.detectives.flux
   "Investigates flux: sources and reconciliations that are failing or suspended."
-  (:require [infra.detective :as detective]
-            [infra.detectives.flux :as flux]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.flux :as flux]))
 
 (detective/book
  {:description "Investigates flux: failing or suspended sources and reconciliations"

@@ -3,8 +3,8 @@
 
 (ns runbooks.detectives.certificates
   "Investigates cert-manager: certificates that are not ready or expire soon, and sour ACME orders."
-  (:require [infra.detective :as detective]
-            [infra.detectives.certificates :as certificates]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.certificates :as certificates]))
 
 (detective/book
  {:description "Investigates cert-manager: certificates not ready or expiring soon, sour ACME orders"

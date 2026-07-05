@@ -5,12 +5,12 @@
   "Lists every metric in a Prometheus TSDB that neither Grafana dashboards
    nor alerting rules use - candidates for deletion."
   (:require [babashka.fs :as fs]
-            [infra.config :as config]
-            [infra.secrets :as secrets]
-            [infra.mimirtool :as mimirtool]
-            [infra.runbook :as runbook]
-            [infra.shell :as shell]
-            [infra.stdout :as stdout]))
+            [gumshoe.config :as config]
+            [gumshoe.secrets :as secrets]
+            [gumshoe.mimirtool :as mimirtool]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.shell :as shell]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   {:directory {:desc "Directory with Prometheus rule files; defaults to env.edn :prometheus :rules-directory"

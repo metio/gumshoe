@@ -3,8 +3,8 @@
 
 (ns runbooks.detectives.databases
   "Investigates the database scope: CloudNativePG clusters and backups plus db-operator databases."
-  (:require [infra.detective :as detective]
-            [infra.detectives.registry :as registry]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.registry :as registry]))
 
 (detective/book
  {:description "Investigates the database scope: CloudNativePG and db-operator"

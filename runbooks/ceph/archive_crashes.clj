@@ -5,13 +5,13 @@
   "Archives ceph daemon crash reports after they have been looked at, which
    clears the RECENT_CRASH health warning. The reports stay available via
    'ceph crash ls' - archiving only acknowledges them."
-  (:require [infra.ceph :as ceph]
-            [infra.effect :as effect]
-            [infra.flow :as flow]
-            [infra.announce :as announce]
-            [infra.runbook :as runbook]
-            [infra.ssh :as ssh]
-            [infra.stdout :as stdout]))
+  (:require [gumshoe.ceph :as ceph]
+            [gumshoe.effect :as effect]
+            [gumshoe.flow :as flow]
+            [gumshoe.announce :as announce]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.ssh :as ssh]
+            [gumshoe.stdout :as stdout]))
 
 (def options ceph/ssh-options)
 

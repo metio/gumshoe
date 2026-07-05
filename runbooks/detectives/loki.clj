@@ -7,14 +7,14 @@
    inspects the hash rings over a port-forward. The namespace comes from
    env.edn or a flag; the components are found without asking."
   (:require [clojure.string :as str]
-            [infra.detective :as detective]
-            [infra.detectives.loki :as loki-detectives]
-            [infra.inputs :as inputs]
-            [infra.interact :as interact]
-            [infra.kubectl :as kubectl]
-            [infra.loki :as loki]
-            [infra.runbook :as runbook]
-            [infra.stdout :as stdout]))
+            [gumshoe.detective :as detective]
+            [gumshoe.detectives.loki :as loki-detectives]
+            [gumshoe.inputs :as inputs]
+            [gumshoe.interact :as interact]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.loki :as loki]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   (merge {:namespace {:desc "The Loki namespace - env.edn (:loki :namespace) or interactive when omitted"

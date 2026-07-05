@@ -3,8 +3,8 @@
 
 (ns runbooks.detectives.workloads
   "Investigates workload health: controllers, jobs, pods, storage, quotas, overcommit."
-  (:require [infra.detective :as detective]
-            [infra.detectives.registry :as registry]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.registry :as registry]))
 
 (detective/book
  {:description "Investigates workload health: controllers, jobs, pods, and their storage"

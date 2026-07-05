@@ -3,10 +3,10 @@
 
 (ns runbooks.kubernetes.pods.list-resources
   "Lists the resource requests and limits of every pod."
-  (:require [infra.kubectl :as kubectl]
-            [infra.runbook :as runbook]
-            [infra.shell :as shell]
-            [infra.stdout :as stdout]))
+  (:require [gumshoe.kubectl :as kubectl]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.shell :as shell]
+            [gumshoe.stdout :as stdout]))
 
 (def ^:private columns
   (str "Namespace:metadata.namespace"

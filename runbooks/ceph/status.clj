@@ -3,10 +3,10 @@
 
 (ns runbooks.ceph.status
   "Shows the status and health detail of a cephadm-managed ceph cluster."
-  (:require [infra.ceph :as ceph]
-            [infra.runbook :as runbook]
-            [infra.ssh :as ssh]
-            [infra.stdout :as stdout]))
+  (:require [gumshoe.ceph :as ceph]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.ssh :as ssh]
+            [gumshoe.stdout :as stdout]))
 
 (def options ceph/ssh-options)
 

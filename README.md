@@ -7,9 +7,9 @@ SPDX-License-Identifier: 0BSD
 
 The SRE detective. An engine for **books** - runbooks, playbooks, firebooks, and
 detectives - that helps you investigate what's wrong, fix it safely, and announce
-the change. This repo is the engine plus the built-in books for the infra.run
-infrastructure; a team's own books live in a **casebook** repo that depends on it
-(see [Casebooks & plugins](#casebooks--plugins)).
+the change. This repo is the engine plus a library of generic, reusable books; a
+team's own books and configuration live in a **casebook** repo cloned alongside
+it (see [Casebooks & plugins](#casebooks--plugins)).
 
 ## Definitions
 
@@ -119,7 +119,7 @@ Diagnostics go to stderr and results go to stdout, so `--output json | jq '.summ
 
 Covered so far: the control plane (apiserver/scheduler/controller-manager/etcd static pods), nodes, pods (including pods stuck in Terminating), controllers (Deployments/StatefulSets/DaemonSets/Jobs), storage, the CSI layer (ceph-csi attachments and driver registration, Released/Failed volumes, local volumes pinned to missing nodes - see `runbooks/detectives/csi.clj`), PodDisruptionBudgets and HPAs, ResourceQuotas, cluster CPU/memory overcommit (failure-tolerant capacity), cert-manager, flux, CloudNativePG and db-operator, calico (tigera-operator), the prometheus-operator monitoring stack, and Warning events. The findings map onto the canonical [kube-prometheus runbook](https://runbooks.prometheus-operator.dev/) alerts (KubeControllerManagerDown, KubeQuotaFullyUsed, KubeCPUOvercommit, and so on) but are read straight from the cluster, so they need no metrics backend.
 
-New detectives are plain data in `libraries/infra/detectives/`: a name, the resource types they need, and a pure `detect` function from evidence to findings. Register them in `registry.clj` and they join every composed investigation automatically.
+New detectives are plain data in `libraries/gumshoe/detectives/`: a name, the resource types they need, and a pure `detect` function from evidence to findings. Register them in `registry.clj` and they join every composed investigation automatically.
 
 ## Ceph
 
@@ -179,7 +179,7 @@ gumshoe with a `gumshoe.edn` manifest at its root:
 List the cloned roots in `env.edn`:
 
 ```clojure
-:extensions ["../casebook-infra-run" "../gumshoe-community-ceph"]
+:extensions ["../casebook-storage" "../gumshoe-community-ceph"]
 ```
 
 gumshoe adds their code to the classpath **at runtime**, discovers their books,
@@ -229,7 +229,7 @@ A change is a plan of **effects as data** (`[[:kubectl "cordon" node]]`), interp
 ## Structure
 
 - `./firebooks`: Directory for all **firebooks**
-- `./libraries/infra`: shared building blocks (the runbook/mutation/detective engines, effects, kubectl helpers, interaction, detectives, watchers)
+- `./libraries/gumshoe`: shared building blocks (the runbook/mutation/detective engines, effects, kubectl helpers, interaction, detectives, watchers)
 - `./playbooks`: Directory for all **playbooks**
 - `./runbooks`: Directory for all **runbooks**
 - `./tests`: unit tests for the shared libraries

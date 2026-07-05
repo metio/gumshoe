@@ -5,12 +5,12 @@
   "Investigates external-dns end to end: every hostname the cluster declares
    (Ingresses, HTTPRoutes, Gateway listeners, DNSEndpoints) must actually
    resolve on the DNS server."
-  (:require [infra.config :as config]
-            [infra.detective :as detective]
-            [infra.detectives.external-dns :as external-dns-detectives]
-            [infra.external-dns :as external-dns]
-            [infra.kubectl :as kubectl]
-            [infra.runbook :as runbook]))
+  (:require [gumshoe.config :as config]
+            [gumshoe.detective :as detective]
+            [gumshoe.detectives.external-dns :as external-dns-detectives]
+            [gumshoe.external-dns :as external-dns]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.runbook :as runbook]))
 
 (def options
   (merge {:server {:desc "The DNS server the records must exist on"

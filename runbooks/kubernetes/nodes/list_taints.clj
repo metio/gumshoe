@@ -3,10 +3,10 @@
 
 (ns runbooks.kubernetes.nodes.list-taints
   "Shows the taints of a single node."
-  (:require [infra.interact :as interact]
-            [infra.kubectl :as kubectl]
-            [infra.runbook :as runbook]
-            [infra.stdout :as stdout]))
+  (:require [gumshoe.interact :as interact]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   {:node {:desc "The node to inspect - interactive selection when omitted"

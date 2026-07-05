@@ -15,7 +15,7 @@ the built-ins - no dependency resolution, no JVM, just babashka.
 
 1. Copy this directory into a fresh git repo, e.g. `casebook-storage`.
 2. Add your books under `runbooks/` (and `playbooks/`, `firebooks/`). Each book
-   `(:require [infra.detective ...])` or `[infra.runbook ...]` - the engine is on
+   `(:require [gumshoe.detective ...])` or `[gumshoe.runbook ...]` - the engine is on
    the classpath because gumshoe puts it there.
 3. Keep the `gumshoe.edn` manifest at the root. Declare `:book-paths` (where your
    books live), optionally `:paths` (shared code your books require), and

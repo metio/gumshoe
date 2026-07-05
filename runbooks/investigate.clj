@@ -7,13 +7,13 @@
    object, with the crash logs and events surfaced for you - until you find the
    cause. Nothing is changed; the whole path is kept as a reproducer."
   (:require [clojure.string :as str]
-            [infra.fuzzy-finder :as fuzzy]
-            [infra.interact :as interact]
-            [infra.investigation :as investigation]
-            [infra.kubectl :as kubectl]
-            [infra.runbook :as runbook]
-            [infra.stdout :as stdout]
-            [infra.subject :as subject]))
+            [gumshoe.fuzzy-finder :as fuzzy]
+            [gumshoe.interact :as interact]
+            [gumshoe.investigation :as investigation]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.stdout :as stdout]
+            [gumshoe.subject :as subject]))
 
 (def options
   {:host {:desc "A hostname a user reported - resolves to the route, service, and pods behind it"

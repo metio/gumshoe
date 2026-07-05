@@ -3,9 +3,9 @@
 
 (ns runbooks.kubernetes.nodes.drain
   "Drains a single node: cordons it and evicts every pod running on it."
-  (:require [infra.effect :as effect]
-            [infra.kubectl :as kubectl]
-            [infra.mutation :as mutation]))
+  (:require [gumshoe.effect :as effect]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.mutation :as mutation]))
 
 (defn all-nodes
   [context]

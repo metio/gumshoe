@@ -4,9 +4,9 @@
 (ns runbooks.kubernetes.certificates.renew
   "Renews certificates managed by cert-manager."
   (:require [clojure.string :as str]
-            [infra.effect :as effect]
-            [infra.kubectl :as kubectl]
-            [infra.mutation :as mutation]))
+            [gumshoe.effect :as effect]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.mutation :as mutation]))
 
 (def certificate-type "certificates.cert-manager.io")
 

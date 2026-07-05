@@ -3,8 +3,8 @@
 
 (ns runbooks.detectives.calico
   "Investigates calico as managed by the tigera-operator."
-  (:require [infra.detective :as detective]
-            [infra.detectives.calico :as calico]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.calico :as calico]))
 
 (detective/book
  {:description "Investigates calico: unavailable, degraded, or progressing tigera components"

@@ -4,11 +4,11 @@
 (ns firebooks.kubernetes.pending-pvc
   "Firebook: creates a PersistentVolumeClaim with a storage class that does
    not exist, so it hangs in Pending for the team to find during a drill."
-  (:require [infra.firebook :as firebook]
-            [infra.flow :as flow]
-            [infra.kubectl :as kubectl]
-            [infra.announce :as announce]
-            [infra.runbook :as runbook]))
+  (:require [gumshoe.firebook :as firebook]
+            [gumshoe.flow :as flow]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.announce :as announce]
+            [gumshoe.runbook :as runbook]))
 
 (def options
   {:extinguish {:desc "Put out the fire: delete the fire-drill namespace"

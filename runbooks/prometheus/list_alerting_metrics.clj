@@ -5,10 +5,10 @@
   "Lists every metric used by the Prometheus alerting rule files in a
    directory."
   (:require [babashka.fs :as fs]
-            [infra.config :as config]
-            [infra.mimirtool :as mimirtool]
-            [infra.runbook :as runbook]
-            [infra.stdout :as stdout]))
+            [gumshoe.config :as config]
+            [gumshoe.mimirtool :as mimirtool]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.stdout :as stdout]))
 
 (defn rules-directory
   "The --directory flag, or the directory configured in env.edn."

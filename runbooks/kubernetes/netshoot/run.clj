@@ -3,12 +3,12 @@
 
 (ns runbooks.kubernetes.netshoot.run
   "Starts a standalone interactive netshoot pod in a namespace."
-  (:require [infra.effect :as effect]
-            [infra.flow :as flow]
-            [infra.interact :as interact]
-            [infra.kubectl :as kubectl]
-            [infra.runbook :as runbook]
-            [infra.stdout :as stdout]))
+  (:require [gumshoe.effect :as effect]
+            [gumshoe.flow :as flow]
+            [gumshoe.interact :as interact]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   {:namespace {:desc "The namespace to run netshoot in - interactive selection when omitted"

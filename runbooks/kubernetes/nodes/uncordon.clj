@@ -3,9 +3,9 @@
 
 (ns runbooks.kubernetes.nodes.uncordon
   "Marks a single cordoned node as schedulable again."
-  (:require [infra.effect :as effect]
-            [infra.kubectl :as kubectl]
-            [infra.mutation :as mutation]))
+  (:require [gumshoe.effect :as effect]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.mutation :as mutation]))
 
 (defn cordoned-nodes
   [context]

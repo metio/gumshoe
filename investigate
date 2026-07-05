@@ -7,6 +7,6 @@
 ;; node, or a pod - or run it bare and it asks. All flags pass through to the
 ;; book, so ./investigate --host moodle.example.org works too.
 
-(require '[infra.shell :as shell])
+(require '[gumshoe.shell :as shell])
 
 (System/exit (apply shell/run-with-output "bb" "runbooks/investigate.clj" *command-line-args*))

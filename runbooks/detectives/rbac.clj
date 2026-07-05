@@ -3,8 +3,8 @@
 
 (ns runbooks.detectives.rbac
   "Investigates RBAC hygiene: admins, wildcards, escalation verbs, secret readers, default tokens."
-  (:require [infra.detective :as detective]
-            [infra.detectives.rbac :as rbac]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.rbac :as rbac]))
 
 (detective/book
  {:description "Investigates RBAC hygiene: admins, wildcards, escalation verbs, secret readers, default tokens"

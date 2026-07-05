@@ -4,11 +4,11 @@
 (ns runbooks.detectives.dns
   "Investigates the DNS setup: dual-stack reachability, nameserver coherence,
    SOA serial replication, and answer consistency across nameservers."
-  (:require [infra.config :as config]
-            [infra.detective :as detective]
-            [infra.detectives.dns :as dns-detectives]
-            [infra.dns :as dns]
-            [infra.runbook :as runbook]))
+  (:require [gumshoe.config :as config]
+            [gumshoe.detective :as detective]
+            [gumshoe.detectives.dns :as dns-detectives]
+            [gumshoe.dns :as dns]
+            [gumshoe.runbook :as runbook]))
 
 (def options
   (merge {:zone {:desc "The zone to investigate"

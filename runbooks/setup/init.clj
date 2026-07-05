@@ -11,16 +11,16 @@
    and the environments accumulate - staging keeps production's settings and
    vice versa."
   (:require [clojure.string :as str]
-            [infra.capabilities :as capabilities]
-            [infra.config :as config]
-            [infra.discovery :as discovery]
-            [infra.inputs :as inputs]
-            [infra.interact :as interact]
-            [infra.kubectl :as kubectl]
-            [infra.net :as net]
-            [infra.runbook :as runbook]
-            [infra.spec :as spec]
-            [infra.stdout :as stdout]))
+            [gumshoe.capabilities :as capabilities]
+            [gumshoe.config :as config]
+            [gumshoe.discovery :as discovery]
+            [gumshoe.inputs :as inputs]
+            [gumshoe.interact :as interact]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.net :as net]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.spec :as spec]
+            [gumshoe.stdout :as stdout]))
 
 (def prerequisites {})
 

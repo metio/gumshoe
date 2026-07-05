@@ -4,12 +4,12 @@
 (ns runbooks.prometheus.list-dashboard-metrics
   "Lists every metric used by the dashboards of a Grafana instance."
   (:require [babashka.fs :as fs]
-            [infra.config :as config]
-            [infra.secrets :as secrets]
-            [infra.mimirtool :as mimirtool]
-            [infra.runbook :as runbook]
-            [infra.shell :as shell]
-            [infra.stdout :as stdout]))
+            [gumshoe.config :as config]
+            [gumshoe.secrets :as secrets]
+            [gumshoe.mimirtool :as mimirtool]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.shell :as shell]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   {:grafana {:desc "The Grafana base URL (e.g. https://grafana.example.org); defaults to env.edn :grafana :url"

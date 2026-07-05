@@ -5,11 +5,11 @@
   "Investigates mail infrastructure end to end: deliverability records
    (MX, SPF, DMARC, DKIM, reverse DNS) and the live SMTP/POP3/IMAP services
    (reachable ports, STARTTLS on cleartext ports, TLS certificate validity)."
-  (:require [infra.config :as config]
-            [infra.detective :as detective]
-            [infra.detectives.mail :as mail-detectives]
-            [infra.mail :as mail]
-            [infra.runbook :as runbook]))
+  (:require [gumshoe.config :as config]
+            [gumshoe.detective :as detective]
+            [gumshoe.detectives.mail :as mail-detectives]
+            [gumshoe.mail :as mail]
+            [gumshoe.runbook :as runbook]))
 
 (def options
   (merge {:domain {:desc "The mail domain (used for MX, SPF, DMARC, DKIM lookups)"

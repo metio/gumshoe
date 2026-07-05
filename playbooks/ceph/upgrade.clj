@@ -18,12 +18,12 @@
    nothing."
   (:require [babashka.fs :as fs]
             [clojure.string :as str]
-            [infra.ceph :as ceph]
-            [infra.flow :as flow]
-            [infra.announce :as announce]
-            [infra.runbook :as runbook]
-            [infra.ssh :as ssh]
-            [infra.stdout :as stdout]))
+            [gumshoe.ceph :as ceph]
+            [gumshoe.flow :as flow]
+            [gumshoe.announce :as announce]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.ssh :as ssh]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   (merge ceph/ssh-options

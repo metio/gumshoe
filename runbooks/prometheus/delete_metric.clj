@@ -5,14 +5,14 @@
   "Deletes every series of a metric from a Prometheus TSDB."
   (:require [babashka.http-client :as http]
             [cheshire.core :as json]
-            [infra.watch :as watch]
-            [infra.flow :as flow]
-            [infra.interact :as interact]
-            [infra.kubectl :as kubectl]
-            [infra.announce :as announce]
-            [infra.runbook :as runbook]
-            [infra.stdout :as stdout]
-            [infra.verify :as verify]))
+            [gumshoe.watch :as watch]
+            [gumshoe.flow :as flow]
+            [gumshoe.interact :as interact]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.announce :as announce]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.stdout :as stdout]
+            [gumshoe.verify :as verify]))
 
 (def options
   {:metric {:desc "The metric to delete"

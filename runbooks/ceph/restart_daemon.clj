@@ -5,14 +5,14 @@
   "Restarts a single ceph daemon via the orchestrator. On a degraded cluster
    this is blocked unless --force is given, because restarting daemons while
    ceph is already unhealthy is how small incidents become big ones."
-  (:require [infra.ceph :as ceph]
-            [infra.effect :as effect]
-            [infra.flow :as flow]
-            [infra.interact :as interact]
-            [infra.announce :as announce]
-            [infra.runbook :as runbook]
-            [infra.ssh :as ssh]
-            [infra.stdout :as stdout]))
+  (:require [gumshoe.ceph :as ceph]
+            [gumshoe.effect :as effect]
+            [gumshoe.flow :as flow]
+            [gumshoe.interact :as interact]
+            [gumshoe.announce :as announce]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.ssh :as ssh]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   (merge ceph/ssh-options

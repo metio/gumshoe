@@ -3,8 +3,8 @@
 
 (ns runbooks.detectives.csi
   "Investigates the CSI layer backed by ceph-csi: attachments, orphaned volumes, driver registration."
-  (:require [infra.detective :as detective]
-            [infra.detectives.csi :as csi]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.csi :as csi]))
 
 (detective/book
  {:description "Investigates the CSI layer: failing attachments, orphaned volumes, driver registration"

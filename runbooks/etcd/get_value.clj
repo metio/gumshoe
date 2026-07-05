@@ -4,11 +4,11 @@
 (ns runbooks.etcd.get-value
   "Reads a single key from etcd through one etcd pod."
   (:require [clojure.string :as str]
-            [infra.etcd :as etcd]
-            [infra.interact :as interact]
-            [infra.kubectl :as kubectl]
-            [infra.runbook :as runbook]
-            [infra.stdout :as stdout]))
+            [gumshoe.etcd :as etcd]
+            [gumshoe.interact :as interact]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   {:namespace {:desc "The namespace of the etcd pod - interactive selection when omitted"

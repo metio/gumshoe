@@ -4,11 +4,11 @@
 (ns firebooks.kubernetes.crash-loop
   "Firebook: starts a deployment whose container exits immediately, producing
    a CrashLoopBackOff for the team to find during a drill."
-  (:require [infra.firebook :as firebook]
-            [infra.flow :as flow]
-            [infra.kubectl :as kubectl]
-            [infra.announce :as announce]
-            [infra.runbook :as runbook]))
+  (:require [gumshoe.firebook :as firebook]
+            [gumshoe.flow :as flow]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.announce :as announce]
+            [gumshoe.runbook :as runbook]))
 
 (def options
   {:extinguish {:desc "Put out the fire: delete the fire-drill namespace"

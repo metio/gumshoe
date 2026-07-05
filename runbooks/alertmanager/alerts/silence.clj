@@ -5,14 +5,14 @@
   "Silences alerts matching a set of label matchers on one alertmanager."
   (:require [babashka.fs :as fs]
             [clojure.string :as str]
-            [infra.config :as config]
-            [infra.effect :as effect]
-            [infra.flow :as flow]
-            [infra.secrets :as secrets]
-            [infra.announce :as announce]
-            [infra.runbook :as runbook]
-            [infra.shell :as shell]
-            [infra.stdout :as stdout]))
+            [gumshoe.config :as config]
+            [gumshoe.effect :as effect]
+            [gumshoe.flow :as flow]
+            [gumshoe.secrets :as secrets]
+            [gumshoe.announce :as announce]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.shell :as shell]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   {:alertmanager {:desc "The alertmanager host (e.g. alertmanager.example.org); defaults to env.edn :alertmanager :host"

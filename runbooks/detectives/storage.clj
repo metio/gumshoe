@@ -3,8 +3,8 @@
 
 (ns runbooks.detectives.storage
   "Investigates storage: PersistentVolumeClaims that are pending or unused."
-  (:require [infra.detective :as detective]
-            [infra.detectives.storage :as storage]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.storage :as storage]))
 
 (detective/book
  {:description "Investigates storage: pending and unused PersistentVolumeClaims"

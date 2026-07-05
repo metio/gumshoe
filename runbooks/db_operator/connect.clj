@@ -3,12 +3,12 @@
 
 (ns runbooks.db-operator.connect
   "Opens an interactive psql session on a db-operator managed database."
-  (:require [infra.flow :as flow]
-            [infra.kubectl :as kubectl]
-            [infra.announce :as announce]
-            [infra.postgres :as postgres]
-            [infra.runbook :as runbook]
-            [infra.stdout :as stdout]))
+  (:require [gumshoe.flow :as flow]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.announce :as announce]
+            [gumshoe.postgres :as postgres]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   {:namespace {:desc "The namespace of the Database - interactive selection when omitted"

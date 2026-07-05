@@ -9,10 +9,10 @@
 
 (require '[babashka.cli :as cli]
          '[clojure.string :as str]
-         '[infra.catalog :as catalog]
-         '[infra.extensions :as extensions]
-         '[infra.fuzzy-finder :as fuzzy]
-         '[infra.stdout :as stdout])
+         '[gumshoe.catalog :as catalog]
+         '[gumshoe.extensions :as extensions]
+         '[gumshoe.fuzzy-finder :as fuzzy]
+         '[gumshoe.stdout :as stdout])
 
 ;; ./run carries only the flags every book understands and forwards them to the
 ;; chosen book; a book's own flags are answered interactively once it runs, so

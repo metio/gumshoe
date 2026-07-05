@@ -4,12 +4,12 @@
 (ns runbooks.detectives.ceph
   "Investigates a cephadm-managed ceph cluster over SSH: health checks, OSDs,
    placement groups, monitor quorum, capacity, services, and crashes."
-  (:require [infra.ceph :as ceph]
-            [infra.detective :as detective]
-            [infra.detectives.ceph :as ceph-detectives]
-            [infra.runbook :as runbook]
-            [infra.ssh :as ssh]
-            [infra.stdout :as stdout]))
+  (:require [gumshoe.ceph :as ceph]
+            [gumshoe.detective :as detective]
+            [gumshoe.detectives.ceph :as ceph-detectives]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.ssh :as ssh]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   (merge ceph/ssh-options detective/output-option))

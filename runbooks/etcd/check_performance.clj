@@ -4,11 +4,11 @@
 (ns runbooks.etcd.check-performance
   "Runs an etcd performance check through one etcd pod. The check generates
    load on the cluster, so it asks for confirmation first."
-  (:require [infra.etcd :as etcd]
-            [infra.interact :as interact]
-            [infra.kubectl :as kubectl]
-            [infra.runbook :as runbook]
-            [infra.stdout :as stdout]))
+  (:require [gumshoe.etcd :as etcd]
+            [gumshoe.interact :as interact]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.stdout :as stdout]))
 
 (def workloads #{"s" "m" "l" "xl"})
 

@@ -3,9 +3,9 @@
 
 (ns runbooks.kubernetes.pods.list-image-pull-back-off
   "Lists every pod that cannot pull its container image."
-  (:require [infra.kubectl :as kubectl]
-            [infra.runbook :as runbook]
-            [infra.stdout :as stdout]))
+  (:require [gumshoe.kubectl :as kubectl]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.stdout :as stdout]))
 
 (def prerequisites
   {:installed-tools ["kubectl"]

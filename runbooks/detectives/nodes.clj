@@ -3,8 +3,8 @@
 
 (ns runbooks.detectives.nodes
   "Investigates node health: readiness, resource pressure, cordoned nodes."
-  (:require [infra.detective :as detective]
-            [infra.detectives.nodes :as nodes]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.nodes :as nodes]))
 
 (detective/book
  {:description "Investigates node health: readiness, memory/disk/PID pressure, cordoned nodes"

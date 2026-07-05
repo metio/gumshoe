@@ -5,12 +5,12 @@
   "Investigates a Matrix homeserver: the client and federation APIs, signing
    key expiry, .well-known delegation, and - with an admin token - which
    servers federation is failing to reach."
-  (:require [infra.detective :as detective]
-            [infra.detectives.matrix :as matrix-detectives]
-            [infra.inputs :as inputs]
-            [infra.runbook :as runbook]
-            [infra.secrets :as secrets]
-            [infra.synapse :as synapse]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.matrix :as matrix-detectives]
+            [gumshoe.inputs :as inputs]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.secrets :as secrets]
+            [gumshoe.synapse :as synapse]))
 
 (def options
   ;; No hard-coded defaults: the server_name and homeserver host come from the

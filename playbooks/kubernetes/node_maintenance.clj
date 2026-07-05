@@ -11,16 +11,16 @@
    5. verifies node health with the detectives
 
    Every step is verified before the next one starts."
-  (:require [infra.detective :as detective]
-            [infra.detectives.disruption :as disruption]
-            [infra.detectives.nodes :as nodes]
-            [infra.interact :as interact]
-            [infra.kubectl :as kubectl]
-            [infra.announce :as announce]
-            [infra.runbook :as runbook]
-            [infra.shell :as shell]
-            [infra.stdout :as stdout]
-            [infra.verify :as verify]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.disruption :as disruption]
+            [gumshoe.detectives.nodes :as nodes]
+            [gumshoe.interact :as interact]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.announce :as announce]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.shell :as shell]
+            [gumshoe.stdout :as stdout]
+            [gumshoe.verify :as verify]))
 
 (def options
   {:node {:desc "The node to maintain - interactive selection when omitted"

@@ -5,13 +5,13 @@
   "Investigates restic backups: every repository must be readable, hold
    snapshots, and have a recent backup for each of its targets. The
    repository password comes from gopass or the RESTIC_PASSWORD environment."
-  (:require [infra.detective :as detective]
-            [infra.detectives.restic :as restic-detectives]
-            [infra.secrets :as secrets]
-            [infra.restic :as restic]
-            [infra.runbook :as runbook]
-            [infra.shell :as shell]
-            [infra.stdout :as stdout]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.restic :as restic-detectives]
+            [gumshoe.secrets :as secrets]
+            [gumshoe.restic :as restic]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.shell :as shell]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   (merge {:repository {:desc "A restic repository to check, repeatable"

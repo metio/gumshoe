@@ -3,8 +3,8 @@
 
 (ns runbooks.kubernetes.pods.list-images
   "Lists every container image in use, with how many containers run it."
-  (:require [infra.kubectl :as kubectl]
-            [infra.runbook :as runbook]))
+  (:require [gumshoe.kubectl :as kubectl]
+            [gumshoe.runbook :as runbook]))
 
 (def prerequisites
   {:installed-tools ["kubectl"]

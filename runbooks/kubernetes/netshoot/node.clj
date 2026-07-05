@@ -3,12 +3,12 @@
 
 (ns runbooks.kubernetes.netshoot.node
   "Starts an interactive netshoot debug session on a node."
-  (:require [infra.effect :as effect]
-            [infra.flow :as flow]
-            [infra.interact :as interact]
-            [infra.kubectl :as kubectl]
-            [infra.runbook :as runbook]
-            [infra.stdout :as stdout]))
+  (:require [gumshoe.effect :as effect]
+            [gumshoe.flow :as flow]
+            [gumshoe.interact :as interact]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.stdout :as stdout]))
 
 (def options
   {:node {:desc "The node to debug - interactive selection when omitted"

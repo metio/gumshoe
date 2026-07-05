@@ -6,8 +6,8 @@
    you. upterm prints an SSH join command; share it and they attach instantly.
    Restrict who may join with --with, otherwise anyone with an authorized key
    can attach."
-  (:require [infra.runbook :as runbook]
-            [infra.upterm :as upterm]))
+  (:require [gumshoe.runbook :as runbook]
+            [gumshoe.upterm :as upterm]))
 
 (def options
   {:with {:desc "A GitHub username allowed to join, repeatable - key-holders otherwise"

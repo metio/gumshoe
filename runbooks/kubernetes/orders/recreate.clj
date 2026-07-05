@@ -4,9 +4,9 @@
 (ns runbooks.kubernetes.orders.recreate
   "Deletes invalid ACME orders so cert-manager recreates them."
   (:require [clojure.string :as str]
-            [infra.effect :as effect]
-            [infra.kubectl :as kubectl]
-            [infra.mutation :as mutation]))
+            [gumshoe.effect :as effect]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.mutation :as mutation]))
 
 (def order-type "orders.acme.cert-manager.io")
 

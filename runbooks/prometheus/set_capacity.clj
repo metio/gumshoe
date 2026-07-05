@@ -10,16 +10,16 @@
    Steps: pause the Prometheus and patch its volumeClaimTemplate, resize the
    existing PVCs, delete the StatefulSet with orphaned pods, unpause so the
    operator recreates the StatefulSet against the new template."
-  (:require [infra.watch :as watch]
-            [infra.flow :as flow]
-            [infra.interact :as interact]
-            [infra.kubectl :as kubectl]
-            [infra.announce :as announce]
-            [infra.prometheus :as prometheus]
-            [infra.storage :as storage]
-            [infra.runbook :as runbook]
-            [infra.shell :as shell]
-            [infra.stdout :as stdout]))
+  (:require [gumshoe.watch :as watch]
+            [gumshoe.flow :as flow]
+            [gumshoe.interact :as interact]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.announce :as announce]
+            [gumshoe.prometheus :as prometheus]
+            [gumshoe.storage :as storage]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.shell :as shell]
+            [gumshoe.stdout :as stdout]))
 
 (def prometheus-type "prometheuses.monitoring.coreos.com")
 
