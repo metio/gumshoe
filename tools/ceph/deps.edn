@@ -1,0 +1,10 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The ceph tool package (cephadm-over-SSH cluster management). A casebook depends
+;; on it by subpath:
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/ceph"}}}
+;; The books use the ceph lib directly; list gumshoe.tools.ceph under env.edn
+;; :plugins to also get the ceph cluster-log tailer during storage resizes.
+{:paths ["libraries" "runbooks" "playbooks"]
+ :deps {io.github.metio/gumshoe {:local/root "../.."}}}

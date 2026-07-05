@@ -57,8 +57,9 @@
           f (into {} (subject/facts "PersistentVolume" pv))]
       (is (= "Retain" (get f "reclaimPolicy")))
       (is (= "moodle/moodle-data" (get f "claim")))
-      (is (= "kubernetes" (get f "ceph pool")))
-      (is (= "csi-vol-abc" (get f "ceph image")))))
+      (is (= "rbd.csi.ceph.com" (get f "csi driver")))
+      (is (= "kubernetes" (get f "csi pool")) "any CSI driver's volume attributes surface generically")
+      (is (= "csi-vol-abc" (get f "csi imageName")))))
   (testing "ingress facts show hosts and class"
     (let [f (into {} (subject/facts "Ingress" {:spec {:ingressClassName "nginx"
                                                       :rules [{:host "moodle.example.org"}]}}))]

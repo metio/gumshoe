@@ -171,19 +171,17 @@
         attributes (:volumeAttributes csi)
         claim (-> pv :spec :claimRef)]
     (present-pairs
-     [["phase" (-> pv :status :phase)]
-      ["capacity" (-> pv :spec :capacity :storage)]
-      ["reclaimPolicy" (-> pv :spec :persistentVolumeReclaimPolicy)]
-      ["storageClass" (-> pv :spec :storageClassName)]
-      ["claim" (when claim (format "%s/%s" (:namespace claim) (:name claim)))]
-      ;; the ceph backing, so the operator can look the volume up on the ceph
-      ;; side (with runbooks/detectives/ceph.clj) - the storage root cause often
-      ;; lives there, not in Kubernetes.
-      ["ceph driver" (:driver csi)]
-      ["ceph pool" (:pool attributes)]
-      ["ceph image" (:imageName attributes)]
-      ["ceph fs" (:fsName attributes)]
-      ["ceph subvolume" (:subvolumeName attributes)]])))
+     (concat
+      [["phase" (-> pv :status :phase)]
+       ["capacity" (-> pv :spec :capacity :storage)]
+       ["reclaimPolicy" (-> pv :spec :persistentVolumeReclaimPolicy)]
+       ["storageClass" (-> pv :spec :storageClassName)]
+       ["claim" (when claim (format "%s/%s" (:namespace claim) (:name claim)))]
+       ["csi driver" (:driver csi)]]
+      ;; the CSI volume's backing attributes (a ceph-csi pool/image, a Longhorn
+      ;; handle, ...), so the operator can look the volume up on the storage side -
+      ;; the storage root cause often lives there, not in Kubernetes.
+      (for [[k v] attributes] [(str "csi " (name k)) v])))))
 
 (defn- ingress-facts
   [ingress]

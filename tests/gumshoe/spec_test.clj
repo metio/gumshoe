@@ -6,7 +6,6 @@
    and the example env.edn must conform to their schemas, so a drift is caught."
   (:require [clojure.edn :as edn]
             [clojure.test :refer [deftest is testing]]
-            [gumshoe.detectives.ceph :as ceph-detectives]
             [gumshoe.detectives.pods :as pod-detectives]
             [gumshoe.effect :as effect]
             [gumshoe.spec :as spec]))
@@ -19,14 +18,11 @@
     (is (not (spec/valid? :gumshoe.spec/finding {:severity :info :component "x" :summary ""})))
     (is (not (spec/valid? :gumshoe.spec/finding {:severity :info :summary "no component"}))))
   (testing "real detectives emit conforming findings"
-    (let [findings (concat
-                    (ceph-detectives/detect-osd-problems
-                     {"status" {:osdmap {:num_osds 12 :num_up_osds 11 :num_in_osds 10}}})
-                    (pod-detectives/detect-unhealthy-pods
-                     {"pods" {:items [{:metadata {:namespace "ns" :name "p"}
-                                       :status {:containerStatuses
-                                                [{:name "c" :restartCount 20
-                                                  :state {:waiting {:reason "CrashLoopBackOff"}}}]}}]}}))]
+    (let [findings (pod-detectives/detect-unhealthy-pods
+                    {"pods" {:items [{:metadata {:namespace "ns" :name "p"}
+                                      :status {:containerStatuses
+                                               [{:name "c" :restartCount 20
+                                                 :state {:waiting {:reason "CrashLoopBackOff"}}}]}}]}})]
       (is (seq findings) "expected the sample evidence to produce findings")
       (is (every? #(spec/valid? :gumshoe.spec/finding %) findings)
           (str "non-conforming: " (remove #(spec/valid? :gumshoe.spec/finding %) findings))))))

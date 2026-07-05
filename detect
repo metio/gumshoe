@@ -51,7 +51,7 @@
     :book "runbooks/detectives/restic.clj"
     :needs-repositories? true}
    {:label "🐙 Ceph - the storage cluster itself (asks for a host)"
-    :book "runbooks/detectives/ceph.clj"
+    :book "tools/ceph/runbooks/scan.clj"
     :needs-host? true}
    {:label "🌌 OpenNebula - hosts, VMs, datastores (asks for the frontend)"
     :book "runbooks/detectives/opennebula.clj"

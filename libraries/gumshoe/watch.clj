@@ -9,10 +9,8 @@
    infrastructure react - a Warning event, a stuck resize - and tells the
    operator the moment something looks wrong."
   (:require [clojure.string :as str]
-            [gumshoe.ceph :as ceph]
             [gumshoe.config :as config]
-            [gumshoe.kubectl :as kubectl]
-            [gumshoe.net :as net]))
+            [gumshoe.kubectl :as kubectl]))
 
 (defn- one-line
   [text]
@@ -58,31 +56,26 @@
                 ""
                 (str " - " (one-line (:message condition))))))))
 
-(defn ceph-cluster-log-errors
-  "Warn-and-above lines from the ceph cluster log, over SSH to a mgr host -
-   gated on the VPN interface being up, so it never reaches out to a private
-   host off-network (where it would just time out). Returns nothing when the
-   VPN is down."
-  [connection vpn-interface]
-  (fn []
-    (when (net/interface-up? vpn-interface)
-      (->> (str/split-lines (ceph/ceph-stdout connection "log" "last" "50" "warn" "cluster"))
-           (remove str/blank?)
-           (map #(str "ceph cluster log: " (str/trim %)))))))
+(defonce ^:private resize-watcher-builders (atom []))
+
+(defn register-resize-watcher!
+  "Registers an extra watcher for a storage resize: (fn [signals] -> a
+   zero-arg watcher fn, or nil to contribute nothing). signals is
+   {:kubernetes-cluster cluster}, so a builder resolves per-environment config.
+   A tool package tails its own log during a resize this way - the ceph package
+   tails the ceph cluster log for the active cluster's mgr host, gated on its VPN."
+  [builder]
+  (swap! resize-watcher-builders conj builder))
 
 (defn resize-watchers
   "The watcher set for a storage resize: the namespace's Warning events and the
-   PVCs' own resize conditions always, plus - when env.edn names a ceph mgr
-   host for the active cluster - the ceph cluster log over SSH, gated on that
-   environment's VPN. Because the ceph host and VPN are resolved for the current
-   cluster, resizing on the staging cluster tails staging's ceph, and production
-   tails production's - the cluster you operate on selects the rest. On a machine
-   with no env.edn this is just the two cluster-side watchers."
+   PVCs' own resize conditions always, plus any a tool package registered (the
+   ceph package tails the ceph cluster log). On a machine with no such package
+   this is just the two cluster-side watchers."
   [context cluster namespace pvc-names]
   (let [signals {:kubernetes-cluster cluster}]
     (combine
-     [(namespace-warning-events context namespace)
-      (pvc-resize-conditions context namespace pvc-names)
-      (when-let [mgr-host (first (config/env-value signals [:ceph :mgr-hosts]))]
-        (ceph-cluster-log-errors (ceph/connection {:host mgr-host})
-                                 (config/env-value signals [:vpn :interface])))])))
+     (concat
+      [(namespace-warning-events context namespace)
+       (pvc-resize-conditions context namespace pvc-names)]
+      (keep #(% signals) @resize-watcher-builders)))))
