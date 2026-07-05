@@ -9,7 +9,8 @@
   (:require [gumshoe.announce :as announce]
             [gumshoe.command :as command]
             [gumshoe.detectives.registry :as registry]
-            [gumshoe.hooks :as hooks]))
+            [gumshoe.hooks :as hooks]
+            [gumshoe.prerequisites :as prerequisites]))
 
 ;; Seam 1 - a new announcer type. With this loaded, an env.edn announcer of
 ;; {:type :example ...} is dispatched here instead of warning "unknown type".
@@ -36,3 +37,14 @@
 (hooks/register-post-hook!
  (fn [{:keys [description outcome]}]
    (println (format "[example hook] \"%s\" finished: %s" description (name outcome)))))
+
+;; Seam 5 - a custom prerequisite check. A book that declares :change-window in
+;; its :prerequisites is gated on it, animating in the Prerequisites checklist
+;; like the built-ins. A real one would query a change calendar; this passes.
+(prerequisites/register-check!
+ :change-window
+ (fn [window _opts]
+   [(prerequisites/check (str "change window: " window)
+                         (fn [] true)
+                         {:pass (str "change window '" window "' is open")
+                          :fail (str "change window '" window "' is closed - not now")})]))

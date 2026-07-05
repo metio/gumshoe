@@ -215,6 +215,11 @@ sidesteps that, which matters when your users run bare babashka.) Copy
   `:pass`, `:passage`, and `:pasejo` are built in (select with `env.edn :secrets
   {:provider …}`); a `:command` provider drives any other CLI by templates, and a
   plugin registers a native backend with `(secrets/register-provider! { … })`.
+- **Prerequisite checks** - the built-ins (tools, versions, connectivity,
+  secrets, cluster capabilities, permissions) plus any a plugin registers with
+  `(prerequisites/register-check! :change-window (fn [value opts] …))` - gate a
+  book on org policy the core can't know: a change-freeze window, a ticket, an
+  on-call ack. They animate in the Prerequisites checklist like the built-ins.
 
 [`examples/example/plugin.clj`](examples/example/plugin.clj) is a worked plugin
 that extends several seams at once.

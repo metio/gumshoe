@@ -46,6 +46,7 @@
                    [gumshoe.announce-test]
                    [gumshoe.mimirtool-test]
                    [gumshoe.mutation-test]
+                   [gumshoe.prerequisites-test]
                    [gumshoe.postgres-test]
                    [gumshoe.progress-test]
                    [gumshoe.prometheus-test]
@@ -100,6 +101,7 @@
                                                          'gumshoe.announce-test
                                                          'gumshoe.mimirtool-test
                                                          'gumshoe.mutation-test
+                                                         'gumshoe.prerequisites-test
                                                          'gumshoe.postgres-test
                                                          'gumshoe.progress-test
                                                          'gumshoe.prometheus-test

@@ -20,6 +20,7 @@
             [gumshoe.summary :as summary]
             [gumshoe.ping :as ping]
             [gumshoe.plugins :as plugins]
+            [gumshoe.prerequisites :as prerequisites]
             [gumshoe.progress :as progress]
             [gumshoe.recording :as recording]
             [gumshoe.reproducer :as reproducer]
@@ -147,7 +148,9 @@
      (map (partial can-i-item "create") (:kubectl-can-create prerequisites))
      (map (partial can-i-item "patch") (:kubectl-can-patch prerequisites))
      (map (partial can-i-item "delete") (:kubectl-can-delete prerequisites))
-     (map can-exec-item (:kubectl-can-exec prerequisites)))))
+     (map can-exec-item (:kubectl-can-exec prerequisites))
+     ;; plugin-registered checks (change windows, tickets, on-call acks) run last
+     (prerequisites/items prerequisites opts))))
 
 (defn- prerequisites?
   [prerequisites opts]
