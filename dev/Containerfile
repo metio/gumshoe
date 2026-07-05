@@ -35,12 +35,16 @@ ENV SSL_CERT_FILE=/opt/gumshoe-tools/etc/ssl/certs/ca-bundle.crt
 #   --volume ${XDG_CACHE_HOME}/gitlibs:/root/.cache/gitlibs:z
 ENV GITLIBS=/root/.cache/gitlibs
 
-# The netshoot books need the krew-installed kubectl plugin. Keep it in a stable
-# root-owned location. This step needs network at build time; if your builder
-# has none, drop it and run `kubectl krew install netshoot` inside the container.
+# The netshoot books need the krew-installed kubectl plugin. `kubectl krew` finds
+# krew only as a `kubectl-krew` plugin on PATH, so the bare nix `krew` binary is
+# symlinked into a stable, root-owned krew bin. Installing netshoot is a RUNTIME
+# step, not a build step: the nixpkgs krew binary is currently too old for the
+# hosted index ("This version of Krew is not supported anymore"), so run it once
+# inside the container against an up-to-date krew if you need the netshoot books:
+#   kubectl krew update && kubectl krew install netshoot
 ENV KREW_ROOT=/opt/krew
 ENV PATH=/opt/krew/bin:$PATH
-RUN kubectl krew update && kubectl krew install netshoot
+RUN mkdir -p /opt/krew/bin && ln -sf "$(command -v krew)" /opt/krew/bin/kubectl-krew
 
 WORKDIR /workspace
 CMD ["bash"]

@@ -5,4 +5,4 @@
 ;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/flux"}}}
 ;; and lists gumshoe.tools.flux under env.edn :plugins to activate it.
 {:paths ["libraries" "runbooks"]
- :deps {io.github.metio/gumshoe {:local/root "../.."}}}
+ :deps {io.github.metio/gumshoe-core {:local/root "../.."}}}

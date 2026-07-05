@@ -6,7 +6,7 @@
 ;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "meta/all-kubernetes"}}}
 ;; List each tool's plugin ns under env.edn :plugins to activate it. Add packages
 ;; here as they are extracted (gateway, cnpg, prometheus, …).
-{:deps {io.github.metio/gumshoe             {:local/root "../.."}
+{:deps {io.github.metio/gumshoe-core             {:local/root "../.."}
         io.github.metio/gumshoe-flux        {:local/root "../../tools/flux"}
         io.github.metio/gumshoe-certmanager {:local/root "../../tools/certmanager"}
         io.github.metio/gumshoe-gateway     {:local/root "../../tools/gateway"}

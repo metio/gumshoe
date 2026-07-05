@@ -6,4 +6,4 @@
 ;; List gumshoe.tools.gateway under env.edn :plugins to fill :traffic and teach the
 ;; wizard the :gateway-api capability.
 {:paths ["libraries" "runbooks"]
- :deps {io.github.metio/gumshoe {:local/root "../.."}}}
+ :deps {io.github.metio/gumshoe-core {:local/root "../.."}}}

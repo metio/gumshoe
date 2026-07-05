@@ -8,5 +8,5 @@
 ;; charm.clj runs under babashka (pure Clojure over JLine 3), so this drops the
 ;; two external binaries entirely.
 {:paths ["libraries"]
- :deps {io.github.metio/gumshoe {:local/root "../.."}
+ :deps {io.github.metio/gumshoe-core {:local/root "../.."}
         io.github.TimoKramer/charm.clj {:git/sha "REPLACE_WITH_PINNED_SHA"}}}

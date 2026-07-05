@@ -4,4 +4,4 @@
 ;; The Matrix tool package (client/federation API health). A standalone detective book.
 ;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/matrix"}}}
 {:paths ["libraries" "runbooks"]
- :deps {io.github.metio/gumshoe {:local/root "../.."}}}
+ :deps {io.github.metio/gumshoe-core {:local/root "../.."}}}

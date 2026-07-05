@@ -7,4 +7,4 @@
 ;; The books use the ceph lib directly; list gumshoe.tools.ceph under env.edn
 ;; :plugins to also get the ceph cluster-log tailer during storage resizes.
 {:paths ["libraries" "runbooks" "playbooks"]
- :deps {io.github.metio/gumshoe {:local/root "../.."}}}
+ :deps {io.github.metio/gumshoe-core {:local/root "../.."}}}

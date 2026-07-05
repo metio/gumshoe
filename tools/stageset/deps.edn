@@ -6,4 +6,4 @@
 ;; List gumshoe.tools.stageset under env.edn :plugins to fill the :delivery scope,
 ;; teach the wizard the :stageset capability, and get the drill-down + books.
 {:paths ["libraries" "runbooks"]
- :deps {io.github.metio/gumshoe {:local/root "../.."}}}
+ :deps {io.github.metio/gumshoe-core {:local/root "../.."}}}

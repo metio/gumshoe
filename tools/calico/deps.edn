@@ -6,4 +6,4 @@
 ;; List gumshoe.tools.calico under env.edn :plugins to join the :platform scope and
 ;; teach the wizard the :calico capability.
 {:paths ["libraries" "runbooks"]
- :deps {io.github.metio/gumshoe {:local/root "../.."}}}
+ :deps {io.github.metio/gumshoe-core {:local/root "../.."}}}

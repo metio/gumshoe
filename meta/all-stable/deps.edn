@@ -6,7 +6,7 @@
 ;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "meta/all-stable"}}}
 ;; and lists each tool's plugin ns under env.edn :plugins (or a bundled list) to
 ;; activate them. As more tools are extracted, add them here.
-{:deps {io.github.metio/gumshoe      {:local/root "../.."}
+{:deps {io.github.metio/gumshoe-core      {:local/root "../.."}
         io.github.metio/gumshoe-flux {:local/root "../../tools/flux"}
         io.github.metio/gumshoe-ceph {:local/root "../../tools/ceph"}
         io.github.metio/gumshoe-certmanager {:local/root "../../tools/certmanager"}

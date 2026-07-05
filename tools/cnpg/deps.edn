@@ -6,4 +6,4 @@
 ;; List gumshoe.tools.cnpg under env.edn :plugins to join the :databases scope and
 ;; teach the wizard the :cnpg capability.
 {:paths ["libraries" "runbooks"]
- :deps {io.github.metio/gumshoe {:local/root "../.."}}}
+ :deps {io.github.metio/gumshoe-core {:local/root "../.."}}}

@@ -6,4 +6,4 @@
 ;; List gumshoe.tools.prometheus under env.edn :plugins to fill :observability and
 ;; teach the wizard the :prometheus-operator capability.
 {:paths ["libraries" "runbooks"]
- :deps {io.github.metio/gumshoe {:local/root "../.."}}}
+ :deps {io.github.metio/gumshoe-core {:local/root "../.."}}}
