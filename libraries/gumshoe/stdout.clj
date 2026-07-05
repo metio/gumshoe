@@ -7,7 +7,8 @@
    Diagnostics (sections, checks, banners, commands) go to stderr; results go
    to stdout. That keeps `bb <book> --output json | jq` and `> result.txt`
    clean while the interactive chatter stays visible on the terminal."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [gumshoe.theme :as theme]))
 
 (def ^:private escape-red "\u001b[31m")
 (def ^:private escape-green "\u001b[32m")
@@ -55,7 +56,9 @@
 
 (defn- colorize
   [escape text]
-  (if @colors? (str escape text escape-reset) text))
+  ;; Colour needs both a colour-capable destination (tty / FORCE_COLOR / not
+  ;; NO_COLOR) and a theme that permits it, so a :plain theme is always colourless.
+  (if (and @colors? (theme/token :color? true)) (str escape text escape-reset) text))
 
 (defn strip-colors
   "Removes ANSI color escapes from a string. fzf --ansi renders colors but
@@ -76,8 +79,6 @@
   (binding [*out* *err*]
     (apply println parts)))
 
-(def ^:private spinner-frames ["⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏"])
-
 (defn with-spinner
   "Runs thunk while animating a spinner with the message on stderr, so a slow
    fetch never looks like a hang. Returns thunk's value. Only animates on a
@@ -86,12 +87,13 @@
    own line when done, so a captured result and a scrolling log both stay clean."
   [message thunk]
   (if @colors?
-    (let [running (atom true)
+    (let [frames (theme/token :spinner)
+          running (atom true)
           animation (future
                       (loop [i 0]
                         (when @running
                           (binding [*out* *err*]
-                            (print (str "\r" (blue (nth spinner-frames (mod i (count spinner-frames)))) " " message))
+                            (print (str "\r" (blue (nth frames (mod i (count frames)))) " " message))
                             (flush))
                           (Thread/sleep 90)
                           (recur (inc i)))))]
@@ -108,42 +110,43 @@
 
 (defn print-section-marker
   []
-  (err-println (apply str (repeat width "─"))))
+  (err-println (apply str (repeat width (theme/token :rule)))))
 
 (defn print-section
   "A titled horizontal rule: ── Title ─────────"
   [title]
-  (let [visible (.codePointCount ^String title 0 (count title))
-        padding (apply str (repeat (max 0 (- width 4 visible)) "─"))]
-    (err-println (str "── " (bold title) " " padding))))
+  (let [rule (theme/token :rule)
+        visible (.codePointCount ^String title 0 (count title))
+        padding (apply str (repeat (max 0 (- width 4 visible)) rule))]
+    (err-println (str rule rule " " (bold title) " " padding))))
 
 (defn print-banner
   "A full-width banner that is hard to miss."
   [color-fn text]
-  (let [line (apply str (repeat width "─"))]
+  (let [line (apply str (repeat width (theme/token :rule)))]
     (err-println (color-fn line))
     (err-println (color-fn (str "  " text)))
     (err-println (color-fn line))))
 
 (defn ok
   [& parts]
-  (err-println "✅" (str/join " " parts)))
+  (err-println (theme/token :ok) (str/join " " parts)))
 
 (defn error
   [& parts]
-  (err-println "❌" (str/join " " parts)))
+  (err-println (theme/token :error) (str/join " " parts)))
 
 (defn warn
   [& parts]
-  (err-println "🔶" (str/join " " parts)))
+  (err-println (theme/token :warn) (str/join " " parts)))
 
 (defn check-ok
   [& parts]
-  (err-println (str "  " (green "✓")) (str/join " " parts)))
+  (err-println (str "  " (green (theme/token :check-ok))) (str/join " " parts)))
 
 (defn check-error
   [& parts]
-  (err-println (str "  " (red "✗")) (str/join " " parts)))
+  (err-println (str "  " (red (theme/token :check-error))) (str/join " " parts)))
 
 (defn data-table
   "Formats key/value data as aligned lines, preserving insertion order."

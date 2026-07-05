@@ -34,3 +34,20 @@
   (testing "a tool with no readable version still gets a sensible label"
     (is (= "definitely-not-a-real-tool-xyz installed"
            (command/describe-installed "definitely-not-a-real-tool-xyz")))))
+
+(deftest register-tool-profile-test
+  (testing "a tool package registers a version floor and brought prerequisites once,"
+    (command/register-tool! "widgetctl"
+                            {:version-command ["version"]
+                             :min-version "2.0"
+                             :prerequisites (fn [_opts] [["widget service" (constantly {:ok? true})]])})
+    (testing "which any book that lists the tool then inherits"
+      (is (= "2.0" (command/tool-min-version "widgetctl")))
+      (is (fn? (command/tool-prerequisites "widgetctl")))))
+  (testing "register-version-command! is the shorthand and does not clobber a profile"
+    (command/register-tool! "widgetctl" {:min-version "3.0"})
+    (command/register-version-command! "widgetctl" ["--version"])
+    (is (= "3.0" (command/tool-min-version "widgetctl")) "the version-command shorthand merges, keeping the floor"))
+  (testing "an unregistered tool has no floor or brought prerequisites"
+    (is (nil? (command/tool-min-version "definitely-not-a-real-tool-xyz")))
+    (is (nil? (command/tool-prerequisites "definitely-not-a-real-tool-xyz")))))

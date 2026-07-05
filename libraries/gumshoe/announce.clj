@@ -38,6 +38,13 @@
   (stdout/warn (format "unknown announcer type %s - install its plugin or fix :announce in env.edn"
                        (pr-str (:type announcer)))))
 
+(defn register-announcer!
+  "Registers an announcer type from data - the same as `(defmethod announce-via
+   :type ...)` but callable from a plugin manifest. f is
+   (fn [announcer system data message] ...)."
+  [type f]
+  (.addMethod ^clojure.lang.MultiFn announce-via type f))
+
 ;; --- built-in: matrix ------------------------------------------------------
 
 (defn changelog-message

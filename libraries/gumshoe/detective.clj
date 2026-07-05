@@ -31,7 +31,8 @@
             [gumshoe.progress :as progress]
             [gumshoe.runbook :as runbook]
             [gumshoe.stdout :as stdout]
-            [gumshoe.subject :as subject]))
+            [gumshoe.subject :as subject]
+            [gumshoe.theme :as theme]))
 
 (def severity-order {:critical 0 :warning 1 :info 2})
 
@@ -99,9 +100,9 @@
 (defn- severity-tag
   [severity]
   (case severity
-    :critical (stdout/red "🔥 CRITICAL")
-    :warning (stdout/yellow "🔶 WARNING ")
-    :info (stdout/blue "💡 INFO    ")))
+    :critical (stdout/red (str (theme/severity :critical) " CRITICAL"))
+    :warning (stdout/yellow (str (theme/severity :warning) " WARNING "))
+    :info (stdout/blue (str (theme/severity :info) " INFO    "))))
 
 (defn- worst-severity
   "The most severe severity-order among findings (critical wins), for ordering
@@ -231,10 +232,10 @@
    critical ones stand out in the fzf list."
   [severity]
   (case severity
-    :critical (stdout/red "🔴")
-    :warning (stdout/yellow "🟡")
-    :info (stdout/blue "🔵")
-    "•"))
+    :critical (stdout/red (theme/marker :critical))
+    :warning (stdout/yellow (theme/marker :warning))
+    :info (stdout/blue (theme/marker :info))
+    (theme/token :bullet)))
 
 (defn drillable-subjects
   "Pure: one entry per distinct object a scan's findings point at, in severity

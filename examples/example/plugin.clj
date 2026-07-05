@@ -2,29 +2,73 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns example.plugin
-  "A worked example of an gumshoe plugin. Copy this shape into your
-   own repo, publish it, add it as a git dep in bb.edn :deps, and list its
-   namespace in env.edn :plugins - the plugin loader requires it, which runs the
-   registrations below. One namespace can extend several seams at once."
-  (:require [gumshoe.announce :as announce]
-            [gumshoe.command :as command]
-            [gumshoe.detectives.registry :as registry]))
+  "A worked example of a gumshoe plugin: one namespace, one `plugin/provide!`
+   call, extending every seam at once. Copy this shape into your own repo and
+   list its namespace in env.edn :plugins - the loader requires it, which runs
+   the provide! below. The only other namespaces it needs are the helpers used to
+   build values (a prerequisite item, a drill-down subject)."
+  (:require [gumshoe.plugin :as plugin]
+            [gumshoe.prerequisites :as prerequisites]
+            [gumshoe.subject :as subject]))
 
-;; Seam 1 - a new announcer type. With this loaded, an env.edn announcer of
-;; {:type :example ...} is dispatched here instead of warning "unknown type".
-(defmethod announce/announce-via :example
-  [_announcer system {:keys [actor]} message]
-  (println (format "[example announcer] %s: %s by %s" system message actor)))
+(plugin/provide!
+ {;; A change-announcement target: env.edn :announce [{:type :example …}].
+  :announcers
+  {:example (fn [_announcer system {:keys [actor]} message]
+             (println (format "[example announcer] %s: %s by %s" system message actor)))}
 
-;; Seam 2 - a detective that joins the workloads scan (or register a whole new
-;; scope; a detective is pure data over evidence, see gumshoe.detective).
-(registry/register!
- :workloads
- [{:name "example-check"
-   :description "An example plugin detective that never complains"
-   :requires ["pods"]
-   :detect (fn [_evidence] [])}])
+  ;; A detective that joins the workloads scan.
+  :detectives
+  {:workloads [{:name "example-check"
+                :description "An example plugin detective that never complains"
+                :requires ["pods"]
+                :detect (fn [_evidence] [])}]}
 
-;; Seam 3 - teach the core how to read a tool's version, so it shows up in the
-;; Prerequisites checklist for books that require it.
-(command/register-version-command! "example-tool" ["--version"])
+  ;; A cluster capability the setup wizard can detect and books can require.
+  :capabilities
+  {:example-mesh (fn [] false)}
+
+  ;; A tool profile - any book that lists "example-tool" in :installed-tools
+  ;; inherits its version floor and its brought check for free.
+  :tools
+  {"example-tool" {:version-command ["--version"]
+                   :min-version "2.0"
+                   :prerequisites (fn [_opts]
+                                    [(prerequisites/check "example-tool: service reachable"
+                                                          (fn [] true)
+                                                          {:pass "example-tool service is reachable"
+                                                           :fail "example-tool service is unreachable"})])}}
+
+  ;; Observe every finished book (push a metric, forward the recording).
+  :post-hooks
+  [(fn [{:keys [description outcome]}]
+     (println (format "[example hook] \"%s\" finished: %s" description (name outcome))))]
+
+  ;; A global gate: block changes during a freeze, let read-only books through.
+  :pre-hooks
+  [(fn [{:keys [change?]}]
+     (if (and change? (System/getenv "EXAMPLE_CHANGE_FREEZE"))
+       {:allow? false :reason "change freeze in effect (EXAMPLE_CHANGE_FREEZE set)"}
+       true))]
+
+  ;; A custom prerequisite a book gates on with :change-window in :prerequisites.
+  :prerequisites
+  {:change-window (fn [window _opts]
+                    [(prerequisites/check (str "change window: " window)
+                                          (fn [] true)
+                                          {:pass (str "change window '" window "' is open")
+                                           :fail (str "change window '" window "' is closed - not now")})])}
+
+  ;; A drill-down action for a custom kind, offered only when its tool is present.
+  :probes
+  [{:key :widget-status :label "🔧 widget status" :kinds #{"WidgetSet"} :tools ["example-tool"]
+    :args (fn [_ctx {:keys [name]}] ["example-tool" "status" name])}]
+
+  ;; A CRD the drill-down can fetch and traverse.
+  :kinds
+  {"WidgetSet" {:type "widgetsets.acme.example"
+                :edges (fn [object]
+                         [{:relation "manages"
+                           :subject (subject/subject "Pod"
+                                                     (get-in object [:metadata :namespace])
+                                                     (get-in object [:spec :pod]))}])}}})

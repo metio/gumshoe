@@ -15,15 +15,18 @@
             [gumshoe.config :as config]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.flow :as flow]
+            [gumshoe.hooks :as hooks]
             [gumshoe.summary :as summary]
             [gumshoe.ping :as ping]
             [gumshoe.plugins :as plugins]
+            [gumshoe.prerequisites :as prerequisites]
             [gumshoe.progress :as progress]
             [gumshoe.recording :as recording]
             [gumshoe.reproducer :as reproducer]
             [gumshoe.secrets :as secrets]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]
+            [gumshoe.theme :as theme]
             [gumshoe.upterm :as upterm]
             [gumshoe.utils :as utils]))
 
@@ -131,10 +134,17 @@
         ipv4-hosts (remove blank? (map opts (:can-ping-using-ipv4 prerequisites)))
         ipv6-hosts (remove blank? (map opts (:can-ping-using-ipv6 prerequisites)))
         secrets (remove blank? (map opts (:access-gopass-secrets prerequisites)))
-        tools (utils/conj-if-not-empty (:installed-tools prerequisites) secrets (secrets/command-name))]
+        tools (utils/conj-if-not-empty (:installed-tools prerequisites) secrets (secrets/command-name))
+        ;; a tool brings its own version floor: any book that lists it inherits
+        ;; the min-version its tool-support package registered, the book's own
+        ;; :minimum-tool-versions winning on conflict
+        tool-floors (into {} (keep (fn [t] (when-let [v (command/tool-min-version t)] [t v])) tools))
+        min-versions (merge tool-floors (:minimum-tool-versions prerequisites))]
     (concat
      (map tool-item tools)
-     (map min-version-item (:minimum-tool-versions prerequisites))
+     (map min-version-item min-versions)
+     ;; and any extra checks the tool declared it needs (a service to reach, a login)
+     (mapcat (fn [t] (when-let [build (command/tool-prerequisites t)] (build opts))) tools)
      (map (partial ping-item 4) ipv4-hosts)
      (map (partial ping-item 6) ipv6-hosts)
      (map secret-item secrets)
@@ -144,7 +154,9 @@
      (map (partial can-i-item "create") (:kubectl-can-create prerequisites))
      (map (partial can-i-item "patch") (:kubectl-can-patch prerequisites))
      (map (partial can-i-item "delete") (:kubectl-can-delete prerequisites))
-     (map can-exec-item (:kubectl-can-exec prerequisites)))))
+     (map can-exec-item (:kubectl-can-exec prerequisites))
+     ;; plugin-registered checks (change windows, tickets, on-call acks) run last
+     (prerequisites/items prerequisites opts))))
 
 (defn- prerequisites?
   [prerequisites opts]
@@ -212,11 +224,24 @@
         ;; via deps - so their announcers/detectives/etc. are registered before
         ;; anything in this run reaches for them
         (plugins/load!)
+        ;; select the output theme from env.edn (or a plugin theme just loaded)
+        ;; before anything prints
+        (theme/apply!)
         (when-not (prerequisites? prerequisites opts)
-          (stdout/print-banner stdout/red "❌ PREREQUISITES NOT MET - nothing was attempted")
+          (stdout/print-banner stdout/red (str (theme/token :error) " PREREQUISITES NOT MET - nothing was attempted"))
           (stdout/err-println "Next: install the missing tools, connect to the right cluster/VPN, or fix the")
-          (stdout/err-println "      access shown with a ✗ above, then run this book again.")
+          (stdout/err-println (str "      access shown with a " (theme/token :check-error) " above, then run this book again."))
           (System/exit 1))
+        ;; global pre-execution gates (change freeze, required ack) may veto the
+        ;; run before it touches anything - they apply to every book, unlike a
+        ;; book's own declared prerequisites
+        (let [gate (hooks/run-pre-hooks! {:description description
+                                          :book (System/getProperty "babashka.file")
+                                          :opts opts
+                                          :change? (boolean announce?)})]
+          (when-not (:allowed? gate)
+            (stdout/print-banner stdout/red (str (theme/token :error) " BLOCKED - " (:reason gate)))
+            (System/exit 1)))
         (let [ctx (when announce? {:announcement-data (announcement-data)})]
           (stdout/print-section "🚀 Runbook")
           ;; an unexpected exception must still land on the red banner with a
@@ -236,8 +261,8 @@
                                                  :meta (:announcement-data ctx)})]
             ;; the final banner leaves no doubt about the outcome, even at 3am
             (if (= :ok outcome)
-              (stdout/print-banner stdout/green "✅ DONE - everything verified")
-              (stdout/print-banner stdout/red "❌ FAILED or ABORTED - read the messages above, nothing more was changed"))
+              (stdout/print-banner stdout/green (str (theme/token :ok) " DONE - everything verified"))
+              (stdout/print-banner stdout/red (str (theme/token :error) " FAILED or ABORTED - read the messages above, nothing more was changed")))
             ;; run summary: where the record is, how to reproduce, how to dig in together
             (when recording-path
               (stdout/err-println (format "📼 Recording: %s" recording-path)))
@@ -249,4 +274,12 @@
               ;; something turned up - offer a shared terminal to investigate together
               (when (= :failed outcome)
                 (upterm/offer!)))
+            ;; post-execution hooks observe the finished run (metrics, audit
+            ;; forwarding, status pages) - bounded so none can block the exit
+            (hooks/run-post-hooks! {:description description
+                                    :book (System/getProperty "babashka.file")
+                                    :opts opts
+                                    :outcome outcome
+                                    :recording-path recording-path
+                                    :meta (:announcement-data ctx)})
             (System/exit (if (= :ok outcome) 0 1))))))))

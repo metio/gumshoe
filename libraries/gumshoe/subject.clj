@@ -24,21 +24,27 @@
     (format "%s %s" kind name)
     (format "%s %s/%s" kind namespace name)))
 
-(def kind->type
-  "The kubectl resource type for a kind, so the engine can fetch it."
-  {"Pod" "pods"
-   "Node" "nodes"
-   "PersistentVolumeClaim" "persistentvolumeclaims"
-   "PersistentVolume" "persistentvolumes"
-   "Deployment" "deployments"
-   "StatefulSet" "statefulsets"
-   "DaemonSet" "daemonsets"
-   "ReplicaSet" "replicasets"
-   "Job" "jobs"
-   "Service" "services"
-   "Ingress" "ingresses"
-   "HTTPRoute" "httproutes.gateway.networking.k8s.io"
-   "HorizontalPodAutoscaler" "horizontalpodautoscalers"})
+(defonce ^:private kind-types
+  ;; The kubectl resource type for a kind, so the engine can fetch it. A plugin
+  ;; adds its CRD kinds with register-kind!.
+  (atom {"Pod" "pods"
+         "Node" "nodes"
+         "PersistentVolumeClaim" "persistentvolumeclaims"
+         "PersistentVolume" "persistentvolumes"
+         "Deployment" "deployments"
+         "StatefulSet" "statefulsets"
+         "DaemonSet" "daemonsets"
+         "ReplicaSet" "replicasets"
+         "Job" "jobs"
+         "Service" "services"
+         "Ingress" "ingresses"
+         "HTTPRoute" "httproutes.gateway.networking.k8s.io"
+         "HorizontalPodAutoscaler" "horizontalpodautoscalers"}))
+
+(defn kind->type
+  "The kubectl resource type for a kind, or nil when the kind is unknown."
+  [kind]
+  (get @kind-types kind))
 
 ;; ---------------------------------------------------------------------------
 ;; Facts: a pure at-a-glance summary of an object, as ordered [label value]
@@ -290,17 +296,33 @@
     (for [name service-names]
       {:relation "routes to" :subject (subject "Service" namespace name)})))
 
+(defonce ^:private edge-builders
+  ;; kind -> (fn [object] -> seq of {:relation :subject}). A kind without a
+  ;; registered builder falls back to following ownerReferences, so most
+  ;; workloads need no entry. A plugin adds a CRD's edges with register-kind!.
+  (atom {"Pod" pod-edges
+         "HTTPRoute" httproute-edges
+         "Ingress" ingress-edges
+         "PersistentVolumeClaim" (fn [object] (concat (pvc-edges object) (owner-edges object)))
+         "PersistentVolume" pv-edges
+         "HorizontalPodAutoscaler" hpa-edges}))
+
 (defn object-edges
-  "Pure: the related subjects reachable from the object itself."
+  "Pure: the related subjects reachable from the object itself. Uses the kind's
+   registered edge builder, or follows ownerReferences when none is registered."
   [kind object]
-  (case kind
-    "Pod" (vec (pod-edges object))
-    "HTTPRoute" (vec (httproute-edges object))
-    "Ingress" (vec (ingress-edges object))
-    "PersistentVolumeClaim" (vec (concat (pvc-edges object) (owner-edges object)))
-    "PersistentVolume" (vec (pv-edges object))
-    "HorizontalPodAutoscaler" (vec (hpa-edges object))
-    (vec (owner-edges object))))
+  (vec ((get @edge-builders kind owner-edges) object)))
+
+(defn register-kind!
+  "Makes a custom resource kind a first-class drill-down subject: its kubectl
+   :type (so the engine can fetch it) and an optional :edges builder,
+   (fn [object] -> seq of {:relation \"...\" :subject <subject>}), that traverses
+   from it - a HelmRelease to what it manages, a Rollout to its ReplicaSets, a
+   CloudNativePG Cluster to its pods. Called by a plugin, so a CRD drills down
+   like the built-in kinds."
+  [kind {:keys [type edges]}]
+  (when type (swap! kind-types assoc kind type))
+  (when edges (swap! edge-builders assoc kind edges)))
 
 (defn exposes-service?
   "Whether a route or ingress object routes to the given Service subject - the

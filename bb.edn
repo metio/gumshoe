@@ -13,6 +13,7 @@
                    [gumshoe.command-test]
                    [gumshoe.config-test]
                    [gumshoe.summary-test]
+                   [gumshoe.theme-test]
                    [gumshoe.spec-test]
                    [gumshoe.conformance-test]
                    [gumshoe.detectives-test]
@@ -27,6 +28,7 @@
                    [gumshoe.observability-stack-test]
                    [gumshoe.opennebula-test]
                    [gumshoe.pad-test]
+                   [gumshoe.plugin-test]
                    [gumshoe.plugins-test]
                    [gumshoe.reproducer-test]
                    [gumshoe.recording-test]
@@ -35,6 +37,7 @@
                    [gumshoe.watch-test]
                    [gumshoe.resources-test]
                    [gumshoe.robustness-test]
+                   [gumshoe.hooks-test]
                    [gumshoe.grafana-test]
                    [gumshoe.interact-test]
                    [gumshoe.investigation-test]
@@ -43,6 +46,7 @@
                    [gumshoe.announce-test]
                    [gumshoe.mimirtool-test]
                    [gumshoe.mutation-test]
+                   [gumshoe.prerequisites-test]
                    [gumshoe.postgres-test]
                    [gumshoe.progress-test]
                    [gumshoe.prometheus-test]
@@ -64,6 +68,7 @@
                                                          'gumshoe.command-test
                                                          'gumshoe.config-test
                                                          'gumshoe.summary-test
+                                                         'gumshoe.theme-test
                                                          'gumshoe.spec-test
                                                          'gumshoe.conformance-test
                                                          'gumshoe.detectives-test
@@ -78,6 +83,7 @@
                                                          'gumshoe.observability-stack-test
                                                          'gumshoe.opennebula-test
                                                          'gumshoe.pad-test
+                                                         'gumshoe.plugin-test
                                                          'gumshoe.plugins-test
                                                          'gumshoe.reproducer-test
                                                          'gumshoe.recording-test
@@ -86,6 +92,7 @@
                                                          'gumshoe.watch-test
                                                          'gumshoe.resources-test
                                                          'gumshoe.robustness-test
+                                                         'gumshoe.hooks-test
                                                          'gumshoe.grafana-test
                                                          'gumshoe.interact-test
                                                          'gumshoe.investigation-test
@@ -94,6 +101,7 @@
                                                          'gumshoe.announce-test
                                                          'gumshoe.mimirtool-test
                                                          'gumshoe.mutation-test
+                                                         'gumshoe.prerequisites-test
                                                          'gumshoe.postgres-test
                                                          'gumshoe.progress-test
                                                          'gumshoe.prometheus-test

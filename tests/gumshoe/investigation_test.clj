@@ -101,3 +101,16 @@
       (is (not-any? #(= :back (:type %)) (investigation/menu-items focus [])))
       (is (some #(= :back (:type %)) (investigation/menu-items focus [(subject/subject "Node" nil "x")])))
       (is (= :done (:type (last (investigation/menu-items focus []))))))))
+
+(deftest register-probe-and-tool-gating-test
+  (reset! @#'investigation/extra-probes [])
+  (testing "a plugin probe appears in the drill-down menu for its kind"
+    (investigation/register-probe! {:key :widget-status :label "widget status"
+                                    :kinds #{"WidgetSet"} :args (fn [_ _] ["echo" "ok"])})
+    (is (some #(= :widget-status (:key %)) (investigation/applicable-probes "WidgetSet" nil))))
+  (testing "a probe whose tools are not installed is not offered"
+    (investigation/register-probe! {:key :needs-missing :label "x" :kinds :any
+                                    :tools ["definitely-not-a-real-tool-xyz"]
+                                    :args (fn [_ _] [])})
+    (is (not (some #(= :needs-missing (:key %)) (investigation/applicable-probes "Pod" nil)))))
+  (reset! @#'investigation/extra-probes []))

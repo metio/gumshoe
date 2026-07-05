@@ -189,24 +189,72 @@ like the built-ins. This is pure babashka: no dependency resolution, no JVM.
 sidesteps that, which matters when your users run bare babashka.) Copy
 [`casebook-example/`](casebook-example/) to start one.
 
-**The seams a plugin can register into:**
+**One plugin, one call, every seam.** A plugin declares everything it provides in
+a single manifest and calls `plugin/provide!` once — so you only ever think in
+terms of "plugins", and one can extend the whole engine at the same time:
+
+```clojure
+(gumshoe.plugin/provide!
+  {:announcers    {:irc      (fn [announcer system data message] …)}
+   :detectives    {:workloads [ … ]}
+   :capabilities  {:ceph     (fn [] boolean)}
+   :tools         {"amtool"  {:version-command […] :min-version "0.25"}}
+   :pre-hooks     [ … ]  :post-hooks [ … ]  :secrets [ … ]  :themes [ … ]
+   :prerequisites {:change-window (fn [value opts] …)}
+   :probes        [ … ]  :kinds {"HelmRelease" {:type "…" :edges (fn [o] …)}}})
+```
+
+Every key is optional; adding a seam adds a key. The per-seam register functions
+below stay available for direct or conditional use — `provide!` is the unifying
+convenience.
+
+**The seams (each is one key above, and one register function):**
 
 - **Announcers** - `:announce` in `env.edn` is a list of announcer configs
   (`:matrix`, `:webhook`, …); a change fans out to all of them. A plugin adds a
-  type: `(defmethod announce/announce-via :irc …)`.
+  type via the `:announcers` key, or directly with
+  `(announce/register-announcer! :irc (fn …))` / `(defmethod announce/announce-via :irc …)`.
 - **Detectives** - a plugin joins a scan: `(registry/register! :workloads [ … ])`,
   resolved when the scan runs.
 - **Capability detectors** - `(capabilities/register-detector! :ceph #(…))`, so
   the setup wizard recognises what a cluster can do and books can require it with
   `:cluster-capabilities [:ceph]`.
-- **Tool support** - `(command/register-version-command! "mytool" ["--version"])`
-  so a tool shows its version in Prerequisites.
+- **Tool support** - a tool's profile: `(command/register-tool! "mytool"
+  {:version-command ["--version"] :min-version "2.0" :prerequisites (fn [opts] …)})`.
+  A book that lists the tool in `:installed-tools` inherits its version floor and
+  brought checks (a service it must reach, a login) for free, instead of
+  repeating them. `register-version-command!` is the version-only shorthand.
 - **Summary providers** - where a scan's findings can be sent. The clipboard and
   a HedgeDoc pad are built in; a plugin adds more with
   `(summary/register-provider! { … })` - Slack, a ticket, a file, a Matrix post.
+- **Themes** - how output looks. `:default` (emoji + colour), `:ascii` (no emoji,
+  for logs/CI), and `:plain` (no colour) are built in; a plugin registers more
+  with `(theme/register! { … })`. Selected by `env.edn :theme`.
+- **Execution hooks** - `(hooks/register-post-hook! (fn [ctx] …))` observes every
+  finished book (outcome, recording path) to push a metric or forward the audit
+  trail; `(hooks/register-pre-hook! (fn [ctx] …))` is a global gate that can
+  *veto* a run before it starts (a change freeze, a required ack) by returning
+  `{:allow? false :reason …}`. Both are bounded; pre-hooks fail *open* so a broken
+  gate never blocks emergency response. Distinct from announcers (fire on
+  confirmation) and prerequisites (a single book declares its own).
+- **Secrets** - which password manager reads secrets at runtime. `:gopass`,
+  `:pass`, `:passage`, and `:pasejo` are built in (select with `env.edn :secrets
+  {:provider …}`); a `:command` provider drives any other CLI by templates, and a
+  plugin registers a native backend with `(secrets/register-provider! { … })`.
+- **Prerequisite checks** - the built-ins (tools, versions, connectivity,
+  secrets, cluster capabilities, permissions) plus any a plugin registers with
+  `(prerequisites/register-check! :change-window (fn [value opts] …))` - gate a
+  book on org policy the core can't know: a change-freeze window, a ticket, an
+  on-call ack. They animate in the Prerequisites checklist like the built-ins.
+- **Drill-down probes & subject edges** - extend the investigation. A probe is a
+  live action for a subject: `(investigation/register-probe! {:kinds #{"HelmRelease"}
+  :tools ["flux"] :args (fn [ctx subject] …)})` - offered only when its tools are
+  installed, so a tool package brings its probes. A kind teaches the drill-down to
+  traverse a CRD: `(subject/register-kind! "HelmRelease" {:type "…" :edges (fn
+  [object] …)})` - a Rollout to its ReplicaSets, a CNPG Cluster to its pods.
 
 [`examples/example/plugin.clj`](examples/example/plugin.clj) is a worked plugin
-that extends several seams at once.
+that extends *every* seam through one `provide!` call.
 
 ## Tests
 
