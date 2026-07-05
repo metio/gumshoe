@@ -40,7 +40,7 @@
    {:label "🎬 Delivery - StageSet staged rollouts"
     :book "tools/stageset/runbooks/scan.clj"}
    {:label "📈 Observability - the prometheus-operator stack"
-    :book "runbooks/detectives/observability.clj"}
+    :book "tools/prometheus/runbooks/scan.clj"}
    {:label "⚡ Events - Warning events from the last hour"
     :book "runbooks/detectives/events.clj"}
    {:label "📊 Thanos - the query layer: readiness, stores, rules (port-forward)"

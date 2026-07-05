@@ -1,0 +1,9 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The prometheus-operator tool package.
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/prometheus"}}}
+;; List gumshoe.tools.prometheus under env.edn :plugins to fill :observability and
+;; teach the wizard the :prometheus-operator capability.
+{:paths ["libraries" "runbooks"]
+ :deps {io.github.metio/gumshoe {:local/root "../.."}}}

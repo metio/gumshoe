@@ -8,7 +8,6 @@
             [gumshoe.detective :as detective]
             [gumshoe.subject :as subject]
             [gumshoe.detectives.calico :as calico]
-            [gumshoe.detectives.monitoring :as monitoring]
             [gumshoe.detectives.nodes :as nodes]
             [gumshoe.detectives.pods :as pods]
             [gumshoe.detectives.registry :as registry]
@@ -112,19 +111,6 @@
         findings (calico/detect-calico-problems evidence)]
     (is (= #{"tigera component is not Available"
              "tigera component is Degraded (PodFailure)"}
-           (summaries findings)))))
-
-(deftest monitoring-detective-test
-  (let [evidence {monitoring/prometheus-type
-                  {:items [{:metadata {:namespace "monitoring" :name "prometheus"}
-                            :status {:conditions [{:type "Available" :status "Degraded"
-                                                   :reason "SomePodsNotReady"}]}}
-                           {:metadata {:namespace "monitoring" :name "paused"}
-                            :spec {:paused true}
-                            :status {:conditions [{:type "Available" :status "True"}]}}]}}
-        findings (monitoring/detect-prometheus-problems evidence)]
-    (is (= #{"Prometheus is not Available (SomePodsNotReady)"
-             "Prometheus is paused - the operator does not reconcile it"}
            (summaries findings)))))
 
 (deftest registry-test

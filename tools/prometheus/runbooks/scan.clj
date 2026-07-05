@@ -4,7 +4,8 @@
 (ns runbooks.detectives.monitoring
   "Investigates the prometheus-operator monitoring stack: Prometheus, Alertmanager, ThanosRuler."
   (:require [gumshoe.detective :as detective]
-            [gumshoe.detectives.monitoring :as monitoring]))
+            [gumshoe.detectives.monitoring :as monitoring]
+            [gumshoe.tools.prometheus]))
 
 (detective/book
  {:description "Investigates the monitoring stack: Prometheus, Alertmanager, ThanosRuler"

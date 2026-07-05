@@ -15,7 +15,6 @@
             [gumshoe.detectives.disruption :as disruption]
             [gumshoe.detectives.events :as events]
             [gumshoe.detectives.mail :as mail]
-            [gumshoe.detectives.monitoring :as monitoring]
             [gumshoe.detectives.network :as network]
             [gumshoe.detectives.nodes :as nodes]
             [gumshoe.detectives.pod-security :as pod-security]
@@ -55,7 +54,6 @@
 (register! :workloads (concat controllers/detectives pods/detectives storage/detectives disruption/detectives
                               quotas/detectives capacity/detectives))
 (register! :databases db-operator/detectives)
-(register! :observability monitoring/detectives)
 (register! :signals events/detectives)
 (register! :security (concat rbac/detectives pod-security/detectives network/detectives))
 (register! :mail mail/detectives)

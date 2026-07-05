@@ -48,5 +48,4 @@
   [crd]
   (kubectl/resource-exists? "customresourcedefinition" crd))
 
-(register-detector! :prometheus-operator #(serves-crd? "prometheuses.monitoring.coreos.com"))
 (register-detector! :calico #(serves-crd? "installations.operator.tigera.io"))
