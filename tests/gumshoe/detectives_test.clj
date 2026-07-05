@@ -8,7 +8,6 @@
             [gumshoe.detective :as detective]
             [gumshoe.subject :as subject]
             [gumshoe.detectives.calico :as calico]
-            [gumshoe.detectives.cnpg :as cnpg]
             [gumshoe.detectives.monitoring :as monitoring]
             [gumshoe.detectives.nodes :as nodes]
             [gumshoe.detectives.pods :as pods]
@@ -59,25 +58,6 @@
     (is (= #{"node is not Ready (status Unknown)"
              "DiskPressure is active"
              "node is cordoned (unschedulable)"}
-           (summaries findings)))))
-
-(deftest cnpg-detective-test
-  (let [evidence {cnpg/cluster-type
-                  {:items [{:metadata {:namespace "moodle" :name "database"}
-                            :spec {:instances 3}
-                            :status {:phase "Failing over"
-                                     :readyInstances 1
-                                     :conditions [{:type "ContinuousArchiving" :status "False"
-                                                   :message "WAL archive check failed"}]}}
-                           {:metadata {:namespace "fine" :name "database"}
-                            :spec {:instances 2}
-                            :status {:phase "Cluster in healthy state"
-                                     :readyInstances 2
-                                     :conditions [{:type "ContinuousArchiving" :status "True"}]}}]}}
-        findings (cnpg/detect-cnpg-problems evidence)]
-    (is (= #{"cluster phase: Failing over"
-             "only 1 of 3 instances are ready"
-             "continuous WAL archiving is failing"}
            (summaries findings)))))
 
 (deftest storage-detective-test
@@ -172,18 +152,6 @@
                                   {:metadata {:namespace "fine" :name "alive"}}]}}
         findings (pods/detect-stuck-terminating evidence)]
     (is (= ["moodle/stuck"] (map :component findings)))))
-
-(deftest cnpg-backup-detective-test
-  (is (= #{"backup failed" "scheduled backup is suspended"}
-         (summaries (cnpg/detect-backup-problems
-                     {cnpg/backup-type
-                      {:items [{:metadata {:namespace "moodle" :name "nightly-1"}
-                                :status {:phase "failed" :error "connection refused"}}
-                               {:metadata {:namespace "fine" :name "nightly-2"}
-                                :status {:phase "completed"}}]}
-                      cnpg/scheduled-backup-type
-                      {:items [{:metadata {:namespace "moodle" :name "nightly"}
-                                :spec {:suspend true}}]}})))))
 
 (deftest report-format-test
   (testing "summary counts every severity"

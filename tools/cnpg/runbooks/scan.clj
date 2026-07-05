@@ -4,7 +4,8 @@
 (ns runbooks.detectives.cnpg
   "Investigates CloudNativePG: unhealthy clusters, missing replicas, failing WAL archiving."
   (:require [gumshoe.detective :as detective]
-            [gumshoe.detectives.cnpg :as cnpg]))
+            [gumshoe.detectives.cnpg :as cnpg]
+            [gumshoe.tools.cnpg]))
 
 (detective/book
  {:description "Investigates CloudNativePG: cluster phase, ready instances, WAL archiving"

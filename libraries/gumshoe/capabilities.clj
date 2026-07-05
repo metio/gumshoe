@@ -48,6 +48,5 @@
   [crd]
   (kubectl/resource-exists? "customresourcedefinition" crd))
 
-(register-detector! :cnpg #(serves-crd? "clusters.postgresql.cnpg.io"))
 (register-detector! :prometheus-operator #(serves-crd? "prometheuses.monitoring.coreos.com"))
 (register-detector! :calico #(serves-crd? "installations.operator.tigera.io"))
