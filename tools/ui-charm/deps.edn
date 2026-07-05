@@ -1,0 +1,12 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The charm.clj UI backend - a babashka-native replacement for the fzf/gum
+;; binaries. A casebook depends on it by subpath and selects it in env.edn:
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/ui-charm"}}}
+;;   env.edn: {:plugins [gumshoe.ui.charm] :ui :charm}
+;; charm.clj runs under babashka (pure Clojure over JLine 3), so this drops the
+;; two external binaries entirely.
+{:paths ["libraries"]
+ :deps {io.github.metio/gumshoe {:local/root "../.."}
+        io.github.TimoKramer/charm.clj {:git/sha "REPLACE_WITH_PINNED_SHA"}}}
