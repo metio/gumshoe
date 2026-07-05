@@ -8,7 +8,7 @@
 (deftest built-in-detectors-registered-test
   (testing "the core ships detectors for the common platform pieces"
     (is (every? (set (capabilities/registered))
-                [:cert-manager :gateway-api :cnpg :prometheus-operator :calico]))))
+                [:gateway-api :cnpg :prometheus-operator :calico]))))
 
 (deftest detect-present-is-best-effort-test
   (testing "a detector that throws counts as absent, never breaks detection"

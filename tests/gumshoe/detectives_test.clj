@@ -8,7 +8,6 @@
             [gumshoe.detective :as detective]
             [gumshoe.subject :as subject]
             [gumshoe.detectives.calico :as calico]
-            [gumshoe.detectives.certificates :as certificates]
             [gumshoe.detectives.cnpg :as cnpg]
             [gumshoe.detectives.monitoring :as monitoring]
             [gumshoe.detectives.nodes :as nodes]
@@ -61,31 +60,6 @@
              "DiskPressure is active"
              "node is cordoned (unschedulable)"}
            (summaries findings)))))
-
-(deftest certificates-detective-test
-  (let [now (java.time.Instant/parse "2026-07-04T00:00:00Z")
-        evidence {:now now
-                  certificates/certificate-type
-                  {:items [{:metadata {:namespace "moodle" :name "tls"}
-                            :status {:conditions [{:type "Ready" :status "False" :reason "Failed"}]}}
-                           {:metadata {:namespace "keycloak" :name "tls"}
-                            :status {:conditions [{:type "Ready" :status "True"}]
-                                     :notAfter "2026-07-10T00:00:00Z"}}
-                           {:metadata {:namespace "fine" :name "tls"}
-                            :status {:conditions [{:type "Ready" :status "True"}]
-                                     :notAfter "2026-12-31T00:00:00Z"}}]}}
-        findings (certificates/detect-certificate-problems evidence)]
-    (is (= #{"certificate is not Ready (Failed)"
-             "certificate expires soon (2026-07-10T00:00:00Z)"}
-           (summaries findings))))
-  (testing "invalid and errored orders are reported"
-    (is (= #{"ACME order is invalid"}
-           (summaries (certificates/detect-invalid-orders
-                       {certificates/order-type
-                        {:items [{:metadata {:namespace "moodle" :name "order-1"}
-                                  :status {:state "invalid"}}
-                                 {:metadata {:namespace "fine" :name "order-2"}
-                                  :status {:state "valid"}}]}}))))))
 
 (deftest cnpg-detective-test
   (let [evidence {cnpg/cluster-type

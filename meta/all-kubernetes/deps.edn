@@ -1,0 +1,11 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The "all-kubernetes" meta-package: gumshoe plus every in-cluster tool package,
+;; for a casebook that operates a Kubernetes platform and wants them all at once.
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "meta/all-kubernetes"}}}
+;; List each tool's plugin ns under env.edn :plugins to activate it. Add packages
+;; here as they are extracted (gateway, cnpg, prometheus, …).
+{:deps {io.github.metio/gumshoe             {:local/root "../.."}
+        io.github.metio/gumshoe-flux        {:local/root "../../tools/flux"}
+        io.github.metio/gumshoe-certmanager {:local/root "../../tools/certmanager"}}}

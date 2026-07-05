@@ -1,10 +1,10 @@
 ;; SPDX-FileCopyrightText: The gumshoe Authors
 ;; SPDX-License-Identifier: 0BSD
 
-{:paths ["libraries" "runbooks" "playbooks" "firebooks" "tools/flux/libraries" "tools/flux/runbooks" "tools/ceph/libraries" "tools/ceph/runbooks" "tools/ceph/playbooks"]
+{:paths ["libraries" "runbooks" "playbooks" "firebooks" "tools/flux/libraries" "tools/flux/runbooks" "tools/ceph/libraries" "tools/ceph/runbooks" "tools/ceph/playbooks" "tools/certmanager/libraries" "tools/certmanager/runbooks"]
  :tasks
  {test {:doc "Runs all unit tests"
-        :extra-paths ["tests" "examples" "tools/flux/tests" "tools/ceph/tests"]
+        :extra-paths ["tests" "examples" "tools/flux/tests" "tools/ceph/tests" "tools/certmanager/tests"]
         :requires ([clojure.test :as test]
                    [gumshoe.backups-test]
                    [gumshoe.catalog-test]
@@ -18,6 +18,7 @@
                    [gumshoe.conformance-test]
                    [gumshoe.detectives-test]
                    [gumshoe.tools.flux-test]
+                   [gumshoe.certificates-test]
                    [gumshoe.discovery-test]
                    [gumshoe.dns-test]
                    [gumshoe.etcd-test]
@@ -76,6 +77,7 @@
                                                          'gumshoe.conformance-test
                                                          'gumshoe.detectives-test
                                                          'gumshoe.tools.flux-test
+                                                         'gumshoe.certificates-test
                                                          'gumshoe.discovery-test
                                                          'gumshoe.dns-test
                                                          'gumshoe.etcd-test

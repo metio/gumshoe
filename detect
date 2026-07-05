@@ -34,7 +34,7 @@
    {:label "🐘 Databases - CloudNativePG and db-operator"
     :book "runbooks/detectives/databases.clj"}
    {:label "🔒 TLS - cert-manager certificates and ACME orders"
-    :book "runbooks/detectives/certificates.clj"}
+    :book "tools/certmanager/runbooks/scan.clj"}
    {:label "🔁 GitOps - flux sources and reconciliations"
     :book "tools/flux/runbooks/gitops.clj"}
    {:label "📈 Observability - the prometheus-operator stack"

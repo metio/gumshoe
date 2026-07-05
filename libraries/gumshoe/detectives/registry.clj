@@ -9,7 +9,6 @@
    plugin detectives join the scan with no change to the core."
   (:require [gumshoe.detectives.calico :as calico]
             [gumshoe.detectives.capacity :as capacity]
-            [gumshoe.detectives.certificates :as certificates]
             [gumshoe.detectives.cnpg :as cnpg]
             [gumshoe.detectives.controlplane :as controlplane]
             [gumshoe.detectives.csi :as csi]
@@ -57,7 +56,6 @@
 (register! :platform (concat controlplane/detectives nodes/detectives calico/detectives csi/detectives))
 (register! :workloads (concat controllers/detectives pods/detectives storage/detectives disruption/detectives
                               quotas/detectives capacity/detectives))
-(register! :tls certificates/detectives)
 (register! :databases (concat cnpg/detectives db-operator/detectives))
 (register! :observability monitoring/detectives)
 (register! :signals events/detectives)
