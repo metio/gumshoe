@@ -29,7 +29,6 @@
         fluxcd # helmrelease reconciliation
         cmctl # cert-manager certificate renewal
         prometheus-alertmanager # amtool for alert silences
-        mimirtool # prometheus metrics usage analyses
 
         postgresql # psql and pg_dump for db-operator databases
         restic # the restic backup detective queries repositories directly
