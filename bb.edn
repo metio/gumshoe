@@ -29,6 +29,7 @@
                    [gumshoe.observability-stack-test]
                    [gumshoe.opennebula-test]
                    [gumshoe.pad-test]
+                   [gumshoe.plugin-test]
                    [gumshoe.plugins-test]
                    [gumshoe.reproducer-test]
                    [gumshoe.recording-test]
@@ -84,6 +85,7 @@
                                                          'gumshoe.observability-stack-test
                                                          'gumshoe.opennebula-test
                                                          'gumshoe.pad-test
+                                                         'gumshoe.plugin-test
                                                          'gumshoe.plugins-test
                                                          'gumshoe.reproducer-test
                                                          'gumshoe.recording-test
