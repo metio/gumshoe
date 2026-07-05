@@ -129,6 +129,27 @@
       {:ok? true :label (format "can exec into %s" resource)}
       {:ok? false :label (format "cannot exec into %s" resource)})])
 
+(def ^:private built-in-prerequisite-keys
+  "The :prerequisites keys the harness handles directly; everything else must be
+   a plugin-registered check. A declared key in neither set is a typo or a plugin
+   that failed to load."
+  #{:can-ping-using-ipv4 :can-ping-using-ipv6 :access-gopass-secrets
+    :installed-tools :minimum-tool-versions :cluster-capabilities
+    :kubectl-can-get :kubectl-can-create :kubectl-can-patch
+    :kubectl-can-delete :kubectl-can-exec})
+
+(defn- unknown-prerequisite-items
+  "Fail-closed items for declared prerequisite keys that no built-in handles and
+   no plugin registered - so a change gate whose providing plugin is missing (or
+   whose key is misspelled) blocks the book instead of being silently dropped."
+  [prerequisites]
+  (let [known (into built-in-prerequisite-keys (prerequisites/registered-checks))]
+    (for [key (remove known (keys prerequisites))]
+      [(format "prerequisite %s" key)
+       (fn [] {:ok? false
+               :label (format "unknown prerequisite %s - its providing plugin is not loaded, or the key is misspelled"
+                              key)})])))
+
 (defn- prerequisite-items
   [prerequisites opts]
   (let [blank? #(str/blank? (str %))
@@ -157,7 +178,9 @@
      (map (partial can-i-item "delete") (:kubectl-can-delete prerequisites))
      (map can-exec-item (:kubectl-can-exec prerequisites))
      ;; plugin-registered checks (change windows, tickets, on-call acks) run last
-     (prerequisites/items prerequisites opts))))
+     (prerequisites/items prerequisites opts)
+     ;; and a fail-closed item for any declared key nothing handles
+     (unknown-prerequisite-items prerequisites))))
 
 (defn- prerequisites?
   [prerequisites opts]

@@ -64,6 +64,7 @@
                    [gumshoe.prometheus-test]
                    [gumshoe.rbac-test]
                    [gumshoe.report-test]
+                   [gumshoe.runbook-test]
                    [gumshoe.secrets-test]
                    [gumshoe.security-test]
                    [gumshoe.shell-test]
@@ -110,6 +111,7 @@
                                                          'gumshoe.plugin-test
                                                          'gumshoe.plugins-test
                                                          'gumshoe.reproducer-test
+                                                         'gumshoe.runbook-test
                                                          'gumshoe.recording-test
                                                          'gumshoe.upload-test
                                                          'gumshoe.ui-test

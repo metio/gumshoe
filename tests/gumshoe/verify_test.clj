@@ -2,7 +2,8 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.verify-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string]
+            [clojure.test :refer [deftest is testing]]
             [gumshoe.verify :as verify]))
 
 (deftest eventually-test
@@ -43,6 +44,26 @@
       (is (verify/eventually {:description "watched" :timeout 1 :interval 0 :soft? true
                               :check (constantly false) :watch watch}))
       (is (pos? @samples)))))
+
+(deftest watch-primes-baseline-test
+  (testing "the pre-existing signal backlog is not reported as if it appeared during the wait"
+    (let [calls (atom 0)
+          watch (fn []
+                  (swap! calls inc)
+                  ;; the pre-existing signal is present from the baseline sample on;
+                  ;; a genuinely new one only shows up after a couple of intervals
+                  (if (>= @calls 3)
+                    ["pre-existing warning" "a NEW resizer error"]
+                    ["pre-existing warning"]))
+          err (java.io.StringWriter.)]
+      (binding [*err* err]
+        (verify/eventually {:description "watched" :timeout 2 :interval 0 :soft? true
+                            :check (constantly false) :watch watch}))
+      (let [out (str err)]
+        (is (clojure.string/includes? out "a NEW resizer error")
+            "a signal that appears during the wait is surfaced")
+        (is (not (clojure.string/includes? out "while waiting — pre-existing warning"))
+            "the pre-existing backlog is not surfaced as a during-wait signal")))))
 
 (deftest all-test
   (testing "every check must hold"

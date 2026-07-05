@@ -27,7 +27,11 @@
     (do (stdout/error "refusing a malformed post-check: it needs a :description string and a :check function")
         false)
     (loop [elapsed 0
-           seen #{}]
+           ;; Prime the dedup set with a baseline sample, so the pre-existing
+           ;; signal backlog (Kubernetes Warning events persist ~1h, a ceph log
+           ;; tail) is not reported as if it appeared during this wait. Only
+           ;; signals that show up after the change are surfaced.
+           seen (if watch (try (set (watch)) (catch Exception _ #{})) #{})]
       (cond
         (try (boolean (check)) (catch Exception _ false))
         (do (stdout/ok (str "verified: " description))
