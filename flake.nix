@@ -76,8 +76,12 @@
           packages = (toolsFor pkgs) ++ (ciTools pkgs);
 
           shellHook = ''
+            # tools.deps caches resolved git deps here (default ~/.gitlibs). It is
+            # regenerable, so keep it under XDG_CACHE_HOME rather than dotting $HOME.
+            export GITLIBS="''${XDG_CACHE_HOME:-$HOME/.cache}/gitlibs"
             echo "📚 gumshoe - run books with: bb <path-to-book> --help"
             echo "   run the test suite with: bb test"
+            echo "   git deps cache: $GITLIBS"
             echo "   netshoot books also need: kubectl krew install netshoot"
           '';
         };

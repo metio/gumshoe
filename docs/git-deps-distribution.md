@@ -63,10 +63,17 @@ A gumshoe monorepo can offer channels by subpath, pinned per casebook:
 ## The one cost
 
 babashka resolves git deps by shelling to tools.deps, which needs `java`. The
-flake's devShell carries a JDK, and the resolution is cached under `~/.gitlibs`
-after the first run - but a user on bare babashka with no JDK cannot resolve.
-That single fact is why `main` ships the clone-based model; this branch is the
-alternative if a JDK in every environment is acceptable.
+flake's devShell carries a JDK, and the resolution is cached after the first run -
+but a user on bare babashka with no JDK cannot resolve. That single fact is why
+`main` ships the clone-based model; this branch is the alternative if a JDK in
+every environment is acceptable.
+
+The cache lives at `~/.gitlibs` by default. tools.gitlibs honors the `GITLIBS`
+environment variable (and the `clojure.gitlibs` system property), so the devShell
+points it at the XDG cache - `export GITLIBS="$XDG_CACHE_HOME/gitlibs"` - rather
+than dotting `$HOME`; the container image sets the same and `.ilo.rc` mounts the
+host's copy so it survives across runs. Wherever this doc says `~/.gitlibs`, read
+"the `GITLIBS` cache."
 
 ## Not yet done on this branch
 

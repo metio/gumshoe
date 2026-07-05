@@ -29,6 +29,12 @@ RUN nix run nixpkgs#git -- init -q \
 ENV PATH=/opt/gumshoe-tools/bin:$PATH
 ENV SSL_CERT_FILE=/opt/gumshoe-tools/etc/ssl/certs/ca-bundle.crt
 
+# tools.deps caches resolved git deps here (default ~/.gitlibs). Keep it under the
+# XDG cache dir; mount the host's ${XDG_CACHE_HOME}/gitlibs onto this path in
+# .ilo.rc so resolution is cached across container runs instead of re-cloning:
+#   --volume ${XDG_CACHE_HOME}/gitlibs:/root/.cache/gitlibs:z
+ENV GITLIBS=/root/.cache/gitlibs
+
 # The netshoot books need the krew-installed kubectl plugin. Keep it in a stable
 # root-owned location. This step needs network at build time; if your builder
 # has none, drop it and run `kubectl krew install netshoot` inside the container.
