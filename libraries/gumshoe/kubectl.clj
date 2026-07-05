@@ -229,6 +229,18 @@
   [type name]
   (zero? (shell/exit-code-of "kubectl" "get" type name "--request-timeout=5s")))
 
+(defn any-matching?
+  "Whether any resource of `type` matches a label `selector`, across all namespaces
+   - the existence check for a tool installed WITHOUT its own CRD, where a Helm
+   chart instead labels its workloads (app.kubernetes.io/name=<tool>). Name-only and
+   bounded with a short timeout, so capability detection stays snappy; runs against
+   the current kubectl context, like resource-exists?. An unreachable API or a
+   no-match both yield false (absent)."
+  [type selector]
+  (not (str/blank? (shell/stdout-of "kubectl" "get" type "--all-namespaces"
+                                    (str "--selector=" selector)
+                                    "--output=name" "--request-timeout=5s"))))
+
 ;; A bounded request timeout on every read means a wedged API server slows a
 ;; book down by seconds, never hangs it forever. It applies only to these
 ;; quick get calls - long-running work (port-forward, drain, exec, watches,

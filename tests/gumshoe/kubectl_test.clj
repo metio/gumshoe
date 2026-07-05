@@ -3,6 +3,7 @@
 
 (ns gumshoe.kubectl-test
   (:require [clojure.test :refer [deftest is testing]]
+            [gumshoe.shell :as shell]
             [gumshoe.kubectl :as kubectl]))
 
 (def nodes
@@ -122,3 +123,11 @@
     (is (= ["cpu/Utilization (Resource)"
             "requests_per_second/AverageValue (Pods)"]
            (kubectl/hpa-scaling-metrics hpas)))))
+
+(deftest any-matching?-test
+  (testing "a non-empty name list means at least one resource matches the selector"
+    (with-redefs [shell/stdout-of (fn [& _] "deployment.apps/loki\nstatefulset.apps/loki-backend")]
+      (is (kubectl/any-matching? "deployment,statefulset" "app.kubernetes.io/name=loki"))))
+  (testing "empty output - no match, or an unreachable API - reads as absent, never throws"
+    (with-redefs [shell/stdout-of (fn [& _] "")]
+      (is (not (kubectl/any-matching? "deployment" "app.kubernetes.io/name=loki"))))))
