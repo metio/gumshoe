@@ -14,21 +14,44 @@
   [tool]
   (some? (fs/which tool)))
 
-(defonce ^:private version-commands
-  ;; How to ask a tool for its version, when the usual --version does not work.
-  ;; A tool-support plugin registers its own tools here (register-version-command!)
-  ;; so the core can show their versions in Prerequisites.
-  (atom {"kubectl" ["version" "--client"]
-         "krew" ["version"]
-         "dig" ["-v"]
-         "restic" ["version"]
-         "openssl" ["version"]}))
+(defonce ^:private tools
+  ;; A tool's profile: how to read its :version-command, an optional :min-version
+  ;; every book that uses it must meet, and optional :prerequisites the tool
+  ;; brings along. A tool-support plugin registers its tool once here, so a book
+  ;; that lists the tool in :installed-tools inherits its version and checks
+  ;; instead of repeating them.
+  (atom {"kubectl" {:version-command ["version" "--client"]}
+         "krew" {:version-command ["version"]}
+         "dig" {:version-command ["-v"]}
+         "restic" {:version-command ["version"]}
+         "openssl" {:version-command ["version"]}}))
+
+(defn register-tool!
+  "Registers a tool's profile so every book that lists it in :installed-tools
+   gets its checks for free: :version-command (the argv that prints its version),
+   an optional :min-version, and optional :prerequisites - (fn [opts] -> seq of
+   [label thunk] checklist items) the tool brings along (a service it must reach,
+   a login it needs). Merges into any existing profile for the tool."
+  [binary profile]
+  (swap! tools update binary merge profile))
 
 (defn register-version-command!
-  "Teaches the core how to read a tool's version - the argv that prints it. Used
-   by tool-support plugins for tools the core does not ship knowledge of."
+  "Teaches the core how to read a tool's version - a shorthand for register-tool!
+   with just :version-command."
   [tool args]
-  (swap! version-commands assoc tool (vec args)))
+  (register-tool! tool {:version-command (vec args)}))
+
+(defn tool-min-version
+  "The minimum version registered for a tool, or nil - checked automatically for
+   any book that lists the tool in :installed-tools."
+  [tool]
+  (get-in @tools [tool :min-version]))
+
+(defn tool-prerequisites
+  "The extra checklist-item builder a tool brought along ((fn [opts] -> items)),
+   or nil."
+  [tool]
+  (get-in @tools [tool :prerequisites]))
 
 (defn version
   "A short version string for an installed tool, or nil when it can not be
@@ -38,7 +61,7 @@
    Some tools print the version to stderr, so both streams are considered and
    the first non-blank line wins."
   [tool]
-  (let [{:keys [exit out err]} (apply shell/execute tool (get @version-commands tool ["--version"]))]
+  (let [{:keys [exit out err]} (apply shell/execute tool (get-in @tools [tool :version-command] ["--version"]))]
     (when (zero? exit)
       (->> (str/split-lines (str out "\n" err))
            (map str/trim)

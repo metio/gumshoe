@@ -199,8 +199,11 @@ sidesteps that, which matters when your users run bare babashka.) Copy
 - **Capability detectors** - `(capabilities/register-detector! :ceph #(…))`, so
   the setup wizard recognises what a cluster can do and books can require it with
   `:cluster-capabilities [:ceph]`.
-- **Tool support** - `(command/register-version-command! "mytool" ["--version"])`
-  so a tool shows its version in Prerequisites.
+- **Tool support** - a tool's profile: `(command/register-tool! "mytool"
+  {:version-command ["--version"] :min-version "2.0" :prerequisites (fn [opts] …)})`.
+  A book that lists the tool in `:installed-tools` inherits its version floor and
+  brought checks (a service it must reach, a login) for free, instead of
+  repeating them. `register-version-command!` is the version-only shorthand.
 - **Summary providers** - where a scan's findings can be sent. The clipboard and
   a HedgeDoc pad are built in; a plugin adds more with
   `(summary/register-provider! { … })` - Slack, a ticket, a file, a Matrix post.

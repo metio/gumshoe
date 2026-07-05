@@ -27,9 +27,19 @@
    :requires ["pods"]
    :detect (fn [_evidence] [])}])
 
-;; Seam 3 - teach the core how to read a tool's version, so it shows up in the
-;; Prerequisites checklist for books that require it.
-(command/register-version-command! "example-tool" ["--version"])
+;; Seam 3 - a tool profile: how to read its version, a version floor every book
+;; that uses it inherits, and a prerequisite the tool brings along. A book that
+;; lists "example-tool" in :installed-tools gets all three for free, without
+;; repeating the tool's requirements.
+(command/register-tool!
+ "example-tool"
+ {:version-command ["--version"]
+  :min-version "2.0"
+  :prerequisites (fn [_opts]
+                   [(prerequisites/check "example-tool: service reachable"
+                                         (fn [] true)
+                                         {:pass "example-tool service is reachable"
+                                          :fail "example-tool service is unreachable"})])})
 
 ;; Seam 4 - a post-execution hook: observe every finished book (push a metric,
 ;; forward the recording, update a status page). It never changes the outcome,

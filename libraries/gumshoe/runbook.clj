@@ -135,10 +135,17 @@
         ipv4-hosts (remove blank? (map opts (:can-ping-using-ipv4 prerequisites)))
         ipv6-hosts (remove blank? (map opts (:can-ping-using-ipv6 prerequisites)))
         secrets (remove blank? (map opts (:access-gopass-secrets prerequisites)))
-        tools (utils/conj-if-not-empty (:installed-tools prerequisites) secrets (secrets/command-name))]
+        tools (utils/conj-if-not-empty (:installed-tools prerequisites) secrets (secrets/command-name))
+        ;; a tool brings its own version floor: any book that lists it inherits
+        ;; the min-version its tool-support package registered, the book's own
+        ;; :minimum-tool-versions winning on conflict
+        tool-floors (into {} (keep (fn [t] (when-let [v (command/tool-min-version t)] [t v])) tools))
+        min-versions (merge tool-floors (:minimum-tool-versions prerequisites))]
     (concat
      (map tool-item tools)
-     (map min-version-item (:minimum-tool-versions prerequisites))
+     (map min-version-item min-versions)
+     ;; and any extra checks the tool declared it needs (a service to reach, a login)
+     (mapcat (fn [t] (when-let [build (command/tool-prerequisites t)] (build opts))) tools)
      (map (partial ping-item 4) ipv4-hosts)
      (map (partial ping-item 6) ipv6-hosts)
      (map secret-item secrets)
