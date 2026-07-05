@@ -68,7 +68,7 @@
 
 (plugin/provide!
  {:detectives {:delivery detectives}
-  :capabilities {:stageset #(kubectl/resource-exists? "customresourcedefinition" stageset-type)}
+  :capabilities {:stageset #(kubectl/serves-crd? stageset-type)}
   :kinds {"StageSet" {:type stageset-type}
           "StageInventory" {:type stageinventory-type}}
   :probes [{:key :stageset-status :label "🎬 StageSet per-stage progress"

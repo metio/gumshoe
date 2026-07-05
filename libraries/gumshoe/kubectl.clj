@@ -241,6 +241,14 @@
                                     (str "--selector=" selector)
                                     "--output=name" "--request-timeout=5s"))))
 
+(defn serves-crd?
+  "Whether the cluster serves a CRD by its full plural.group name (e.g.
+   \"certificates.cert-manager.io\") - the existence check for an operator that
+   installs its own CRD. A capability detector for such a tool is just
+   #(serves-crd? \"…\"), the CRD-shaped sibling of resource-exists? and any-matching?."
+  [crd]
+  (resource-exists? "customresourcedefinition" crd))
+
 ;; A bounded request timeout on every read means a wedged API server slows a
 ;; book down by seconds, never hangs it forever. It applies only to these
 ;; quick get calls - long-running work (port-forward, drain, exec, watches,

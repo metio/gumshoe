@@ -11,4 +11,4 @@
 
 (plugin/provide!
  {:detectives {:databases cnpg/detectives}
-  :capabilities {:cnpg #(kubectl/resource-exists? "customresourcedefinition" "clusters.postgresql.cnpg.io")}})
+  :capabilities {:cnpg #(kubectl/serves-crd? "clusters.postgresql.cnpg.io")}})

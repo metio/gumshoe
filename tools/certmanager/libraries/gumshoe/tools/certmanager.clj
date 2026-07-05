@@ -12,4 +12,4 @@
 
 (plugin/provide!
  {:detectives {:tls certificates/detectives}
-  :capabilities {:cert-manager #(kubectl/resource-exists? "customresourcedefinition" "certificates.cert-manager.io")}})
+  :capabilities {:cert-manager #(kubectl/serves-crd? "certificates.cert-manager.io")}})

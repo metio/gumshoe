@@ -93,7 +93,7 @@
   :detectives {:gitops detectives}
 
   ;; A cluster runs flux when it serves the flux CRDs.
-  :capabilities {:flux #(kubectl/resource-exists? "customresourcedefinition" kustomization-type)}
+  :capabilities {:flux #(kubectl/serves-crd? kustomization-type)}
 
   ;; The flux CLI, so any book that lists it inherits the version check.
   :tools {"flux" {:version-command ["version" "--client"] :min-version "2.0"}}

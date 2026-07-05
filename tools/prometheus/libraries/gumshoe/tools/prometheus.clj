@@ -13,4 +13,4 @@
 
 (plugin/provide!
  {:detectives {:observability monitoring/detectives}
-  :capabilities {:prometheus-operator #(kubectl/resource-exists? "customresourcedefinition" "prometheuses.monitoring.coreos.com")}})
+  :capabilities {:prometheus-operator #(kubectl/serves-crd? "prometheuses.monitoring.coreos.com")}})

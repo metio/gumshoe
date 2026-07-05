@@ -131,3 +131,13 @@
   (testing "empty output - no match, or an unreachable API - reads as absent, never throws"
     (with-redefs [shell/stdout-of (fn [& _] "")]
       (is (not (kubectl/any-matching? "deployment" "app.kubernetes.io/name=loki"))))))
+
+(deftest serves-crd?-test
+  (testing "serves-crd? checks the named CRD via resource-exists?"
+    (with-redefs [shell/exit-code-of
+                  (fn [& args]
+                    (if (= (vec args) ["kubectl" "get" "customresourcedefinition"
+                                       "certificates.cert-manager.io" "--request-timeout=5s"])
+                      0 1))]
+      (is (kubectl/serves-crd? "certificates.cert-manager.io"))
+      (is (not (kubectl/serves-crd? "absent.example.com"))))))

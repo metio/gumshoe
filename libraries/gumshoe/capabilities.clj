@@ -12,8 +12,8 @@
    current cluster for it, and the setup wizard runs them all to fill in
    :capabilities for you. Detection is itself a plugin seam - a plugin ships a
    detector for its own tool with `register-detector!`, so a gumshoe-ceph package
-   teaches the wizard to recognise ceph with no change to the core."
-  (:require [gumshoe.kubectl :as kubectl]))
+   teaches the wizard to recognise ceph with no change to the core (using
+   kubectl/serves-crd?, kubectl/any-matching?, or any other predicate).")
 
 (defonce ^:private detectors (atom {}))
 
@@ -39,12 +39,4 @@
        sort
        vec))
 
-;; --- built-in detectors: presence of a well-known CRD marks the capability ---
-;; A cluster running flux serves the flux CRDs, cert-manager serves Certificate,
-;; and so on. This is stable across installation methods (helm, operator, raw),
-;; because it keys on the API the tool serves, not on how it was deployed.
-
-(defn- serves-crd?
-  [crd]
-  (kubectl/resource-exists? "customresourcedefinition" crd))
 

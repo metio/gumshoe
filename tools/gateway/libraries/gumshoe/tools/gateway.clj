@@ -11,4 +11,4 @@
 
 (plugin/provide!
  {:detectives {:traffic gateway/detectives}
-  :capabilities {:gateway-api #(kubectl/resource-exists? "customresourcedefinition" "gateways.gateway.networking.k8s.io")}})
+  :capabilities {:gateway-api #(kubectl/serves-crd? "gateways.gateway.networking.k8s.io")}})

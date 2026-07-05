@@ -11,4 +11,4 @@
 
 (plugin/provide!
  {:detectives {:databases db-operator/detectives}
-  :capabilities {:db-operator #(kubectl/resource-exists? "customresourcedefinition" "databases.kinda.rocks")}})
+  :capabilities {:db-operator #(kubectl/serves-crd? "databases.kinda.rocks")}})

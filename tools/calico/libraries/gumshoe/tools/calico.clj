@@ -11,4 +11,4 @@
 
 (plugin/provide!
  {:detectives {:platform calico/detectives}
-  :capabilities {:calico #(kubectl/resource-exists? "customresourcedefinition" "installations.operator.tigera.io")}})
+  :capabilities {:calico #(kubectl/serves-crd? "installations.operator.tigera.io")}})
