@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: The gumshoe Authors
+# SPDX-License-Identifier: 0BSD
+
+# Continuous calendar-versioned release: every push to main that touches shipped
+# code cuts a tagged GitHub release, so a casebook can pin a gumshoe version (and
+# Renovate can bump it) instead of tracking @main. gumshoe is distributed by
+# clone, so the release IS the git tag plus its notes - no artifact to build.
+# Second-precision CalVer means several releases a day never collide.
+name: Release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+# Serialize runs: needs-release reads the previous tag before this run creates
+# its own, so two quick pushes would otherwise read the same bound and emit
+# overlapping notes. Queue (never cancel) so the earlier run tags first.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # create the tag and the release
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0 # needs-release/calver read tags and history
+      - id: gate
+        uses: metio/ci/needs-release@afbf10fe3c5ceb438a1da090e78cc6c0159c4754 # 2026.7.5093733
+        with:
+          paths: libraries runbooks playbooks firebooks examples casebook-example dev bb.edn deps.edn flake.nix flake.lock gumshoe detect run investigate README.md
+      - uses: ./.github/actions/nix-devshell
+        if: steps.gate.outputs.needed == 'true'
+      - name: Run the book test suite before releasing
+        if: steps.gate.outputs.needed == 'true'
+        run: nix develop --command bb test
+      - id: version
+        if: steps.gate.outputs.needed == 'true'
+        uses: metio/ci/calver@afbf10fe3c5ceb438a1da090e78cc6c0159c4754 # 2026.7.5093733
+      - id: notes
+        name: Generate release notes
+        if: steps.gate.outputs.needed == 'true'
+        uses: metio/ci/release-notes@afbf10fe3c5ceb438a1da090e78cc6c0159c4754 # 2026.7.5093733
+        with:
+          version: ${{ steps.version.outputs.version }}
+          previous: ${{ steps.gate.outputs.last }}
+      - name: Tag and publish the GitHub release
+        if: steps.gate.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA: ${{ github.sha }}
+          NOTES: ${{ steps.notes.outputs.file }}
+        run: gh release create "$VERSION" --target "$SHA" --notes-file "$NOTES" --title "$VERSION"

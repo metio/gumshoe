@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: The gumshoe Authors
+# SPDX-License-Identifier: 0BSD
+
+# An image carrying every tool the books need. It builds the exact toolset the
+# flake already defines (packages.default), so there is one source of truth for
+# "what a book needs" - update flake.nix and the image follows. Meant to be run
+# by ilo (see .ilo.rc), which mounts this repo and your host-specific files.
+
+FROM docker.io/nixos/nix:latest
+
+# Flakes are still gated behind experimental features on the stock nix image.
+RUN mkdir -p /etc/nix \
+    && printf '%s\n' 'experimental-features = nix-command flakes' >> /etc/nix/nix.conf
+
+WORKDIR /src
+
+# Only the flake is needed to build the toolset; the books themselves are
+# mounted at runtime by ilo, so they are not copied in.
+COPY flake.nix ./
+
+# Nix flakes evaluate a git tree, so make a throwaway one (git comes from nix
+# itself, no base-image package manager needed). With no committed flake.lock
+# this pins nixpkgs at build time; commit a flake.lock to make it reproducible.
+RUN nix run nixpkgs#git -- init -q \
+    && nix run nixpkgs#git -- add -A \
+    && nix build '.#default' --out-link /opt/gumshoe-tools
+
+# Put every tool on PATH.
+ENV PATH=/opt/gumshoe-tools/bin:$PATH
+ENV SSL_CERT_FILE=/opt/gumshoe-tools/etc/ssl/certs/ca-bundle.crt
+
+# The netshoot books need the krew-installed kubectl plugin. Keep it in a stable
+# root-owned location. This step needs network at build time; if your builder
+# has none, drop it and run `kubectl krew install netshoot` inside the container.
+ENV KREW_ROOT=/opt/krew
+ENV PATH=/opt/krew/bin:$PATH
+RUN kubectl krew update && kubectl krew install netshoot
+
+WORKDIR /workspace
+CMD ["bash"]

@@ -1,0 +1,16 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; This manifest makes the directory a gumshoe extension. Clone it alongside
+;; gumshoe and add its path to env.edn :extensions - gumshoe then puts its code
+;; on the classpath (pure babashka: no dependency resolution, no JVM), discovers
+;; its books, and loads its plugins. A third-party extension reaches every seam
+;; the built-ins do.
+{;; Book directories, discovered by gumshoe / ./detect / ./run.
+ :book-paths ["runbooks"]
+ ;; Shared code to put on the classpath, so your books can require your own
+ ;; helpers (uncomment when you add a libraries/ dir):
+ ;; :paths ["libraries"]
+ ;; Namespaces to load, which register announcers / detectives / capability
+ ;; detectors / tool support (see gumshoe's examples/example/plugin.clj):
+ :plugins []}

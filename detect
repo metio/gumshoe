@@ -1,0 +1,135 @@
+#!/usr/bin/env bb
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The front door: run ./detect, say what hurts, get an investigation.
+;; Every entry maps to a detective runbook that also works standalone.
+
+(require '[babashka.cli :as cli]
+         '[infra.extensions :as extensions]
+         '[infra.fuzzy-finder :as fuzzy]
+         '[infra.stdout :as stdout])
+
+(def investigations
+  [{:label "🔦 Drill down - follow the thread from a hostname, namespace, node, or pod"
+    :book "runbooks/investigate.clj"}
+   {:label "🌍 Everything - the full cluster investigation"
+    :book "runbooks/detectives/cluster.clj"}
+   {:label "🧨 Workloads - crash loops, missing replicas, failed jobs, storage"
+    :book "runbooks/detectives/workloads.clj"}
+   {:label "🧱 Platform - nodes, calico network, CSI storage layer"
+    :book "runbooks/detectives/platform.clj"}
+   {:label "🔐 Security - RBAC, pod security, network policies"
+    :book "runbooks/detectives/security.clj"}
+   {:label "🌐 DNS - nameservers, replication, dual stack"
+    :book "runbooks/detectives/dns.clj"}
+   {:label "📡 external-dns - do all declared hostnames resolve?"
+    :book "runbooks/detectives/external_dns.clj"}
+   {:label "🔀 Traffic - Gateway API gateways and routes"
+    :book "runbooks/detectives/gateway_api.clj"}
+   {:label "📧 Mail - deliverability (SPF/DKIM/DMARC/rDNS) and SMTP/POP3/IMAP services"
+    :book "runbooks/detectives/mail.clj"}
+   {:label "📤 Upload limits - the nginx + php-fpm chain for a Moodle/Nextcloud app"
+    :book "runbooks/detectives/upload_limits.clj"}
+   {:label "🐘 Databases - CloudNativePG and db-operator"
+    :book "runbooks/detectives/databases.clj"}
+   {:label "🔒 TLS - cert-manager certificates and ACME orders"
+    :book "runbooks/detectives/certificates.clj"}
+   {:label "🔁 GitOps - flux sources and reconciliations"
+    :book "runbooks/detectives/gitops.clj"}
+   {:label "📈 Observability - the prometheus-operator stack"
+    :book "runbooks/detectives/observability.clj"}
+   {:label "⚡ Events - Warning events from the last hour"
+    :book "runbooks/detectives/events.clj"}
+   {:label "📊 Thanos - the query layer: readiness, stores, rules (port-forward)"
+    :book "runbooks/detectives/thanos.clj"}
+   {:label "📜 Loki - readiness and component ring health (port-forward)"
+    :book "runbooks/detectives/loki.clj"}
+   {:label "💬 Matrix - client/federation APIs, signing keys, delegation"
+    :book "runbooks/detectives/matrix.clj"}
+   {:label "💾 Restic - are backups actually landing? (asks for repositories)"
+    :book "runbooks/detectives/restic.clj"
+    :needs-repositories? true}
+   {:label "🐙 Ceph - the storage cluster itself (asks for a host)"
+    :book "runbooks/detectives/ceph.clj"
+    :needs-host? true}
+   {:label "🌌 OpenNebula - hosts, VMs, datastores (asks for the frontend)"
+    :book "runbooks/detectives/opennebula.clj"
+    :needs-frontend? true}])
+
+;; ./detect only carries the flags every detective book understands. It picks a
+;; book, then hands these straight through - so `./detect --dry-run` and a book
+;; run directly behave identically, and a typo like `--dry-rundfgfdg` is rejected
+;; here instead of being silently ignored.
+(def cli-spec
+  {:spec {:dry-run {:desc "Pass --dry-run through to the chosen book"
+                    :coerce :boolean}
+          :no-color {:desc "Disable colored output (also honors NO_COLOR)"
+                     :coerce :boolean}
+          :help {:desc "Show this help message"
+                 :alias :h
+                 :coerce :boolean}}
+   :restrict true
+   :error-fn (fn [{:keys [msg]}]
+               (stdout/error msg)
+               (stdout/err-println "run ./detect --help to see the available flags")
+               (System/exit 1))})
+
+(defn- passthrough
+  "The standard flags to forward to whichever book gets launched."
+  [opts]
+  (cond-> []
+    (:dry-run opts) (conj "--dry-run")
+    (:no-color opts) (conj "--no-color")))
+
+(defn- usage
+  []
+  (stdout/err-println (stdout/bold "./detect - start an investigation when something hurts"))
+  (stdout/err-println "")
+  (stdout/err-println (stdout/yellow "Usage:"))
+  (stdout/err-println "  ./detect [--dry-run] [--no-color]")
+  (stdout/err-println "")
+  (stdout/err-println (stdout/yellow "Options:"))
+  (stdout/err-println (cli/format-opts cli-spec))
+  (stdout/err-println "")
+  (stdout/err-println (stdout/yellow "Investigations you can pick from:"))
+  (doseq [{:keys [label]} investigations]
+    (stdout/err-println (str "  " label))))
+
+(defn- ask
+  [prompt]
+  (binding [*out* *err*]
+    (print prompt)
+    (flush))
+  (some-> (read-line) clojure.string/trim not-empty))
+
+(let [opts (cli/parse-opts *command-line-args* cli-spec)]
+  (when (:no-color opts) (stdout/disable-colors!))
+  (if (:help opts)
+    (usage)
+    (let [extra (passthrough opts)
+          labels (mapv :label investigations)
+          choice (fuzzy/select-single "What hurts?" labels)
+          investigation (first (filter #(= choice (:label %)) investigations))]
+      (cond
+        (nil? investigation)
+        (do (stdout/error "nothing selected - run ./detect again when it hurts")
+            (System/exit 1))
+
+        (:needs-host? investigation)
+        (if-let [host (ask "Which ceph host should I SSH into? ")]
+          (System/exit (apply extensions/launch-book! "bb" (:book investigation) "--host" host extra))
+          (do (stdout/error "no host given") (System/exit 1)))
+
+        (:needs-frontend? investigation)
+        (if-let [frontend (ask "Which OpenNebula frontend should I SSH into? ")]
+          (System/exit (apply extensions/launch-book! "bb" (:book investigation) "--frontend" frontend extra))
+          (do (stdout/error "no frontend given") (System/exit 1)))
+
+        (:needs-repositories? investigation)
+        (if-let [repository (ask "Which restic repository should I check? ")]
+          (System/exit (apply extensions/launch-book! "bb" (:book investigation) "--repository" repository extra))
+          (do (stdout/error "no repository given") (System/exit 1)))
+
+        :else
+        (System/exit (apply extensions/launch-book! "bb" (:book investigation) extra))))))

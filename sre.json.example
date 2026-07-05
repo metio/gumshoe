@@ -1,0 +1,13 @@
+{
+  "dns": {
+    "server": "dns.infra.run",
+    "zone": "infra.run"
+  },
+  "matrix": {
+    "domain": "infra.run",
+    "host": "synapse.infra.run"
+  },
+  "loki": {
+    "namespace": "loki"
+  }
+}

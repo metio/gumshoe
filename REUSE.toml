@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: The gumshoe Authors
+# SPDX-License-Identifier: 0BSD
+
+version = 1
+
+# ilo passes every line of an argument file to the container runtime, so the
+# file can not carry a comment header. Declare its license here instead.
+[[annotations]]
+path = "dev/ilo.rc.example"
+precedence = "override"
+SPDX-FileCopyrightText = "The gumshoe Authors"
+SPDX-License-Identifier = "0BSD"
+
+# nix generates flake.lock as pure JSON, which can not carry a comment header.
+[[annotations]]
+path = "flake.lock"
+precedence = "override"
+SPDX-FileCopyrightText = "The gumshoe Authors"
+SPDX-License-Identifier = "0BSD"
+
+# JSON can not carry a comment header. A sample of the public config a domain
+# publishes at /.well-known/sre.json for the setup wizard to discover.
+[[annotations]]
+path = "sre.json.example"
+precedence = "override"
+SPDX-FileCopyrightText = "The gumshoe Authors"
+SPDX-License-Identifier = "0BSD"

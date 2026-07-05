@@ -1,0 +1,12 @@
+#!/usr/bin/env bb
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The drill-down front door: run ./investigate to follow the thread from a
+;; symptom to a cause. Start from a hostname a user reported, a namespace, a
+;; node, or a pod - or run it bare and it asks. All flags pass through to the
+;; book, so ./investigate --host moodle.example.org works too.
+
+(require '[infra.shell :as shell])
+
+(System/exit (apply shell/run-with-output "bb" "runbooks/investigate.clj" *command-line-args*))

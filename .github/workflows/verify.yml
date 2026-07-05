@@ -1,0 +1,112 @@
+# SPDX-FileCopyrightText: The gumshoe Authors
+# SPDX-License-Identifier: 0BSD
+
+# Every gate runs through the flake's devShell (`nix develop --command`), so CI
+# and local shells resolve the exact same tool versions from flake.lock. Renovate
+# maintains the lock; no job installs tools any other way.
+name: Verify
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: ./.github/actions/nix-devshell
+      - name: Run the book test suite
+        run: nix develop --command bb test
+  reuse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: ./.github/actions/nix-devshell
+      - run: nix develop --command reuse lint
+  yaml:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: ./.github/actions/nix-devshell
+      - run: nix develop --command yamllint .
+  github-actions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: ./.github/actions/nix-devshell
+      # The devShell carries shellcheck alongside actionlint, so run: blocks are
+      # shell-linted too - without it actionlint silently skips them.
+      - run: nix develop --command actionlint
+  markdown:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: ./.github/actions/nix-devshell
+      - run: nix develop --command markdownlint-cli2 "**/*.md"
+  typos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: ./.github/actions/nix-devshell
+      - run: nix develop --command typos
+  policy:
+    # The metio org convention policies (conftest/Rego) from metio/ci: SHA pins,
+    # permissions, timeouts, run-injection, and - because this repo ships a
+    # flake.nix - the flake-owned-toolchain rules.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: metio/ci/policy-check@afbf10fe3c5ceb438a1da090e78cc6c0159c4754 # 2026.7.5093733
+  dco:
+    # Developer Certificate of Origin: every commit must carry a Signed-off-by
+    # trailer. Skipped for bot-authored PRs; a skipped job still satisfies the
+    # all-green gate below.
+    if: github.event.pull_request.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+      - name: Verify Signed-off-by on every commit
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          status=0
+          for sha in $(git rev-list "$BASE..$HEAD"); do
+            name=$(git show -s --format='%an' "$sha")
+            case "$name" in
+              *'[bot]'*) echo "skip bot commit ${sha:0:8} ($name)"; continue ;;
+            esac
+            if git show -s --format='%B' "$sha" | grep -qiE '^Signed-off-by: .+ <.+@.+>$'; then
+              echo "ok   ${sha:0:8}"
+            else
+              echo "::error::commit ${sha:0:8} by '$name' is missing a Signed-off-by line (use git commit --signoff)"
+              status=1
+            fi
+          done
+          exit $status
+  verify:
+    # Single required check covering every job above: mark only this one required
+    # in branch protection and new jobs are covered automatically.
+    name: Verify
+    needs: [test, reuse, yaml, github-actions, markdown, typos, policy, dco]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Verify every job succeeded or skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          bad=$(echo "$NEEDS" | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key)=\(.value.result)"')
+          [ -z "$bad" ] || { echo "::error::$bad"; exit 1; }

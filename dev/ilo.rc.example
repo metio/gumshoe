@@ -1,0 +1,8 @@
+shell
+--network host
+--volume ${HOME}/.kube:/root/.kube:ro
+--volume ${HOME}/.ssh:/root/.ssh:ro
+--volume ${HOME}/.gnupg:/root/.gnupg
+--volume ${HOME}/.config/gopass:/root/.config/gopass
+--containerfile dev/Containerfile
+dev/operational-bookstore:latest
