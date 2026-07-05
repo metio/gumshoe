@@ -1,0 +1,9 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The OpenNebula tool package (frontend-over-SSH). A standalone detective book -
+;; it registers no scope or capability, so no :plugins entry is needed; depending
+;; on it puts the book on the classpath.
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/opennebula"}}}
+{:paths ["libraries" "runbooks"]
+ :deps {io.github.metio/gumshoe {:local/root "../.."}}}

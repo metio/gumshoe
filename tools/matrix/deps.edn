@@ -1,0 +1,7 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The Matrix tool package (client/federation API health). A standalone detective book.
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/matrix"}}}
+{:paths ["libraries" "runbooks"]
+ :deps {io.github.metio/gumshoe {:local/root "../.."}}}

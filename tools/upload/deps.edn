@@ -1,0 +1,8 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The upload-limits tool package: the nginx + php-fpm chain behind a Moodle or
+;; Nextcloud upload. A standalone detective book.
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/upload"}}}
+{:paths ["libraries" "runbooks"]
+ :deps {io.github.metio/gumshoe {:local/root "../.."}}}

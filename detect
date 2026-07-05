@@ -30,7 +30,7 @@
    {:label "📧 Mail - deliverability (SPF/DKIM/DMARC/rDNS) and SMTP/POP3/IMAP services"
     :book "runbooks/detectives/mail.clj"}
    {:label "📤 Upload limits - the nginx + php-fpm chain for a Moodle/Nextcloud app"
-    :book "runbooks/detectives/upload_limits.clj"}
+    :book "tools/upload/runbooks/scan.clj"}
    {:label "🐘 Databases - CloudNativePG and db-operator"
     :book "runbooks/detectives/databases.clj"}
    {:label "🔒 TLS - cert-manager certificates and ACME orders"
@@ -44,19 +44,19 @@
    {:label "⚡ Events - Warning events from the last hour"
     :book "runbooks/detectives/events.clj"}
    {:label "📊 Thanos - the query layer: readiness, stores, rules (port-forward)"
-    :book "runbooks/detectives/thanos.clj"}
+    :book "tools/thanos/runbooks/scan.clj"}
    {:label "📜 Loki - readiness and component ring health (port-forward)"
-    :book "runbooks/detectives/loki.clj"}
+    :book "tools/loki/runbooks/scan.clj"}
    {:label "💬 Matrix - client/federation APIs, signing keys, delegation"
-    :book "runbooks/detectives/matrix.clj"}
+    :book "tools/matrix/runbooks/scan.clj"}
    {:label "💾 Restic - are backups actually landing? (asks for repositories)"
-    :book "runbooks/detectives/restic.clj"
+    :book "tools/restic/runbooks/scan.clj"
     :needs-repositories? true}
    {:label "🐙 Ceph - the storage cluster itself (asks for a host)"
     :book "tools/ceph/runbooks/scan.clj"
     :needs-host? true}
    {:label "🌌 OpenNebula - hosts, VMs, datastores (asks for the frontend)"
-    :book "runbooks/detectives/opennebula.clj"
+    :book "tools/opennebula/runbooks/scan.clj"
     :needs-frontend? true}])
 
 ;; ./detect only carries the flags every detective book understands. It picks a

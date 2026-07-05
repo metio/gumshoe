@@ -1,0 +1,7 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The thanos tool package (port-forward health checks). A standalone detective book.
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/thanos"}}}
+{:paths ["libraries" "runbooks"]
+ :deps {io.github.metio/gumshoe {:local/root "../.."}}}
