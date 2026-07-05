@@ -16,7 +16,8 @@
   (:require [babashka.fs :as fs]
             [clojure.string :as str]
             [gumshoe.config :as config]
-            [gumshoe.shell :as shell]))
+            [gumshoe.shell :as shell]
+            [gumshoe.stdout :as stdout]))
 
 ;; --- pure helpers ----------------------------------------------------------
 
@@ -147,16 +148,28 @@
     (:password secrets-config) :command
     :else :gopass))
 
+(defonce ^:private warned-unknown (atom #{}))
+
 (defn- active []
   (let [name (active-name (config/value [:secrets] {}))]
-    (or (get @providers name) gopass)))
+    (or (get @providers name)
+        ;; A configured provider that is not registered (a typo, or a plugin
+        ;; that failed to load) would otherwise silently read from gopass -
+        ;; wrong-store credentials with no signal. Warn once, then fall back.
+        (do (when (and name (not (contains? @warned-unknown name)))
+              (swap! warned-unknown conj name)
+              (stdout/warn (format "secrets provider %s is not registered - falling back to gopass" name)))
+            gopass))))
 
 (defn command-name
-  "The password-manager binary the books need installed - the active provider's,
-   or the first word of the :command provider's configured retrieval command."
+  "The password-manager binary the books need installed - the active provider's
+   :binary, or (only for the template-driven :command provider) the first word of
+   its configured retrieval command."
   []
-  (or (:binary (active))
-      (first (command-template :password))))
+  (let [provider (active)]
+    (if (= :command (:name provider))
+      (or (:binary provider) (first (command-template :password)))
+      (:binary provider))))
 
 (defn password
   "The password for a secret path, or nil when it is absent or empty."

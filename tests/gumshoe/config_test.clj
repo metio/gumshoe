@@ -86,7 +86,10 @@
            (config/known-clusters {:environments {:a {:select {:kubernetes-cluster "c1"}}
                                                   :b {:select {:kubernetes-cluster "c2"}}}
                                    :clusters ["c3" "c1"]})))
-    (is (empty? (config/known-clusters {})))))
+    (is (empty? (config/known-clusters {}))))
+  (testing "a :clusters written as a bare string is one cluster, not a seq of characters"
+    (is (= ["kube.example.org"]
+           (config/known-clusters {:clusters "kube.example.org"})))))
 
 (deftest from-answers-capabilities-test
   (testing "detected capabilities land in the environment body"

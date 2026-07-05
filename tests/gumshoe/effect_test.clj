@@ -26,6 +26,9 @@
   (testing "dry-run wording hides the context noise and reads like the CLI"
     (is (= "kubectl cordon node-1" (effect/describe (effect/kubectl "prod" "cordon" "node-1"))))
     (is (= "ssh mgr-1 -- ceph -s" (effect/describe (effect/ssh {:host "mgr-1"} "ceph" "-s"))))
+    (is (= "ssh cephadm@mgr-1 -- ceph -s"
+           (effect/describe (effect/ssh {:host "mgr-1" :user "cephadm"} "ceph" "-s")))
+        "the preview shows the same user@host the effect connects to")
     (is (= "# taking a backup" (effect/describe (effect/note "taking a backup"))))))
 
 (deftest collect-is-the-test-interpreter

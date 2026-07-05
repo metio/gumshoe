@@ -12,6 +12,7 @@
    keep the data tidy; interpreters at the bottom give it meaning."
   (:require [clojure.string :as str]
             [gumshoe.shell :as shell]
+            [gumshoe.ssh :as ssh]
             [gumshoe.stdout :as stdout]))
 
 ;; ---------------------------------------------------------------------------
@@ -75,8 +76,10 @@
   (case op
     :kubectl (str "kubectl " (str/join " " (rest args)))
     :kubectl-stdin (str "kubectl " (str/join " " (drop 2 args)) " (with stdin)")
+    ;; Render the same user@host target perform! connects to, so a --dry-run
+    ;; preview an operator copies runs as the same identity, not their default.
     :ssh (let [[connection & command] args]
-           (str "ssh " (:host connection) " -- " (str/join " " command)))
+           (str "ssh " (ssh/target connection) " -- " (str/join " " command)))
     :cmd (str/join " " args)
     :note (str "# " (first args))
     (if-let [render (:describe (get @effect-types op))]
@@ -102,9 +105,7 @@
     :ssh (let [[connection & command] args]
            (zero? (apply shell/run-with-output
                          (concat ["ssh" "-q" "-o" "BatchMode=yes" "-o" "ConnectTimeout=5"
-                                  "--" (if (:user connection)
-                                         (str (:user connection) "@" (:host connection))
-                                         (:host connection))]
+                                  "--" (ssh/target connection)]
                                  command))))
     :cmd (zero? (apply shell/run-with-output args))
     :note (do (stdout/err-println (str "  " (first args))) true)

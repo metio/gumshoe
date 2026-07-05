@@ -11,6 +11,9 @@
     (is (= "https://example.org/.well-known/sre.json" (discovery/url "  example.org  "))))
   (testing "a value that already looks like a URL is passed through"
     (is (= "https://example.org/custom/sre.json" (discovery/url "https://example.org/custom/sre.json"))))
+  (testing "a hostname that merely starts with 'http' is still a domain, not a URL"
+    (is (= "https://httpd.example.org/.well-known/sre.json" (discovery/url "httpd.example.org")))
+    (is (= "https://httpbin.example.org/.well-known/sre.json" (discovery/url "httpbin.example.org"))))
   (testing "blank/nil is no URL"
     (is (nil? (discovery/url "")))
     (is (nil? (discovery/url nil)))))

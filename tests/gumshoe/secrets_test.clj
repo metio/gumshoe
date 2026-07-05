@@ -2,8 +2,16 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.secrets-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string]
+            [clojure.test :refer [deftest is testing]]
+            [gumshoe.config :as config]
             [gumshoe.secrets :as secrets]))
+
+(defn- with-secrets
+  "Runs f with the :secrets config fixed to the given map."
+  [secrets-config f]
+  (with-redefs [config/value (fn [path & [d]] (if (= path [:secrets]) secrets-config d))]
+    (f)))
 
 (deftest resolve-command-test
   (testing "substitutes {path} and {field} into a command template"
@@ -55,3 +63,22 @@
                                  :password (fn [_] "x") :field (fn [_ _] nil)
                                  :find-path (fn [_] nil) :available? (fn [_] true)})
     (is (contains? (set (secrets/registered-providers)) :vault-native))))
+
+(deftest command-name-reflects-the-active-provider-test
+  (secrets/register-provider! {:name :vault-nobinary
+                               :password (fn [_] "x") :field (fn [_ _] nil)
+                               :find-path (fn [_] nil) :available? (fn [_] true)})
+  (testing "a plugin provider without :binary yields nil, not the gopass template word"
+    (is (nil? (with-secrets {:provider :vault-nobinary} secrets/command-name))))
+  (testing "the template-driven :command provider still reports its command's first word"
+    (is (= "gopass" (with-secrets {:provider :command} secrets/command-name))))
+  (testing "a built-in provider reports its own binary"
+    (is (= "pass" (with-secrets {:provider :pass} secrets/command-name)))))
+
+(deftest unknown-provider-warns-and-falls-back-test
+  (testing "a configured provider that is not registered warns instead of silently using gopass"
+    (reset! @#'secrets/warned-unknown #{})
+    (let [err (java.io.StringWriter.)]
+      (binding [*err* err]
+        (is (= "gopass" (with-secrets {:provider :nonexistent-typo} secrets/command-name))))
+      (is (clojure.string/includes? (str err) "not registered")))))

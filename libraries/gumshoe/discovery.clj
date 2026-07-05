@@ -25,7 +25,9 @@
   (let [domain (str/trim (str domain))]
     (cond
       (str/blank? domain) nil
-      (str/starts-with? domain "http") domain
+      ;; Match a real scheme, not the bare prefix "http": a hostname like
+      ;; httpd.example.org or httpbin.example.org is a domain, not a URL.
+      (re-find #"^https?://" domain) domain
       :else (format "https://%s/.well-known/sre.json" domain))))
 
 (defn fetch

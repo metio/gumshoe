@@ -90,9 +90,14 @@
    passes, since there is no allow-list to enforce."
   ([] (known-clusters (all)))
   ([config]
-   (distinct
-    (concat (keep #(get-in % [:select :kubernetes-cluster]) (vals (:environments config)))
-            (:clusters config)))))
+   ;; :clusters may be written as a single string; concat would then splice it
+   ;; character-by-character into the allow-list, so coerce a bare string to a
+   ;; one-element sequence.
+   (let [clusters (:clusters config)
+         clusters (if (string? clusters) [clusters] clusters)]
+     (distinct
+      (concat (keep #(get-in % [:select :kubernetes-cluster]) (vals (:environments config)))
+              clusters)))))
 
 (defn- matches-signals?
   [env signals]
