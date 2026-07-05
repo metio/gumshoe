@@ -26,7 +26,7 @@
    {:label "📡 external-dns - do all declared hostnames resolve?"
     :book "runbooks/detectives/external_dns.clj"}
    {:label "🔀 Traffic - Gateway API gateways and routes"
-    :book "runbooks/detectives/gateway_api.clj"}
+    :book "tools/gateway/runbooks/scan.clj"}
    {:label "📧 Mail - deliverability (SPF/DKIM/DMARC/rDNS) and SMTP/POP3/IMAP services"
     :book "runbooks/detectives/mail.clj"}
    {:label "📤 Upload limits - the nginx + php-fpm chain for a Moodle/Nextcloud app"

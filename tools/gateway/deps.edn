@@ -1,0 +1,9 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The Gateway API tool package.
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/gateway"}}}
+;; List gumshoe.tools.gateway under env.edn :plugins to fill :traffic and teach the
+;; wizard the :gateway-api capability.
+{:paths ["libraries" "runbooks"]
+ :deps {io.github.metio/gumshoe {:local/root "../.."}}}

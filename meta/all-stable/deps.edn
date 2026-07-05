@@ -9,4 +9,5 @@
 {:deps {io.github.metio/gumshoe      {:local/root ".."}
         io.github.metio/gumshoe-flux {:local/root "../tools/flux"}
         io.github.metio/gumshoe-ceph {:local/root "../tools/ceph"}
-        io.github.metio/gumshoe-certmanager {:local/root "../tools/certmanager"}}}
+        io.github.metio/gumshoe-certmanager {:local/root "../tools/certmanager"}
+        io.github.metio/gumshoe-gateway {:local/root "../tools/gateway"}}}

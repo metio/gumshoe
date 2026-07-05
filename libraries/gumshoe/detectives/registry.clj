@@ -15,7 +15,6 @@
             [gumshoe.detectives.db-operator :as db-operator]
             [gumshoe.detectives.disruption :as disruption]
             [gumshoe.detectives.events :as events]
-            [gumshoe.detectives.gateway :as gateway]
             [gumshoe.detectives.mail :as mail]
             [gumshoe.detectives.monitoring :as monitoring]
             [gumshoe.detectives.network :as network]
@@ -60,5 +59,4 @@
 (register! :observability monitoring/detectives)
 (register! :signals events/detectives)
 (register! :security (concat rbac/detectives pod-security/detectives network/detectives))
-(register! :traffic gateway/detectives)
 (register! :mail mail/detectives)
