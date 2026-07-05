@@ -207,6 +207,10 @@ sidesteps that, which matters when your users run bare babashka.) Copy
 - **Themes** - how output looks. `:default` (emoji + colour), `:ascii` (no emoji,
   for logs/CI), and `:plain` (no colour) are built in; a plugin registers more
   with `(theme/register! { … })`. Selected by `env.edn :theme`.
+- **Post-execution hooks** - observe every finished book (its outcome, recording
+  path, flags) with `(hooks/register-post-hook! (fn [ctx] …))` - push a metric,
+  forward the audit trail, update a status page. Bounded, so a slow hook can't
+  block the exit; distinct from announcers, which fire *before* a change.
 
 [`examples/example/plugin.clj`](examples/example/plugin.clj) is a worked plugin
 that extends several seams at once.

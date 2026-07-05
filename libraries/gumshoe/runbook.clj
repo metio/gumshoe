@@ -16,6 +16,7 @@
             [gumshoe.extensions :as extensions]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.flow :as flow]
+            [gumshoe.hooks :as hooks]
             [gumshoe.summary :as summary]
             [gumshoe.ping :as ping]
             [gumshoe.plugins :as plugins]
@@ -254,4 +255,12 @@
               ;; something turned up - offer a shared terminal to investigate together
               (when (= :failed outcome)
                 (upterm/offer!)))
+            ;; post-execution hooks observe the finished run (metrics, audit
+            ;; forwarding, status pages) - bounded so none can block the exit
+            (hooks/run-post-hooks! {:description description
+                                    :book (System/getProperty "babashka.file")
+                                    :opts opts
+                                    :outcome outcome
+                                    :recording-path recording-path
+                                    :meta (:announcement-data ctx)})
             (System/exit (if (= :ok outcome) 0 1))))))))
