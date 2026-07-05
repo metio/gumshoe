@@ -12,4 +12,5 @@
         io.github.metio/gumshoe-gateway     {:local/root "../../tools/gateway"}
         io.github.metio/gumshoe-cnpg        {:local/root "../../tools/cnpg"}
         io.github.metio/gumshoe-stageset    {:local/root "../../tools/stageset"}
-        io.github.metio/gumshoe-prometheus  {:local/root "../../tools/prometheus"}}}
+        io.github.metio/gumshoe-prometheus  {:local/root "../../tools/prometheus"}
+        io.github.metio/gumshoe-calico      {:local/root "../../tools/calico"}}}

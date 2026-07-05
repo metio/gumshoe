@@ -48,4 +48,3 @@
   [crd]
   (kubectl/resource-exists? "customresourcedefinition" crd))
 
-(register-detector! :calico #(serves-crd? "installations.operator.tigera.io"))

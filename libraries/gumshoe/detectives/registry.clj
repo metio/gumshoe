@@ -7,8 +7,7 @@
    detectives to a scope (or a brand new scope) with `register!`, and because a
    detective book resolves its scope when it runs (after plugins load), those
    plugin detectives join the scan with no change to the core."
-  (:require [gumshoe.detectives.calico :as calico]
-            [gumshoe.detectives.capacity :as capacity]
+  (:require [gumshoe.detectives.capacity :as capacity]
             [gumshoe.detectives.controlplane :as controlplane]
             [gumshoe.detectives.csi :as csi]
             [gumshoe.detectives.db-operator :as db-operator]
@@ -50,7 +49,7 @@
 
 ;; --- the built-in scopes ---------------------------------------------------
 
-(register! :platform (concat controlplane/detectives nodes/detectives calico/detectives csi/detectives))
+(register! :platform (concat controlplane/detectives nodes/detectives csi/detectives))
 (register! :workloads (concat controllers/detectives pods/detectives storage/detectives disruption/detectives
                               quotas/detectives capacity/detectives))
 (register! :databases db-operator/detectives)

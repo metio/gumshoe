@@ -5,11 +5,6 @@
   (:require [clojure.test :refer [deftest is testing]]
             [gumshoe.capabilities :as capabilities]))
 
-(deftest built-in-detectors-registered-test
-  (testing "the core ships detectors for the common platform pieces"
-    (is (every? (set (capabilities/registered))
-                [:calico]))))
-
 (deftest detect-present-is-best-effort-test
   (testing "a detector that throws counts as absent, never breaks detection"
     (capabilities/register-detector! :explodes (fn [] (throw (ex-info "boom" {}))))

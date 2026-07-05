@@ -7,7 +7,6 @@
             [clojure.test :refer [deftest is testing]]
             [gumshoe.detective :as detective]
             [gumshoe.subject :as subject]
-            [gumshoe.detectives.calico :as calico]
             [gumshoe.detectives.nodes :as nodes]
             [gumshoe.detectives.pods :as pods]
             [gumshoe.detectives.registry :as registry]
@@ -98,20 +97,6 @@
                                         {:metadata {:namespace "fine" :name "done"}
                                          :status {:conditions [{:type "Complete"
                                                                 :status "True"}]}}]}}))))))
-
-(deftest calico-detective-test
-  (let [evidence {calico/tigerastatus-type
-                  {:items [{:metadata {:name "calico"}
-                            :status {:conditions [{:type "Available" :status "False"
-                                                   :message "not all pods are ready"}]}}
-                           {:metadata {:name "apiserver"}
-                            :status {:conditions [{:type "Available" :status "True"}
-                                                  {:type "Degraded" :status "True"
-                                                   :reason "PodFailure"}]}}]}}
-        findings (calico/detect-calico-problems evidence)]
-    (is (= #{"tigera component is not Available"
-             "tigera component is Degraded (PodFailure)"}
-           (summaries findings)))))
 
 (deftest registry-test
   (testing "the registry composes every scope and stays free of duplicates"

@@ -1,10 +1,10 @@
 ;; SPDX-FileCopyrightText: The gumshoe Authors
 ;; SPDX-License-Identifier: 0BSD
 
-{:paths ["libraries" "runbooks" "playbooks" "firebooks" "tools/flux/libraries" "tools/flux/runbooks" "tools/ceph/libraries" "tools/ceph/runbooks" "tools/ceph/playbooks" "tools/certmanager/libraries" "tools/certmanager/runbooks" "tools/gateway/libraries" "tools/gateway/runbooks" "tools/cnpg/libraries" "tools/cnpg/runbooks" "tools/stageset/libraries" "tools/stageset/runbooks" "tools/prometheus/libraries" "tools/prometheus/runbooks"]
+{:paths ["libraries" "runbooks" "playbooks" "firebooks" "tools/flux/libraries" "tools/flux/runbooks" "tools/ceph/libraries" "tools/ceph/runbooks" "tools/ceph/playbooks" "tools/certmanager/libraries" "tools/certmanager/runbooks" "tools/gateway/libraries" "tools/gateway/runbooks" "tools/cnpg/libraries" "tools/cnpg/runbooks" "tools/stageset/libraries" "tools/stageset/runbooks" "tools/prometheus/libraries" "tools/prometheus/runbooks" "tools/calico/libraries" "tools/calico/runbooks"]
  :tasks
  {test {:doc "Runs all unit tests"
-        :extra-paths ["tests" "examples" "tools/flux/tests" "tools/ceph/tests" "tools/certmanager/tests" "tools/gateway/tests" "tools/cnpg/tests" "tools/stageset/tests" "tools/prometheus/tests"]
+        :extra-paths ["tests" "examples" "tools/flux/tests" "tools/ceph/tests" "tools/certmanager/tests" "tools/gateway/tests" "tools/cnpg/tests" "tools/stageset/tests" "tools/prometheus/tests" "tools/calico/tests"]
         :requires ([clojure.test :as test]
                    [gumshoe.backups-test]
                    [gumshoe.catalog-test]
@@ -23,6 +23,7 @@
                    [gumshoe.cnpg-test]
                    [gumshoe.stageset-test]
                    [gumshoe.monitoring-test]
+                   [gumshoe.calico-test]
                    [gumshoe.discovery-test]
                    [gumshoe.dns-test]
                    [gumshoe.etcd-test]
@@ -86,6 +87,7 @@
                                                          'gumshoe.cnpg-test
                                                          'gumshoe.stageset-test
                                                          'gumshoe.monitoring-test
+                                                         'gumshoe.calico-test
                                                          'gumshoe.discovery-test
                                                          'gumshoe.dns-test
                                                          'gumshoe.etcd-test

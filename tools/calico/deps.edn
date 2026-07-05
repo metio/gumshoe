@@ -1,0 +1,9 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The Calico tool package (tigera-operator managed).
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/calico"}}}
+;; List gumshoe.tools.calico under env.edn :plugins to join the :platform scope and
+;; teach the wizard the :calico capability.
+{:paths ["libraries" "runbooks"]
+ :deps {io.github.metio/gumshoe {:local/root "../.."}}}

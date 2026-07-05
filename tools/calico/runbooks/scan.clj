@@ -4,7 +4,8 @@
 (ns runbooks.detectives.calico
   "Investigates calico as managed by the tigera-operator."
   (:require [gumshoe.detective :as detective]
-            [gumshoe.detectives.calico :as calico]))
+            [gumshoe.detectives.calico :as calico]
+            [gumshoe.tools.calico]))
 
 (detective/book
  {:description "Investigates calico: unavailable, degraded, or progressing tigera components"
