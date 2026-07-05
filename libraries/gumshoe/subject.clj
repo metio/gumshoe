@@ -156,6 +156,19 @@
       ["available" (:availableReplicas status)]
       ["unavailable" (:unavailableReplicas status)]])))
 
+(defn- daemonset-facts
+  [daemonset]
+  ;; A DaemonSet has no spec.replicas/status.readyReplicas; it schedules one pod
+  ;; per matching node and reports its rollout under different status fields.
+  (let [status (:status daemonset)]
+    (present-pairs
+     [["ready" (format "%s/%s ready"
+                       (or (:numberReady status) 0)
+                       (or (:desiredNumberScheduled status) 0))]
+      ["updated" (:updatedNumberScheduled status)]
+      ["available" (:numberAvailable status)]
+      ["unavailable" (:numberUnavailable status)]])))
+
 (defn- service-facts
   [service]
   (let [spec (:spec service)]
@@ -215,7 +228,8 @@
     "Pod" (pod-facts object)
     "Node" (node-facts object)
     "PersistentVolumeClaim" (pvc-facts object)
-    ("Deployment" "StatefulSet" "DaemonSet" "ReplicaSet") (workload-facts object)
+    ("Deployment" "StatefulSet" "ReplicaSet") (workload-facts object)
+    "DaemonSet" (daemonset-facts object)
     "Service" (service-facts object)
     "PersistentVolume" (pv-facts object)
     "Ingress" (ingress-facts object)
@@ -414,6 +428,18 @@
       (< ready desired) :degraded
       :else :ok)))
 
+(defn- daemonset-situation
+  [daemonset]
+  ;; DaemonSet health lives in status.desiredNumberScheduled/numberReady, not the
+  ;; replicas fields, so routing it through workload-situation always reads 0/0
+  ;; and reports a broken DaemonSet as :ok.
+  (let [desired (or (-> daemonset :status :desiredNumberScheduled) 0)
+        ready (or (-> daemonset :status :numberReady) 0)]
+    (cond
+      (and (pos? desired) (zero? ready)) :none-ready
+      (< ready desired) :degraded
+      :else :ok)))
+
 (defn- hpa-situation
   [hpa]
   (let [current (-> hpa :status :currentReplicas)
@@ -435,7 +461,8 @@
     "Node" (node-situation object)
     "PersistentVolumeClaim" (pvc-situation object)
     "PersistentVolume" (pv-situation object)
-    ("Deployment" "StatefulSet" "DaemonSet" "ReplicaSet") (workload-situation object)
+    ("Deployment" "StatefulSet" "ReplicaSet") (workload-situation object)
+    "DaemonSet" (daemonset-situation object)
     "HorizontalPodAutoscaler" (hpa-situation object)
     "Job" (job-situation object)
     :ok))

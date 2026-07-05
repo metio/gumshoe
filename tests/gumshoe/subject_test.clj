@@ -47,6 +47,12 @@
   (testing "workload facts show ready/desired"
     (is (= "1/3 ready" (-> (subject/facts "Deployment" {:spec {:replicas 3} :status {:readyReplicas 1}})
                            (->> (into {})) (get "replicas")))))
+  (testing "DaemonSet facts read the DaemonSet status fields, not replicas"
+    (let [f (into {} (subject/facts "DaemonSet"
+                                    {:status {:desiredNumberScheduled 5 :numberReady 2
+                                              :numberUnavailable 3}}))]
+      (is (= "2/5 ready" (get f "ready")))
+      (is (= "3" (get f "unavailable")))))
   (testing "PV facts surface the ceph backing so the operator can chase it on the ceph side"
     (let [pv {:status {:phase "Bound"}
               :spec {:capacity {:storage "50Gi"}
@@ -109,6 +115,10 @@
     (is (= :none-ready (subject/situation "Deployment" {:spec {:replicas 3} :status {:readyReplicas 0}})))
     (is (= :degraded (subject/situation "StatefulSet" {:spec {:replicas 3} :status {:readyReplicas 1}})))
     (is (= :ok (subject/situation "Deployment" {:spec {:replicas 3} :status {:readyReplicas 3}}))))
+  (testing "DaemonSet situations read the DaemonSet status fields, not replicas"
+    (is (= :none-ready (subject/situation "DaemonSet" {:status {:desiredNumberScheduled 5 :numberReady 0}})))
+    (is (= :degraded (subject/situation "DaemonSet" {:status {:desiredNumberScheduled 5 :numberReady 2}})))
+    (is (= :ok (subject/situation "DaemonSet" {:status {:desiredNumberScheduled 5 :numberReady 5}}))))
   (testing "PV situations flag released (orphaned data) volumes"
     (is (= :released (subject/situation "PersistentVolume" {:status {:phase "Released"}})))
     (is (= :ok (subject/situation "PersistentVolume" {:status {:phase "Bound"}}))))
