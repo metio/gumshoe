@@ -6,20 +6,20 @@
 ;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "meta/all-stable"}}}
 ;; and lists each tool's plugin ns under env.edn :plugins (or a bundled list) to
 ;; activate them. As more tools are extracted, add them here.
-{:deps {io.github.metio/gumshoe      {:local/root ".."}
-        io.github.metio/gumshoe-flux {:local/root "../tools/flux"}
-        io.github.metio/gumshoe-ceph {:local/root "../tools/ceph"}
-        io.github.metio/gumshoe-certmanager {:local/root "../tools/certmanager"}
-        io.github.metio/gumshoe-gateway {:local/root "../tools/gateway"}
-        io.github.metio/gumshoe-cnpg {:local/root "../tools/cnpg"}
-        io.github.metio/gumshoe-stageset {:local/root "../tools/stageset"}
-        io.github.metio/gumshoe-prometheus {:local/root "../tools/prometheus"}
-        io.github.metio/gumshoe-calico {:local/root "../tools/calico"}
-        io.github.metio/gumshoe-opennebula {:local/root "../tools/opennebula"}
-        io.github.metio/gumshoe-upload {:local/root "../tools/upload"}
-        io.github.metio/gumshoe-matrix {:local/root "../tools/matrix"}
-        io.github.metio/gumshoe-restic {:local/root "../tools/restic"}
-        io.github.metio/gumshoe-thanos {:local/root "../tools/thanos"}
-        io.github.metio/gumshoe-loki {:local/root "../tools/loki"}
-        io.github.metio/gumshoe-db-operator {:local/root "../tools/db-operator"}
-        io.github.metio/gumshoe-external-dns {:local/root "../tools/external-dns"}}}
+{:deps {io.github.metio/gumshoe      {:local/root "../.."}
+        io.github.metio/gumshoe-flux {:local/root "../../tools/flux"}
+        io.github.metio/gumshoe-ceph {:local/root "../../tools/ceph"}
+        io.github.metio/gumshoe-certmanager {:local/root "../../tools/certmanager"}
+        io.github.metio/gumshoe-gateway {:local/root "../../tools/gateway"}
+        io.github.metio/gumshoe-cnpg {:local/root "../../tools/cnpg"}
+        io.github.metio/gumshoe-stageset {:local/root "../../tools/stageset"}
+        io.github.metio/gumshoe-prometheus {:local/root "../../tools/prometheus"}
+        io.github.metio/gumshoe-calico {:local/root "../../tools/calico"}
+        io.github.metio/gumshoe-opennebula {:local/root "../../tools/opennebula"}
+        io.github.metio/gumshoe-upload {:local/root "../../tools/upload"}
+        io.github.metio/gumshoe-matrix {:local/root "../../tools/matrix"}
+        io.github.metio/gumshoe-restic {:local/root "../../tools/restic"}
+        io.github.metio/gumshoe-thanos {:local/root "../../tools/thanos"}
+        io.github.metio/gumshoe-loki {:local/root "../../tools/loki"}
+        io.github.metio/gumshoe-db-operator {:local/root "../../tools/db-operator"}
+        io.github.metio/gumshoe-external-dns {:local/root "../../tools/external-dns"}}}
