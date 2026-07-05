@@ -1,12 +1,15 @@
 ;; SPDX-FileCopyrightText: The gumshoe Authors
 ;; SPDX-License-Identifier: 0BSD
 
-;; gumshoe's source root, for consuming it as a tools.deps library.
+;; gumshoe as a tools.deps library. A casebook depends on it and gets the engine
+;; (gumshoe.* on the classpath) AND the built-in books - runbooks/playbooks/
+;; firebooks are on :paths too, so a dependent's book discovery finds them from
+;; the classpath alongside its own.
 ;;
-;; NOTE: babashka resolves git/local-root deps by shelling out to tools.deps,
-;; which needs a JVM. Since gumshoe's users run babashka (often without a JDK),
-;; the PRIMARY way to add books/plugins is the clone-based extension model - see
-;; env.edn :extensions and casebook-example/ - which needs no dependency
-;; resolution and no java. This deps.edn is only for a consumer that already has
-;; a JDK and wants gumshoe on a tools.deps classpath.
-{:paths ["libraries"]}
+;;   ;; casebook bb.edn
+;;   {:deps  {io.github.metio/gumshoe {:git/tag "2026.7.5" :git/sha "…"}}
+;;    :paths ["libraries" "runbooks" "playbooks" "firebooks"]}
+;;
+;; babashka resolves git deps via tools.deps, which needs a JVM (the flake's
+;; devShell provides it); the resolution is cached under ~/.gitlibs afterwards.
+{:paths ["libraries" "runbooks" "playbooks" "firebooks"]}

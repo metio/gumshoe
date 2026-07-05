@@ -5,37 +5,30 @@ SPDX-License-Identifier: 0BSD
 
 # casebook-example
 
-A template for a **casebook** - a team's own collection of books (runbooks,
-playbooks, firebooks, detectives) and plugins that runs on the
-[gumshoe](../README.md) engine. It is a gumshoe **extension**: you clone it next
-to gumshoe and register its path, and gumshoe treats it as a first-class peer of
-the built-ins - no dependency resolution, no JVM, just babashka.
+A template for a **casebook** - a team's own books and plugins on the
+[gumshoe](../README.md) engine. gumshoe is a git dependency; you never clone it.
 
 ## Bootstrap
 
 1. Copy this directory into a fresh git repo, e.g. `casebook-storage`.
-2. Add your books under `runbooks/` (and `playbooks/`, `firebooks/`). Each book
-   `(:require [gumshoe.detective ...])` or `[gumshoe.runbook ...]` - the engine is on
-   the classpath because gumshoe puts it there.
-3. Keep the `gumshoe.edn` manifest at the root. Declare `:book-paths` (where your
-   books live), optionally `:paths` (shared code your books require), and
-   `:plugins` (namespaces that register announcers/detectives/capability
-   detectors/tool support).
+2. In `bb.edn`, pin a gumshoe release (`:git/tag` + `:git/sha`).
+3. Add your books under `runbooks/` and your plugins under `libraries/`. Books
+   `(:require [gumshoe.detective ...])` etc.; the engine comes from the dep.
 
-## Wire it into gumshoe
-
-Clone this repo alongside gumshoe and point at it from your `env.edn`:
-
-```clojure
-:extensions ["../casebook-storage"]
-```
-
-Now `gumshoe`, `./detect`, and `./run` discover its books, and its plugins load,
-exactly as the built-ins do. Run a book directly through gumshoe's launcher:
+## Run
 
 ```shell
-$ ./run                              # your casebook's books appear in the list
+$ bb gumshoe        # the front door - your books appear next to gumshoe's built-ins
+$ bb detect         # scan for symptoms
+$ bb run cordon     # launch a book by name
 ```
 
-Everything is pure babashka - the extension's code is added to the classpath at
-runtime, so no `java`/dependency resolution is ever needed.
+gumshoe's `catalog` discovers books from the whole classpath, so your `runbooks/`
+and gumshoe's built-ins (arriving via the dep) are found together - no manifest,
+no `:book-paths`. Register announcers / detectives / capability detectors by
+listing your namespaces under `:plugins` in `env.edn`; they are already on the
+classpath via the dep graph.
+
+The first `bb` run resolves the git dep through tools.deps (needs a JVM - the
+gumshoe devShell provides one) and caches it under `~/.gitlibs`; later runs are
+offline and instant.

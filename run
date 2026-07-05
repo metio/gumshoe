@@ -10,7 +10,7 @@
 (require '[babashka.cli :as cli]
          '[clojure.string :as str]
          '[gumshoe.catalog :as catalog]
-         '[gumshoe.extensions :as extensions]
+         '[gumshoe.shell :as shell]
          '[gumshoe.fuzzy-finder :as fuzzy]
          '[gumshoe.stdout :as stdout])
 
@@ -69,4 +69,4 @@
       (if (nil? book)
         (do (stdout/error "nothing selected - run ./run again when you know the book you want")
             (System/exit 1))
-        (System/exit (apply extensions/launch-book! "bb" (:path book) (passthrough opts)))))))
+        (System/exit (apply shell/run-with-output "bb" (:path book) (passthrough opts)))))))

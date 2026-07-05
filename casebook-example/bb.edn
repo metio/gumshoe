@@ -1,0 +1,19 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; A casebook: a team's own books and plugins, layered on the gumshoe engine.
+;; gumshoe is a normal git dependency - its engine (gumshoe.*) and its built-in
+;; books arrive on the classpath, and gumshoe's catalog discovers this casebook's
+;; own books (under :paths) right alongside them. Pin a released version so the
+;; set is reproducible and Renovate can bump it.
+;;
+;; Run the front doors as tasks: `bb gumshoe`, `bb detect`, `bb run` (they call
+;; gumshoe's entry points with this casebook's deps on the classpath). babashka
+;; resolves the git dep once via tools.deps (needs a JVM - the gumshoe devShell
+;; provides it) and caches it under ~/.gitlibs.
+{:deps {io.github.metio/gumshoe {:git/tag "REPLACE-WITH-A-GUMSHOE-RELEASE"
+                                 :git/sha "REPLACE-WITH-THAT-TAG-S-COMMIT-SHA"}}
+ :paths ["libraries" "runbooks" "playbooks" "firebooks"]
+ :tasks {gumshoe  {:doc "The one front door" :task (exec 'gumshoe.main/front-door)}
+         detect   {:doc "Scan for symptoms"  :task (exec 'gumshoe.main/detect)}
+         run      {:doc "Launch a book"       :task (exec 'gumshoe.main/run)}}}

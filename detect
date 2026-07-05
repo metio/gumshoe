@@ -6,7 +6,7 @@
 ;; Every entry maps to a detective runbook that also works standalone.
 
 (require '[babashka.cli :as cli]
-         '[gumshoe.extensions :as extensions]
+         '[gumshoe.shell :as shell]
          '[gumshoe.fuzzy-finder :as fuzzy]
          '[gumshoe.stdout :as stdout])
 
@@ -118,18 +118,18 @@
 
         (:needs-host? investigation)
         (if-let [host (ask "Which ceph host should I SSH into? ")]
-          (System/exit (apply extensions/launch-book! "bb" (:book investigation) "--host" host extra))
+          (System/exit (apply shell/run-with-output "bb" (:book investigation) "--host" host extra))
           (do (stdout/error "no host given") (System/exit 1)))
 
         (:needs-frontend? investigation)
         (if-let [frontend (ask "Which OpenNebula frontend should I SSH into? ")]
-          (System/exit (apply extensions/launch-book! "bb" (:book investigation) "--frontend" frontend extra))
+          (System/exit (apply shell/run-with-output "bb" (:book investigation) "--frontend" frontend extra))
           (do (stdout/error "no frontend given") (System/exit 1)))
 
         (:needs-repositories? investigation)
         (if-let [repository (ask "Which restic repository should I check? ")]
-          (System/exit (apply extensions/launch-book! "bb" (:book investigation) "--repository" repository extra))
+          (System/exit (apply shell/run-with-output "bb" (:book investigation) "--repository" repository extra))
           (do (stdout/error "no repository given") (System/exit 1)))
 
         :else
-        (System/exit (apply extensions/launch-book! "bb" (:book investigation) extra))))))
+        (System/exit (apply shell/run-with-output "bb" (:book investigation) extra))))))

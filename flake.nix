@@ -21,7 +21,8 @@
       # never drift apart.
       toolsFor = pkgs: with pkgs; [
         babashka # every book runs on babashka
-        git # changelog announcement metadata
+        jdk # babashka resolves git deps via tools.deps, which needs a JVM
+        git # changelog announcement metadata + git-dep resolution
 
         kubectl # all cluster access
         krew # installs the netshoot plugin: kubectl krew install netshoot

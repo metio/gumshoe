@@ -6,11 +6,10 @@
    description, so a launcher can present every book without a hand-maintained
    list. ./detect fronts the read-only detectives with a guided \"what hurts\"
    flow; ./run uses this to offer any book for a direct, one-shot launch."
-  (:require [babashka.fs :as fs]
+  (:require [babashka.classpath :as classpath]
+            [babashka.fs :as fs]
             [clojure.string :as str]
-            [edamame.core :as edamame]
-            [gumshoe.config :as config]
-            [gumshoe.extensions :as extensions]))
+            [edamame.core :as edamame]))
 
 (def ^:private harness-calls
   "The calls a book uses to enter the harness. The config map is their first
@@ -38,11 +37,15 @@
         forms))
 
 (defn short-name
-  "The path without its leading root segment or .clj suffix, e.g.
-   kubernetes/nodes/cordon - short enough to fuzzy-match by name."
+  "The path below its book-root segment, without the .clj suffix, e.g.
+   kubernetes/nodes/cordon - short enough to fuzzy-match by name. Works whether
+   the path is relative (runbooks/…) or an absolute classpath entry
+   (/…/gitlibs/…/runbooks/…), so a book from a dependency reads the same as a
+   local one."
   [path]
   (-> path
-      (str/replace #"^[^/]+/" "")
+      (str/replace #"^.*/(runbooks|playbooks|firebooks)/" "")
+      (str/replace #"^(runbooks|playbooks|firebooks)/" "")
       (str/replace #"\.clj$" "")))
 
 (defn book-at
@@ -55,23 +58,28 @@
    :description (try (description-of (forms-of path))
                      (catch Exception _ nil))})
 
+(def ^:private book-dir-names
+  "A classpath entry holds books when its own name is one of these."
+  #{"runbooks" "playbooks" "firebooks"})
+
 (defn book-roots
-  "Where books live: the built-in directories, the book dirs of every cloned
-   extension (its gumshoe.edn :book-paths), and any bare :book-paths in env.edn -
-   so an extension repo's books are discovered exactly like the built-ins."
+  "Every book directory on the classpath - gumshoe's own plus each dependency's.
+   Because git-dep sources land on the classpath (gumshoe's deps.edn puts the
+   book dirs on :paths, and so does a casebook's bb.edn), a casebook's own books,
+   gumshoe's built-ins, and any tool package's books are all discovered here with
+   no extra configuration - tools.deps resolved the graph, this just reads it."
   []
-  (concat ["runbooks" "playbooks" "firebooks"]
-          (extensions/book-paths)
-          (config/value [:book-paths] [])))
+  (->> (classpath/split-classpath (classpath/get-classpath))
+       (filter #(and (contains? book-dir-names (fs/file-name %)) (fs/directory? %)))
+       (distinct)))
 
 (defn books
-  "Every runnable book under the given roots (default: the built-in directories
-   plus configured :book-paths), ordered by path. Each is {:path :name
-   :description}. A root that does not exist is skipped, not an error."
+  "Every runnable book on the classpath, ordered by path. Each is {:path :name
+   :description}."
   ([] (books (book-roots)))
   ([roots]
    (->> roots
-        (filter fs/exists?)
         (mapcat #(map str (fs/glob % "**.clj")))
+        (distinct)
         (sort)
         (mapv book-at))))

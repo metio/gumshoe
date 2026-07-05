@@ -1,7 +1,7 @@
 ;; SPDX-FileCopyrightText: The gumshoe Authors
 ;; SPDX-License-Identifier: 0BSD
 
-{:paths ["libraries"]
+{:paths ["libraries" "runbooks" "playbooks" "firebooks"]
  :tasks
  {test {:doc "Runs all unit tests"
         :extra-paths ["tests" "examples"]
@@ -19,7 +19,6 @@
                    [gumshoe.discovery-test]
                    [gumshoe.dns-test]
                    [gumshoe.etcd-test]
-                   [gumshoe.extensions-test]
                    [gumshoe.effect-test]
                    [gumshoe.federation-test]
                    [gumshoe.firebook-test]
@@ -71,7 +70,6 @@
                                                          'gumshoe.discovery-test
                                                          'gumshoe.dns-test
                                                          'gumshoe.etcd-test
-                                                         'gumshoe.extensions-test
                                                          'gumshoe.effect-test
                                                          'gumshoe.federation-test
                                                          'gumshoe.firebook-test

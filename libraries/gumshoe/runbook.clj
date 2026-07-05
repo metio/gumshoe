@@ -13,7 +13,6 @@
             [clojure.string :as str]
             [gumshoe.command :as command]
             [gumshoe.config :as config]
-            [gumshoe.extensions :as extensions]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.flow :as flow]
             [gumshoe.summary :as summary]
@@ -209,10 +208,10 @@
       (println (help-text description spec))
       (let [opts (cli/parse-opts *command-line-args* spec)]
         (when (:no-color opts) (stdout/disable-colors!))
-        ;; activate the cloned extensions (their code onto the classpath) and load
-        ;; every plugin - the flat :plugins plus the ones extensions declare - so
-        ;; all seams are registered before anything in this run reaches for them
-        (plugins/load! (concat (config/value [:plugins] []) (extensions/activate!)))
+        ;; load the configured plugins - their code is already on the classpath
+        ;; via deps - so their announcers/detectives/etc. are registered before
+        ;; anything in this run reaches for them
+        (plugins/load!)
         (when-not (prerequisites? prerequisites opts)
           (stdout/print-banner stdout/red "❌ PREREQUISITES NOT MET - nothing was attempted")
           (stdout/err-println "Next: install the missing tools, connect to the right cluster/VPN, or fix the")

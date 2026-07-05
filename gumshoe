@@ -12,7 +12,6 @@
 (require '[babashka.cli :as cli]
          '[clojure.string :as str]
          '[gumshoe.catalog :as catalog]
-         '[gumshoe.extensions :as extensions]
          '[gumshoe.fuzzy-finder :as fuzzy]
          '[gumshoe.shell :as shell]
          '[gumshoe.stdout :as stdout])
@@ -71,7 +70,7 @@
       (let [by-label (into {} (map (juxt display identity) books))
             choice (fuzzy/select-single prompt (map display books))]
         (if-let [book (get by-label choice)]
-          (extensions/launch-book! "bb" (:path book))
+          (shell/run-with-output "bb" (:path book))
           1)))))
 
 (defn- guided
@@ -79,7 +78,7 @@
   (case (fuzzy/select-single "what are you doing?"
                              [follow-lead scan-area run-book run-playbook fire-drill])
     nil 1
-    follow-lead (extensions/launch-book! "bb" "runbooks/investigate.clj")
+    follow-lead (shell/run-with-output "bb" "runbooks/investigate.clj")
     scan-area (shell/run-with-output "./detect")
     run-book (shell/run-with-output "./run")
     run-playbook (pick-and-run "which playbook?" "playbooks")
@@ -92,7 +91,7 @@
 
     ;; a lead was named - go straight to the drill-down
     (some opts [:host :pod :node :namespace])
-    (System/exit (apply extensions/launch-book! "bb" "runbooks/investigate.clj" (lead-args opts)))
+    (System/exit (apply shell/run-with-output "bb" "runbooks/investigate.clj" (lead-args opts)))
 
     ;; search terms - fuzzy-launch a book, prefilled
     (seq args)
