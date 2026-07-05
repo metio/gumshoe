@@ -7,7 +7,8 @@
    list its namespace in env.edn :plugins - the loader requires it, which runs
    the provide! below. The only other namespaces it needs are the helpers used to
    build values (a prerequisite item, a drill-down subject)."
-  (:require [gumshoe.plugin :as plugin]
+  (:require [gumshoe.command :as command]
+            [gumshoe.plugin :as plugin]
             [gumshoe.prerequisites :as prerequisites]
             [gumshoe.subject :as subject]))
 
@@ -60,9 +61,13 @@
                                            :fail (str "change window '" window "' is closed - not now")})])}
 
   ;; A drill-down action for a custom kind, offered only when its tool is present.
+  ;; Version-aware: example-tool renamed "status" to "inspect" at v2, so
+  ;; dispatch-by-version picks the right subcommand for whichever major is
+  ;; installed - one package supports both, the operator never has to care.
   :probes
   [{:key :widget-status :label "🔧 widget status" :kinds #{"WidgetSet"} :tools ["example-tool"]
-    :args (fn [_ctx {:keys [name]}] ["example-tool" "status" name])}]
+    :args (fn [_ctx {:keys [name]}]
+            ["example-tool" (command/dispatch-by-version "example-tool" {"2.0" "inspect" "1.0" "status"}) name])}]
 
   ;; A CRD the drill-down can fetch and traverse.
   :kinds

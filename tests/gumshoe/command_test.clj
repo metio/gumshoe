@@ -51,3 +51,13 @@
   (testing "an unregistered tool has no floor or brought prerequisites"
     (is (nil? (command/tool-min-version "definitely-not-a-real-tool-xyz")))
     (is (nil? (command/tool-prerequisites "definitely-not-a-real-tool-xyz")))))
+
+(deftest select-by-version-test
+  (let [table {"2.0" :v2 "1.0" :v1}]
+    (testing "picks the value for the highest threshold the version meets"
+      (is (= :v2 (command/select-by-version "2.3.1" table)))
+      (is (= :v1 (command/select-by-version "1.5" table))))
+    (testing "below every threshold falls back to the lowest"
+      (is (= :v1 (command/select-by-version "0.9" table))))
+    (testing "an unreadable version is treated as newest"
+      (is (= :v2 (command/select-by-version nil table))))))

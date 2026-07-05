@@ -107,7 +107,9 @@
           "HelmChart"     {:type helmchart-type}}
 
   ;; A flux-native probe: reconcile status via the flux CLI, offered only where
-  ;; flux is installed.
+  ;; flux is installed. The flux2 `get` syntax is stable across its majors, so
+  ;; one form serves all; were a future major to change it, wrapping :args in
+  ;; command/dispatch-by-version keeps this one package agnostic.
   :probes [{:key :flux-status :label "🔁 flux reconcile status"
             :kinds (set (keys flux-get-kind)) :tools ["flux"]
             :args (fn [context {:keys [kind namespace name]}]

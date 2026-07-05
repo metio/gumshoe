@@ -223,7 +223,9 @@ convenience.
   {:version-command ["--version"] :min-version "2.0" :prerequisites (fn [opts] …)})`.
   A book that lists the tool in `:installed-tools` inherits its version floor and
   brought checks (a service it must reach, a login) for free, instead of
-  repeating them. `register-version-command!` is the version-only shorthand.
+  repeating them. `register-version-command!` is the version-only shorthand. When
+  a tool's CLI differs across majors, `(command/dispatch-by-version "flux" {"2.0"
+  … "1.0" …})` picks the right form at call time, so one package stays agnostic.
 - **Summary providers** - where a scan's findings can be sent. The clipboard and
   a HedgeDoc pad are built in; a plugin adds more with
   `(summary/register-provider! { … })` - Slack, a ticket, a file, a Matrix post.

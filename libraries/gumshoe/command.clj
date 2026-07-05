@@ -94,6 +94,24 @@
     (or (nil? a) (nil? r)
         (>= (compare (pad3 a) (pad3 r)) 0))))
 
+(defn select-by-version
+  "Pure: the value from a {version-string -> value} table for an installed
+   version - the value for the highest threshold the version meets, or the
+   lowest threshold's value when it meets none. An unreadable (nil) version is
+   treated as the newest, so it maps to the highest threshold."
+  [installed table]
+  (let [high->low (reverse (sort-by (comp parse-version key) table))]
+    (or (some (fn [[threshold v]] (when (version-at-least? installed threshold) v)) high->low)
+        (val (last high->low)))))
+
+(defn dispatch-by-version
+  "Selects from a {version-string -> value} table by the installed version of a
+   tool - so a tool package stays agnostic to which major of its tool is present,
+   choosing the right command form (or any value) at call time. See
+   select-by-version for the pure selection."
+  [tool table]
+  (select-by-version (version tool) table))
+
 (defn describe-installed
   "A label for an installed tool including its version when it can be read - what
    the Prerequisites checklist shows once a tool checks out."
