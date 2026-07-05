@@ -5,7 +5,8 @@
   (:require [clojure.test :refer [deftest is testing]]
             [gumshoe.ceph :as ceph]
             [gumshoe.detectives.ceph :as detectives]
-            [gumshoe.ssh :as ssh]))
+            [gumshoe.ssh :as ssh]
+            [gumshoe.tools.ceph :as tools-ceph]))
 
 (defn- summaries
   [findings]
@@ -77,7 +78,26 @@
   (testing "upgrade-in-progress? reads the cephadm flag"
     (is (ceph/upgrade-in-progress? {:in_progress true}))
     (is (not (ceph/upgrade-in-progress? {:in_progress false})))
-    (is (not (ceph/upgrade-in-progress? {})))))
+    (is (not (ceph/upgrade-in-progress? {}))))
+  (testing "upgrade-finished? treats an unreadable (nil) status as not done, so the watch keeps waiting"
+    (is (not (ceph/upgrade-finished? nil)) "nil means unreadable, not finished")
+    (is (not (ceph/upgrade-finished? {:in_progress true})) "still in progress")
+    (is (ceph/upgrade-finished? {:in_progress false}) "present and no longer in progress is done")))
+
+(deftest capacity-preflight-helpers-test
+  (testing "growth-bytes sums the logical (target - current) of the plan"
+    (is (= (* 20 1024 1024 1024) (tools-ceph/growth-bytes [{:current "10Gi" :target "30Gi"}])))
+    (is (= (* 20 1024 1024 1024) (tools-ceph/growth-bytes [{:current "10Gi" :target "20Gi"}
+                                                           {:current "5Gi" :target "15Gi"}])))
+    (testing "an unmeasurable capacity makes the whole plan not-our-call (nil)"
+      (is (nil? (tools-ceph/growth-bytes [{:current "10Gi" :target "500m"}])))))
+  (testing "min-pool-max-avail uses the replication-adjusted pool max_avail, not the raw total"
+    (is (= 50 (tools-ceph/min-pool-max-avail {:stats {:total_avail_bytes 9999}
+                                              :pools [{:stats {:max_avail 100}}
+                                                      {:stats {:max_avail 50}}]})))
+    (testing "no readable pool capacity is nil (the preflight then fails closed)"
+      (is (nil? (tools-ceph/min-pool-max-avail {:stats {:total_avail_bytes 9999} :pools []})))
+      (is (nil? (tools-ceph/min-pool-max-avail {:stats {:total_avail_bytes 9999}}))))))
 
 (deftest health-checks-test
   (let [evidence {"status" {:health {:status "HEALTH_WARN"

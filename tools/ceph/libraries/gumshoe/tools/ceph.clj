@@ -31,16 +31,26 @@
 
 (def ^:private bytes-per-gi (* 1024 1024 1024))
 
-(defn available-bytes
-  "The cluster's free capacity in bytes from `ceph df --format json`, or nil when
-   it can not be read or parsed - nil forces the caller to fail closed rather than
-   guess. Never throws."
+(defn min-pool-max-avail
+  "Pure: the smallest per-pool max_avail in a parsed `ceph df --format json`
+   document - the replication-adjusted usable free bytes of the most-constrained
+   pool. This is what a resize can actually consume: the raw stats.total_avail_bytes
+   ignores replication, so on a 3x pool a logical growth of N bytes really costs
+   3N raw and comparing against the raw figure lets the pool overfill. nil when
+   no pool capacity can be read."
+  [df-json]
+  (let [avails (keep #(get-in % [:stats :max_avail]) (:pools df-json))]
+    (when (seq avails) (long (apply min avails)))))
+
+(defn usable-bytes
+  "The replication-adjusted free capacity a resize can consume, from
+   `ceph df --format json`, or nil when it can not be read or parsed - nil forces
+   the caller to fail closed rather than guess. Never throws."
   [connection]
   (try
-    (let [out (ceph/ceph-stdout connection "df" "--format" "json")
-          avail (when-not (str/blank? (str out))
-                  (get-in (json/parse-string out true) [:stats :total_avail_bytes]))]
-      (when (number? avail) (long avail)))
+    (let [out (ceph/ceph-stdout connection "df" "--format" "json")]
+      (when-not (str/blank? (str out))
+        (min-pool-max-avail (json/parse-string out true))))
     (catch Exception _ nil)))
 
 (defn growth-bytes
@@ -70,15 +80,15 @@
       (not (net/interface-up? (config/env-value signals [:vpn :interface])))
       [(format "ceph mgr host %s is configured but the VPN is down - cannot verify ceph capacity, refusing the resize" mgr-host)]
       :else
-      (let [available (available-bytes (ceph/connection {:host mgr-host}))
+      (let [usable (usable-bytes (ceph/connection {:host mgr-host}))
             growth (growth-bytes plan)]
         (cond
-          (nil? available)
+          (nil? usable)
           [(format "could not read ceph free capacity from %s - refusing the resize (fail closed)" mgr-host)]
           (nil? growth) []
-          (> growth available)
-          [(format "ceph has %s free but the resize needs %s more - refusing to avoid filling the cluster"
-                   (human-gib available) (human-gib growth))]
+          (> growth usable)
+          [(format "ceph has %s usable free but the resize needs %s more - refusing to avoid filling the cluster"
+                   (human-gib usable) (human-gib growth))]
           :else [])))))
 
 (plugin/provide!

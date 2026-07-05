@@ -123,6 +123,15 @@
   [upgrade-status-json]
   (true? (:in_progress upgrade-status-json)))
 
+(defn upgrade-finished?
+  "Whether an upgrade-status result reports a completed upgrade. A nil result
+   means the status could not be read (a blank or unparseable response - common
+   while `orch upgrade` restarts the very mgr daemons answering the query), not
+   that the upgrade finished, so only a present, not-in-progress status counts."
+  [upgrade-status-json]
+  (and (some? upgrade-status-json)
+       (not (upgrade-in-progress? upgrade-status-json))))
+
 (defn versions
   [connection]
   (ceph-json connection "versions"))

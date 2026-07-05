@@ -76,7 +76,10 @@
   (loop [elapsed 0]
     (let [status (ceph/upgrade-status connection)]
       (cond
-        (not (ceph/upgrade-in-progress? status))
+        ;; upgrade-finished? treats an unreadable (nil) status as "keep waiting",
+        ;; not "done", so a transient blip - a blank status while orch upgrade
+        ;; restarts the mgr daemons - does not abandon an hours-long upgrade early.
+        (ceph/upgrade-finished? status)
         (do (stdout/ok "cephadm reports the upgrade is no longer in progress") true)
 
         (>= elapsed timeout)
