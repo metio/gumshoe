@@ -211,6 +211,10 @@ sidesteps that, which matters when your users run bare babashka.) Copy
   path, flags) with `(hooks/register-post-hook! (fn [ctx] …))` - push a metric,
   forward the audit trail, update a status page. Bounded, so a slow hook can't
   block the exit; distinct from announcers, which fire *before* a change.
+- **Secrets** - which password manager reads secrets at runtime. `:gopass`,
+  `:pass`, `:passage`, and `:pasejo` are built in (select with `env.edn :secrets
+  {:provider …}`); a `:command` provider drives any other CLI by templates, and a
+  plugin registers a native backend with `(secrets/register-provider! { … })`.
 
 [`examples/example/plugin.clj`](examples/example/plugin.clj) is a worked plugin
 that extends several seams at once.
