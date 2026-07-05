@@ -20,4 +20,6 @@
         io.github.metio/gumshoe-matrix {:local/root "../tools/matrix"}
         io.github.metio/gumshoe-restic {:local/root "../tools/restic"}
         io.github.metio/gumshoe-thanos {:local/root "../tools/thanos"}
-        io.github.metio/gumshoe-loki {:local/root "../tools/loki"}}}
+        io.github.metio/gumshoe-loki {:local/root "../tools/loki"}
+        io.github.metio/gumshoe-db-operator {:local/root "../tools/db-operator"}
+        io.github.metio/gumshoe-external-dns {:local/root "../tools/external-dns"}}}

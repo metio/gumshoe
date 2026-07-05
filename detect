@@ -24,7 +24,7 @@
    {:label "🌐 DNS - nameservers, replication, dual stack"
     :book "runbooks/detectives/dns.clj"}
    {:label "📡 external-dns - do all declared hostnames resolve?"
-    :book "runbooks/detectives/external_dns.clj"}
+    :book "tools/external-dns/runbooks/scan.clj"}
    {:label "🔀 Traffic - Gateway API gateways and routes"
     :book "tools/gateway/runbooks/scan.clj"}
    {:label "📧 Mail - deliverability (SPF/DKIM/DMARC/rDNS) and SMTP/POP3/IMAP services"

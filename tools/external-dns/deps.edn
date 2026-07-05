@@ -1,0 +1,8 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The external-dns tool package: do all declared hostnames actually resolve? Uses
+;; the core DNS helper (gumshoe.dns). A standalone detective book.
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/external-dns"}}}
+{:paths ["libraries" "runbooks"]
+ :deps {io.github.metio/gumshoe {:local/root "../.."}}}

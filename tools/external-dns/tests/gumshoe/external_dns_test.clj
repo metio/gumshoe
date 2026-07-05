@@ -1,7 +1,7 @@
 ;; SPDX-FileCopyrightText: The gumshoe Authors
 ;; SPDX-License-Identifier: 0BSD
 
-(ns gumshoe.traffic-test
+(ns gumshoe.external-dns-test
   (:require [clojure.test :refer [deftest is testing]]
             [gumshoe.detectives.external-dns :as external-dns-detectives]
             [gumshoe.external-dns :as external-dns]))

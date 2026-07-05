@@ -4,7 +4,6 @@
 (ns gumshoe.signals-test
   (:require [clojure.test :refer [deftest is testing]]
             [gumshoe.detectives.csi :as csi]
-            [gumshoe.detectives.db-operator :as db-operator]
             [gumshoe.detectives.disruption :as disruption]
             [gumshoe.detectives.events :as events]))
 
@@ -134,12 +133,3 @@
         findings (csi/detect-orphaned-local-volumes evidence)]
     (is (= ["pv-on-gone-node"] (map :component findings)))
     (is (= [:critical] (map :severity findings)))))
-
-(deftest db-operator-detective-test
-  (is (= #{"database is not ready (phase: Creating)"}
-         (summaries (db-operator/detect-database-problems
-                     {db-operator/database-type
-                      {:items [{:metadata {:namespace "moodle" :name "moodle-db"}
-                                :status {:status false :phase "Creating"}}
-                               {:metadata {:namespace "fine" :name "keycloak-db"}
-                                :status {:status true :phase "Ready"}}]}})))))

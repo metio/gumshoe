@@ -13,4 +13,5 @@
         io.github.metio/gumshoe-cnpg        {:local/root "../../tools/cnpg"}
         io.github.metio/gumshoe-stageset    {:local/root "../../tools/stageset"}
         io.github.metio/gumshoe-prometheus  {:local/root "../../tools/prometheus"}
-        io.github.metio/gumshoe-calico      {:local/root "../../tools/calico"}}}
+        io.github.metio/gumshoe-calico      {:local/root "../../tools/calico"}
+        io.github.metio/gumshoe-db-operator {:local/root "../../tools/db-operator"}}}

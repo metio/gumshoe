@@ -1,0 +1,9 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The db-operator tool package (databases.kinda.rocks).
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/db-operator"}}}
+;; List gumshoe.tools.db-operator under env.edn :plugins to join :databases and
+;; teach the wizard the :db-operator capability.
+{:paths ["libraries" "runbooks"]
+ :deps {io.github.metio/gumshoe {:local/root "../.."}}}

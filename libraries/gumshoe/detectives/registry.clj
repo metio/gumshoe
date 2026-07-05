@@ -10,7 +10,6 @@
   (:require [gumshoe.detectives.capacity :as capacity]
             [gumshoe.detectives.controlplane :as controlplane]
             [gumshoe.detectives.csi :as csi]
-            [gumshoe.detectives.db-operator :as db-operator]
             [gumshoe.detectives.disruption :as disruption]
             [gumshoe.detectives.events :as events]
             [gumshoe.detectives.mail :as mail]
@@ -52,7 +51,6 @@
 (register! :platform (concat controlplane/detectives nodes/detectives csi/detectives))
 (register! :workloads (concat controllers/detectives pods/detectives storage/detectives disruption/detectives
                               quotas/detectives capacity/detectives))
-(register! :databases db-operator/detectives)
 (register! :signals events/detectives)
 (register! :security (concat rbac/detectives pod-security/detectives network/detectives))
 (register! :mail mail/detectives)
