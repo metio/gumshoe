@@ -11,4 +11,5 @@
         io.github.metio/gumshoe-ceph {:local/root "../tools/ceph"}
         io.github.metio/gumshoe-certmanager {:local/root "../tools/certmanager"}
         io.github.metio/gumshoe-gateway {:local/root "../tools/gateway"}
-        io.github.metio/gumshoe-cnpg {:local/root "../tools/cnpg"}}}
+        io.github.metio/gumshoe-cnpg {:local/root "../tools/cnpg"}
+        io.github.metio/gumshoe-stageset {:local/root "../tools/stageset"}}}

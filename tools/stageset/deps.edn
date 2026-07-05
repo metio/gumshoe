@@ -1,0 +1,9 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The StageSet tool package (staged delivery via the StageSet Flux controller).
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/stageset"}}}
+;; List gumshoe.tools.stageset under env.edn :plugins to fill the :delivery scope,
+;; teach the wizard the :stageset capability, and get the drill-down + books.
+{:paths ["libraries" "runbooks"]
+ :deps {io.github.metio/gumshoe {:local/root "../.."}}}

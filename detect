@@ -37,6 +37,8 @@
     :book "tools/certmanager/runbooks/scan.clj"}
    {:label "🔁 GitOps - flux sources and reconciliations"
     :book "tools/flux/runbooks/gitops.clj"}
+   {:label "🎬 Delivery - StageSet staged rollouts"
+    :book "tools/stageset/runbooks/scan.clj"}
    {:label "📈 Observability - the prometheus-operator stack"
     :book "runbooks/detectives/observability.clj"}
    {:label "⚡ Events - Warning events from the last hour"
