@@ -216,3 +216,15 @@
            (subject/object-edges "WidgetSet" {:spec {:pod "w-1"}}))))
   (testing "an unregistered kind falls back to following ownerReferences"
     (is (= [] (subject/object-edges "SomeUnknownKind" {})))))
+
+(deftest registered-facts-append-to-a-kind-test
+  (testing "a plugin's fact contributor enriches the built-in panel, keeping core generic"
+    (subject/register-facts! "PersistentVolume"
+                             (fn [pv] [["ceph pool" (-> pv :spec :csi :volumeAttributes :pool)]
+                                       ["empty" nil]]))
+    (let [pv {:spec {:csi {:driver "rbd.csi.ceph.com" :volumeAttributes {:pool "kubernetes"}}}}
+          f (into {} (subject/facts "PersistentVolume" pv))]
+      (is (= "rbd.csi.ceph.com" (get f "csi driver")) "built-in generic facts still present")
+      (is (= "kubernetes" (get f "ceph pool")) "the plugin's fact is appended")
+      (is (not (contains? f "empty")) "nil-valued plugin facts are dropped"))
+    (reset! @#'subject/fact-contributors {})))

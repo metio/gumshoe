@@ -209,9 +209,7 @@
     ["created" (-> object :metadata :creationTimestamp)]
     ["phase" (or (-> object :status :phase) (-> object :status :state))]]))
 
-(defn facts
-  "A pure, ordered [label value] summary of an object by kind - the at-a-glance
-   panel shown when you focus a subject."
+(defn- built-in-facts
   [kind object]
   (case kind
     "Pod" (pod-facts object)
@@ -225,6 +223,27 @@
     "HorizontalPodAutoscaler" (hpa-facts object)
     "Job" (job-facts object)
     (generic-facts object)))
+
+(defonce ^:private fact-contributors (atom {}))
+
+(defn register-facts!
+  "Adds a fact contributor for a kind: (fn [object] -> seq of [label value] pairs).
+   Its facts are appended to the built-in panel when a subject of that kind is
+   focused, so a plugin enriches the drill-down without the engine knowing the
+   kind's specifics - a ceph-csi package labels the pool and image behind a
+   PersistentVolume while core stays a generic CSI view. nil values are dropped."
+  [kind contributor]
+  {:pre [(string? kind) (fn? contributor)]}
+  (swap! fact-contributors update kind (fnil conj []) contributor))
+
+(defn facts
+  "A pure, ordered [label value] summary of an object by kind - the at-a-glance
+   panel shown when you focus a subject. The built-in facts come first, then any a
+   plugin registered for this kind."
+  [kind object]
+  (into (built-in-facts kind object)
+        (mapcat (fn [contributor] (present-pairs (contributor object)))
+                (get @fact-contributors kind))))
 
 ;; ---------------------------------------------------------------------------
 ;; Edges: the related subjects discoverable from the object itself. Edges that

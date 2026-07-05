@@ -42,6 +42,7 @@
      :prerequisites {:change-window (fn [value opts] items)}            ; a custom gate type
      :probes        [probe …]                                           ; a drill-down action
      :kinds         {\"HelmRelease\" {:type \"…\" :edges (fn [object] …)}} ; a CRD drill-down target
+     :facts         {\"PersistentVolume\" (fn [pv] [[\"ceph pool\" …]])}    ; extra drill-down facts for a kind
      :resize-watchers   [(fn [signals] …)]                              ; a log source for storage resizes
      :resize-preflights [(fn [context] …)]                              ; a fail-closed resize safety check
      :ui            {:name :native :select-one (fn […]) …}              ; an interactive backend (fzf/gum replacement)
@@ -49,7 +50,7 @@
    Order within the map does not matter; registrations are independent."
   [{:keys [announcers detectives capabilities tools summary-providers themes
            pre-hooks post-hooks secrets prerequisites probes kinds
-           resize-watchers resize-preflights ui]}]
+           resize-watchers resize-preflights ui facts]}]
   (doseq [[type f] announcers] (announce/register-announcer! type f))
   (doseq [[scope ds] detectives] (detectives/register! scope ds))
   (doseq [[cap f] capabilities] (capabilities/register-detector! cap f))
@@ -62,6 +63,7 @@
   (doseq [[k f] prerequisites] (prerequisites/register-check! k f))
   (doseq [p probes] (investigation/register-probe! p))
   (doseq [[kind spec] kinds] (subject/register-kind! kind spec))
+  (doseq [[kind contributor] facts] (subject/register-facts! kind contributor))
   (doseq [b resize-watchers] (watch/register-resize-watcher! b))
   (doseq [c resize-preflights] (storage/register-resize-preflight! c))
   (when ui (ui/register-provider! ui))
