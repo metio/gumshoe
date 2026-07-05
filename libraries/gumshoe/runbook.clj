@@ -233,6 +233,16 @@
           (stdout/err-println "Next: install the missing tools, connect to the right cluster/VPN, or fix the")
           (stdout/err-println (str "      access shown with a " (theme/token :check-error) " above, then run this book again."))
           (System/exit 1))
+        ;; global pre-execution gates (change freeze, required ack) may veto the
+        ;; run before it touches anything - they apply to every book, unlike a
+        ;; book's own declared prerequisites
+        (let [gate (hooks/run-pre-hooks! {:description description
+                                          :book (System/getProperty "babashka.file")
+                                          :opts opts
+                                          :change? (boolean announce?)})]
+          (when-not (:allowed? gate)
+            (stdout/print-banner stdout/red (str (theme/token :error) " BLOCKED - " (:reason gate)))
+            (System/exit 1)))
         (let [ctx (when announce? {:announcement-data (announcement-data)})]
           (stdout/print-section "🚀 Runbook")
           ;; an unexpected exception must still land on the red banner with a

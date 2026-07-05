@@ -2,25 +2,32 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.hooks
-  "Post-execution hooks - a plugin seam. After every book finishes, gumshoe calls
-   each registered hook with the run's outcome, so a plugin can push a metric,
-   forward the recording to an audit store, update a status page, or trigger a
-   follow-up.
+  "Execution hooks - a plugin seam with two ends.
 
-   This is deliberately distinct from announcers. An announcer fires BEFORE a
-   change - on the operator's final confirmation, 'this is starting now' - so
-   whoever sees the alerts that follow can correlate them to the change. A hook
-   fires AFTER, with the result (did it succeed, where's the recording). A hook
-   is a pure observer: it never changes the run's outcome. A throwing hook is
-   warned about, and each hook is time-bounded, so a slow or wedged one can never
-   block the book's exit."
+   POST hooks fire after every book finishes, with the run's outcome, so a plugin
+   can push a metric, forward the recording to an audit store, update a status
+   page, or trigger a follow-up. A post-hook is a pure observer: it never changes
+   the outcome; a throwing one is warned about, and each is time-bounded so a slow
+   one can never block the book's exit.
+
+   PRE hooks fire before every book runs and can VETO it - a global gate for
+   organisation policy that applies to every book without each declaring it (a
+   change freeze that blocks changes, a required acknowledgement). A pre-hook
+   returns false or {:allow? false :reason \"...\"} to block. Pre-hooks fail OPEN:
+   a throwing or slow one warns and allows, so a broken gate can never block
+   emergency response during an incident.
+
+   Both differ from announcers, which fire on the operator's final confirmation
+   ('this is starting now', for alert correlation), and from prerequisite checks,
+   which a single book declares for itself - a pre-hook applies to every book."
   (:require [gumshoe.stdout :as stdout]))
 
 (defonce ^:private post-hooks (atom []))
+(defonce ^:private pre-hooks (atom []))
 
 (def ^:private hook-timeout-ms
-  "A hook runs after the book is already done, so a hang would only delay the
-   exit - bound it and move on."
+  "A post-hook runs after the book is already done, so a hang would only delay the
+   exit; a pre-hook gates the start, so a hang delays it - bound both and move on."
   30000)
 
 (defn register-post-hook!
@@ -51,3 +58,38 @@
       (cond
         (= ::timeout result) (stdout/warn "post-hook timed out - abandoned")
         (some? result) (stdout/warn "post-hook failed:" result)))))
+
+(defn register-pre-hook!
+  "Registers a function called before every book with the run context, a map:
+     {:description  the book's one-line description
+      :book         the book file about to run
+      :opts         the parsed flags
+      :change?      true for a book that makes a change, false for a read-only one}
+   Return anything truthy to allow the run, or false / {:allow? false :reason
+   \"...\"} to VETO it - the book stops before touching anything."
+  [f]
+  (swap! pre-hooks conj f))
+
+(defn- vetoed?
+  [result]
+  (or (false? result) (and (map? result) (false? (:allow? result)))))
+
+(defn run-pre-hooks!
+  "Runs the pre-hooks in order and returns {:allowed? bool :reason ...}. The first
+   veto stops the book. Bounded and fail-open: a throwing or timed-out hook warns
+   and allows, so a broken gate can never block emergency response."
+  [context]
+  (loop [remaining @pre-hooks]
+    (if-let [hook (first remaining)]
+      (let [result (deref (future (try {:value (hook context)}
+                                       (catch Exception e {:error (or (ex-message e) (str e))})))
+                          hook-timeout-ms
+                          ::timeout)]
+        (cond
+          (= ::timeout result) (do (stdout/warn "pre-hook timed out - allowing") (recur (rest remaining)))
+          (:error result) (do (stdout/warn "pre-hook failed - allowing:" (:error result)) (recur (rest remaining)))
+          (vetoed? (:value result)) {:allowed? false
+                                     :reason (or (:reason (:value result))
+                                                 "a pre-execution hook vetoed this run")}
+          :else (recur (rest remaining))))
+      {:allowed? true})))

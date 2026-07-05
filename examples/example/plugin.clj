@@ -58,3 +58,12 @@
                          (fn [] true)
                          {:pass (str "change window '" window "' is open")
                           :fail (str "change window '" window "' is closed - not now")})]))
+
+;; Seam 6 - a pre-execution gate that applies to EVERY book (unlike a declared
+;; prerequisite). This blocks changes while EXAMPLE_CHANGE_FREEZE is set, but lets
+;; read-only books through. Return false or {:allow? false :reason ...} to veto.
+(hooks/register-pre-hook!
+ (fn [{:keys [change?]}]
+   (if (and change? (System/getenv "EXAMPLE_CHANGE_FREEZE"))
+     {:allow? false :reason "change freeze in effect (EXAMPLE_CHANGE_FREEZE set)"}
+     true)))
