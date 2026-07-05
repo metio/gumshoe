@@ -41,6 +41,44 @@
           :current (-> pvc :spec :resources :requests :storage)
           :target capacity})))
 
+(defonce ^:private resize-preflights (atom []))
+
+(defn register-resize-preflight!
+  "Registers a storage-provider preflight for a resize - a SECOND-LEVEL
+   prerequisite. A book's :prerequisites are the first level: the generic ability
+   to do the operation at all (get PVCs and storage classes, patch PVCs), checked
+   before selection. These run AFTER selection and depend on what was chosen: is
+   the selected PVC's storage class expandable, does the backend have room. `check`
+   is (fn [context] -> seq of problem strings, empty when safe), where context is
+   {:context :cluster :namespace :plan}. Any problem stops the resize. A provider
+   checks its backend has room for the growth (the ceph package checks the pool's
+   free capacity).
+
+   Fail CLOSED: a check that can not confirm safety must RETURN a problem, never
+   assume ok. A check that throws is itself treated as a problem."
+  [check]
+  {:pre [(fn? check)]}
+  (swap! resize-preflights conj check))
+
+(defn resize-preflight-problems
+  "Problems from every registered provider preflight for `context`
+   (a map {:context :cluster :namespace :plan}). Best-effort and fail-closed: a
+   check that throws becomes a problem rather than being silently skipped, so a
+   broken capacity check blocks the resize instead of waving it through."
+  [context]
+  (vec
+   (mapcat (fn [check]
+             (try
+               (let [result (check context)]
+                 (cond
+                   (nil? result) []
+                   (sequential? result) (remove nil? result)
+                   :else [(str "a storage preflight returned an unexpected value: " (pr-str result))]))
+               (catch Exception e
+                 [(str "a storage preflight failed to run (treated as unsafe): "
+                       (or (ex-message e) (str e)))])))
+           @resize-preflights)))
+
 (defn expansion-problems
   "Every reason this plan must not run. An empty result means it is safe."
   [plan]

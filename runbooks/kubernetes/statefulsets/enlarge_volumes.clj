@@ -92,12 +92,23 @@
                                                              #(= namespace (kubectl/namespace-of %)))}
                                               :storage-classes (kubectl/get-all context "storageclasses")
                                               :capacity capacity})
-                problems (storage/expansion-problems plan)]
-            (stdout/print-section "📋 Enlargement plan")
+                problems (into (storage/expansion-problems plan)
+                               ;; storage-provider preflights (a ceph pool's free
+                               ;; capacity); fail closed, so an unverifiable backend
+                               ;; blocks the resize
+                               (storage/resize-preflight-problems
+                                {:context context :cluster cluster :namespace namespace :plan plan}))]
+            ;; Second-level prerequisites: the book's :prerequisites already proved
+            ;; the generic ability to do this (get PVCs/storage classes, patch
+            ;; PVCs). These are the checks that depend on WHAT was selected - the
+            ;; chosen PVCs' storage class allows expansion, the sizes are sane, and
+            ;; the storage backend has capacity for this growth. They fail closed.
+            (stdout/print-section "📋 Preflight")
             (doseq [{:keys [pvc current target]} plan]
-              (stdout/err-println (format "  %s: %s -> %s" pvc current target)))
+              (stdout/err-println (format "  plan: %s: %s -> %s" pvc current target)))
             (if (seq problems)
               (do (doseq [problem problems] (stdout/error problem))
+                  (stdout/err-println "Refusing: a second-level prerequisite failed - nothing was changed.")
                   false)
               (flow/change!
                {:confirmation {:action (format "enlarge volumes to %s - the StatefulSet is deleted (pods orphaned) and recreated" capacity)

@@ -73,3 +73,21 @@
       (is (= ["100Gi" "10Gi"]
              (mapv #(-> % :spec :resources :requests :storage)
                    (-> manifest :spec :volumeClaimTemplates)))))))
+
+(deftest resize-preflight-is-fail-closed-test
+  (reset! @#'storage/resize-preflights [])
+  (testing "a preflight that reports a problem surfaces it"
+    (storage/register-resize-preflight! (fn [_] ["no room in the pool"]))
+    (is (= ["no room in the pool"] (storage/resize-preflight-problems {:plan []}))))
+  (testing "a preflight that THROWS becomes a problem, never silently skipped (fail closed)"
+    (reset! @#'storage/resize-preflights [])
+    (storage/register-resize-preflight! (fn [_] (throw (ex-info "boom" {}))))
+    (let [problems (storage/resize-preflight-problems {:plan []})]
+      (is (= 1 (count problems)))
+      (is (clojure.string/includes? (first problems) "treated as unsafe"))))
+  (testing "a preflight returning nil/empty contributes no problem"
+    (reset! @#'storage/resize-preflights [])
+    (storage/register-resize-preflight! (fn [_] nil))
+    (storage/register-resize-preflight! (fn [_] []))
+    (is (empty? (storage/resize-preflight-problems {:plan []}))))
+  (reset! @#'storage/resize-preflights []))
