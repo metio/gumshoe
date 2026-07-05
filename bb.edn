@@ -8,6 +8,7 @@
         :requires ([clojure.test :as test]
                    [gumshoe.backups-test]
                    [gumshoe.catalog-test]
+                   [gumshoe.main-test]
                    [gumshoe.ceph-test]
                    [gumshoe.capabilities-test]
                    [gumshoe.command-test]
@@ -75,6 +76,7 @@
                    [gumshoe.verify-test])
         :task (let [{:keys [fail error]} (test/run-tests 'gumshoe.backups-test
                                                          'gumshoe.catalog-test
+                                                         'gumshoe.main-test
                                                          'gumshoe.ceph-test
                                                          'gumshoe.capabilities-test
                                                          'gumshoe.command-test

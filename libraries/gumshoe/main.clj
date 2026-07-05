@@ -220,8 +220,11 @@
 
 (defn- guided
   []
-  (case (fuzzy/select-single "what are you doing?"
-                             [follow-lead scan-area run-book run-playbook fire-drill])
+  ;; condp/= compares against the def'd label strings; `case` would match the
+  ;; literal symbols (it does not evaluate its test constants) and never hit,
+  ;; throwing "No matching clause" on every real selection.
+  (condp = (fuzzy/select-single "what are you doing?"
+                                [follow-lead scan-area run-book run-playbook fire-drill])
     nil 1
     follow-lead (investigate [])
     scan-area (detect [])
