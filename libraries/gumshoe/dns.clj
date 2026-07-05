@@ -11,15 +11,17 @@
 
 (defn dig-args
   "Pure assembly of a dig invocation. Without a server the system resolver
-   answers - that is the right view for deliverability questions."
-  [{:keys [server transport]} type name]
+   answers - that is the right view for deliverability questions. A :reverse?
+   connection uses `dig -x`, which forms the in-addr.arpa / ip6.arpa query name
+   from an IP; querying the bare IP as a PTR name never resolves."
+  [{:keys [server transport reverse?]} type name]
   (vec (concat ["dig" "+short" "+time=3" "+tries=1"]
                (case transport
                  :ipv4 ["-4"]
                  :ipv6 ["-6"]
                  [])
                (when server [(str "@" server)])
-               [type name])))
+               (if reverse? ["-x" name] [type name]))))
 
 (defn query
   "Answers as a vector of lines; nil when the server did not reply."
@@ -27,6 +29,12 @@
   (let [result (apply shell/execute (dig-args connection type name))]
     (when (zero? (:exit result))
       (vec (remove str/blank? (str/split-lines (:out result)))))))
+
+(defn ptr-records
+  "Reverse-DNS (PTR) answers for an IP address, via `dig -x`. nil when the
+   server did not reply."
+  [connection address]
+  (query (assoc connection :reverse? true) "PTR" address))
 
 (defn strip-dot
   [name]

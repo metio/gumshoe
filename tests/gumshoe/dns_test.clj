@@ -18,7 +18,10 @@
     (is (= ["dig" "+short" "+time=3" "+tries=1" "-4" "@dns.example.org" "SOA" "example.org"]
            (dns/dig-args {:server "dns.example.org" :transport :ipv4} "SOA" "example.org")))
     (is (= ["dig" "+short" "+time=3" "+tries=1" "-6" "@dns.example.org" "SOA" "example.org"]
-           (dns/dig-args {:server "dns.example.org" :transport :ipv6} "SOA" "example.org")))))
+           (dns/dig-args {:server "dns.example.org" :transport :ipv6} "SOA" "example.org"))))
+  (testing "a reverse lookup uses -x, not the bare IP as a PTR name"
+    (is (= ["dig" "+short" "+time=3" "+tries=1" "@dns.example.org" "-x" "203.0.113.5"]
+           (dns/dig-args {:server "dns.example.org" :reverse? true} "PTR" "203.0.113.5")))))
 
 (deftest parsing-test
   (is (= "2026070401"

@@ -4,7 +4,8 @@
 (ns gumshoe.mail-test
   (:require [clojure.test :refer [deftest is testing]]
             [gumshoe.detectives.mail :as detectives]
-            [gumshoe.mail :as mail]))
+            [gumshoe.mail :as mail]
+            [gumshoe.shell :as shell]))
 
 (defn- summaries
   [findings]
@@ -28,7 +29,11 @@
     (is (= "+" (mail/spf-all-qualifier "v=spf1 +all")))
     (is (= "+" (mail/spf-all-qualifier "v=spf1 mx all")))
     (is (= "?" (mail/spf-all-qualifier "v=spf1 ?all")))
-    (is (nil? (mail/spf-all-qualifier "v=spf1 include:_spf.example.org")))))
+    (is (nil? (mail/spf-all-qualifier "v=spf1 include:_spf.example.org"))))
+  (testing "'all' inside an earlier mechanism is not mistaken for the terminating one"
+    (is (= "-" (mail/spf-all-qualifier "v=spf1 include:_spf.firewall.net -all")))
+    (is (= "-" (mail/spf-all-qualifier "v=spf1 a:mail.install.example.com -all")))
+    (is (= "~" (mail/spf-all-qualifier "v=spf1 include:allowlist.example.org ~all")))))
 
 (deftest dmarc-parsing-test
   (is (= "reject" (mail/dmarc-policy ["\"v=DMARC1; p=reject; rua=mailto:x@example.org\""])))
@@ -98,7 +103,10 @@
                    "203.0.113.5 resolves back to other.example.org, not mail.example.org (no forward-confirmed rDNS)")))
   (testing "matching forward-confirmed rDNS is silent"
     (is (empty? (detectives/detect-reverse-dns
-                 {"host" "mail.example.org" "ptr" [["203.0.113.5" "mail.example.org."]]})))))
+                 {"host" "mail.example.org" "ptr" [["203.0.113.5" "mail.example.org."]]}))))
+  (testing "a case-only difference is still forward-confirmed (DNS names are case-insensitive)"
+    (is (empty? (detectives/detect-reverse-dns
+                 {"host" "mail.example.org" "ptr" [["203.0.113.5" "Mail.Example.ORG."]]})))))
 
 ;; ---------------------------------------------------------------------------
 ;; live service detectives
@@ -141,6 +149,44 @@
                     "probes" [{:service "imaps" :port 993 :tls :implicit
                                :reachable true :tls-ok true
                                :not-after "notAfter=Dec 31 00:00:00 2026 GMT"}]}))))))
+
+(def ^:private sample-pem
+  (str "-----BEGIN CERTIFICATE-----\nMIIBmock\n-----END CERTIFICATE-----\n"))
+
+(deftest probe-service-test
+  (testing "a STARTTLS port that presents a certificate is reachable AND starttls-ok"
+    ;; The certificate is the success signal for the handshake; the enddate is
+    ;; read from that same PEM. Guards against keying success off a marker (e.g.
+    ;; 'CONNECTION ESTABLISHED') that openssl only prints in another mode.
+    (with-redefs [shell/execute-with-stdin
+                  (fn [_ & args]
+                    (if (= "s_client" (second args))
+                      {:exit 0 :out sample-pem :err "depth=0 CN=mail\n"}
+                      {:exit 0 :out "notAfter=Dec 31 00:00:00 2026 GMT\n" :err ""}))]
+      (let [probe (mail/probe-service "mail.example.org" (first (filter #(= "smtp" (:name %)) mail/services)))]
+        (is (true? (:reachable probe)))
+        (is (true? (:starttls-ok probe)))
+        (is (= "notAfter=Dec 31 00:00:00 2026 GMT" (:not-after probe))))))
+  (testing "an implicit-TLS port that presents a certificate is reachable AND tls-ok"
+    (with-redefs [shell/execute-with-stdin
+                  (fn [_ & args]
+                    (if (= "s_client" (second args))
+                      {:exit 0 :out sample-pem :err ""}
+                      {:exit 0 :out "notAfter=Dec 31 00:00:00 2026 GMT\n" :err ""}))]
+      (let [probe (mail/probe-service "mail.example.org" (first (filter #(= "smtps" (:name %)) mail/services)))]
+        (is (true? (:tls-ok probe))))))
+  (testing "a reachable port whose TLS negotiation fails is reachable but not ok"
+    (with-redefs [shell/execute-with-stdin
+                  (fn [_ & _] {:exit 1 :out "" :err "wrong version number\n"})]
+      (let [probe (mail/probe-service "mail.example.org" (first (filter #(= "smtp" (:name %)) mail/services)))]
+        (is (true? (:reachable probe)))
+        (is (false? (:starttls-ok probe)))
+        (is (nil? (:not-after probe))))))
+  (testing "a refused/timed-out port is not reachable"
+    (with-redefs [shell/execute-with-stdin
+                  (fn [_ & _] {:exit 124 :out "" :err "'openssl ...' did not finish within 5000ms and was stopped"})]
+      (let [probe (mail/probe-service "mail.example.org" (first (filter #(= "smtp" (:name %)) mail/services)))]
+        (is (false? (:reachable probe)))))))
 
 (deftest service-catalogue-test
   (testing "every cleartext port declares a STARTTLS protocol and a greeting"

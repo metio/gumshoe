@@ -115,7 +115,9 @@
                       :summary (format "%s has no PTR record" address)
                       :hint "many receivers reject mail from IPs without reverse DNS outright"}
 
-                     (not= host ptr-host)
+                     ;; DNS names are case-insensitive (RFC 4343), so a PTR that
+                     ;; differs only in letter-case is still a forward-confirmed match.
+                     (not= (str/lower-case (str host)) (str/lower-case (str ptr-host)))
                      {:severity :warning
                       :component host
                       :summary (format "%s resolves back to %s, not %s (no forward-confirmed rDNS)" address ptr-host host)

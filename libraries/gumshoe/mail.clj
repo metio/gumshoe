@@ -45,7 +45,13 @@
   "The qualifier of the terminating 'all' mechanism: \"+\", \"-\", \"~\", \"?\",
    or nil when there is no 'all'."
   [spf]
-  (some-> (re-find #"([-+~?]?)all\b" (str spf)) second (as-> q (if (str/blank? q) "+" q))))
+  ;; Only a standalone `all` mechanism counts - it is bounded by start/space on
+  ;; the left and space/end on the right, so 'all' inside include:_spf.firewall
+  ;; or a:mail.install is not mistaken for it. Take the last such token, since
+  ;; `all` terminates the record.
+  (when-let [match (last (re-seq #"(?:^|\s)([-+~?]?)all(?=\s|$)" (str spf)))]
+    (let [q (second match)]
+      (if (str/blank? q) "+" q))))
 
 (defn dmarc-policy
   [txt-lines]
@@ -74,48 +80,50 @@
 ;; ---------------------------------------------------------------------------
 ;; live probes
 
-(defn- probe-implicit-tls
-  "Handshake TLS immediately and read the certificate's notAfter."
-  [host {:keys [port]}]
-  (let [result (shell/execute-with-stdin
-                "QUIT\n"
-                "openssl" "s_client" "-connect" (format "%s:%d" host port)
-                "-servername" host "-brief")
-        cert (shell/execute-with-stdin
-              ""
-              "sh" "-c"
-              (format "echo QUIT | openssl s_client -connect %s:%d -servername %s 2>/dev/null | openssl x509 -noout -enddate"
-                      host port host))]
-    {:reachable (zero? (:exit result))
-     :tls-ok (str/includes? (str (:err result)) "CONNECTION ESTABLISHED")
-     :not-after (when (zero? (:exit cert)) (str/trim (:out cert)))}))
+(defn- s-client
+  "Runs `openssl s_client` against host:port as an argument vector, so the host
+   is never reparsed by a shell. starttls is a protocol keyword (:smtp/:pop3/
+   :imap) for a cleartext port that upgrades, or nil for an implicit-TLS port.
+   Feeds QUIT on stdin so the client exits once the handshake is done."
+  [host port starttls]
+  (apply shell/execute-with-stdin "QUIT\n"
+         "openssl" "s_client" "-connect" (format "%s:%d" host port) "-servername" host
+         (when starttls ["-starttls" (name starttls)])))
 
-(defn- probe-starttls
-  "Connect in cleartext, read the greeting, and check STARTTLS is advertised
-   by completing a STARTTLS handshake via openssl."
-  [host {:keys [port starttls greeting]}]
-  (let [banner (shell/execute-with-stdin
-                ""
-                "sh" "-c"
-                (format "echo QUIT | timeout 5 openssl s_client -connect %s:%d -starttls %s -servername %s 2>&1"
-                        host port (name starttls) host))
-        output (str (:out banner))]
-    {:reachable (or (zero? (:exit banner))
-                    (str/includes? output greeting)
-                    (str/includes? output "CONNECTION ESTABLISHED"))
-     :starttls-ok (str/includes? output "CONNECTION ESTABLISHED")
-     :not-after (let [enddate (shell/execute-with-stdin
-                               ""
-                               "sh" "-c"
-                               (format "echo QUIT | timeout 5 openssl s_client -connect %s:%d -starttls %s -servername %s 2>/dev/null | openssl x509 -noout -enddate"
-                                       host port (name starttls) host))]
-                  (when (zero? (:exit enddate)) (str/trim (:out enddate))))}))
+(defn- connected?
+  "Whether openssl reached the port at all. A refused, filtered, or timed-out
+   connection never opens the socket; a reachable port that only fails the TLS
+   or STARTTLS negotiation still counts as reachable."
+  [{:keys [exit out err]}]
+  (not (or (#{124 127} exit)
+           (re-find #"(?i)errno|connection refused|no route to host|could not resolve|name or service not known"
+                    (str out err)))))
+
+(defn- enddate-of
+  "The certificate's notAfter line, extracted from s_client's PEM output via
+   `openssl x509`. nil when no certificate was presented or it can not be read."
+  [pem]
+  (when (str/includes? (str pem) "BEGIN CERTIFICATE")
+    (let [result (shell/execute-with-stdin (str pem) "openssl" "x509" "-noout" "-enddate")]
+      (when (zero? (:exit result)) (str/trim (:out result))))))
+
+(defn- probe-tls
+  "Probes one service port. A completed handshake prints the server certificate,
+   so its presence is the success signal for both implicit-TLS and STARTTLS
+   ports; the notAfter is read from that same certificate. The port is reachable
+   whenever openssl connected, even if the negotiation then failed."
+  [host {:keys [port tls starttls]}]
+  (let [result (s-client host port starttls)
+        established (str/includes? (str (:out result) (:err result)) "BEGIN CERTIFICATE")
+        base {:reachable (or established (connected? result))
+              :not-after (enddate-of (:out result))}]
+    (if (= :implicit tls)
+      (assoc base :tls-ok established)
+      (assoc base :starttls-ok established))))
 
 (defn probe-service
   [host service]
-  (assoc (if (= :implicit (:tls service))
-           (probe-implicit-tls host service)
-           (probe-starttls host service))
+  (assoc (probe-tls host service)
          :service (:name service)
          :port (:port service)
          :tls (:tls service)))
@@ -132,7 +140,7 @@
         mx (future (q "MX" domain))
         spf (future (q "TXT" domain))
         dmarc (future (q "TXT" (str "_dmarc." domain)))
-        ptr (future (mapv #(vector % (first (q "PTR" %)))
+        ptr (future (mapv #(vector % (first (dns/ptr-records {:server server} %)))
                           (remove str/blank? (q "A" host))))
         dkim (future (into {} (map (fn [selector]
                                      [selector (q "TXT" (format "%s._domainkey.%s" selector domain))])
