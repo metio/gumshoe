@@ -27,6 +27,7 @@
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]
             [gumshoe.theme :as theme]
+            [gumshoe.ui :as ui]
             [gumshoe.upterm :as upterm]
             [gumshoe.utils :as utils]))
 
@@ -224,9 +225,10 @@
         ;; via deps - so their announcers/detectives/etc. are registered before
         ;; anything in this run reaches for them
         (plugins/load!)
-        ;; select the output theme from env.edn (or a plugin theme just loaded)
-        ;; before anything prints
+        ;; select the output theme and the interactive backend from env.edn (or a
+        ;; plugin's, just loaded) before anything prints or prompts
         (theme/apply!)
+        (ui/activate!)
         (when-not (prerequisites? prerequisites opts)
           (stdout/print-banner stdout/red (str (theme/token :error) " PREREQUISITES NOT MET - nothing was attempted"))
           (stdout/err-println "Next: install the missing tools, connect to the right cluster/VPN, or fix the")

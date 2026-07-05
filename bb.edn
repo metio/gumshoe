@@ -34,6 +34,7 @@
                    [gumshoe.reproducer-test]
                    [gumshoe.recording-test]
                    [gumshoe.upload-test]
+                   [gumshoe.ui-test]
                    [gumshoe.upterm-test]
                    [gumshoe.watch-test]
                    [gumshoe.resources-test]
@@ -90,6 +91,7 @@
                                                          'gumshoe.reproducer-test
                                                          'gumshoe.recording-test
                                                          'gumshoe.upload-test
+                                                         'gumshoe.ui-test
                                                          'gumshoe.upterm-test
                                                          'gumshoe.watch-test
                                                          'gumshoe.resources-test

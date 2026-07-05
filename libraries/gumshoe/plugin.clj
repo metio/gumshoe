@@ -22,6 +22,7 @@
             [gumshoe.subject :as subject]
             [gumshoe.summary :as summary]
             [gumshoe.theme :as theme]
+            [gumshoe.ui :as ui]
             [gumshoe.watch :as watch]))
 
 (defn provide!
@@ -43,11 +44,12 @@
      :kinds         {\"HelmRelease\" {:type \"…\" :edges (fn [object] …)}} ; a CRD drill-down target
      :resize-watchers   [(fn [signals] …)]                              ; a log source for storage resizes
      :resize-preflights [(fn [context] …)]                              ; a fail-closed resize safety check
+     :ui            {:name :native :select-one (fn […]) …}              ; an interactive backend (fzf/gum replacement)
 
    Order within the map does not matter; registrations are independent."
   [{:keys [announcers detectives capabilities tools summary-providers themes
            pre-hooks post-hooks secrets prerequisites probes kinds
-           resize-watchers resize-preflights]}]
+           resize-watchers resize-preflights ui]}]
   (doseq [[type f] announcers] (announce/register-announcer! type f))
   (doseq [[scope ds] detectives] (detectives/register! scope ds))
   (doseq [[cap f] capabilities] (capabilities/register-detector! cap f))
@@ -62,4 +64,5 @@
   (doseq [[kind spec] kinds] (subject/register-kind! kind spec))
   (doseq [b resize-watchers] (watch/register-resize-watcher! b))
   (doseq [c resize-preflights] (storage/register-resize-preflight! c))
+  (when ui (ui/register-provider! ui))
   nil)

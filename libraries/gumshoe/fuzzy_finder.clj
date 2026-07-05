@@ -7,7 +7,8 @@
    candidate is picked automatically; ESC selects nothing."
   (:require [babashka.process :as process]
             [clojure.java.io :as io]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [gumshoe.ui :as ui]))
 
 (defn- select
   [args values]
@@ -27,18 +28,22 @@
    launcher can seed the filter with whatever the operator already typed."
   ([prompt values] (select-single prompt values nil))
   ([prompt values query]
-   (select (concat ["fzf" "--exit-0" "--select-1" "--no-multi"
-                    (str "--prompt=" prompt " ▶ ")]
-                   (when (not-empty query) [(str "--query=" query)])
-                   style)
-           values)))
+   (if-let [pick (ui/backend :select-one)]
+     (pick prompt values query)
+     (select (concat ["fzf" "--exit-0" "--select-1" "--no-multi"
+                      (str "--prompt=" prompt " ▶ ")]
+                     (when (not-empty query) [(str "--query=" query)])
+                     style)
+             values))))
 
 (defn select-multi
   [prompt values]
-  (when-let [selection (select (concat ["fzf" "--exit-0" "--select-1" "--multi"
-                                        "--bind=ctrl-a:select-all"
-                                        "--header=TAB selects multiple entries, CTRL-A selects all"
-                                        (str "--prompt=" prompt " ▶ ")]
-                                       style)
-                               values)]
-    (str/split selection #"\n")))
+  (if-let [pick (ui/backend :select-multi)]
+    (pick prompt values)
+    (when-let [selection (select (concat ["fzf" "--exit-0" "--select-1" "--multi"
+                                          "--bind=ctrl-a:select-all"
+                                          "--header=TAB selects multiple entries, CTRL-A selects all"
+                                          (str "--prompt=" prompt " ▶ ")]
+                                         style)
+                                 values)]
+      (str/split selection #"\n"))))

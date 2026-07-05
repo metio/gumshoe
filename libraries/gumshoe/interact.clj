@@ -11,7 +11,8 @@
             [gumshoe.command :as command]
             [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.shell :as shell]
-            [gumshoe.stdout :as stdout]))
+            [gumshoe.stdout :as stdout]
+            [gumshoe.ui :as ui]))
 
 ;; Every resolved selection is recorded so a book's recording can show exactly
 ;; what the operator picked, whether by flag or interactively.
@@ -38,10 +39,12 @@
   (binding [*out* *err*] (println prompt) (flush))
   (record-selection!
    label
-   (if (command/installed? "gum")
-     (shell/capture-line "gum" "input" "--prompt" "▸ ")
-     (do (binding [*out* *err*] (print "▸ ") (flush))
-         (not-empty (some-> (read-line) str/trim))))))
+   (if-let [ask (ui/backend :ask-text)]
+     (ask prompt)
+     (if (command/installed? "gum")
+       (shell/capture-line "gum" "input" "--prompt" "▸ ")
+       (do (binding [*out* *err*] (print "▸ ") (flush))
+           (not-empty (some-> (read-line) str/trim)))))))
 
 (defn valid-choice?
   [candidates choice]
@@ -127,9 +130,13 @@
     (stdout/print-banner stdout/red "💥 DESTRUCTIVE ACTION - this cannot be undone automatically")
     (stdout/print-banner stdout/yellow "🔶 You are about to change a running system"))
   (stdout/err-println (confirmation-message request))
-  (let [approved (if (and (not destructive?) (command/installed? "gum"))
-                   (gum-yes?)
-                   (typed-yes?))]
+  ;; destructive actions always require the literal word 'yes', whatever the UI
+  ;; backend - the deliberate friction is the point, not a widget's convenience
+  (let [approved (cond
+                   destructive? (typed-yes?)
+                   (ui/backend :confirm) ((ui/backend :confirm))
+                   (command/installed? "gum") (gum-yes?)
+                   :else (typed-yes?))]
     (record-selection! (str "confirm: " (:action request)) (if approved "approved" "aborted"))
     (or approved
         (do (stdout/error "aborted, nothing was changed")
