@@ -2,71 +2,10 @@
 ;; SPDX-FileCopyrightText: The gumshoe Authors
 ;; SPDX-License-Identifier: 0BSD
 
-;; The other front door: run ./run, fuzzy-pick any single book, and go. Where
-;; ./detect guides you from a symptom to an investigation, ./run is for when you
-;; already know the book you want - a one-shot launcher over every book on disk.
-;; Anything you type after ./run seeds the fuzzy filter (./run cordon).
+;; Launch any single book by fuzzy search.
+;; A thin wrapper over gumshoe.main so the same door works from this repo and from
+;; a casebook's bb.edn :tasks. All flags pass through.
 
-(require '[babashka.cli :as cli]
-         '[clojure.string :as str]
-         '[gumshoe.catalog :as catalog]
-         '[gumshoe.shell :as shell]
-         '[gumshoe.fuzzy-finder :as fuzzy]
-         '[gumshoe.stdout :as stdout])
+(require '[gumshoe.main :as main])
 
-;; ./run carries only the flags every book understands and forwards them to the
-;; chosen book; a book's own flags are answered interactively once it runs, so
-;; an unknown flag here is a typo and is rejected rather than silently ignored.
-(def cli-spec
-  {:spec {:dry-run {:desc "Pass --dry-run through to the chosen book"
-                    :coerce :boolean}
-          :no-color {:desc "Disable colored output (also honors NO_COLOR)"
-                     :coerce :boolean}
-          :help {:desc "Show this help message"
-                 :alias :h
-                 :coerce :boolean}}
-   :restrict true
-   :error-fn (fn [{:keys [msg]}]
-               (stdout/error msg)
-               (stdout/err-println "run ./run --help to see the available flags")
-               (System/exit 1))})
-
-(defn- passthrough
-  [opts]
-  (cond-> []
-    (:dry-run opts) (conj "--dry-run")
-    (:no-color opts) (conj "--no-color")))
-
-(defn- display
-  "The line shown for a book: its description with the short path for context,
-   so you can fuzzy-match on either what it does or where it lives."
-  [{:keys [name description]}]
-  (if description
-    (format "%s  —  %s" description name)
-    name))
-
-(defn- usage
-  []
-  (stdout/err-println (stdout/bold "./run - launch any single book by fuzzy search"))
-  (stdout/err-println "")
-  (stdout/err-println (stdout/yellow "Usage:"))
-  (stdout/err-println "  ./run [search terms] [--dry-run] [--no-color]")
-  (stdout/err-println "")
-  (stdout/err-println (stdout/yellow "Options:"))
-  (stdout/err-println (cli/format-opts cli-spec))
-  (stdout/err-println "")
-  (stdout/err-println "Any search terms prefill the fuzzy filter, e.g. `./run cordon`.")
-  (stdout/err-println "For a guided \"what hurts?\" investigation instead, use ./detect."))
-
-(let [{:keys [opts args]} (cli/parse-args *command-line-args* cli-spec)]
-  (when (:no-color opts) (stdout/disable-colors!))
-  (if (:help opts)
-    (usage)
-    (let [books (catalog/books)
-          labels (mapv display books)
-          choice (fuzzy/select-single "Which book?" labels (str/join " " args))
-          book (first (filter #(= choice (display %)) books))]
-      (if (nil? book)
-        (do (stdout/error "nothing selected - run ./run again when you know the book you want")
-            (System/exit 1))
-        (System/exit (apply shell/run-with-output "bb" (:path book) (passthrough opts)))))))
+(System/exit (main/run *command-line-args*))

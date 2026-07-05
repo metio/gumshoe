@@ -30,3 +30,14 @@
     (let [b (catalog/book-at "does/not/exist.clj")]
       (is (= "does/not/exist.clj" (:path b)))
       (is (nil? (:description b))))))
+
+(deftest resolve-path-by-suffix-test
+  (let [catalog [{:path "/home/x/gumshoe/tools/flux/runbooks/gitops.clj" :name "gitops"}
+                 {:path "/root/.gitlibs/libs/io.github.metio/gumshoe/abc/runbooks/investigate.clj" :name "investigate"}]]
+    (testing "a book-dir-relative suffix resolves to the absolute classpath path"
+      (is (= "/home/x/gumshoe/tools/flux/runbooks/gitops.clj"
+             (catalog/resolve-path "tools/flux/runbooks/gitops.clj" catalog)))
+      (is (= "/root/.gitlibs/libs/io.github.metio/gumshoe/abc/runbooks/investigate.clj"
+             (catalog/resolve-path "runbooks/investigate.clj" catalog))))
+    (testing "an unknown suffix falls back to itself, so a bare monorepo path still runs"
+      (is (= "runbooks/nope.clj" (catalog/resolve-path "runbooks/nope.clj" catalog))))))

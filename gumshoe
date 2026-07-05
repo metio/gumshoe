@@ -2,101 +2,10 @@
 ;; SPDX-FileCopyrightText: The gumshoe Authors
 ;; SPDX-License-Identifier: 0BSD
 
-;; The one front door. Not sure where to start? Run ./gumshoe and it asks what you
-;; are doing. Already know? Take a shortcut:
-;;   ./gumshoe --host moodle.example.org   → drill down from a lead (./investigate)
-;;   ./gumshoe cordon                      → fuzzy-launch a book (./run)
-;;   ./gumshoe                             → the guided menu
-;; ./detect, ./investigate, and ./run are still there as direct aliases.
+;; The one front door - a guided menu, a lead shortcut, or a fuzzy book search.
+;; A thin wrapper over gumshoe.main so the same door works from this repo and from
+;; a casebook's bb.edn :tasks. All flags pass through.
 
-(require '[babashka.cli :as cli]
-         '[clojure.string :as str]
-         '[gumshoe.catalog :as catalog]
-         '[gumshoe.fuzzy-finder :as fuzzy]
-         '[gumshoe.shell :as shell]
-         '[gumshoe.stdout :as stdout])
+(require '[gumshoe.main :as main])
 
-(def cli-spec
-  {:spec {:host {:desc "Drill down from a hostname a user reported" :coerce :string}
-          :pod {:desc "Drill down from a pod (namespace/name)" :coerce :string}
-          :node {:desc "Drill down from a node" :coerce :string}
-          :namespace {:desc "Drill down from a namespace" :alias :n :coerce :string}
-          :help {:desc "Show this help message" :alias :h :coerce :boolean}}
-   :restrict true
-   :error-fn (fn [{:keys [msg]}]
-               (stdout/error msg)
-               (stdout/err-println "run ./gumshoe --help to see the shortcuts, or ./gumshoe for the guided menu")
-               (System/exit 1))})
-
-(defn- lead-args
-  "The investigate flags carried straight through when a lead is given."
-  [opts]
-  (cond-> []
-    (:host opts) (conj "--host" (:host opts))
-    (:pod opts) (conj "--pod" (:pod opts))
-    (:node opts) (conj "--node" (:node opts))
-    (:namespace opts) (conj "--namespace" (:namespace opts))))
-
-(defn- usage
-  []
-  (stdout/err-println (stdout/bold "gumshoe - the SRE detective (the gumshoe's front door)"))
-  (stdout/err-println "")
-  (stdout/err-println (stdout/yellow "Usage:"))
-  (stdout/err-println "  ./gumshoe                         the guided menu - it asks what you are doing")
-  (stdout/err-println "  ./gumshoe --host <hostname>       drill down from a lead (also --pod/--node/--namespace)")
-  (stdout/err-println "  ./gumshoe <search terms>          fuzzy-launch a book by name")
-  (stdout/err-println "")
-  (stdout/err-println (stdout/yellow "Options:"))
-  (stdout/err-println (cli/format-opts cli-spec))
-  (stdout/err-println "")
-  (stdout/err-println "Direct doors: ./investigate (drill down), ./detect (scan an area), ./run (launch a book)."))
-
-(def ^:private follow-lead "🔦 Follow a lead - a hostname, pod, node, or namespace you suspect")
-(def ^:private scan-area "🩺 Scan for symptoms - what hurts, across an area of the cluster")
-(def ^:private run-book "📖 Run a book - a single action, you already know which")
-(def ^:private run-playbook "📋 Run a playbook - a multi-step procedure, start to finish")
-(def ^:private fire-drill "🔥 Practice a fire drill - break something on purpose to train the team")
-
-(defn- display
-  [{:keys [name description]}]
-  (if description (format "%s  —  %s" description name) name))
-
-(defn- pick-and-run
-  "Fuzzy-pick one book from a root directory (playbooks, firebooks) and run it."
-  [prompt root]
-  (let [books (filter #(str/starts-with? (:path %) (str root "/")) (catalog/books))]
-    (if (empty? books)
-      (do (stdout/error (format "no %s found" root)) 1)
-      (let [by-label (into {} (map (juxt display identity) books))
-            choice (fuzzy/select-single prompt (map display books))]
-        (if-let [book (get by-label choice)]
-          (shell/run-with-output "bb" (:path book))
-          1)))))
-
-(defn- guided
-  []
-  (case (fuzzy/select-single "what are you doing?"
-                             [follow-lead scan-area run-book run-playbook fire-drill])
-    nil 1
-    follow-lead (shell/run-with-output "bb" "runbooks/investigate.clj")
-    scan-area (shell/run-with-output "./detect")
-    run-book (shell/run-with-output "./run")
-    run-playbook (pick-and-run "which playbook?" "playbooks")
-    fire-drill (pick-and-run "which fire drill?" "firebooks")))
-
-(let [{:keys [opts args]} (cli/parse-args *command-line-args* cli-spec)]
-  (cond
-    (:help opts)
-    (usage)
-
-    ;; a lead was named - go straight to the drill-down
-    (some opts [:host :pod :node :namespace])
-    (System/exit (apply shell/run-with-output "bb" "runbooks/investigate.clj" (lead-args opts)))
-
-    ;; search terms - fuzzy-launch a book, prefilled
-    (seq args)
-    (System/exit (apply shell/run-with-output "./run" args))
-
-    ;; nothing given - ask
-    :else
-    (System/exit (guided))))
+(System/exit (main/front-door *command-line-args*))

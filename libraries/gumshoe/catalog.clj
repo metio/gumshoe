@@ -83,3 +83,15 @@
         (distinct)
         (sort)
         (mapv book-at))))
+
+(defn resolve-path
+  "The absolute path of a book named by a book-dir-relative suffix
+   (\"tools/flux/runbooks/gitops.clj\", \"runbooks/investigate.clj\") found on the
+   classpath - so a front door names a book the same way whether gumshoe runs from
+   its own repo (the book is under the working directory) or a casebook that has it
+   as a dependency (the book is under ~/.gitlibs). Falls back to the suffix itself
+   when nothing matches, so a bare monorepo path still runs."
+  ([suffix] (resolve-path suffix (books)))
+  ([suffix catalog]
+   (or (some #(when (str/ends-with? (:path %) suffix) (:path %)) catalog)
+       suffix)))
