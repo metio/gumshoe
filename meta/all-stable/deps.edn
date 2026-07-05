@@ -1,0 +1,10 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The "all-stable" meta-package: gumshoe plus every stable tool package, so a
+;; casebook pins one dep and gets the lot. A casebook depends on it by subpath:
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "meta/all-stable"}}}
+;; and lists each tool's plugin ns under env.edn :plugins (or a bundled list) to
+;; activate them. As more tools are extracted, add them here.
+{:deps {io.github.metio/gumshoe      {:local/root ".."}
+        io.github.metio/gumshoe-flux {:local/root "../tools/flux"}}}

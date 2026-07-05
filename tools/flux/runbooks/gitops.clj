@@ -4,7 +4,8 @@
 (ns runbooks.detectives.gitops
   "Investigates the gitops scope: every flux source and reconciliation."
   (:require [gumshoe.detective :as detective]
-            [gumshoe.detectives.registry :as registry]))
+            [gumshoe.detectives.registry :as registry]
+            [gumshoe.tools.flux]))
 
 (detective/book
  {:description "Investigates the gitops scope: every flux source and reconciliation"

@@ -5,7 +5,8 @@
   "Triggers a flux reconciliation of a single HelmRelease."
   (:require [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.mutation :as mutation]))
+            [gumshoe.mutation :as mutation]
+            [gumshoe.tools.flux]))
 
 (def helmrelease-type "helmreleases.helm.toolkit.fluxcd.io")
 

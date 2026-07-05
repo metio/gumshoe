@@ -10,7 +10,6 @@
             [gumshoe.detectives.calico :as calico]
             [gumshoe.detectives.certificates :as certificates]
             [gumshoe.detectives.cnpg :as cnpg]
-            [gumshoe.detectives.flux :as flux]
             [gumshoe.detectives.monitoring :as monitoring]
             [gumshoe.detectives.nodes :as nodes]
             [gumshoe.detectives.pods :as pods]
@@ -87,18 +86,6 @@
                                   :status {:state "invalid"}}
                                  {:metadata {:namespace "fine" :name "order-2"}
                                   :status {:state "valid"}}]}}))))))
-
-(deftest flux-detective-test
-  (let [evidence {flux/helmrelease-type
-                  {:items [{:metadata {:namespace "moodle" :name "moodle"}
-                            :status {:conditions [{:type "Ready" :status "False" :reason "UpgradeFailed"}]}}
-                           {:metadata {:namespace "keycloak" :name "keycloak"}
-                            :spec {:suspend true}
-                            :status {:conditions [{:type "Ready" :status "True"}]}}]}}
-        findings (flux/detect-helmrelease-problems evidence)]
-    (is (= #{"HelmRelease is not Ready (UpgradeFailed)"
-             "HelmRelease is suspended"}
-           (summaries findings)))))
 
 (deftest cnpg-detective-test
   (let [evidence {cnpg/cluster-type
@@ -223,14 +210,6 @@
                       cnpg/scheduled-backup-type
                       {:items [{:metadata {:namespace "moodle" :name "nightly"}
                                 :spec {:suspend true}}]}})))))
-
-(deftest flux-source-detective-test
-  (is (= #{"OCIRepository is not Ready (PullFailed)"}
-         (summaries (flux/detect-ocirepository-problems
-                     {flux/ocirepository-type
-                      {:items [{:metadata {:namespace "flux-system" :name "charts"}
-                                :status {:conditions [{:type "Ready" :status "False"
-                                                       :reason "PullFailed"}]}}]}})))))
 
 (deftest report-format-test
   (testing "summary counts every severity"

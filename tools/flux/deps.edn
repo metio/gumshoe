@@ -1,0 +1,8 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The flux tool package. A casebook depends on it by subpath:
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/flux"}}}
+;; and lists gumshoe.tools.flux under env.edn :plugins to activate it.
+{:paths ["libraries" "runbooks"]
+ :deps {io.github.metio/gumshoe {:local/root "../.."}}}

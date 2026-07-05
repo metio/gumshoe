@@ -36,7 +36,7 @@
    {:label "🔒 TLS - cert-manager certificates and ACME orders"
     :book "runbooks/detectives/certificates.clj"}
    {:label "🔁 GitOps - flux sources and reconciliations"
-    :book "runbooks/detectives/gitops.clj"}
+    :book "tools/flux/runbooks/gitops.clj"}
    {:label "📈 Observability - the prometheus-operator stack"
     :book "runbooks/detectives/observability.clj"}
    {:label "⚡ Events - Warning events from the last hour"

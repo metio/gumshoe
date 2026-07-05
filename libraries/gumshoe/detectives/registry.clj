@@ -16,7 +16,6 @@
             [gumshoe.detectives.db-operator :as db-operator]
             [gumshoe.detectives.disruption :as disruption]
             [gumshoe.detectives.events :as events]
-            [gumshoe.detectives.flux :as flux]
             [gumshoe.detectives.gateway :as gateway]
             [gumshoe.detectives.mail :as mail]
             [gumshoe.detectives.monitoring :as monitoring]
@@ -59,7 +58,6 @@
 (register! :workloads (concat controllers/detectives pods/detectives storage/detectives disruption/detectives
                               quotas/detectives capacity/detectives))
 (register! :tls certificates/detectives)
-(register! :gitops flux/detectives)
 (register! :databases (concat cnpg/detectives db-operator/detectives))
 (register! :observability monitoring/detectives)
 (register! :signals events/detectives)

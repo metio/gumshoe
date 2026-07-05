@@ -48,7 +48,6 @@
   [crd]
   (kubectl/resource-exists? "customresourcedefinition" crd))
 
-(register-detector! :flux #(serves-crd? "kustomizations.kustomize.toolkit.fluxcd.io"))
 (register-detector! :cert-manager #(serves-crd? "certificates.cert-manager.io"))
 (register-detector! :gateway-api #(serves-crd? "gateways.gateway.networking.k8s.io"))
 (register-detector! :cnpg #(serves-crd? "clusters.postgresql.cnpg.io"))
