@@ -40,3 +40,22 @@
     (is (false? (effect/run! [(effect/note "ok") [:bogus-op "x"] (effect/note "never")]))))
   (testing "dry-run always succeeds and runs nothing"
     (is (true? (effect/dry-run [(effect/kubectl "p" "delete" "everything")])))))
+
+(deftest custom-effect-type-describes-and-performs-test
+  (let [ran (atom nil)]
+    (effect/register-effect-type! :spy
+                                  {:describe (fn [args] (str "spy on " (first args)))
+                                   :perform (fn [args] (reset! ran (first args)) true)})
+    (testing "describe uses the plugin's renderer, so --dry-run and the preview stay honest"
+      (is (= "spy on target" (effect/describe [:spy "target"])))
+      (is (true? (effect/dry-run [[:spy "target"]])) "dry-run never performs")
+      (is (nil? @ran) "dry-run did not perform"))
+    (testing "run! dispatches to the plugin's perform"
+      (is (true? (effect/run! [[:spy "target"]])))
+      (is (= "target" @ran)))
+    (reset! @#'effect/effect-types {})))
+
+(deftest custom-effect-type-requires-both-handlers-test
+  (is (thrown? Throwable (effect/register-effect-type! :bad {:perform (fn [_] true)}))
+      ":describe is mandatory - a custom effect can not act without a preview")
+  (is (thrown? Throwable (effect/register-effect-type! :bad {:describe (fn [_] "x")}))))

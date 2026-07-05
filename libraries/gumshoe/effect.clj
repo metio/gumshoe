@@ -50,6 +50,23 @@
   (vec (remove nil? effects)))
 
 ;; ---------------------------------------------------------------------------
+;; custom effect verbs - a plugin seam
+
+(defonce ^:private effect-types (atom {}))
+
+(defn register-effect-type!
+  "Registers a custom effect verb, so a tool package can add an action to the DSL
+   and have it flow through the same run!/dry-run/confirmation machinery as the
+   built-ins. `op` is the keyword an effect starts with ([op & args]); handlers is
+   {:describe (fn [args] -> one-line string) :perform (fn [args] -> true on
+   success)}. Both are required: the :describe is what --dry-run and the change
+   preview show, so a custom effect can not act without first being able to say
+   what it will do."
+  [op {:keys [describe perform] :as handlers}]
+  {:pre [(keyword? op) (fn? describe) (fn? perform)]}
+  (swap! effect-types assoc op handlers))
+
+;; ---------------------------------------------------------------------------
 ;; describing (for dry-run and logs) - pure
 
 (defn describe
@@ -62,7 +79,9 @@
            (str "ssh " (:host connection) " -- " (str/join " " command)))
     :cmd (str/join " " args)
     :note (str "# " (first args))
-    (pr-str (into [op] args))))
+    (if-let [render (:describe (get @effect-types op))]
+      (render args)
+      (pr-str (into [op] args)))))
 
 ;; ---------------------------------------------------------------------------
 ;; interpreters
@@ -89,7 +108,9 @@
                                  command))))
     :cmd (zero? (apply shell/run-with-output args))
     :note (do (stdout/err-println (str "  " (first args))) true)
-    (do (stdout/error "unknown effect:" (pr-str op)) false)))
+    (if-let [act (:perform (get @effect-types op))]
+      (boolean (act args))
+      (do (stdout/error "unknown effect:" (pr-str op)) false))))
 
 (defn run!
   "Runs the whole plan in order, stopping at the first failure. Returns true

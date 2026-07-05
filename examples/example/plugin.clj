@@ -83,4 +83,14 @@
   :report-formats
   {"tally" (fn [{:keys [summary]}]
              (println (format "critical=%d warning=%d info=%d"
-                              (:critical summary 0) (:warning summary 0) (:info summary 0))))}})
+                              (:critical summary 0) (:warning summary 0) (:info summary 0))))}
+
+  ;; A custom effect verb, so a book can (effect/plan [:example-webhook url event])
+  ;; and have it flow through --dry-run, the confirmation preview, and recordings
+  ;; like any built-in. This is what earns a custom effect type: the action is NOT
+  ;; a plain shell command (it would POST over HTTP), so :cmd does not fit - and the
+  ;; :describe keeps the dry-run/preview honest about what will happen.
+  :effect-types
+  {:example-webhook
+   {:describe (fn [[url event]] (format "POST %s to %s" event url))
+    :perform (fn [[url event]] (println "would POST" event "to" url) true)}}})
