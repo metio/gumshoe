@@ -2,7 +2,8 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.report-test
-  (:require [clojure.string :as str]
+  (:require [babashka.cli :as cli]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [gumshoe.detective :as detective]
             [gumshoe.report :as report]))
@@ -25,6 +26,15 @@
   (report/register-format! "sarif" (fn [_] nil))
   (is (= ["edn" "json" "sarif" "text"] (report/registered))
       "the three built-ins plus any registered, sorted"))
+
+(deftest output-option-accepts-plugin-formats-test
+  (testing "--output validates against the live registry, so a plugin format parses"
+    (report/register-format! "sarif" (fn [_] nil))
+    (is (= "sarif" (:output (cli/parse-opts ["--output" "sarif"] {:spec detective/output-option}))))
+    (is (= "json" (:output (cli/parse-opts ["--output" "json"] {:spec detective/output-option})))))
+  (testing "an unregistered format is still rejected"
+    (is (thrown? Exception
+                 (cli/parse-opts ["--output" "nope"] {:spec detective/output-option})))))
 
 (deftest an-unknown-format-returns-health-not-crash-test
   (testing "report! still returns healthy? for a plugin format"

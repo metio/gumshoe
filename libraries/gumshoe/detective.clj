@@ -39,10 +39,16 @@
 
 (def output-option
   "Standard CLI option shared by every detective runbook."
-  {:output {:desc "Report format: text, json, or edn"
+  {:output {:desc "Report format: text, json, edn, or a plugin-registered format"
             :alias :o
             :default "text"
-            :validate #{"text" "json" "edn"}
+            ;; Validate against the live registry, not a frozen literal, so a
+            ;; plugin format (sarif, junit, ...) registered via report/register-format!
+            ;; is accepted at parse time instead of rejected before it can run.
+            :validate {:pred (fn [value] (contains? (set (report/registered)) value))
+                       :ex-msg (fn [{:keys [value]}]
+                                 (format "invalid report format %s - registered formats: %s"
+                                         (pr-str value) (apply str (interpose ", " (report/registered)))))}
             :coerce :string}})
 
 (defn healthy?
