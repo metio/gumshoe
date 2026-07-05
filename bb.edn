@@ -53,6 +53,7 @@
                    [gumshoe.progress-test]
                    [gumshoe.prometheus-test]
                    [gumshoe.rbac-test]
+                   [gumshoe.report-test]
                    [gumshoe.secrets-test]
                    [gumshoe.security-test]
                    [gumshoe.shell-test]
@@ -110,6 +111,7 @@
                                                          'gumshoe.progress-test
                                                          'gumshoe.prometheus-test
                                                          'gumshoe.rbac-test
+                                                         'gumshoe.report-test
                                                          'gumshoe.secrets-test
                                                          'gumshoe.security-test
                                                          'gumshoe.shell-test

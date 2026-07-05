@@ -17,6 +17,7 @@
             [gumshoe.hooks :as hooks]
             [gumshoe.investigation :as investigation]
             [gumshoe.prerequisites :as prerequisites]
+            [gumshoe.report :as report]
             [gumshoe.secrets :as secrets]
             [gumshoe.storage :as storage]
             [gumshoe.subject :as subject]
@@ -46,11 +47,12 @@
      :resize-watchers   [(fn [signals] …)]                              ; a log source for storage resizes
      :resize-preflights [(fn [context] …)]                              ; a fail-closed resize safety check
      :ui            {:name :native :select-one (fn […]) …}              ; an interactive backend (fzf/gum replacement)
+     :report-formats {\"sarif\" (fn [report] …)}                         ; a --output format for scan findings
 
    Order within the map does not matter; registrations are independent."
   [{:keys [announcers detectives capabilities tools summary-providers themes
            pre-hooks post-hooks secrets prerequisites probes kinds
-           resize-watchers resize-preflights ui facts]}]
+           resize-watchers resize-preflights ui facts report-formats]}]
   (doseq [[type f] announcers] (announce/register-announcer! type f))
   (doseq [[scope ds] detectives] (detectives/register! scope ds))
   (doseq [[cap f] capabilities] (capabilities/register-detector! cap f))
@@ -67,4 +69,5 @@
   (doseq [b resize-watchers] (watch/register-resize-watcher! b))
   (doseq [c resize-preflights] (storage/register-resize-preflight! c))
   (when ui (ui/register-provider! ui))
+  (doseq [[name render] report-formats] (report/register-format! name render))
   nil)

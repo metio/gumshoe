@@ -27,6 +27,7 @@
             [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.investigation :as investigation]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.report :as report]
             [gumshoe.summary :as summary]
             [gumshoe.progress :as progress]
             [gumshoe.runbook :as runbook]
@@ -204,17 +205,18 @@
    alongside the list of detectives that ran. Returns true when nothing critical
    was found."
   [detectives findings output]
-  (case output
-    "json" (do (println (json/generate-string {:findings findings
-                                               :checked (checked detectives)
-                                               :summary (summary-of findings)}
-                                              {:pretty true}))
-               (healthy? findings))
-    "edn" (do (prn {:findings findings
-                    :checked (checked detectives)
-                    :summary (summary-of findings)})
-              (healthy? findings))
-    (print-report! detectives findings)))
+  (let [data {:findings findings
+              :checked (checked detectives)
+              :summary (summary-of findings)}]
+    (case output
+      "json" (do (println (json/generate-string data {:pretty true}))
+                 (healthy? findings))
+      "edn" (do (prn data)
+                (healthy? findings))
+      ;; a plugin's format (sarif, junit, …), else the rich terminal report
+      (if-let [render (report/format-fn output)]
+        (do (render data) (healthy? findings))
+        (print-report! detectives findings)))))
 
 (defn when-to-run!
   "Prints a short orientation before an investigation: what this book is for and

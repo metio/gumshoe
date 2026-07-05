@@ -76,4 +76,11 @@
                          [{:relation "manages"
                            :subject (subject/subject "Pod"
                                                      (get-in object [:metadata :namespace])
-                                                     (get-in object [:spec :pod]))}])}}})
+                                                     (get-in object [:spec :pod]))}])}}
+
+  ;; A report format selected with --output tally: one line per severity, the
+  ;; shape a CI job greps. Real plugins add sarif or junit the same way.
+  :report-formats
+  {"tally" (fn [{:keys [summary]}]
+             (println (format "critical=%d warning=%d info=%d"
+                              (:critical summary 0) (:warning summary 0) (:info summary 0))))}})
