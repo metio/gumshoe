@@ -29,7 +29,11 @@
         :summary (format "container %s is waiting: %s" (:name status) reason)
         :hint (-> status :state :waiting :message)})
      (for [status statuses
-           :when (= "OOMKilled" (-> status :lastState :terminated :reason))]
+           ;; A container restarted after an OOM kill records it in lastState; a
+           ;; one-shot container (restartPolicy Never) is left terminated in its
+           ;; current state instead, so both must be checked.
+           :when (= "OOMKilled" (or (-> status :state :terminated :reason)
+                                    (-> status :lastState :terminated :reason)))]
        {:severity :warning
         :component component
         :summary (format "container %s was OOMKilled" (:name status))

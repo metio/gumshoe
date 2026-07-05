@@ -19,7 +19,9 @@
               ratio (quantity/ratio used hard)]
         :when (and ratio (>= ratio warn-ratio))]
     {:severity (if (>= ratio 1.0) :critical :warning)
-     :component (format "%s (%s)" (kubectl/namespace-name-of quota) (name resource))
+     ;; A key like "count/pods" keywordizes to :count/pods; (name ...) would drop
+     ;; the "count/" namespace, so render the whole keyword instead.
+     :component (format "%s (%s)" (kubectl/namespace-name-of quota) (subs (str resource) 1))
      :summary (format "quota is %.0f%% used (%s of %s)" (* 100 ratio) used hard)
      :hint (if (>= ratio 1.0)
              "the quota is exhausted - new objects of this kind are rejected"

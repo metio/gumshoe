@@ -64,14 +64,20 @@
                                      :used {:pods "47"}}}
                            {:metadata {:namespace "team-c" :name "roomy"}
                             :status {:hard {:requests.cpu "10"}
-                                     :used {:requests.cpu "2"}}}]}}
+                                     :used {:requests.cpu "2"}}}
+                           {:metadata {:namespace "team-d" :name "counts"}
+                            :status {:hard {:count/pods "5"}
+                                     :used {:count/pods "5"}}}]}}
         findings (quotas/detect-quota-pressure evidence)]
     (testing "exhausted quotas are critical, near-full warn, roomy ones are silent"
       (is (= #{"quota is 100% used (10 of 10)"
-               "quota is 94% used (47 of 50)"}
+               "quota is 94% used (47 of 50)"
+               "quota is 100% used (5 of 5)"}
              (summaries findings)))
       (is (= :critical (:severity (first (filter #(re-find #"cpu" (:component %)) findings)))))
-      (is (= :warning (:severity (first (filter #(re-find #"pods" (:component %)) findings))))))))
+      (is (= :warning (:severity (first (filter #(re-find #"pods" (:component %)) findings))))))
+    (testing "a count/ quota keeps its 'count/' prefix in the component label"
+      (is (some #(= "team-d/counts (count/pods)" (:component %)) findings)))))
 
 (deftest overcommit-detective-test
   (testing "requests over total capacity are critical"
@@ -93,4 +99,14 @@
     (is (empty? (capacity/detect-overcommit
                  {"nodes" {:items [{:status {:allocatable {:cpu "8" :memory "16Gi"}}}
                                    {:status {:allocatable {:cpu "8" :memory "16Gi"}}}]}
-                  "pods" {:items [{:spec {:containers [{:resources {:requests {:cpu "2" :memory "4Gi"}}}]}}]}})))))
+                  "pods" {:items [{:spec {:containers [{:resources {:requests {:cpu "2" :memory "4Gi"}}}]}}]}}))))
+  (testing "terminated pods (Succeeded/Failed) do not count toward the commitment"
+    (is (empty? (capacity/detect-overcommit
+                 {"nodes" {:items [{:status {:allocatable {:cpu "8" :memory "16Gi"}}}
+                                   {:status {:allocatable {:cpu "8" :memory "16Gi"}}}]}
+                  "pods" {:items [{:status {:phase "Succeeded"}
+                                   :spec {:containers [{:resources {:requests {:cpu "100" :memory "200Gi"}}}]}}
+                                  {:status {:phase "Failed"}
+                                   :spec {:containers [{:resources {:requests {:cpu "100" :memory "200Gi"}}}]}}
+                                  {:status {:phase "Running"}
+                                   :spec {:containers [{:resources {:requests {:cpu "1" :memory "1Gi"}}}]}}]}})))))

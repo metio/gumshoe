@@ -65,12 +65,21 @@
   (for [pod (workload-pods evidence)
         container (all-containers pod)
         :let [added (set (map str (-> container :securityContext :capabilities :add)))
+              all? (contains? added "ALL")
               found (sort (filter added dangerous-capabilities))]
-        :when (seq found)]
-    {:severity :warning
-     :component (kubectl/namespace-name-of pod)
-     :summary (format "container %s adds capabilities: %s" (:name container) (str/join ", " found))
-     :hint "these capabilities are node-takeover primitives - drop them if the workload survives without"}))
+        :when (or all? (seq found))]
+    (if all?
+      ;; "ALL" grants every Linux capability - equivalent to privileged, so it
+      ;; outranks any specific-capability warning and must not slip through just
+      ;; because the literal "ALL" is not in the dangerous set.
+      {:severity :critical
+       :component (kubectl/namespace-name-of pod)
+       :summary (format "container %s adds ALL capabilities" (:name container))
+       :hint "adding ALL is equivalent to a privileged container - a node-takeover primitive"}
+      {:severity :warning
+       :component (kubectl/namespace-name-of pod)
+       :summary (format "container %s adds capabilities: %s" (:name container) (str/join ", " found))
+       :hint "these capabilities are node-takeover primitives - drop them if the workload survives without"})))
 
 (def detectives
   [{:name "privileged"

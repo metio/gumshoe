@@ -55,7 +55,15 @@
                                                          {:capabilities {:add ["NET_ADMIN" "SYS_ADMIN" "CHOWN"]}}}]}}]}})]
     (testing "only the dangerous capabilities are named, harmless ones are ignored"
       (is (= #{"container web adds capabilities: NET_ADMIN, SYS_ADMIN"}
-             (summaries findings))))))
+             (summaries findings)))))
+  (testing "add: [ALL] is a critical, not silently ignored for not being in the named set"
+    (let [findings (pod-security/detect-dangerous-capabilities
+                    {"pods" {:items [{:metadata {:namespace "app" :name "cap-pod"}
+                                      :spec {:containers [{:name "web"
+                                                           :securityContext
+                                                           {:capabilities {:add ["ALL"]}}}]}}]}})]
+      (is (= #{"container web adds ALL capabilities"} (summaries findings)))
+      (is (= [:critical] (map :severity findings))))))
 
 (deftest network-policy-test
   (testing "namespaces with pods and no policy are reported, kube-* and fire-drill are not"

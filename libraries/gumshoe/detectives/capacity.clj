@@ -12,7 +12,12 @@
 
 (defn- pod-requests
   [pods resource]
+  ;; Terminated pods (Succeeded/Failed) linger in `kubectl get pods` until GC'd
+  ;; but hold no schedulable capacity, so counting their requests inflates the
+  ;; commitment - matching the scheduler and kube-prometheus, which both ignore
+  ;; those phases.
   (quantity/sum (for [pod (kubectl/items-of pods)
+                      :when (not (#{"Succeeded" "Failed"} (-> pod :status :phase)))
                       container (-> pod :spec :containers)]
                   (get-in container [:resources :requests resource]))))
 

@@ -29,15 +29,22 @@
                                             :conditions [{:type "PodScheduled"
                                                           :status "False"
                                                           :message "0/3 nodes available"}]}}
+                                  {:metadata {:namespace "batch" :name "oneshot"}
+                                   :status {:phase "Failed"
+                                            :containerStatuses [{:name "worker"
+                                                                 :restartCount 0
+                                                                 :state {:terminated {:reason "OOMKilled"}}}]}}
                                   {:metadata {:namespace "fine" :name "healthy"}
                                    :status {:phase "Running"
                                             :containerStatuses [{:name "app"
                                                                  :restartCount 0
                                                                  :state {:running {}}}]}}]}}
         findings (pods/detect-unhealthy-pods evidence)]
-    (testing "reports crash loops, restarts, and pending pods but not healthy ones"
+    (testing "reports crash loops, restarts, pending pods, and a one-shot OOM kill but not healthy ones"
       (is (= #{"container web is waiting: CrashLoopBackOff"
                "container web restarted 42 times"
+               "container worker was OOMKilled"
+               "pod is in phase Failed (unknown reason)"
                "pod is stuck in Pending"}
              (summaries findings))))
     (testing "crash loops are critical"
