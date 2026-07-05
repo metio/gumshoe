@@ -18,6 +18,7 @@
   (:require [babashka.fs :as fs]
             [clojure.edn :as edn]
             [clojure.string :as str]
+            [gumshoe.command :as command]
             [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.shell :as shell]
@@ -67,12 +68,15 @@
 ;; print and return to the loop; --follow streams until Ctrl-C (unbounded, by
 ;; design). Every one runs through the streaming path, so nothing is cut off.
 
-(defn- with-context
+(defn with-context
+  "A kubectl argv pinned to the investigation's context and (when given) namespace
+   - the building block for a probe's :args. Public so a plugin probe builds its
+   command the same way the built-ins do."
   [context namespace & args]
   (into ["kubectl" (str "--context=" context)]
         (concat (when namespace [(str "--namespace=" namespace)]) args)))
 
-(def probes
+(def built-in-probes
   [{:key :logs-previous :label "📜 previous logs (the crash)" :kinds #{"Pod"}
     :args (fn [ctx {:keys [namespace name]}]
             (with-context ctx namespace "logs" name "--previous" "--all-containers" "--tail=200"))}
@@ -94,10 +98,31 @@
     :args (fn [ctx {:keys [kind namespace name]}]
             (with-context ctx namespace "get" (subject/kind->type kind) name "--output=yaml"))}])
 
+(defonce ^:private extra-probes (atom []))
+
+(defn register-probe!
+  "Registers a drill-down probe: {:key :label :kinds :args :tools}. :kinds is :any
+   or a set of subject kinds it applies to; :args is (fn [context subject] -> argv)
+   (use `with-context` to build a kubectl command, or return any argv - a probe
+   may combine tools). :tools is an optional list of binaries the probe needs; the
+   probe is only offered when they are all installed, so a tool package brings its
+   probes and the menu never lists an action that can't run. A plugin adds actions
+   like a HelmRelease's flux reconcile status or a pod's /healthz."
+  [probe]
+  (swap! extra-probes conj probe))
+
+(defn probes
+  "The built-in probes plus every plugin-registered one."
+  []
+  (concat built-in-probes @extra-probes))
+
 (defn applicable-probes
-  "The probes that make sense for a kind, recommended one first."
+  "The probes that make sense for a kind, recommended one first: the kind matches
+   and every tool the probe needs is installed."
   [kind recommended]
-  (let [applicable (filter #(or (= :any (:kinds %)) (contains? (:kinds %) kind)) probes)]
+  (let [applicable (filter #(and (or (= :any (:kinds %)) (contains? (:kinds %) kind))
+                                 (every? command/installed? (:tools %)))
+                           (probes))]
     (sort-by #(if (= recommended (:key %)) 0 1) applicable)))
 
 ;; ---------------------------------------------------------------------------

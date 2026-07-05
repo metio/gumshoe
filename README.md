@@ -226,6 +226,12 @@ sidesteps that, which matters when your users run bare babashka.) Copy
   `(prerequisites/register-check! :change-window (fn [value opts] …))` - gate a
   book on org policy the core can't know: a change-freeze window, a ticket, an
   on-call ack. They animate in the Prerequisites checklist like the built-ins.
+- **Drill-down probes & subject edges** - extend the investigation. A probe is a
+  live action for a subject: `(investigation/register-probe! {:kinds #{"HelmRelease"}
+  :tools ["flux"] :args (fn [ctx subject] …)})` - offered only when its tools are
+  installed, so a tool package brings its probes. A kind teaches the drill-down to
+  traverse a CRD: `(subject/register-kind! "HelmRelease" {:type "…" :edges (fn
+  [object] …)})` - a Rollout to its ReplicaSets, a CNPG Cluster to its pods.
 
 [`examples/example/plugin.clj`](examples/example/plugin.clj) is a worked plugin
 that extends several seams at once.

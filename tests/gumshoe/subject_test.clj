@@ -203,3 +203,15 @@
   (testing "an unmappable detective yields nil rather than a wrong guess"
     (is (nil? (subject/from-finding {:detective "dns-transports" :component "dns.example.org"})))
     (is (nil? (subject/from-finding {:detective "overcommit" :component "cluster"})))))
+
+(deftest register-kind-adds-a-custom-drill-down-target-test
+  (testing "a plugin makes a CRD fetchable and gives it edges to traverse"
+    (subject/register-kind! "WidgetSet"
+                            {:type "widgetsets.acme.example"
+                             :edges (fn [obj] [{:relation "manages"
+                                                :subject (subject/subject "Pod" "ns" (get-in obj [:spec :pod]))}])})
+    (is (= "widgetsets.acme.example" (subject/kind->type "WidgetSet")))
+    (is (= [{:relation "manages" :subject (subject/subject "Pod" "ns" "w-1")}]
+           (subject/object-edges "WidgetSet" {:spec {:pod "w-1"}}))))
+  (testing "an unregistered kind falls back to following ownerReferences"
+    (is (= [] (subject/object-edges "SomeUnknownKind" {})))))
