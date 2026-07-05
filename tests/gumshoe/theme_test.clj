@@ -35,6 +35,15 @@
     (is (= "❌" (theme/token :error)) "unset glyphs come from the default")
     (is (= "🔥" (theme/severity :critical)))))
 
+(deftest partial-nested-glyph-merges-onto-default-test
+  (testing "overriding one marker glyph keeps the sibling glyphs from the default"
+    (theme/register! {:name :cb :marker {:critical "▲"}})
+    (theme/select! :cb)
+    (is (= "▲" (theme/marker :critical)) "the overridden glyph is used")
+    (is (= "🟡" (theme/marker :warning)) "the untouched sibling glyph survives the merge")
+    (is (= "🔵" (theme/marker :info)) "so does the other sibling")
+    (is (= "🔥" (theme/severity :critical)) "and the whole untouched :severity submap")))
+
 (deftest unknown-theme-keeps-default-test
   (testing "an unknown name keeps the default and reports it was not found"
     (is (false? (theme/select! :nope)))

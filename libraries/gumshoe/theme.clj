@@ -48,12 +48,18 @@
   []
   (sort (keys @themes)))
 
+(defn- deep-merge
+  "Recursively merges nested maps, so overriding one glyph in :severity/:marker
+   keeps the sibling glyphs instead of replacing the whole submap."
+  [a b]
+  (merge-with (fn [x y] (if (and (map? x) (map? y)) (deep-merge x y) y)) a b))
+
 (defn select!
   "Activates the named theme, merged onto the default so a partial theme overrides
    only what it sets. An unknown name keeps the default and returns false."
   [wanted]
   (let [chosen (get @themes wanted)]
-    (reset! active (merge default-theme chosen))
+    (reset! active (deep-merge default-theme chosen))
     (some? chosen)))
 
 (defn apply!

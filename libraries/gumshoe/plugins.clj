@@ -25,5 +25,9 @@
    (doseq [plugin plugins]
      (try
        (require (symbol (str plugin)))
-       (catch Exception e
+       ;; Catch Throwable, not just Exception: a plugin whose top-level
+       ;; registration trips an assert (subject/register-facts! has :pre
+       ;; conditions) throws AssertionError, an Error - which would otherwise
+       ;; abort the whole core instead of skipping the one bad plugin.
+       (catch Throwable e
          (stdout/warn (format "could not load plugin %s: %s" plugin (ex-message e))))))))

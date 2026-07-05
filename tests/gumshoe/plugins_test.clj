@@ -15,6 +15,12 @@
     (let [err (java.io.StringWriter.)]
       (binding [*err* err]
         (is (nil? (plugins/load! ['totally.bogus.plugin.that.does.not.exist]))))
+      (is (clojure.string/includes? (str err) "could not load plugin"))))
+  (testing "a plugin whose registration trips an assert throws an Error, which must also be contained"
+    (let [err (java.io.StringWriter.)]
+      (with-redefs [require (fn [& _] (assert false "a :pre condition in a top-level register! call"))]
+        (binding [*err* err]
+          (is (nil? (plugins/load! ['acme.plugin.with.a.bad.registration])))))
       (is (clojure.string/includes? (str err) "could not load plugin")))))
 
 (deftest example-plugin-extends-every-seam-test

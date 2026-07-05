@@ -66,3 +66,17 @@
       (binding [*err* err]
         (is (:allowed? (hooks/run-pre-hooks! {:change? true}))))
       (is (clojure.string/includes? (str err) "pre-hook failed")))))
+
+(deftest an-assert-throwing-hook-does-not-escape-test
+  (testing "a hook that trips an assert throws an Error, not an Exception, and must still be contained"
+    (let [err (java.io.StringWriter.)]
+      (hooks/register-pre-hook! (fn [_] (assert false "gate bug")))
+      (binding [*err* err]
+        (is (:allowed? (hooks/run-pre-hooks! {:change? true})) "pre-hooks still fail open")))
+    (let [ran (atom false)
+          err (java.io.StringWriter.)]
+      (hooks/register-post-hook! (fn [_] (assert false "post bug")))
+      (hooks/register-post-hook! (fn [_] (reset! ran true)))
+      (binding [*err* err]
+        (hooks/run-post-hooks! {:outcome :ok}))
+      (is (true? @ran) "a later post-hook still runs after an Error in an earlier one"))))

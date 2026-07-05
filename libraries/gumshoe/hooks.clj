@@ -52,7 +52,10 @@
    it can never block the book's exit. Never throws."
   [context]
   (doseq [hook @post-hooks]
-    (let [result (deref (future (try (hook context) nil (catch Exception e (or (ex-message e) (str e)))))
+    ;; Catch Throwable, not just Exception: a hook that trips an assert throws
+    ;; AssertionError (an Error), which would otherwise escape the future and
+    ;; break the documented never-throw guarantee.
+    (let [result (deref (future (try (hook context) nil (catch Throwable e (or (ex-message e) (str e)))))
                         hook-timeout-ms
                         ::timeout)]
       (cond
@@ -81,8 +84,10 @@
   [context]
   (loop [remaining @pre-hooks]
     (if-let [hook (first remaining)]
+      ;; Catch Throwable so a hook that trips an assert (AssertionError, an Error)
+      ;; fails open rather than crashing the run - the whole point of the gate.
       (let [result (deref (future (try {:value (hook context)}
-                                       (catch Exception e {:error (or (ex-message e) (str e))})))
+                                       (catch Throwable e {:error (or (ex-message e) (str e))})))
                           hook-timeout-ms
                           ::timeout)]
         (cond
