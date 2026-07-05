@@ -93,7 +93,13 @@
                                           :pvcs (kubectl/get-all context "persistentvolumeclaims")
                                           :storage-classes (kubectl/get-all context "storageclasses")
                                           :capacity capacity})
-            problems (storage/expansion-problems plan)]
+            ;; Fold in the storage-provider preflights (e.g. a ceph pool's free
+            ;; capacity), fail-closed, exactly as the StatefulSet enlarge_volumes
+            ;; book does - a resize that would overfill the backend must be
+            ;; refused here too, not just for generic PVCs.
+            problems (into (storage/expansion-problems plan)
+                           (storage/resize-preflight-problems
+                            {:context context :cluster cluster :namespace namespace :plan plan}))]
         (stdout/print-section "📋 Resize plan")
         (doseq [{:keys [pvc current target]} plan]
           (stdout/err-println (format "  %s: %s -> %s" pvc current target)))

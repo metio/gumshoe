@@ -36,33 +36,39 @@
     (is (empty? (matrix/detect-health {"host" "h" "health" {:reachable false :error "refused"}}))))
   (testing "a present but failing /health is critical"
     (is (= #{"the health endpoint returned HTTP 503"}
-           (summaries (matrix/detect-health {"host" "h" "health" {:reachable true :status 503}}))))))
+           (summaries (matrix/detect-health {"host" "h" "health" {:reachable true :status 503}})))))
+  (testing "a 404 means the /health route is simply not there - not a finding"
+    (is (empty? (matrix/detect-health {"host" "h" "health" {:reachable true :status 404}})))))
 
 (deftest signing-keys-test
   (testing "expired keys are critical"
     (is (= #{"the published signing keys have expired"}
            (summaries (matrix/detect-signing-keys
                        {:now now "host" "h"
-                        "server-keys" {:reachable true
+                        "server-keys" {:reachable true :status 200
                                        :json {:valid_until_ts (.toEpochMilli
                                                                (java.time.Instant/parse "2026-07-03T00:00:00Z"))}}})))))
   (testing "keys expiring soon warn"
     (is (= #{"the signing keys are valid for only 3 more days"}
            (summaries (matrix/detect-signing-keys
                        {:now now "host" "h"
-                        "server-keys" {:reachable true
+                        "server-keys" {:reachable true :status 200
                                        :json {:valid_until_ts (.toEpochMilli
                                                                (java.time.Instant/parse "2026-07-07T00:00:00Z"))}}})))))
   (testing "keys valid for a long time are silent"
     (is (empty? (matrix/detect-signing-keys
                  {:now now "host" "h"
-                  "server-keys" {:reachable true
+                  "server-keys" {:reachable true :status 200
                                  :json {:valid_until_ts (.toEpochMilli
                                                          (java.time.Instant/parse "2026-12-31T00:00:00Z"))}}}))))
   (testing "an unreachable keys endpoint is critical"
     (is (= #{"the signing keys endpoint is unreachable"}
            (summaries (matrix/detect-signing-keys {:now now "host" "h"
-                                                   "server-keys" {:reachable false :error "refused"}}))))))
+                                                   "server-keys" {:reachable false :error "refused"}})))))
+  (testing "a reachable-but-erroring keys endpoint is critical, not silently green"
+    (is (= #{"the signing keys endpoint returned HTTP 500"}
+           (summaries (matrix/detect-signing-keys {:now now "host" "h"
+                                                   "server-keys" {:reachable true :status 500 :json nil}}))))))
 
 (deftest wellknown-test
   (testing "absent delegation is fine (SRV/direct setups exist)"

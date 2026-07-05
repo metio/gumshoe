@@ -33,8 +33,10 @@
   [evidence]
   (let [host (get evidence "host")
         health (get evidence "health")]
-    ;; /health only exists behind some reverse proxies; only judge it when it answers
-    (when (and (:reachable health) (not (http/ok? health)))
+    ;; /health only exists behind some reverse proxies; a 404 means the route is
+    ;; simply not there (a valid setup), so only an actually-unhealthy status
+    ;; (e.g. 5xx) is a finding.
+    (when (and (:reachable health) (not (http/ok? health)) (not= 404 (:status health)))
       [{:severity :critical
         :component host
         :summary (format "the health endpoint returned HTTP %s" (:status health))
@@ -71,6 +73,15 @@
         :component host
         :summary "the signing keys endpoint is unreachable"
         :hint "other servers can not verify this homeserver's events"}]
+
+      ;; Reachable but non-2xx (or non-JSON) leaves valid-until nil; without this
+      ;; branch that reads as all-green, hiding a keys endpoint other servers
+      ;; cannot use to verify this homeserver's events.
+      (not (http/ok? keys))
+      [{:severity :critical
+        :component host
+        :summary (format "the signing keys endpoint returned HTTP %s" (:status keys))
+        :hint "other servers can not fetch this homeserver's keys - check the reverse proxy for /_matrix/key/"}]
 
       (nil? valid-until)
       []

@@ -5,7 +5,8 @@
   "Detectives for Thanos Query, judging its HTTP API: readiness, the connected
    store endpoints (a query layer with no stores answers nothing), and rule
    evaluation health."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [gumshoe.http :as http]))
 
 (defn detect-readiness
   [evidence]
@@ -37,14 +38,30 @@
 (defn detect-stores
   [evidence]
   (let [stores (get evidence "stores")
+        url (get evidence "url")
         endpoints (store-endpoints evidence)]
     (cond
       (not (:reachable stores))
       []
 
+      ;; A non-2xx or non-JSON /api/v1/stores response leaves endpoints empty for
+      ;; the same reason a genuinely store-less query layer does; reporting "no
+      ;; connected stores" there misdiagnoses an API/proxy fault, so separate them.
+      (not (http/ok? stores))
+      [{:severity :critical
+        :component url
+        :summary (format "the stores endpoint returned HTTP %s" (:status stores))
+        :hint "the query layer is up but /api/v1/stores is erroring - check the reverse proxy"}]
+
+      (nil? (-> stores :json :data))
+      [{:severity :critical
+        :component url
+        :summary "the stores endpoint returned an unexpected response"
+        :hint "/api/v1/stores did not return the expected JSON - check what is answering on this URL"}]
+
       (empty? endpoints)
       [{:severity :critical
-        :component (get evidence "url")
+        :component url
         :summary "Thanos Query has no connected stores"
         :hint "no sidecars or store gateways are attached - every query returns empty"}]
 
