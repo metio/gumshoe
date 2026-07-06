@@ -3,7 +3,10 @@
 
 {:paths ["libraries" "runbooks" "playbooks" "firebooks" "tools/flux/libraries" "tools/flux/runbooks" "tools/ceph/libraries" "tools/ceph/runbooks" "tools/ceph/playbooks" "tools/certmanager/libraries" "tools/certmanager/runbooks" "tools/gateway/libraries" "tools/gateway/runbooks" "tools/cnpg/libraries" "tools/cnpg/runbooks" "tools/stageset/libraries" "tools/stageset/runbooks" "tools/prometheus/libraries" "tools/prometheus/runbooks" "tools/calico/libraries" "tools/calico/runbooks" "tools/opennebula/libraries" "tools/opennebula/runbooks" "tools/upload/libraries" "tools/upload/runbooks" "tools/matrix/libraries" "tools/matrix/runbooks" "tools/restic/libraries" "tools/restic/runbooks" "tools/thanos/libraries" "tools/thanos/runbooks" "tools/loki/libraries" "tools/loki/runbooks" "tools/db-operator/libraries" "tools/db-operator/runbooks" "tools/external-dns/libraries" "tools/external-dns/runbooks"]
  :tasks
- {test {:doc "Runs all unit tests"
+ {gumshoe {:doc "The guided front door - menu, lead shortcut, or fuzzy book search"
+           :requires ([gumshoe.main :as main])
+           :task (System/exit (main/front-door *command-line-args*))}
+  test {:doc "Runs all unit tests"
         :extra-paths ["tests" "examples" "tools/flux/tests" "tools/ceph/tests" "tools/certmanager/tests" "tools/gateway/tests" "tools/cnpg/tests" "tools/stageset/tests" "tools/prometheus/tests" "tools/calico/tests" "tools/opennebula/tests" "tools/upload/tests" "tools/matrix/tests" "tools/restic/tests" "tools/thanos/tests" "tools/loki/tests" "tools/db-operator/tests" "tools/external-dns/tests"]
         :requires ([clojure.test :as test]
                    [gumshoe.backups-test]

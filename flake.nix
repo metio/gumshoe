@@ -73,14 +73,21 @@
 
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
-          packages = (toolsFor pkgs) ++ (ciTools pkgs);
+          # `gumshoe` on PATH is the guided front door - the same thin wrapper over
+          # gumshoe.main that ./gumshoe and a casebook's `bb gumshoe` task provide.
+          # Casebooks re-export this devShell, so they inherit the command with no
+          # flake boilerplate; it runs the consuming repo's own `gumshoe` bb task.
+          packages = (toolsFor pkgs) ++ (ciTools pkgs) ++ [
+            (pkgs.writeShellScriptBin "gumshoe" ''exec bb gumshoe "$@"'')
+          ];
 
           shellHook = ''
             # tools.deps caches resolved git deps here (default ~/.gitlibs). It is
             # regenerable, so keep it under XDG_CACHE_HOME rather than dotting $HOME.
             export GITLIBS="''${XDG_CACHE_HOME:-$HOME/.cache}/gitlibs"
-            echo "📚 gumshoe - run books with: bb <path-to-book> --help"
-            echo "   run the test suite with: bb test"
+            echo "📚 gumshoe - guided front door: gumshoe --help"
+            echo "   run any book directly:       bb <path-to-book> --help"
+            echo "   run the test suite with:     bb test"
             echo "   git deps cache: $GITLIBS"
             echo "   netshoot books also need: kubectl krew install netshoot"
           '';
