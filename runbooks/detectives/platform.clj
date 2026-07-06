@@ -12,4 +12,4 @@
   :scope :platform
   :prerequisites {:installed-tools ["kubectl"]
                   :cluster-capabilities []
-                  :kubectl-can-get ["nodes"]}})
+                  :kubectl-can-get ["nodes" "services"]}})
