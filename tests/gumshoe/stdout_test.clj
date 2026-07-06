@@ -51,7 +51,10 @@
       (is (= 30 (count out)))
       (is (clojure.string/includes? out "…"))
       (is (clojure.string/starts-with? out "/home"))
-      (is (clojure.string/ends-with? out ".clj")))))
+      (is (clojure.string/ends-with? out ".clj"))))
+  (testing "an astral character at a cut boundary is not split into a lone surrogate"
+    (is (= "🔦…🔦🔦" (stdout/elide 4 "🔦🔦🔦🔦🔦🔦"))
+        "slicing must be on code points, not UTF-16 units")))
 
 (deftest wrap-test
   (let [prose "the exact kubectl calls are offered as a reproducer below - keep them with the incident notes"]
@@ -72,5 +75,10 @@
   (let [home (System/getProperty "user.home")]
     (testing "a path under home is shortened to ~, staying copy-pasteable"
       (is (= "~/.cache/gitlibs/x.edn" (stdout/shorten-path (str home "/.cache/gitlibs/x.edn")))))
+    (testing "the home directory itself becomes ~"
+      (is (= "~" (stdout/shorten-path home))))
+    (testing "a sibling that merely shares the home prefix is left alone"
+      (is (= (str home "-sibling/x") (stdout/shorten-path (str home "-sibling/x")))
+          "matching must be on a path boundary, not a raw string prefix"))
     (testing "a path outside home is unchanged"
       (is (= "/etc/hosts" (stdout/shorten-path "/etc/hosts"))))))

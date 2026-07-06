@@ -373,7 +373,12 @@
 
     :else
     (let [forward (try
-                    (process/process ["kubectl" (str "--context=" context) (str "--namespace=" namespace)
+                    ;; inherit stdout/stderr: kubectl port-forward logs a line per
+                    ;; connection, and with the default captured pipes (that
+                    ;; nothing reads) a busy tunnel fills the buffer and blocks,
+                    ;; silently stalling the forward.
+                    (process/process {:out :inherit :err :inherit}
+                                     ["kubectl" (str "--context=" context) (str "--namespace=" namespace)
                                       "port-forward" (str "service/" service)
                                       (str local-port ":" remote-port)])
                     (catch Exception e

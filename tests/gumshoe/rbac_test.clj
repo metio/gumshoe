@@ -42,7 +42,18 @@
 (deftest wildcard-roles-test
   (testing "custom full-wildcard roles are reported, cluster-admin and system: are not"
     (is (= ["sneaky-admin"]
-           (map :component (rbac/detect-wildcard-roles {"clusterroles" clusterroles}))))))
+           (map :component (rbac/detect-wildcard-roles {"clusterroles" clusterroles})))))
+  (testing "a role that enumerates every verb on */* is cluster-admin by another name"
+    (let [roles {:items [{:metadata {:name "spelled-out-admin"}
+                          :rules [{:apiGroups ["*"] :resources ["*"]
+                                   :verbs ["get" "list" "watch" "create" "update" "patch" "delete"]}]}
+                         {:metadata {:name "read-only"}
+                          :rules [{:apiGroups ["*"] :resources ["*"] :verbs ["get" "list" "watch"]}]}]}]
+      (is (rbac/wildcard-rule? (-> roles :items first :rules first)))
+      (is (not (rbac/wildcard-rule? (-> roles :items second :rules first))))
+      (is (= ["spelled-out-admin"]
+             (map :component (rbac/detect-wildcard-roles {"clusterroles" roles})))
+          "enumerated-verb god-mode is caught, a read-only role is not"))))
 
 (deftest admin-bindings-test
   (let [findings (rbac/detect-admin-bindings {"clusterroles" clusterroles

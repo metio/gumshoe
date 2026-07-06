@@ -97,7 +97,10 @@
 (defn detect-orphaned-local-volumes
   [evidence]
   (let [node-names (set (kubectl/names-of (get evidence "nodes")))]
-    (for [volume (kubectl/items-of (get evidence "persistentvolumes"))
+    ;; with no node evidence (a failed nodes fetch yields nil) every hostname
+    ;; would look absent and every local PV would be flagged - so a missing node
+    ;; list means "can't tell", not "all orphaned".
+    (for [volume (when (seq node-names) (kubectl/items-of (get evidence "persistentvolumes")))
           :let [hostnames (affinity-hostnames volume)]
           :when (and (seq hostnames)
                      (not-any? node-names hostnames))]

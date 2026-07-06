@@ -23,9 +23,23 @@
     (format "ServiceAccount %s/%s" (:namespace subject) (:name subject))
     (format "%s %s" (:kind subject) (:name subject))))
 
+(def ^:private standard-verbs
+  "The verbs a rule must cover to be write-everything, even without a literal *."
+  #{"get" "list" "watch" "create" "update" "patch" "delete"})
+
+(defn- covers-all-verbs?
+  [verbs]
+  (let [verbs (set verbs)]
+    (or (contains? verbs "*")
+        (every? verbs standard-verbs))))
+
 (defn wildcard-rule?
+  "Whether a rule grants god-mode on every resource: a literal * over
+   resources and apiGroups, and either a * verb or all the standard verbs
+   spelled out (a role that enumerates get/list/.../delete is cluster-admin by
+   another name)."
   [rule]
-  (boolean (and (some #{"*"} (:verbs rule))
+  (boolean (and (covers-all-verbs? (:verbs rule))
                 (some #{"*"} (:resources rule))
                 (some #{"*"} (:apiGroups rule)))))
 

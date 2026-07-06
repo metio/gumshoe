@@ -5,6 +5,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [gumshoe.detectives.capacity :as capacity]
             [gumshoe.detectives.controlplane :as controlplane]
+            [gumshoe.detectives.csi :as csi]
             [gumshoe.detectives.quotas :as quotas]
             [gumshoe.quantity :as quantity]))
 
@@ -46,13 +47,36 @@
                                   {:metadata {:namespace "app" :name "web"
                                               :labels {:component "web"}}
                                    :status {:phase "Running"
-                                            :conditions [{:type "Ready" :status "True"}]}}]}}
+                                            :conditions [{:type "Ready" :status "True"}]}}
+                                  ;; a user workload that merely carries a
+                                  ;; control-plane component label, outside kube-system
+                                  {:metadata {:namespace "app" :name "fake-etcd"
+                                              :labels {:component "etcd"}}
+                                   :status {:phase "CrashLoopBackOff"}}]}}
         findings (controlplane/detect-control-plane evidence)]
     (testing "only unready control-plane components are reported, app pods are ignored"
       (is (= #{"control-plane scheduler is not ready (phase Running)"
                "control-plane etcd is not ready (phase CrashLoopBackOff)"}
              (summaries findings)))
-      (is (every? #(= :critical (:severity %)) findings)))))
+      (is (every? #(= :critical (:severity %)) findings)))
+    (testing "a workload labelled like a control-plane component outside kube-system is not a control-plane outage"
+      (is (not (some #(= "app/fake-etcd" (:component %)) findings))))))
+
+(deftest orphaned-local-volumes-detective-test
+  (let [pv (fn [name host] {:metadata {:name name}
+                            :spec {:nodeAffinity
+                                   {:required {:nodeSelectorTerms
+                                               [{:matchExpressions
+                                                 [{:key "kubernetes.io/hostname" :operator "In" :values [host]}]}]}}}})
+        pvs {:items [(pv "data-worker-1" "worker-1") (pv "data-gone" "worker-99")]}]
+    (testing "a local PV pinned to a node that no longer exists is critical"
+      (let [findings (csi/detect-orphaned-local-volumes
+                      {"nodes" {:items [{:metadata {:name "worker-1"}}]}
+                       "persistentvolumes" pvs})]
+        (is (= ["data-gone"] (map :component findings)))
+        (is (every? #(= :critical (:severity %)) findings))))
+    (testing "with no node evidence nothing is flagged - a failed nodes fetch must not orphan every volume"
+      (is (empty? (csi/detect-orphaned-local-volumes {"nodes" nil "persistentvolumes" pvs}))))))
 
 (deftest quota-detective-test
   (let [evidence {"resourcequotas"

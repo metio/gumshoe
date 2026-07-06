@@ -34,8 +34,11 @@
    times out counts the capability as absent, never breaks detection."
   []
   (->> @detectors
+       ;; Throwable, not Exception: a plugin detector that trips an assert or a
+       ;; :pre throws an AssertionError (an Error), and one bad detector must not
+       ;; abort the whole sweep - the same reason plugins/load! catches Throwable.
        (keep (fn [[capability detect]]
-               (when (try (detect) (catch Exception _ false)) capability)))
+               (when (try (detect) (catch Throwable _ false)) capability)))
        sort
        vec))
 

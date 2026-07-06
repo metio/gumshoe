@@ -81,10 +81,16 @@
   (let [s (str s)]
     (if (<= (visible-width s) at)
       s
+      ;; head/tail are code-point counts; slice on code points (not UTF-16 units)
+      ;; so an astral character at a cut boundary is never split into a lone
+      ;; surrogate.
       (let [budget (max 1 (dec at))          ; one column for the ellipsis
             head (quot budget 2)
-            tail (- budget head)]
-        (str (subs s 0 head) "…" (subs s (- (count s) tail)))))))
+            tail (- budget head)
+            n (count s)]
+        (str (subs s 0 (.offsetByCodePoints ^String s 0 head))
+             "…"
+             (subs s (.offsetByCodePoints ^String s n (- tail))))))))
 
 (defn wrap
   "Word-wraps text to at most `at` columns (default the shared width), breaking on
@@ -111,7 +117,11 @@
   [path]
   (let [p (str path)
         home (str (System/getProperty "user.home"))]
-    (if (and (not (str/blank? home)) (str/starts-with? p home))
+    ;; match the home directory itself or a child under it, on a path boundary -
+    ;; a bare starts-with? would rewrite a sibling like /home/sebastian when home
+    ;; is /home/seb.
+    (if (and (not (str/blank? home))
+             (or (= p home) (str/starts-with? p (str home "/"))))
       (str "~" (subs p (count home)))
       p)))
 

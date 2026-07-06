@@ -27,6 +27,10 @@
 (defn detect-control-plane
   [evidence]
   (for [pod (kubectl/items-of (get evidence "pods"))
+        ;; kubeadm runs the static control-plane pods in kube-system; scoping to
+        ;; it keeps a user workload that merely carries a `component: etcd` label
+        ;; from reading as a control-plane outage.
+        :when (= "kube-system" (kubectl/namespace-of pod))
         :let [component (control-plane-component pod)]
         :when (and component (not (ready? pod)))]
     {:severity :critical

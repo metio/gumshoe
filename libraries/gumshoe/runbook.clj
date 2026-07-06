@@ -305,7 +305,10 @@
           (let [outcome (try
                           (binding [flow/*dry-run* (boolean (:dry-run opts))]
                             (if (action opts ctx) :ok :failed))
-                          (catch Exception e
+                          ;; Throwable, not Exception: an Error from the action
+                          ;; must still land on the red banner and the recording,
+                          ;; not skip them with a raw stack trace.
+                          (catch Throwable e
                             (stdout/error "unexpected error:" (or (ex-message e) (str e)))
                             :error))
                 ;; every run leaves an audit trail: input vars, selections, commands

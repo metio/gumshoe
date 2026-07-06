@@ -98,7 +98,11 @@
                                          (paint! false frame)
                                          (Thread/sleep 90)
                                          (recur (inc frame))))))
-                 result (try (thunk) (catch Exception _ {:ok? false}))
+                 ;; Throwable, not Exception: a thunk that throws an Error (e.g. an
+                 ;; AssertionError from a check) becomes a failed step, not an
+                 ;; escape that both crashes the run and, by skipping the cleanup
+                 ;; below, leaves the spinner future repainting forever.
+                 result (try (thunk) (catch Throwable _ {:ok? false}))
                  result (if (map? result) result {:ok? (boolean result)})
                  ok (boolean (:ok? result))]
              (reset! running false)
