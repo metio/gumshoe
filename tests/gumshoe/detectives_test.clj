@@ -58,12 +58,18 @@
                                    {:metadata {:name "worker-2"}
                                     :spec {:unschedulable true}
                                     :status {:conditions [{:type "Ready" :status "True"}
-                                                          {:type "DiskPressure" :status "True"}]}}]}}
+                                                          {:type "DiskPressure" :status "True"}
+                                                          ;; a node-problem-detector condition - caught generically
+                                                          {:type "KernelDeadlock" :status "True"}
+                                                          ;; False conditions are healthy and must not fire
+                                                          {:type "NetworkUnavailable" :status "False"}]}}]}}
         findings (nodes/detect-node-problems evidence)]
     (is (= #{"node is not Ready (status Unknown)"
              "DiskPressure is active"
+             "KernelDeadlock is active"
              "node is cordoned (unschedulable)"}
-           (summaries findings)))))
+           (summaries findings))
+        "any non-Ready condition with status True is flagged; a False one is not")))
 
 (deftest storage-detective-test
   (let [evidence {"persistentvolumeclaims" {:items [{:metadata {:namespace "moodle" :name "data"}
