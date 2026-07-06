@@ -67,6 +67,54 @@
   [s]
   (str/replace (str s) #"\[[0-9;]*m" ""))
 
+(defn- visible-width
+  "The printed column count of s, colour escapes excluded, so a colourised value
+   measures the same as its plain form."
+  [s]
+  (let [bare (strip-colors (str s))]
+    (.codePointCount ^String bare 0 (count bare))))
+
+(defn elide
+  "Shortens s to at most `at` visible columns with a middle ellipsis, so a long
+   value still shows where it begins and ends. A shorter string passes through."
+  [at s]
+  (let [s (str s)]
+    (if (<= (visible-width s) at)
+      s
+      (let [budget (max 1 (dec at))          ; one column for the ellipsis
+            head (quot budget 2)
+            tail (- budget head)]
+        (str (subs s 0 head) "…" (subs s (- (count s) tail)))))))
+
+(defn wrap
+  "Word-wraps text to at most `at` columns (default the shared width), breaking on
+   whitespace so long prose reflows cleanly instead of at the terminal's ragged
+   edge. A word longer than the line is left whole rather than split; existing
+   newlines are kept as paragraph breaks."
+  ([text] (wrap text width))
+  ([text at]
+   (str/join
+    "\n"
+    (for [para (str/split-lines (str text))]
+      (->> (str/split (str/trim para) #"\s+")
+           (reduce (fn [lines word]
+                     (let [cur (peek lines)]
+                       (if (and cur (<= (+ (visible-width cur) 1 (visible-width word)) at))
+                         (conj (pop lines) (str cur " " word))
+                         (conj lines word))))
+                   [])
+           (str/join "\n"))))))
+
+(defn shorten-path
+  "Replaces the home-directory prefix of a path with ~, so a long absolute path
+   reads shorter while staying copy-pasteable. A path outside home is unchanged."
+  [path]
+  (let [p (str path)
+        home (str (System/getProperty "user.home"))]
+    (if (and (not (str/blank? home)) (str/starts-with? p home))
+      (str "~" (subs p (count home)))
+      p)))
+
 (defn red [text] (colorize escape-red text))
 (defn green [text] (colorize escape-green text))
 (defn yellow [text] (colorize escape-yellow text))
@@ -113,10 +161,12 @@
   (err-println (apply str (repeat width (theme/token :rule)))))
 
 (defn print-section
-  "A titled horizontal rule: ── Title ─────────"
+  "A titled horizontal rule: ── Title ─────────. A title too long for the frame is
+   elided in the middle, so the rule always closes within the width."
   [title]
-  (let [rule (theme/token :rule)
-        visible (.codePointCount ^String title 0 (count title))
+  (let [title (elide (- width 6) title)
+        rule (theme/token :rule)
+        visible (visible-width title)
         padding (apply str (repeat (max 0 (- width 4 visible)) rule))]
     (err-println (str rule rule " " (bold title) " " padding))))
 
@@ -165,16 +215,9 @@
   (print-section-marker)
   (err-println (data-table data)))
 
-(defn- cell-width
-  "The visible width of a cell, colour codes excluded, so a colourised value still
-   lines up with a plain one."
-  [s]
-  (let [bare (strip-colors (str s))]
-    (.codePointCount ^String bare 0 (count bare))))
-
 (defn- pad
   [s target]
-  (str s (apply str (repeat (max 0 (- target (cell-width s))) \space))))
+  (str s (apply str (repeat (max 0 (- target (visible-width s))) \space))))
 
 (defn table
   "Renders rows as an aligned text table. `columns` is a seq of [header accessor]
@@ -189,7 +232,7 @@
           accessors (mapv second columns)
           cell (fn [row acc] (str (if (fn? acc) (acc row) (get row acc))))
           grid (into [headers] (mapv (fn [row] (mapv #(cell row %) accessors)) rows))
-          widths (mapv (fn [i] (apply max (map #(cell-width (nth % i)) grid)))
+          widths (mapv (fn [i] (apply max (map #(visible-width (nth % i)) grid)))
                        (range (count headers)))
           render (fn [cells] (str/trimr (str/join "  " (map pad cells widths))))]
       (str/join "\n" (map render grid)))))

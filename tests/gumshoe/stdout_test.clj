@@ -42,3 +42,35 @@
           "the STATUS column starts at the same offset on every row despite ANSI codes")))
   (testing "no rows render nothing"
     (is (= "" (stdout/table [["A" :a]] [])))))
+
+(deftest elide-test
+  (testing "a value within the width is unchanged"
+    (is (= "short" (stdout/elide 20 "short"))))
+  (testing "a long value is middle-elided to fit, keeping its head and tail"
+    (let [out (stdout/elide 30 "/home/seb/.cache/gitlibs/io.github.metio.gumshoe/abc/cordon.clj")]
+      (is (= 30 (count out)))
+      (is (clojure.string/includes? out "…"))
+      (is (clojure.string/starts-with? out "/home"))
+      (is (clojure.string/ends-with? out ".clj")))))
+
+(deftest wrap-test
+  (let [prose "the exact kubectl calls are offered as a reproducer below - keep them with the incident notes"]
+    (testing "a long line wraps at word boundaries, each line within the width"
+      (let [lines (clojure.string/split-lines (stdout/wrap prose 40))]
+        (is (> (count lines) 1))
+        (is (every? #(<= (count %) 40) lines))
+        (is (= (clojure.string/split prose #" ")
+               (clojure.string/split (clojure.string/join " " lines) #" "))
+            "no word is split or lost across the wrap")))
+    (testing "text within the width stays on one line"
+      (is (= "short line" (stdout/wrap "short line" 40))))
+    (testing "a single word longer than the width is left whole, not split"
+      (is (= "supercalifragilisticexpialidocious"
+             (stdout/wrap "supercalifragilisticexpialidocious" 10))))))
+
+(deftest shorten-path-test
+  (let [home (System/getProperty "user.home")]
+    (testing "a path under home is shortened to ~, staying copy-pasteable"
+      (is (= "~/.cache/gitlibs/x.edn" (stdout/shorten-path (str home "/.cache/gitlibs/x.edn")))))
+    (testing "a path outside home is unchanged"
+      (is (= "/etc/hosts" (stdout/shorten-path "/etc/hosts"))))))

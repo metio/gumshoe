@@ -440,7 +440,7 @@
     (stdout/err-println (format "  %d. %s" (inc i) (subject/display s))))
   (stdout/err-println "")
   (stdout/err-println "resume this exactly where you left off with ./investigate --resume")
-  (stdout/err-println "the exact kubectl calls are offered as a reproducer below - keep them with the incident notes")
+  (stdout/err-println (stdout/wrap "the exact kubectl calls are offered as a reproducer below - keep them with the incident notes"))
   true)
 
 (defn investigate!

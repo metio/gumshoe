@@ -320,7 +320,7 @@
               (stdout/print-banner stdout/red (str (theme/token :error) " FAILED or ABORTED - read the messages above, nothing more was changed")))
             ;; run summary: where the record is, how to reproduce, how to dig in together
             (when recording-path
-              (stdout/err-println (format "📼 Recording: %s" recording-path)))
+              (stdout/err-println (format "📼 Recording: %s" (stdout/shorten-path recording-path))))
             (when-not announce?
               ;; the exact CLI calls behind a read-only book's output are safe to replay
               (reproducer/offer! description)
