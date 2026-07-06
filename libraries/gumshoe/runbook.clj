@@ -232,6 +232,21 @@
      :cluster (try (kubectl/current-cluster) (catch Exception _ nil))
      :actor (format "%s@%s" username host)}))
 
+(defn- book-heading
+  "The run header for a book: its kind and its description. execute! backs
+   runbooks, playbooks, firebooks, and mutating books alike, so the kind is read
+   from the book's path segment rather than assumed - a playbook or firebook must
+   not announce itself as a Runbook."
+  [book-file description]
+  (let [path (str book-file)
+        [emoji kind] (cond
+                       (str/includes? path "/firebooks/") ["🔥" "Firebook"]
+                       (str/includes? path "/playbooks/") ["📋" "Playbook"]
+                       :else ["🚀" "Runbook"])]
+    (if (str/blank? (str description))
+      (str emoji " " kind)
+      (format "%s %s · %s" emoji kind description))))
+
 (defn execute!
   "Runs a runbook described by a config map:
 
@@ -283,7 +298,7 @@
             (stdout/print-banner stdout/red (str (theme/token :error) " BLOCKED - " (:reason gate)))
             (System/exit 1)))
         (let [ctx (when announce? {:announcement-data (announcement-data)})]
-          (stdout/print-section "🚀 Runbook")
+          (stdout/print-section (book-heading (System/getProperty "babashka.file") description))
           ;; an unexpected exception must still land on the red banner with a
           ;; clean message, never a raw stack trace - the exit code stays 1 so
           ;; scripts and ./detect see the failure

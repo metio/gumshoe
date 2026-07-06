@@ -15,7 +15,23 @@
                       (reset! @#'prerequisites/checks {})))
 
 (def ^:private unknown-items #'runbook/unknown-prerequisite-items)
+(def ^:private book-heading #'runbook/book-heading)
 (def ^:private can-i-item #'runbook/can-i-item)
+
+(deftest book-heading-test
+  (testing "the kind comes from the book's path segment, not a fixed 'Runbook'"
+    (is (= "📋 Playbook · node maintenance"
+           (book-heading "/x/playbooks/kubernetes/node_maintenance.clj" "node maintenance")))
+    (is (= "🔥 Firebook · simulate an ImagePullBackOff"
+           (book-heading "/x/firebooks/kubernetes/image_pull.clj" "simulate an ImagePullBackOff")))
+    (is (= "🚀 Runbook · cordon a node"
+           (book-heading "/x/runbooks/kubernetes/nodes/cordon.clj" "cordon a node")))
+    (is (= "📋 Playbook · ceph upgrade"
+           (book-heading "/x/tools/ceph/playbooks/upgrade.clj" "ceph upgrade"))
+        "a tool package's playbook is still a Playbook"))
+  (testing "a blank or missing description leaves just the kind; a missing path is a runbook"
+    (is (= "🔥 Firebook" (book-heading "/x/firebooks/a.clj" nil)))
+    (is (= "🚀 Runbook" (book-heading nil "")))))
 (def ^:private cluster-item #'runbook/cluster-item)
 
 (defn- run-thunk [[_heading thunk]] (thunk))
