@@ -365,9 +365,7 @@ by subpath, or pin a meta-package that bundles many:
 `meta/all-stable` bundles every stable tool package; `meta/all-kubernetes` the
 in-cluster subset. A tool's books arrive on the classpath automatically; a tool
 that registers a scope or capability is activated by listing its plugin
-namespace under `:plugins` in `env.edn` (each tool's README says which). See
-[docs/git-deps-distribution.md](docs/git-deps-distribution.md) for the full
-model.
+namespace under `:plugins` in `env.edn` (each tool's README says which).
 
 **One plugin, one call, every seam.** A plugin declares everything it provides
 in a single manifest and calls `plugin/provide!` once — so you only ever think
