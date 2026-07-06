@@ -12,6 +12,7 @@
             [gumshoe.detectives.csi :as csi]
             [gumshoe.detectives.disruption :as disruption]
             [gumshoe.detectives.events :as events]
+            [gumshoe.detectives.expectations :as expectations]
             [gumshoe.detectives.mail :as mail]
             [gumshoe.detectives.network :as network]
             [gumshoe.detectives.nodes :as nodes]
@@ -48,7 +49,7 @@
 
 ;; --- the built-in scopes ---------------------------------------------------
 
-(register! :platform (concat controlplane/detectives nodes/detectives csi/detectives))
+(register! :platform (concat controlplane/detectives nodes/detectives csi/detectives expectations/detectives))
 (register! :workloads (concat controllers/detectives pods/detectives storage/detectives disruption/detectives
                               quotas/detectives capacity/detectives))
 (register! :signals events/detectives)

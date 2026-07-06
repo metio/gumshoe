@@ -21,6 +21,7 @@
                    [gumshoe.spec-test]
                    [gumshoe.conformance-test]
                    [gumshoe.detectives-test]
+                   [gumshoe.expectations-test]
                    [gumshoe.tools.flux-test]
                    [gumshoe.certificates-test]
                    [gumshoe.gateway-test]
@@ -91,6 +92,7 @@
                                                          'gumshoe.spec-test
                                                          'gumshoe.conformance-test
                                                          'gumshoe.detectives-test
+                                                         'gumshoe.expectations-test
                                                          'gumshoe.tools.flux-test
                                                          'gumshoe.certificates-test
                                                          'gumshoe.gateway-test
