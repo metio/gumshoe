@@ -37,6 +37,22 @@
   [{:keys [name description]}]
   (if description (format "%s  —  %s" description name) name))
 
+(def ^:private back-item "⬅ Back")
+
+(defn- menu-choice
+  "Selects one label from a guided menu. With `back?`, a '⬅ Back' row is offered
+   and both choosing it and pressing ESC resolve to :back, so a submenu returns to
+   the level above instead of exiting the whole flow. At the top level (`back?`
+   false) ESC resolves to nil, which the caller treats as quit. An optional query
+   prefills the fuzzy filter, so search terms still seed a launch."
+  ([prompt labels back?] (menu-choice prompt labels back? nil))
+  ([prompt labels back? query]
+   (let [choice (fuzzy/select-single prompt (cond-> (vec labels) back? (conj back-item)) query)]
+     (cond
+       (= choice back-item) :back
+       (and back? (nil? choice)) :back
+       :else choice))))
+
 ;; ---------------------------------------------------------------------------
 ;; ./investigate - drill down from a lead
 
@@ -66,20 +82,26 @@
     (:no-color opts) (conj "--no-color")))
 
 (defn run
-  "Launches any single book by fuzzy search. Search terms prefill the filter."
-  [args]
-  (let [{:keys [opts args]} (cli/parse-args args run-spec)]
-    (when (:no-color opts) (stdout/disable-colors!))
-    (if (:help opts)
-      (do (stdout/err-println (stdout/bold "run - launch any single book by fuzzy search"))
-          (stdout/err-println "  [search terms] [--dry-run] [--no-color]")
-          0)
-      (let [books (catalog/books)
-            choice (fuzzy/select-single "Which book?" (mapv display books) (str/join " " args))
-            book (first (filter #(= choice (display %)) books))]
-        (if (nil? book)
-          (do (stdout/error "nothing selected - try again when you know the book you want") 1)
-          (apply shell/run-with-output "bb" (:path book) (passthrough opts)))))))
+  "Launches any single book by fuzzy search. Search terms prefill the filter.
+   `back?` (set when reached from the guided menu) offers a Back row and returns
+   :back so the caller can step up a level."
+  ([args] (run args false))
+  ([args back?]
+   (let [{:keys [opts args]} (cli/parse-args args run-spec)]
+     (when (:no-color opts) (stdout/disable-colors!))
+     (if (:help opts)
+       (do (stdout/err-println (stdout/bold "run - launch any single book by fuzzy search"))
+           (stdout/err-println "  [search terms] [--dry-run] [--no-color]")
+           0)
+       (let [books (catalog/books)
+             choice (menu-choice "Which book?" (mapv display books) back? (str/join " " args))]
+         (cond
+           (= :back choice) :back
+           :else
+           (let [book (first (filter #(= choice (display %)) books))]
+             (if (nil? book)
+               (do (stdout/error "nothing selected - try again when you know the book you want") 1)
+               (apply shell/run-with-output "bb" (:path book) (passthrough opts))))))))))
 
 ;; ---------------------------------------------------------------------------
 ;; ./detect - guided "what hurts?" scan of an area
@@ -146,39 +168,44 @@
   (some-> (read-line) str/trim not-empty))
 
 (defn detect
-  "Starts an investigation when something hurts: pick an area, launch its scan."
-  [args]
-  (let [opts (cli/parse-opts args detect-spec)]
-    (when (:no-color opts) (stdout/disable-colors!))
-    (if (:help opts)
-      (do (stdout/err-println (stdout/bold "detect - start an investigation when something hurts"))
-          (doseq [{:keys [label]} investigations] (stdout/err-println (str "  " label)))
-          0)
-      (let [extra (passthrough opts)
-            choice (fuzzy/select-single "What hurts?" (mapv :label investigations))
-            {:keys [book needs-host? needs-frontend? needs-repositories?]}
-            (first (filter #(= choice (:label %)) investigations))]
-        (cond
-          (nil? book)
-          (do (stdout/error "nothing selected - run again when it hurts") 1)
+  "Starts an investigation when something hurts: pick an area, launch its scan.
+   `back?` (set when reached from the guided menu) offers a Back row and returns
+   :back so the caller can step up a level."
+  ([args] (detect args false))
+  ([args back?]
+   (let [opts (cli/parse-opts args detect-spec)]
+     (when (:no-color opts) (stdout/disable-colors!))
+     (if (:help opts)
+       (do (stdout/err-println (stdout/bold "detect - start an investigation when something hurts"))
+           (doseq [{:keys [label]} investigations] (stdout/err-println (str "  " label)))
+           0)
+       (let [extra (passthrough opts)
+             choice (menu-choice "What hurts?" (mapv :label investigations) back?)]
+         (if (= :back choice)
+           :back
+           (let [{:keys [book needs-host? needs-frontend? needs-repositories?]}
+                 (first (filter #(= choice (:label %)) investigations))]
+             (cond
+               (nil? book)
+               (do (stdout/error "nothing selected - run again when it hurts") 1)
 
-          needs-host?
-          (if-let [host (ask "Which ceph host should I SSH into? ")]
-            (apply launch book "--host" host extra)
-            (do (stdout/error "no host given") 1))
+               needs-host?
+               (if-let [host (ask "Which ceph host should I SSH into? ")]
+                 (apply launch book "--host" host extra)
+                 (do (stdout/error "no host given") 1))
 
-          needs-frontend?
-          (if-let [frontend (ask "Which OpenNebula frontend should I SSH into? ")]
-            (apply launch book "--frontend" frontend extra)
-            (do (stdout/error "no frontend given") 1))
+               needs-frontend?
+               (if-let [frontend (ask "Which OpenNebula frontend should I SSH into? ")]
+                 (apply launch book "--frontend" frontend extra)
+                 (do (stdout/error "no frontend given") 1))
 
-          needs-repositories?
-          (if-let [repository (ask "Which restic repository should I check? ")]
-            (apply launch book "--repository" repository extra)
-            (do (stdout/error "no repository given") 1))
+               needs-repositories?
+               (if-let [repository (ask "Which restic repository should I check? ")]
+                 (apply launch book "--repository" repository extra)
+                 (do (stdout/error "no repository given") 1))
 
-          :else
-          (apply launch book extra))))))
+               :else
+               (apply launch book extra)))))))))
 
 ;; ---------------------------------------------------------------------------
 ;; ./gumshoe - the one front door
@@ -210,27 +237,37 @@
 (def ^:private fire-drill "🔥 Practice a fire drill - break something on purpose to train the team")
 
 (defn- pick-and-run
-  [prompt root]
-  (let [books (books-under root)]
-    (if (empty? books)
-      (do (stdout/error (format "no %s found" root)) 1)
-      (let [choice (fuzzy/select-single prompt (mapv display books))
-            book (first (filter #(= choice (display %)) books))]
-        (if book (shell/run-with-output "bb" (:path book)) 1)))))
+  "Picks and launches one book under a root (playbooks/firebooks). `back?` (set
+   when reached from the guided menu) offers a Back row and returns :back."
+  ([prompt root] (pick-and-run prompt root false))
+  ([prompt root back?]
+   (let [books (books-under root)]
+     (if (empty? books)
+       (do (stdout/error (format "no %s found" root)) 1)
+       (let [choice (menu-choice prompt (mapv display books) back?)]
+         (if (= :back choice)
+           :back
+           (let [book (first (filter #(= choice (display %)) books))]
+             (if book (shell/run-with-output "bb" (:path book)) 1))))))))
 
 (defn- guided
   []
-  ;; condp/= compares against the def'd label strings; `case` would match the
-  ;; literal symbols (it does not evaluate its test constants) and never hit,
-  ;; throwing "No matching clause" on every real selection.
-  (condp = (fuzzy/select-single "what are you doing?"
-                                [follow-lead scan-area run-book run-playbook fire-drill])
-    nil 1
-    follow-lead (investigate [])
-    scan-area (detect [])
-    run-book (run [])
-    run-playbook (pick-and-run "which playbook?" "playbooks")
-    fire-drill (pick-and-run "which fire drill?" "firebooks")))
+  ;; The top menu loops: a submenu that returns :back (its Back row or ESC) re-
+  ;; shows this menu instead of exiting, so a wrong turn costs one keypress. ESC
+  ;; here, at the top, quits. condp/= compares against the def'd label strings;
+  ;; `case` would match the literal symbols (it does not evaluate its test
+  ;; constants) and never hit, throwing "No matching clause" on every selection.
+  (loop []
+    (let [result (condp = (menu-choice "what are you doing?"
+                                       [follow-lead scan-area run-book run-playbook fire-drill]
+                                       false)
+                   nil 1
+                   follow-lead (investigate [])
+                   scan-area (detect [] true)
+                   run-book (run [] true)
+                   run-playbook (pick-and-run "which playbook?" "playbooks" true)
+                   fire-drill (pick-and-run "which fire drill?" "firebooks" true))]
+      (if (= :back result) (recur) result))))
 
 (defn front-door
   "The guided menu, a lead shortcut, or a fuzzy book search - the one door."
