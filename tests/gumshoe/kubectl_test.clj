@@ -26,6 +26,30 @@
   {:items [{:metadata {:namespace "moodle" :name "moodle-data"}}
            {:metadata {:namespace "moodle" :name "moodle-backup"}}]})
 
+;; `kubectl api-resources --no-headers` - a core row with a short name, a core
+;; row without one, a compound-cased core Kind, and a CRD row carrying its group.
+(def api-resources-output
+  (str "pods                              po   v1                        true    Pod\n"
+       "nodes                                  v1                        false   Node\n"
+       "persistentvolumeclaims            pvc  v1                        true    PersistentVolumeClaim\n"
+       "helmreleases                      hr   helm.toolkit.fluxcd.io/v2 true    HelmRelease\n"))
+
+(deftest parse-api-resources-test
+  (let [kinds (kubectl/parse-api-resources api-resources-output)]
+    (testing "the KIND column maps from the bare plural, with the cluster's own casing"
+      (is (= "Pod" (get kinds "pods")))
+      (is (= "Node" (get kinds "nodes")))
+      (is (= "PersistentVolumeClaim" (get kinds "persistentvolumeclaims"))
+          "a compound Kind keeps the cluster's casing - no lossy title-casing"))
+    (testing "a grouped resource is also keyed by its plural.group form"
+      (is (= "HelmRelease" (get kinds "helmreleases")))
+      (is (= "HelmRelease" (get kinds "helmreleases.helm.toolkit.fluxcd.io"))))
+    (testing "a core (groupless) resource is not given a spurious dotted key"
+      (is (nil? (get kinds "pods.v1")))))
+  (testing "empty or unreachable output parses to an empty map, never throws"
+    (is (= {} (kubectl/parse-api-resources "")))
+    (is (= {} (kubectl/parse-api-resources nil)))))
+
 (deftest names-test
   (testing "names-of"
     (is (= ["worker-1" "worker-2"] (kubectl/names-of nodes))))

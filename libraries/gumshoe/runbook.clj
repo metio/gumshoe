@@ -93,41 +93,56 @@
    it is a known cluster), so onboarding stays smooth while labelled clusters get
    the safety of a real match."
   [required-capabilities]
-  ["connected to a suitable cluster"
+  ["connected to a suitable Kubernetes cluster"
    #(let [current (kubectl/current-cluster)
           known (config/known-clusters)
           declared (config/env-value {:kubernetes-cluster current} [:capabilities])
           missing (when declared (remove (set declared) required-capabilities))]
       (cond
         (str/blank? (str current))
-        {:ok? false :label "not connected to any kubernetes cluster"}
+        {:ok? false :label "not connected to any Kubernetes cluster"}
 
         (and (seq known) (not (some #{current} known)))
-        {:ok? false :label (format "current cluster %s is none you configured: %s"
+        {:ok? false :label (format "current Kubernetes cluster %s is none you configured: %s"
                                    current (str/join ", " known))}
 
         (seq missing)
-        {:ok? false :label (format "cluster %s does not advertise: %s"
+        {:ok? false :label (format "Kubernetes cluster %s does not advertise: %s"
                                    current (str/join ", " (map name missing)))}
 
         :else
         {:ok? true :label (if (seq required-capabilities)
-                            (format "cluster: %s (has %s)" current (str/join ", " (map name required-capabilities)))
-                            (format "cluster: %s" current))}))])
+                            (format "Kubernetes cluster: %s (has %s)" current (str/join ", " (map name required-capabilities)))
+                            (format "Kubernetes cluster: %s" current))}))])
+
+(defn- resource-label
+  "The label for a kubectl resource in a permission prerequisite: the cluster's
+   Kind when discovery knows it (\"Pod resources\"), else the verbatim resource
+   name. A fabricated Kind would read as certainty the check does not have, so an
+   unknown or unreachable resource stays as the raw name the check actually uses."
+  [resource]
+  (if-let [kind (kubectl/resource-kind resource)]
+    (str kind " resources")
+    resource))
 
 (defn- can-i-item
   [verb resource]
-  [(format "can %s %s" verb resource)
-   #(if (kubectl/can-i? verb resource)
-      {:ok? true :label (format "can %s %s" verb resource)}
-      {:ok? false :label (format "cannot %s %s" verb resource)})])
+  (let [verb-label (str/upper-case verb)
+        target (resource-label resource)
+        heading (format "Kubernetes: can %s %s" verb-label target)]
+    [heading
+     #(if (kubectl/can-i? verb resource)
+        {:ok? true :label heading}
+        {:ok? false :label (format "Kubernetes: cannot %s %s" verb-label target)})]))
 
 (defn- can-exec-item
   [resource]
-  [(format "can exec into %s" resource)
-   #(if (kubectl/can-exec? resource)
-      {:ok? true :label (format "can exec into %s" resource)}
-      {:ok? false :label (format "cannot exec into %s" resource)})])
+  (let [target (resource-label resource)
+        heading (format "Kubernetes: can EXEC into %s" target)]
+    [heading
+     #(if (kubectl/can-exec? resource)
+        {:ok? true :label heading}
+        {:ok? false :label (format "Kubernetes: cannot EXEC into %s" target)})]))
 
 (def ^:private built-in-prerequisite-keys
   "The :prerequisites keys the harness handles directly; everything else must be

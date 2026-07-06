@@ -249,6 +249,50 @@
   [crd]
   (resource-exists? "customresourcedefinition" crd))
 
+(defn parse-api-resources
+  "Parses `kubectl api-resources --no-headers` into a map from resource name to
+   Kind, keyed by both the bare plural (\"pods\") and the group-qualified plural
+   (\"helmreleases.helm.toolkit.fluxcd.io\"), so a lookup resolves whichever form
+   a book wrote. Columns are NAME [SHORTNAMES] APIVERSION NAMESPACED KIND; the
+   SHORTNAMES column is optional, so the stable fields are read from the edges -
+   NAME first, then KIND, NAMESPACED, APIVERSION counted back from the right."
+  [output]
+  (into {}
+        (for [line (str/split-lines (str output))
+              :let [fields (str/split (str/trim line) #"\s+")
+                    n (count fields)]
+              :when (>= n 4)
+              :let [resource (first fields)
+                    kind (peek fields)
+                    api-version (nth fields (- n 3))
+                    group (when (str/includes? api-version "/")
+                            (first (str/split api-version #"/")))]
+              entry (cond-> [[resource kind]]
+                      group (conj [(str resource "." group) kind]))]
+          entry)))
+
+(defonce ^:private resource-kinds-cache (atom nil))
+
+(defn resource-kinds
+  "A map from resource name to Kind, discovered once from `kubectl api-resources`
+   and cached for the run. Empty when the API is unreachable, so a caller falls
+   back to the raw resource name instead of guessing a Kind."
+  []
+  (or @resource-kinds-cache
+      (reset! resource-kinds-cache
+              (parse-api-resources
+               (shell/stdout-of "kubectl" "api-resources" "--no-headers"
+                                "--request-timeout=5s")))))
+
+(defn resource-kind
+  "The Kind the cluster reports for a resource name - \"pods\" -> \"Pod\",
+   \"helmreleases.helm.toolkit.fluxcd.io\" -> \"HelmRelease\" - or nil when the API
+   is unreachable or serves no such resource. The cluster's own discovery is the
+   single source of truth for a resource's Kind; there is no hardcoded table to
+   drift out of date."
+  [resource]
+  (get (resource-kinds) resource))
+
 ;; A bounded request timeout on every read means a wedged API server slows a
 ;; book down by seconds, never hangs it forever. It applies only to these
 ;; quick get calls - long-running work (port-forward, drain, exec, watches,
