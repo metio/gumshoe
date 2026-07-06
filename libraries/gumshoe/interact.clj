@@ -56,23 +56,26 @@
    match seeds the picker's fuzzy query, so a near-miss (a typo or a partial name)
    surfaces the intended candidate - but it is never auto-accepted, so the
    operator confirms the highlighted row rather than a typo resolving to a
-   different resource. Returns nil when nothing was chosen."
-  [label candidates provided]
-  (record-selection!
-   label
-   (cond
-     (empty? candidates)
-     nil
+   different resource. An optional `preview` is a shell command (its `{}` is the
+   highlighted candidate) fzf renders in a side pane, so the operator sees what a
+   pick means before committing. Returns nil when nothing was chosen."
+  ([label candidates provided] (choose-one label candidates provided nil))
+  ([label candidates provided preview]
+   (record-selection!
+    label
+    (cond
+      (empty? candidates)
+      nil
 
-     (valid-choice? candidates provided)
-     provided
+      (valid-choice? candidates provided)
+      provided
 
-     :else
-     (do (when provided
-           (stdout/warn (format "%s '%s' is not a valid choice, please select one" label provided)))
-         (if-let [seed (some-> provided str not-empty)]
-           (fuzzy/select-single label (sort candidates) seed false)
-           (fuzzy/select-single label (sort candidates)))))))
+      :else
+      (do (when provided
+            (stdout/warn (format "%s '%s' is not a valid choice, please select one" label provided)))
+          (if-let [seed (some-> provided str not-empty)]
+            (fuzzy/select-single label (sort candidates) {:query seed :auto-select? false :preview preview})
+            (fuzzy/select-single label (sort candidates) {:preview preview})))))))
 
 (defn choose-many
   "Resolves multiple items: valid provided values are used as-is, anything else

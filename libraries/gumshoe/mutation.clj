@@ -19,7 +19,8 @@
                :candidates (fn [context] -> seq of names)
                :flag :node                      ; :one / :many
                :namespace-flag :namespace       ; :namespaced
-               :name-flag :name}                ; :namespaced
+               :name-flag :name                 ; :namespaced
+               :preview \"kubectl describe node {}\"}  ; :one, optional fzf side pane
       :empty-message \"every node is already cordoned\"   ; when nothing to pick
       :confirm  {:action \"...\" :destructive? false}
       :announce (fn [ctx] -> changelog message)   ; optional
@@ -50,11 +51,11 @@
   (if (= :many mode) (vec target) [target]))
 
 (defn- select-target
-  [{:keys [mode label candidates flag namespace-flag name-flag]} opts context]
+  [{:keys [mode label candidates flag namespace-flag name-flag preview]} opts context]
   (let [names (candidates context)]
     {:candidates names
      :target (case mode
-               :one (interact/choose-one label names (get opts flag))
+               :one (interact/choose-one label names (get opts flag) preview)
                :many (interact/choose-many label names (get opts flag))
                :namespaced (interact/choose-namespaced label names
                                                        (get opts namespace-flag)
