@@ -5,9 +5,10 @@ SPDX-License-Identifier: 0BSD
 
 # gumshoe-restic
 
-The restic tool package for [gumshoe](../../README.md): restic backups - are they actually landing?. A standalone
-detective book - it registers no scope or capability, so depending on it simply
-puts the book on the classpath (no env.edn :plugins entry needed).
+The restic tool package for [gumshoe](../../README.md): restic backups - are
+they actually landing? A standalone detective book - it registers no scope or
+capability, so depending on it simply puts the book on the classpath (no
+env.edn :plugins entry needed).
 
 ```clojure
 ;; bb.edn

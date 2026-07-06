@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: The gumshoe Authors
+# SPDX-License-Identifier: 0BSD
+
+extends: default
+
+rules:
+  # Workflow files pin every action by its 40-char commit SHA and inline shell
+  # commands, neither of which can wrap. Keep line-length visible as a warning
+  # rather than a hard CI failure.
+  line-length:
+    level: warning

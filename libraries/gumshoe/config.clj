@@ -201,10 +201,13 @@
 (defn render
   "Pretty EDN for an env.edn map, with the license header."
   [config]
+  ;; REUSE-IgnoreStart -- the strings below are the license header written INTO a
+  ;; generated env.edn, not a license declaration for this source file.
   (str ";; SPDX-FileCopyrightText: The gumshoe Authors\n"
        ";; SPDX-License-Identifier: 0BSD\n\n"
        ";; Written by runbooks/setup/init.clj - edit freely.\n"
        (with-out-str (pprint/pprint config))))
+;; REUSE-IgnoreEnd
 
 (defn write!
   "Writes an env.edn map to the primary path and returns the path."

@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: 0BSD
 
 # Continuous calendar-versioned release: every push to main that touches shipped
-# code cuts a tagged GitHub release, so a casebook can pin a gumshoe version (and
-# Renovate can bump it) instead of tracking @main. gumshoe is distributed by
-# clone, so the release IS the git tag plus its notes - no artifact to build.
+# code cuts a tagged GitHub release, so a casebook can pin a gumshoe version
+# (and Renovate can bump it) instead of tracking @main. gumshoe is distributed
+# by clone, so the release IS the git tag plus its notes - no artifact to build.
 # Second-precision CalVer means several releases a day never collide.
 name: Release
 on:

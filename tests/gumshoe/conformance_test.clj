@@ -68,8 +68,10 @@
 
 (deftest every-file-carries-the-license
   (doseq [file (concat book-files library-files)]
+    ;; REUSE-IgnoreStart -- asserting every book carries the tag, not declaring one here.
     (is (str/includes? (slurp file) "SPDX-License-Identifier: 0BSD")
         (str file " is missing its SPDX header"))))
+;; REUSE-IgnoreEnd
 
 (deftest every-namespace-documents-itself
   (doseq [file (concat book-files library-files)]

@@ -18,9 +18,9 @@ A template for a **casebook** - a team's own books and plugins on the
 ## Run
 
 ```shell
-$ bb gumshoe        # the front door - your books appear next to gumshoe's built-ins
-$ bb detect         # scan for symptoms
-$ bb run cordon     # launch a book by name
+bb gumshoe      # front door; your books sit beside gumshoe's built-ins
+bb detect       # scan for symptoms
+bb run cordon   # launch a book by name
 ```
 
 gumshoe's `catalog` discovers books from the whole classpath, so your `runbooks/`

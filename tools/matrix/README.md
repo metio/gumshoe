@@ -5,9 +5,10 @@ SPDX-License-Identifier: 0BSD
 
 # gumshoe-matrix
 
-The matrix tool package for [gumshoe](../../README.md): Matrix client/federation API health, signing keys, delegation. A standalone
-detective book - it registers no scope or capability, so depending on it simply
-puts the book on the classpath (no env.edn :plugins entry needed).
+The matrix tool package for [gumshoe](../../README.md): Matrix
+client/federation API health, signing keys, delegation. A standalone detective
+book - it registers no scope or capability, so depending on it simply puts the
+book on the classpath (no env.edn :plugins entry needed).
 
 ```clojure
 ;; bb.edn

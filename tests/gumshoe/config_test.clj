@@ -73,7 +73,9 @@
   (testing "render produces loadable EDN with the license header"
     (let [config {:vpn {:interface "wg0"} :ceph {:mgr-hosts ["m1"]}}
           rendered (config/render config)]
+      ;; REUSE-IgnoreStart -- asserting on the header text, not declaring a license.
       (is (str/includes? rendered "SPDX-License-Identifier: 0BSD"))
+      ;; REUSE-IgnoreEnd
       (is (= config (edn/read-string rendered)))))
   (testing "an environments config round-trips too"
     (let [config {:environments {:staging {:select {:kubernetes-cluster "c"} :ceph {:mgr-hosts ["m"]}}}

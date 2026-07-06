@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: 0BSD
 
 # Every gate runs through the flake's devShell (`nix develop --command`), so CI
-# and local shells resolve the exact same tool versions from flake.lock. Renovate
+# and local shells resolve the exact same tool versions from flake.lock.
+# Renovate
 # maintains the lock; no job installs tools any other way.
 name: Verify
 on:
@@ -96,7 +97,7 @@ jobs:
           done
           exit $status
   verify:
-    # Single required check covering every job above: mark only this one required
+    # Single required check covering every job above: mark only this required
     # in branch protection and new jobs are covered automatically.
     name: Verify
     needs: [test, reuse, yaml, github-actions, markdown, typos, policy, dco]

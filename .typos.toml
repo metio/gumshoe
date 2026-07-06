@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: The gumshoe Authors
+# SPDX-License-Identifier: 0BSD
+
+# Domain vocabulary the spell-checker misreads. Each maps to itself, marking the
+# word as correct rather than a typo:
+#   edn         - the EDN data format, Clojure file extension, and clojure.edn
+#   juxt        - clojure.core/juxt
+#   unparseable - accepted spelling of "cannot be parsed" used throughout
+#   criticals   - the count of critical findings, used in test descriptions
+[default.extend-words]
+edn = "edn"
+juxt = "juxt"
+unparseable = "unparseable"
+criticals = "criticals"
