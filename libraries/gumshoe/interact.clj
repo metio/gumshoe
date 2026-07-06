@@ -52,7 +52,11 @@
 
 (defn choose-one
   "Resolves a single item: a valid provided value is used as-is, anything else
-   falls back to interactive selection. Returns nil when nothing was chosen."
+   falls back to interactive selection. A provided value that is not an exact
+   match seeds the picker's fuzzy query, so a near-miss (a typo or a partial name)
+   surfaces the intended candidate - but it is never auto-accepted, so the
+   operator confirms the highlighted row rather than a typo resolving to a
+   different resource. Returns nil when nothing was chosen."
   [label candidates provided]
   (record-selection!
    label
@@ -66,7 +70,9 @@
      :else
      (do (when provided
            (stdout/warn (format "%s '%s' is not a valid choice, please select one" label provided)))
-         (fuzzy/select-single label (sort candidates))))))
+         (if-let [seed (some-> provided str not-empty)]
+           (fuzzy/select-single label (sort candidates) seed false)
+           (fuzzy/select-single label (sort candidates)))))))
 
 (defn choose-many
   "Resolves multiple items: valid provided values are used as-is, anything else

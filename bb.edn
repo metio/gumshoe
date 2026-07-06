@@ -55,6 +55,7 @@
                    [gumshoe.hooks-test]
                    [gumshoe.grafana-test]
                    [gumshoe.interact-test]
+                   [gumshoe.fuzzy-finder-test]
                    [gumshoe.investigation-test]
                    [gumshoe.kubectl-test]
                    [gumshoe.mail-test]
@@ -125,6 +126,7 @@
                                                          'gumshoe.hooks-test
                                                          'gumshoe.grafana-test
                                                          'gumshoe.interact-test
+                                                         'gumshoe.fuzzy-finder-test
                                                          'gumshoe.investigation-test
                                                          'gumshoe.kubectl-test
                                                          'gumshoe.mail-test

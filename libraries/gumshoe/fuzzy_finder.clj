@@ -23,18 +23,30 @@
    "--pointer=▶" "--marker=✓"
    "--color=pointer:red,marker:green,prompt:blue,border:8"])
 
+(defn- single-select-args
+  "The fzf argv for a single pick. `--select-1`/`--exit-0` (auto-accept a lone
+   match, exit when none) apply only when `auto-select?` is set: a caller
+   resolving a resource name for a change turns it off, so a seeded query never
+   auto-accepts a fuzzy match - the operator confirms the highlighted row by
+   pressing enter, and a typo that matches nothing keeps the picker open to edit
+   rather than resolving to the wrong resource."
+  [prompt query auto-select?]
+  (concat ["fzf" "--no-multi" (str "--prompt=" prompt " ▶ ")]
+          (when (not-empty query) [(str "--query=" query)])
+          (when auto-select? ["--exit-0" "--select-1"])
+          style))
+
 (defn select-single
   "Picks one value. An optional initial query prefills fzf's search box, so a
-   launcher can seed the filter with whatever the operator already typed."
-  ([prompt values] (select-single prompt values nil))
-  ([prompt values query]
+   launcher can seed the filter with whatever the operator already typed.
+   `auto-select?` (default true) lets a lone match resolve without a keypress;
+   pass false when a mistyped name must never resolve silently."
+  ([prompt values] (select-single prompt values nil true))
+  ([prompt values query] (select-single prompt values query true))
+  ([prompt values query auto-select?]
    (if-let [pick (ui/backend :select-one)]
      (pick prompt values query)
-     (select (concat ["fzf" "--exit-0" "--select-1" "--no-multi"
-                      (str "--prompt=" prompt " ▶ ")]
-                     (when (not-empty query) [(str "--query=" query)])
-                     style)
-             values))))
+     (select (single-select-args prompt query auto-select?) values))))
 
 (defn select-multi
   [prompt values]
