@@ -179,6 +179,7 @@
     (vec (concat probe-items
                  edge-items
                  (when (seq trail) [{:type :back :label "⬆ back to the previous subject"}])
+                 (when (> (count trail) 1) [{:type :jump :label "⏮ jump back to an earlier subject"}])
                  [{:type :done :label "✓ done - end the investigation"}]))))
 
 ;; ---------------------------------------------------------------------------
@@ -412,6 +413,24 @@
   (stdout/print-section (str "▶ " (:label probe)))
   (apply shell/run-with-output ((:args probe) context subject)))
 
+(defn trail-jump
+  "The loop state to resume at breadcrumb `i`: that subject becomes the focus and
+   the trail rewinds to everything before it - so landing there is exactly the
+   state the operator had when they first stood on it."
+  [trail i]
+  {:subject (nth trail i)
+   :trail (subvec (vec trail) 0 i)})
+
+(defn- choose-jump!
+  "Lets the operator pick any earlier subject in the trail (numbered as in the
+   summary) and returns the state to resume there, or nil when they back out - so
+   a deep drill-down can rewind many levels at once, not just one."
+  [trail]
+  (let [labelled (map-indexed (fn [i s] [(format "%d. %s" (inc i) (subject/display s)) i]) trail)
+        by-label (into {} labelled)]
+    (when-let [i (get by-label (fuzzy/select-single "jump back to" (map first labelled)))]
+      (trail-jump trail i))))
+
 (defn- summarise!
   [trail]
   ;; persist the trail so ./investigate --resume can pick up here next time
@@ -449,6 +468,9 @@
             (case (:type item)
               (nil :done) (summarise! (conj trail subject))
               :back (recur (peek trail) (pop trail))
+              :jump (if-let [dest (choose-jump! trail)]
+                      (recur (:subject dest) (:trail dest))
+                      (recur subject trail))
               :probe (do (run-probe! context subject (:probe item))
                          (recur subject trail))
               :pivot (recur (:subject item) (conj trail subject))))))))))

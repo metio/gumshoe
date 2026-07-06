@@ -100,7 +100,25 @@
     (testing "back appears only when there is a trail; done is always last"
       (is (not-any? #(= :back (:type %)) (investigation/menu-items focus [])))
       (is (some #(= :back (:type %)) (investigation/menu-items focus [(subject/subject "Node" nil "x")])))
-      (is (= :done (:type (last (investigation/menu-items focus []))))))))
+      (is (= :done (:type (last (investigation/menu-items focus []))))))
+    (testing "jump-back appears only once the trail is deep enough to skip a level"
+      (is (not-any? #(= :jump (:type %))
+                    (investigation/menu-items focus [(subject/subject "Node" nil "x")]))
+          "one ancestor: 'back' already covers it, so no jump")
+      (is (some #(= :jump (:type %))
+                (investigation/menu-items focus [(subject/subject "Node" nil "x")
+                                                 (subject/subject "Pod" "ns" "y")]))
+          "two or more ancestors: jump lets the operator rewind several at once"))))
+
+(deftest trail-jump-test
+  (testing "jumping to a breadcrumb rewinds to the state the operator had there"
+    (let [root (subject/subject "Node" nil "worker-3")
+          mid (subject/subject "Pod" "moodle" "web-1")
+          leaf (subject/subject "PersistentVolumeClaim" "moodle" "data")
+          trail [root mid leaf]]
+      (is (= {:subject root :trail []} (investigation/trail-jump trail 0)))
+      (is (= {:subject mid :trail [root]} (investigation/trail-jump trail 1)))
+      (is (= {:subject leaf :trail [root mid]} (investigation/trail-jump trail 2))))))
 
 (deftest register-probe-and-tool-gating-test
   (reset! @#'investigation/extra-probes [])
