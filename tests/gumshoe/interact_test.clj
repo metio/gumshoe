@@ -3,6 +3,7 @@
 
 (ns gumshoe.interact-test
   (:require [clojure.test :refer [deftest is testing]]
+            [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.interact :as interact]))
 
 (deftest valid-choice-test
@@ -18,6 +19,24 @@
     (is (nil? (interact/choose-one "Node" [] "worker-1"))))
   (testing "uses a valid provided value without interaction"
     (is (= "worker-1" (interact/choose-one "Node" ["worker-1" "worker-2"] "worker-1")))))
+
+(deftest choose-one-seeds-picker-test
+  (let [calls (atom [])]
+    (with-redefs [fuzzy/select-single (fn [& args] (swap! calls conj (vec args)) nil)]
+      (testing "a typed near-miss seeds the picker query and forbids auto-accept"
+        (reset! calls [])
+        (interact/choose-one "Node" ["worker-1" "worker-2"] "worker-9")
+        (is (= [["Node" ["worker-1" "worker-2"] "worker-9" false]] @calls)
+            "the near-miss name seeds the fuzzy query, and auto-select? is false so it never resolves silently"))
+      (testing "no provided value opens the picker without a seed (auto-select left on)"
+        (reset! calls [])
+        (interact/choose-one "Node" ["worker-1" "worker-2"] nil)
+        (is (= [["Node" ["worker-1" "worker-2"]]] @calls)
+            "with nothing typed there is no seed to guard, so the plain interactive pick is used"))
+      (testing "candidates are sorted before they reach the picker"
+        (reset! calls [])
+        (interact/choose-one "Node" ["worker-2" "worker-1"] "worker")
+        (is (= ["worker-1" "worker-2"] (second (first @calls))))))))
 
 (deftest choose-many-test
   (testing "returns nil when there is nothing to choose from"
