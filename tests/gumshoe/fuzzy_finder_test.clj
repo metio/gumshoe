@@ -9,18 +9,24 @@
 
 (deftest single-select-args-test
   (testing "a seed query is passed to fzf"
-    (is (some #{"--query=worker-1"} (single-select-args "Node" "worker-1" false))))
-  (testing "no auto-accept when auto-select? is false - the operator must confirm a seeded match"
-    (let [args (single-select-args "Node" "worker-1" false)]
+    (is (some #{"--query=worker-1"} (single-select-args "Node" {:query "worker-1" :auto-select? false}))))
+  (testing "no auto-accept when :auto-select? is false - the operator must confirm a seeded match"
+    (let [args (single-select-args "Node" {:query "worker-1" :auto-select? false})]
       (is (not (some #{"--select-1"} args))
           "a mistyped name must not resolve to a lone fuzzy match without a keypress")
       (is (not (some #{"--exit-0"} args))
           "a no-match query keeps the picker open to edit rather than resolving to nothing")))
-  (testing "auto-accept when auto-select? is true - a launcher may run a unique match"
-    (let [args (single-select-args "Which book?" "scale up" true)]
+  (testing "auto-accept when :auto-select? is true (the default) - a launcher may run a unique match"
+    (let [args (single-select-args "Which book?" {:query "scale up"})]
       (is (some #{"--select-1"} args))
       (is (some #{"--exit-0"} args))
       (is (some #{"--query=scale up"} args))))
   (testing "a blank query adds no --query flag"
     (is (not (some #(clojure.string/starts-with? % "--query=")
-                   (single-select-args "Node" nil true))))))
+                   (single-select-args "Node" {})))))
+  (testing ":preview adds a preview command and window; its absence adds neither"
+    (let [args (single-select-args "Node" {:preview "kubectl describe node {}"})]
+      (is (some #{"--preview=kubectl describe node {}"} args))
+      (is (some #(clojure.string/starts-with? % "--preview-window=") args)))
+    (is (not (some #(clojure.string/starts-with? % "--preview")
+                   (single-select-args "Node" {}))))))

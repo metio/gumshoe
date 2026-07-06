@@ -26,13 +26,18 @@
       (testing "a typed near-miss seeds the picker query and forbids auto-accept"
         (reset! calls [])
         (interact/choose-one "Node" ["worker-1" "worker-2"] "worker-9")
-        (is (= [["Node" ["worker-1" "worker-2"] "worker-9" false]] @calls)
+        (is (= [["Node" ["worker-1" "worker-2"] {:query "worker-9" :auto-select? false :preview nil}]] @calls)
             "the near-miss name seeds the fuzzy query, and auto-select? is false so it never resolves silently"))
       (testing "no provided value opens the picker without a seed (auto-select left on)"
         (reset! calls [])
         (interact/choose-one "Node" ["worker-1" "worker-2"] nil)
-        (is (= [["Node" ["worker-1" "worker-2"]]] @calls)
+        (is (= [["Node" ["worker-1" "worker-2"] {:preview nil}]] @calls)
             "with nothing typed there is no seed to guard, so the plain interactive pick is used"))
+      (testing "a declared preview command is passed through to the picker"
+        (reset! calls [])
+        (interact/choose-one "Node" ["worker-1" "worker-2"] nil "kubectl describe node {}")
+        (is (= "kubectl describe node {}" (:preview (last (first @calls))))
+            "the book's :preview reaches fzf so the operator sees the node before picking"))
       (testing "candidates are sorted before they reach the picker"
         (reset! calls [])
         (interact/choose-one "Node" ["worker-2" "worker-1"] "worker")

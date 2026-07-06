@@ -35,7 +35,8 @@
                   :cluster-capabilities []
                   :kubectl-can-get ["nodes"]
                   :kubectl-can-patch ["nodes"]}
-  :select {:mode :one :label "Node" :flag :node :candidates schedulable-nodes}
+  :select {:mode :one :label "Node" :flag :node :candidates schedulable-nodes
+           :preview "kubectl describe node {}"}
   :empty-message "every node is already cordoned"
   :confirm {:action "cordon (mark unschedulable) a node"}
   :announce (fn [{:keys [target]}] (format "Cordon node %s" target))
