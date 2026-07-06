@@ -165,6 +165,44 @@
   (print-section-marker)
   (err-println (data-table data)))
 
+(defn- cell-width
+  "The visible width of a cell, colour codes excluded, so a colourised value still
+   lines up with a plain one."
+  [s]
+  (let [bare (strip-colors (str s))]
+    (.codePointCount ^String bare 0 (count bare))))
+
+(defn- pad
+  [s target]
+  (str s (apply str (repeat (max 0 (- target (cell-width s))) \space))))
+
+(defn table
+  "Renders rows as an aligned text table. `columns` is a seq of [header accessor]
+   pairs; accessor is a keyword (looked up in the row map) or a fn of the row.
+   Each column is padded to its widest visible cell - colour codes excluded, so a
+   colourised value still lines up - and trailing padding is trimmed. Returns the
+   table as a string (header line first); empty rows yield an empty string."
+  [columns rows]
+  (if (empty? rows)
+    ""
+    (let [headers (mapv (comp str first) columns)
+          accessors (mapv second columns)
+          cell (fn [row acc] (str (if (fn? acc) (acc row) (get row acc))))
+          grid (into [headers] (mapv (fn [row] (mapv #(cell row %) accessors)) rows))
+          widths (mapv (fn [i] (apply max (map #(cell-width (nth % i)) grid)))
+                       (range (count headers)))
+          render (fn [cells] (str/trimr (str/join "  " (map pad cells widths))))]
+      (str/join "\n" (map render grid)))))
+
+(defn print-table
+  "Prints a titled table: the header row in bold, then each data row. A table with
+   no rows prints nothing, so a caller need not guard the empty case."
+  [columns rows]
+  (when (seq rows)
+    (let [[header & body] (str/split-lines (table columns rows))]
+      (err-println (bold header))
+      (doseq [line body] (err-println line)))))
+
 (defn print-command
   "Shows the exact command about to run, so the underlying tooling stays learnable."
   [& args]
