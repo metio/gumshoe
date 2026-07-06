@@ -2,7 +2,8 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.detectives.nodes
-  "Detectives for node health: readiness, resource pressure, cordoned nodes."
+  "Detectives for node health: readiness, every node-problem condition, cordoned
+   nodes."
   (:require [gumshoe.kubectl :as kubectl]))
 
 (defn- condition
@@ -20,14 +21,20 @@
         :component (kubectl/name-of node)
         :summary (format "node is not Ready (status %s)" (or (:status ready) "unknown"))
         :hint (:message ready)})
+     ;; Every non-Ready node condition follows the same convention: status True
+     ;; means the problem is present. Reading them generically catches the built-in
+     ;; pressures and NetworkUnavailable, plus every node-problem-detector
+     ;; condition (KernelDeadlock, ReadonlyFilesystem, FrequentKubeletRestart, ...),
+     ;; without a hardcoded list.
      (for [node nodes
-           pressure ["MemoryPressure" "DiskPressure" "PIDPressure"]
-           :let [state (condition node pressure)]
-           :when (= "True" (:status state))]
+           condition (-> node :status :conditions)
+           :let [type (:type condition)]
+           :when (not= "Ready" type)
+           :when (= "True" (:status condition))]
        {:severity :warning
         :component (kubectl/name-of node)
-        :summary (format "%s is active" pressure)
-        :hint (:message state)})
+        :summary (format "%s is active" type)
+        :hint (:message condition)})
      (for [node nodes
            :when (true? (-> node :spec :unschedulable))]
        {:severity :info
@@ -37,6 +44,6 @@
 
 (def detectives
   [{:name "nodes"
-    :description "Node health: readiness, memory/disk/PID pressure, cordoned nodes"
+    :description "Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
     :requires ["nodes"]
     :detect detect-node-problems}])
