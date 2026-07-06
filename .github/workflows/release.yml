@@ -33,7 +33,7 @@ jobs:
         uses: metio/ci/needs-release@afbf10fe3c5ceb438a1da090e78cc6c0159c4754 # 2026.7.5093733
         with:
           paths: libraries runbooks playbooks firebooks examples casebook-example dev bb.edn deps.edn flake.nix flake.lock gumshoe detect run investigate README.md
-      - uses: ./.github/actions/nix-devshell
+      - uses: metio/nix-devshell@1976169d4c51b321be318ade369ccf689849f9f0 # 2026.7.6091757
         if: steps.gate.outputs.needed == 'true'
       - name: Run the book test suite before releasing
         if: steps.gate.outputs.needed == 'true'
