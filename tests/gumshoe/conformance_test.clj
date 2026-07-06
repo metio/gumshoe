@@ -122,3 +122,51 @@
 ;; malformed post-checks are refused at runtime by verify/eventually, which
 ;; has its own tests - a textual rule here would misjudge checks composed via
 ;; helpers like firebook/burning-check
+
+(def ^:private all-clj-files
+  "Every book and library, core and tool-package - scanned statically for both
+   what a tool provides and what a book requires."
+  (vec (mapcat clj-files ["runbooks" "playbooks" "firebooks" "libraries" "tools"])))
+
+(defn- nodes-of
+  "Every node in a file's parsed forms, for structural scans."
+  [file]
+  (tree-seq coll? seq (vec (forms-of file))))
+
+(defn- capabilities-provided
+  "Every capability keyword a tool package registers a detector for, read from the
+   :capabilities map of its plugin/provide! manifest."
+  []
+  (into #{}
+        (for [file all-clj-files
+              node (nodes-of file)
+              :when (and (seq? node)
+                         (symbol? (first node))
+                         (= "provide!" (name (first node)))
+                         (map? (second node))
+                         (map? (:capabilities (second node))))
+              capability (keys (:capabilities (second node)))]
+          capability)))
+
+(defn- capabilities-required
+  "Every capability keyword a file declares under :cluster-capabilities, whether
+   the prerequisites map is inline in the book or a separate def."
+  [file]
+  (into #{}
+        (for [node (nodes-of file)
+              :when (and (map? node) (contains? node :cluster-capabilities))
+              :let [declared (:cluster-capabilities node)]
+              :when (sequential? declared)
+              capability declared
+              :when (keyword? capability)]
+          capability)))
+
+(deftest every-required-capability-is-provided
+  ;; A book's :cluster-capabilities is checked at runtime against the cluster's
+  ;; env.edn labels; a capability no tool package provides a detector for is a
+  ;; typo or a stale name the prerequisite check could never satisfy anywhere.
+  (let [provided (capabilities-provided)]
+    (doseq [file all-clj-files
+            :let [unknown (remove provided (capabilities-required file))]]
+      (is (empty? unknown)
+          (format "%s requires capabilities no tool package provides: %s" file (vec unknown))))))
