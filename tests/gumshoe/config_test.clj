@@ -91,7 +91,12 @@
     (is (empty? (config/known-clusters {}))))
   (testing "a :clusters written as a bare string is one cluster, not a seq of characters"
     (is (= ["kube.example.org"]
-           (config/known-clusters {:clusters "kube.example.org"})))))
+           (config/known-clusters {:clusters "kube.example.org"}))))
+  (testing "a :select cluster set contributes each alias to the allow-list, not the set itself"
+    (is (= #{"kube.example.org" "production" "c2"}
+           (set (config/known-clusters
+                 {:environments {:a {:select {:kubernetes-cluster #{"kube.example.org" "production"}}}
+                                 :b {:select {:kubernetes-cluster "c2"}}}}))))))
 
 (deftest from-answers-capabilities-test
   (testing "detected capabilities land in the environment body"
@@ -107,13 +112,13 @@
   {:production {:select {:kubernetes-cluster "kube.example.org"}
                 :ceph {:mgr-hosts ["prod-mgr"]}
                 :vpn {:interface "wg-prod"}}
-   :staging {:select {:kubernetes-cluster "kube.bastelgenosse.de"}
+   :staging {:select {:kubernetes-cluster "kube.staging.example.org"}
              :ceph {:mgr-hosts ["stg-mgr"]}}})
 
 (deftest select-environment-test
   (testing "the environment is chosen by the cluster signal - select the cluster, get its bundle"
     (is (= :production (config/select-environment two-envs {:kubernetes-cluster "kube.example.org"})))
-    (is (= :staging (config/select-environment two-envs {:kubernetes-cluster "kube.bastelgenosse.de"}))))
+    (is (= :staging (config/select-environment two-envs {:kubernetes-cluster "kube.staging.example.org"}))))
   (testing "no matching cluster (or no signal) selects nothing"
     (is (nil? (config/select-environment two-envs {:kubernetes-cluster "some.other.cluster"})))
     (is (nil? (config/select-environment two-envs {})))
@@ -123,7 +128,14 @@
                 :specific {:select {:kubernetes-cluster "c" :vpn-interface "wg0"}}}]
       (is (= :specific (config/select-environment envs {:kubernetes-cluster "c" :vpn-interface "wg0"})))
       ;; without the extra signal only the broad one still matches
-      (is (= :broad (config/select-environment envs {:kubernetes-cluster "c"}))))))
+      (is (= :broad (config/select-environment envs {:kubernetes-cluster "c"})))))
+  (testing "a :select value that is a set matches any of its aliases"
+    (let [envs {:production {:select {:kubernetes-cluster #{"kube.example.org" "production"}}}
+                :staging {:select {:kubernetes-cluster #{"kube.staging.example.org" "staging"}}}}]
+      (is (= :production (config/select-environment envs {:kubernetes-cluster "kube.example.org"})))
+      (is (= :production (config/select-environment envs {:kubernetes-cluster "production"})))
+      (is (= :staging (config/select-environment envs {:kubernetes-cluster "staging"})))
+      (is (nil? (config/select-environment envs {:kubernetes-cluster "unknown"}))))))
 
 (deftest resolve-value-layering-test
   (let [cfg (assoc {:environments two-envs
@@ -152,11 +164,11 @@
 
 (deftest from-answers-environment-test
   (testing "naming an environment nests it under :environments, tied to its cluster"
-    (is (= {:environments {:staging {:select {:kubernetes-cluster "kube.bastelgenosse.de"}
+    (is (= {:environments {:staging {:select {:kubernetes-cluster "kube.staging.example.org"}
                                      :vpn {:interface "wg0"}
                                      :ceph {:mgr-hosts ["m1"]}}}}
            (config/from-answers {:environment "staging"
-                                 :kubernetes-cluster "kube.bastelgenosse.de"
+                                 :kubernetes-cluster "kube.staging.example.org"
                                  :vpn-interface "wg0" :ceph-mgr-host "m1"}))))
   (testing "no environment name produces a flat config, the cluster selector dropped"
     (is (= {:vpn {:interface "wg0"} :ceph {:mgr-hosts ["m1"]}}
@@ -166,7 +178,7 @@
 (deftest merge-answers-accumulates-environments-test
   (testing "running the wizard once per cluster accumulates rather than overwrites"
     (let [prod (config/from-answers {:environment "production" :kubernetes-cluster "kube.example.org" :ceph-mgr-host "prod-mgr"})
-          stg (config/from-answers {:environment "staging" :kubernetes-cluster "kube.bastelgenosse.de" :ceph-mgr-host "stg-mgr"})
+          stg (config/from-answers {:environment "staging" :kubernetes-cluster "kube.staging.example.org" :ceph-mgr-host "stg-mgr"})
           merged (config/merge-answers prod stg)]
       (is (= #{:production :staging} (set (keys (:environments merged)))))
       (is (= ["prod-mgr"] (get-in merged [:environments :production :ceph :mgr-hosts])))

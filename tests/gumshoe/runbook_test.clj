@@ -60,11 +60,11 @@
       (is (= {:ok? false :label "not connected to any Kubernetes cluster"}
              (run-thunk (cluster-item []))))))
   (testing "a suitable cluster: 'Kubernetes cluster: <name>'"
-    (with-redefs [kubectl/current-cluster (constantly "kube.infra.run")
+    (with-redefs [kubectl/current-cluster (constantly "kube.example.org")
                   config/known-clusters (constantly [])
                   config/env-value (constantly nil)]
       (is (= "connected to a suitable Kubernetes cluster" (first (cluster-item []))))
-      (is (= {:ok? true :label "Kubernetes cluster: kube.infra.run"}
+      (is (= {:ok? true :label "Kubernetes cluster: kube.example.org"}
              (run-thunk (cluster-item [])))))))
 
 (deftest unknown-prerequisite-fails-closed-test

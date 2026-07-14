@@ -92,18 +92,33 @@
   ([config]
    ;; :clusters may be written as a single string; concat would then splice it
    ;; character-by-character into the allow-list, so coerce a bare string to a
-   ;; one-element sequence.
+   ;; one-element sequence. A :select :kubernetes-cluster may itself be a set of
+   ;; aliases (see matches-signals?); splice its members in rather than letting
+   ;; the whole set count as one entry.
    (let [clusters (:clusters config)
-         clusters (if (string? clusters) [clusters] clusters)]
-     (distinct
-      (concat (keep #(get-in % [:select :kubernetes-cluster]) (vals (:environments config)))
-              clusters)))))
+         clusters (if (string? clusters) [clusters] clusters)
+         select-clusters (mapcat (fn [env]
+                                   (let [c (get-in env [:select :kubernetes-cluster])]
+                                     (cond (set? c) c
+                                           (some? c) [c])))
+                                 (vals (:environments config)))]
+     (distinct (concat select-clusters clusters)))))
+
+(defn- signal-matches?
+  "Whether one :select value matches the live signal. A scalar matches on
+   equality; a set matches when it contains the signal - so an environment can
+   list several acceptable names (e.g. a cluster's full name and a short alias)
+   that all resolve to it."
+  [v signal]
+  (if (set? v)
+    (contains? v signal)
+    (= v signal)))
 
 (defn- matches-signals?
   [env signals]
   (let [select (:select env)]
     (and (seq select)
-         (every? (fn [[k v]] (= v (get signals k))) select))))
+         (every? (fn [[k v]] (signal-matches? v (get signals k))) select))))
 
 (defn select-environment
   "Pure: the name of the environment whose :select criteria all match the given
