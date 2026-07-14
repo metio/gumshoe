@@ -63,6 +63,7 @@
                    [gumshoe.mail-test]
                    [gumshoe.announce-test]
                    [gumshoe.mimirtool-test]
+                   [gumshoe.select-test]
                    [gumshoe.mutation-test]
                    [gumshoe.prerequisites-test]
                    [gumshoe.postgres-test]
@@ -136,6 +137,7 @@
                                                          'gumshoe.mail-test
                                                          'gumshoe.announce-test
                                                          'gumshoe.mimirtool-test
+                                                         'gumshoe.select-test
                                                          'gumshoe.mutation-test
                                                          'gumshoe.prerequisites-test
                                                          'gumshoe.postgres-test

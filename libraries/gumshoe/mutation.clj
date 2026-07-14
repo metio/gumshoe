@@ -2,13 +2,13 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.mutation
-  "A declarative shape for the many books that are the same underneath: list a
-   resource, let the operator pick one (or several), then run a confirmed,
-   announced, verified change. Such a book is a map - what to select, what to
-   confirm, the effect plan, the post-checks - and this engine composes it out
-   of gumshoe.interact, gumshoe.flow, and gumshoe.effect. The bespoke pieces (the
-   candidate query, the effect, the checks) stay small, named, and testable;
-   the flow around them is written and tested once, here.
+  "A declarative shape for the many books that are the same underneath: pick a
+   subject, then run a confirmed, announced, verified change against it. Such a
+   book is a map - what to select, what to confirm, the effect plan, the
+   post-checks - and this engine composes it out of gumshoe.select, gumshoe.flow,
+   and gumshoe.effect. The bespoke pieces (the candidate query, the effect, the
+   checks) stay small, named, and testable; the flow around them is written and
+   tested once, here.
 
    Spec:
      {:description   \"...\"
@@ -23,82 +23,83 @@
                :preview \"kubectl describe node {}\"}  ; :one, optional fzf side pane
       :empty-message \"every node is already cordoned\"   ; when nothing to pick
       :confirm  {:action \"...\" :destructive? false}
+      :precondition (fn [ctx] -> bool)            ; optional, re-checked after confirm
       :announce (fn [ctx] -> changelog message)   ; optional
       :effect   (fn [ctx] -> effect plan)
-      :verify   (fn [ctx] -> seq of post-check maps)}   ; optional
+      :verify   (fn [ctx] -> seq of post-check maps)   ; optional
+      :derive   (fn [ctx] -> map)   ; optional, values merged into ctx once so a
+                                    ; per-run value is shared by :effect and :verify
+      :items    (fn [ctx] -> seq)}  ; optional, overrides the confirmation items
 
-   The :announce, :effect, and :verify callbacks each receive one context map,
-   so a book destructures exactly what it needs:
-     {:context .. :cluster .. :target <the pick(s)> :opts <parsed flags>}"
+   The :precondition, :announce, :effect, :verify, :derive and :items callbacks
+   each receive one context map, so a book destructures exactly what it needs:
+     {:context .. :cluster .. :target <the pick(s)> :opts <parsed flags>}
+
+   Three entry points, same spec: `book` is a standalone runbook; `run!` selects
+   the subject and runs it, returning a boolean; `run-on!` runs against a subject
+   already chosen, so a playbook picks once and drives many steps without
+   re-prompting."
   (:require [gumshoe.flow :as flow]
-            [gumshoe.interact :as interact]
+            [gumshoe.select :as select]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.announce :as announce]
             [gumshoe.runbook :as runbook]
             [gumshoe.stdout :as stdout]))
 
-(defn nothing-selected?
-  "Whether the selection is empty for the mode - nil for a single pick, an
-   empty seq for a multi pick."
-  [mode target]
-  (if (= :many mode)
-    (empty? target)
-    (nil? target)))
+(defn run-on!
+  "Runs a mutation spec against an ALREADY-CHOSEN `target`, skipping the spec's own
+   selection, through confirm -> [precondition] -> announce -> execute -> verify.
+   Returns true/false. This is what a playbook calls per step after picking its
+   subject once (e.g. via gumshoe.select/pick), so the operator is not re-prompted
+   for every step. `run!` is this plus selection.
 
-(defn items
-  "The confirmation items for a selection: the picks as a vector."
-  [mode target]
-  (if (= :many mode) (vec target) [target]))
+   `opts` is the parsed CLI flags; `announcement-data` is the value the runbook
+   action receives in its ctx (nil when the book does not announce)."
+  [{:keys [select confirm derive precondition announce effect verify] :as spec}
+   target opts announcement-data]
+  (let [context (kubectl/current-context)
+        cluster (kubectl/current-cluster)
+        base {:context context :cluster cluster :target target
+              :opts opts :announcement-data announcement-data}
+        ctx (merge base (when derive (derive base)))
+        items-fn (:items spec)]
+    (flow/change!
+     {:confirmation {:action (:action confirm)
+                     :target cluster
+                     :items (if items-fn (items-fn ctx) (select/items (:mode select) target))
+                     :destructive? (:destructive? confirm)}
+      :precondition (when precondition #(precondition ctx))
+      :announce! (when announce
+                   #(announce/announce! cluster announcement-data (announce ctx)))
+      :effect (effect ctx)
+      :post-checks (when verify (verify ctx))})))
 
-(defn- select-target
-  [{:keys [mode label candidates flag namespace-flag name-flag preview]} opts context]
-  (let [names (candidates context)]
-    {:candidates names
-     :target (case mode
-               :one (interact/choose-one label names (get opts flag) preview)
-               :many (interact/choose-many label names (get opts flag))
-               :namespaced (interact/choose-namespaced label names
-                                                       (get opts namespace-flag)
-                                                       (get opts name-flag)))}))
+(defn run!
+  "Selects the spec's subject (interactive, honouring the CLI flags) and runs it
+   through run-on!. Returns true when there is nothing to select (its
+   :empty-message is shown), false when the operator picks nothing, otherwise the
+   change's result. Use run! for a single confirmed step; use run-on! to compose
+   several steps against one already-picked subject."
+  [{:keys [select empty-message] :as spec} opts announcement-data]
+  (let [context (kubectl/current-context)
+        {:keys [candidates target]} (select/resolve-target select opts context)]
+    (cond
+      (empty? candidates)
+      (do (stdout/ok (or empty-message "nothing to do")) true)
+
+      (select/nothing-selected? (:mode select) target)
+      (do (stdout/error (format "no %s selected" (:label select))) false)
+
+      :else
+      (run-on! spec target opts announcement-data))))
 
 (defn book
-  "Builds and runs a mutating runbook from a declarative spec.
-
-   Optional hooks beyond the core keys:
-     :derive (fn [ctx] -> map)  values computed once and merged into ctx, so a
-                                per-run value (a random job name) is shared by
-                                :effect and :verify.
-     :items  (fn [ctx] -> seq)  overrides the confirmation items, e.g. to add
-                                a policy or a warning next to each pick."
-  [{:keys [description options prerequisites select empty-message confirm
-           derive announce effect verify] :as spec}]
+  "Builds and runs a standalone mutating runbook from a declarative spec (see the
+   namespace doc). To compose several confirmed steps in one playbook, define each
+   step's spec and call `run!` per step from a bespoke runbook/execute! :action."
+  [{:keys [description options prerequisites] :as spec}]
   (runbook/execute!
    {:description description
     :options (or options {})
     :prerequisites prerequisites
-    :action
-    (fn [opts {:keys [announcement-data]}]
-      (let [context (kubectl/current-context)
-            cluster (kubectl/current-cluster)
-            {:keys [candidates target]} (select-target select opts context)]
-        (cond
-          (empty? candidates)
-          (do (stdout/ok (or empty-message "nothing to do")) true)
-
-          (nothing-selected? (:mode select) target)
-          (do (stdout/error (format "no %s selected" (:label select))) false)
-
-          :else
-          (let [base {:context context :cluster cluster :target target
-                      :opts opts :announcement-data announcement-data}
-                ctx (merge base (when derive (derive base)))
-                items-fn (:items spec)]
-            (flow/change!
-             {:confirmation {:action (:action confirm)
-                             :target cluster
-                             :items (if items-fn (items-fn ctx) (items (:mode select) target))
-                             :destructive? (:destructive? confirm)}
-              :announce! (when announce
-                           #(announce/announce! cluster announcement-data (announce ctx)))
-              :effect (effect ctx)
-              :post-checks (when verify (verify ctx))})))))}))
+    :action (fn [opts {:keys [announcement-data]}] (run! spec opts announcement-data))}))

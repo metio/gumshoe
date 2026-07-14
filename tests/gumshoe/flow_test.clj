@@ -4,7 +4,8 @@
 (ns gumshoe.flow-test
   (:require [clojure.test :refer [deftest is testing]]
             [gumshoe.effect :as effect]
-            [gumshoe.flow :as flow]))
+            [gumshoe.flow :as flow]
+            [gumshoe.interact :as interact]))
 
 (def ^:private valid
   {:confirmation {:action "delete a thing" :target "cluster" :items ["thing"]}
@@ -44,3 +45,19 @@
                                   :post-checks [{:description "x"
                                                  :check (fn [] (reset! checked true) true)}]}))))
       (is (false? @checked) "post-checks must not run during a dry-run"))))
+
+(deftest precondition-gates-the-confirmed-change-test
+  (testing "a precondition that no longer holds aborts after the confirm, before any work"
+    (with-redefs [interact/confirm! (constantly true)]
+      (let [ran (atom false)]
+        (is (false? (flow/change! {:confirmation {:action "drain a node" :target "prod" :items ["node-1"]}
+                                   :precondition (constantly false)
+                                   :execute! (fn [] (reset! ran true) true)})))
+        (is (false? @ran) "the work must not run when the precondition fails"))))
+  (testing "a precondition that holds lets the confirmed change proceed"
+    (with-redefs [interact/confirm! (constantly true)]
+      (let [ran (atom false)]
+        (is (true? (flow/change! {:confirmation {:action "drain a node" :target "prod" :items ["node-1"]}
+                                  :precondition (constantly true)
+                                  :execute! (fn [] (reset! ran true) true)})))
+        (is (true? @ran) "the work runs when the precondition holds")))))

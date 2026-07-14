@@ -54,16 +54,21 @@
     (execute!)))
 
 (defn change!
-  "Runs a change through confirm -> announce -> execute -> verify.
+  "Runs a change through confirm -> [precondition] -> announce -> execute -> verify.
 
    :confirmation  request map for interact/confirm! (:action, :target, :items)
+   :precondition  optional thunk re-checked AFTER the confirm and before any
+                  action, so a change confirmed while the world was safe aborts
+                  cleanly if the world drifted while the operator was deciding
+                  (e.g. the replacement went NotReady before a drain). Returns
+                  truthy to proceed.
    :announce!     optional thunk posting to the changelog
    :effect        a plan of effect data (preferred - composes and dry-runs)
    :execute!      a thunk doing the work, truthy on success (legacy)
    :post-checks   optional seq of verify/eventually maps proving the result
 
    Returns true only when every step succeeded."
-  [{:keys [confirmation announce! execute! effect post-checks] :as config}]
+  [{:keys [confirmation precondition announce! execute! effect post-checks] :as config}]
   (cond
     (not (valid-config? config))
     (do (stdout/error "refusing a malformed change: :confirmation needs a non-blank :action, a :target, and :items, and either an :effect plan or an :execute! function")
@@ -83,6 +88,10 @@
 
     (not (interact/confirm! confirmation))
     false
+
+    (and precondition (not (precondition)))
+    (do (stdout/error "the change was confirmed but its precondition no longer holds - aborting before any action")
+        false)
 
     :else
     (do
