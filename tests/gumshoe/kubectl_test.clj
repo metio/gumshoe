@@ -165,3 +165,31 @@
                       0 1))]
       (is (kubectl/serves-crd? "certificates.cert-manager.io"))
       (is (not (kubectl/serves-crd? "absent.example.com"))))))
+
+(defn- helm-owner? [item] (= "helm" (get-in item [:metadata :labels :owner])))
+
+(deftest get-namespaced-result-distinguishes-empty-from-failed-test
+  (testing "a successful read is ok? with its parsed items"
+    (with-redefs [shell/execute (fn [& _] {:exit 0 :out "{\"items\":[{\"metadata\":{\"name\":\"a\"}}]}"})]
+      (let [r (kubectl/get-namespaced-result "ctx" "ns" "secrets")]
+        (is (true? (:ok? r)))
+        (is (= ["a"] (map kubectl/name-of (:items r)))))))
+  (testing "a genuinely empty read is ok? with no items"
+    (with-redefs [shell/execute (fn [& _] {:exit 0 :out "{\"items\":[]}"})]
+      (let [r (kubectl/get-namespaced-result "ctx" "ns" "secrets")]
+        (is (true? (:ok? r)))
+        (is (empty? (:items r))))))
+  (testing "a FAILED read is not ok? - so it can not be mistaken for empty"
+    (with-redefs [shell/execute (fn [& _] {:exit 1 :out ""})]
+      (is (false? (:ok? (kubectl/get-namespaced-result "ctx" "ns" "secrets")))))))
+
+(deftest confirmed-absent-fails-safe-test
+  (testing "absent is confirmed only when the read succeeded and nothing matches"
+    (with-redefs [shell/execute (fn [& _] {:exit 0 :out "{\"items\":[{\"metadata\":{\"labels\":{\"owner\":\"db-operator\"}}}]}"})]
+      (is (true? (kubectl/confirmed-absent? "ctx" "ns" "secrets" helm-owner?)))))
+  (testing "a matching item means NOT absent"
+    (with-redefs [shell/execute (fn [& _] {:exit 0 :out "{\"items\":[{\"metadata\":{\"labels\":{\"owner\":\"helm\"}}}]}"})]
+      (is (false? (kubectl/confirmed-absent? "ctx" "ns" "secrets" helm-owner?)))))
+  (testing "a failed read is NEVER 'confirmed absent' (the whole point)"
+    (with-redefs [shell/execute (fn [& _] {:exit 1 :out ""})]
+      (is (false? (kubectl/confirmed-absent? "ctx" "ns" "secrets" (constantly false)))))))

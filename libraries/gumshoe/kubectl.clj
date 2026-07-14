@@ -333,6 +333,30 @@
   (parse (shell/stdout-of "kubectl" (str "--context=" context) (str "--namespace=" namespace) request-timeout
                           "get" type "--output=json")))
 
+(defn get-namespaced-result
+  "Like get-namespaced, but returns {:ok? <did the read succeed> :items <seq>}.
+   The plain reads collapse any failure - a throttled API, a network blip, an
+   absent CRD - into the same empty result as 'genuinely nothing there', which is
+   exactly what you must NOT do when gating on an ABSENCE (a transient failure
+   then reads as 'absent' and the gate opens). This keeps the exit status, so a
+   caller can require that the read actually answered before trusting an empty."
+  [context namespace type]
+  (let [{:keys [exit out]} (shell/execute "kubectl" (str "--context=" context)
+                                          (str "--namespace=" namespace) request-timeout
+                                          "get" type "--output=json")]
+    {:ok? (zero? exit) :items (items-of (parse out))}))
+
+(defn confirmed-absent?
+  "True ONLY when a namespaced read succeeds AND no item matches `pred` - the
+   fail-safe way to gate on an absence. A failed or unreachable read returns false
+   (not confirmed), so a gate built on it stays closed on uncertainty instead of
+   treating 'could not read' as 'absent' and acting. Use this instead of
+   (not (some pred (get-namespaced ...))) whenever proceeding on an absence would
+   be destructive."
+  [context namespace type pred]
+  (let [{:keys [ok? items]} (get-namespaced-result context namespace type)]
+    (and ok? (not-any? pred items))))
+
 (defn container-names
   [pod]
   (mapv :name (-> pod :spec :containers)))
