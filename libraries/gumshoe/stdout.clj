@@ -188,17 +188,21 @@
     (err-println (color-fn (str "  " text)))
     (err-println (color-fn line))))
 
+;; The status marks are ANSI-colored like the check-ok/check-error ticks, so a
+;; terminal that renders the ✅/❌/🔶 emoji monochrome still shows green/red/yellow.
+;; colorize honors --no-color / NO_COLOR and the ASCII theme, so this is a no-op
+;; when color is off.
 (defn ok
   [& parts]
-  (err-println (theme/token :ok) (str/join " " parts)))
+  (err-println (green (theme/token :ok)) (str/join " " parts)))
 
 (defn error
   [& parts]
-  (err-println (theme/token :error) (str/join " " parts)))
+  (err-println (red (theme/token :error)) (str/join " " parts)))
 
 (defn warn
   [& parts]
-  (err-println (theme/token :warn) (str/join " " parts)))
+  (err-println (yellow (theme/token :warn)) (str/join " " parts)))
 
 (defn check-ok
   [& parts]
