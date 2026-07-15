@@ -43,6 +43,15 @@
         (interact/choose-one "Node" ["worker-2" "worker-1"] "worker")
         (is (= ["worker-1" "worker-2"] (second (first @calls))))))))
 
+(deftest choose-one-echoes-selection-test
+  (testing "a resolved pick is echoed to the terminal so the transcript shows it"
+    (let [err (java.io.StringWriter.)]
+      (binding [*err* err]
+        (interact/choose-one "Namespace" ["moodle-a" "moodle-b"] "moodle-a"))
+      (is (re-find #"Namespace" (str err)))
+      (is (re-find #"moodle-a" (str err))
+          "the chosen value appears on stderr, not only in selections.edn"))))
+
 (deftest choose-many-test
   (testing "returns nil when there is nothing to choose from"
     (is (nil? (interact/choose-many "Certificate" [] ["a"]))))

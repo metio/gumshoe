@@ -23,11 +23,24 @@
   []
   @selections)
 
-(defn- record-selection!
+(defn- record-only!
+  "Appends a resolved selection to the run's audit list without echoing it - for a
+   selection that already has its own visible output (a confirmation prints a
+   banner and the approve/abort verdict)."
   [label value]
   (when (some? value)
     (swap! selections conj {:label label :value value}))
   value)
+
+(defn- record-selection!
+  "Records a resolved selection and echoes it to the terminal, so an interactive
+   fuzzy pick leaves a visible trace in the run's transcript - not only in the
+   recording's selections.edn. Returns the value so it composes in a threading
+   position."
+  [label value]
+  (when (some? value)
+    (stdout/selected label value))
+  (record-only! label value))
 
 (defn ask-text
   "Prompts for a free-text value. The question is always printed to the terminal
@@ -146,7 +159,7 @@
                    (ui/backend :confirm) ((ui/backend :confirm))
                    (command/installed? "gum") (gum-yes?)
                    :else (typed-yes?))]
-    (record-selection! (str "confirm: " (:action request)) (if approved "approved" "aborted"))
+    (record-only! (str "confirm: " (:action request)) (if approved "approved" "aborted"))
     (or approved
         (do (stdout/error "aborted, nothing was changed")
             false))))

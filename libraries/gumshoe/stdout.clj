@@ -212,6 +212,17 @@
   [& parts]
   (err-println (str "  " (red (theme/token :check-error))) (str/join " " parts)))
 
+(defn selected
+  "Echoes a resolved selection - the label and what was chosen - to the terminal.
+   An interactive fuzzy pick otherwise leaves no trace in the run's visible output,
+   only in the recording's selections.edn, so a copy-pasted transcript cannot show
+   which subject the run acted on. Diagnostic, so it joins the other chatter on
+   stderr; a multi-pick collection is rendered comma-separated."
+  [label value]
+  (err-println (blue (theme/token :bullet))
+               (str (bold label) ":")
+               (green (if (coll? value) (str/join ", " value) (str value)))))
+
 (defn data-table
   "Formats key/value data as aligned lines, preserving insertion order."
   [data]
