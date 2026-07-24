@@ -9,6 +9,7 @@
   test {:doc "Runs all unit tests"
         :extra-paths ["tests" "examples" "tools/flux/tests" "tools/ceph/tests" "tools/certmanager/tests" "tools/gateway/tests" "tools/cnpg/tests" "tools/stageset/tests" "tools/prometheus/tests" "tools/calico/tests" "tools/opennebula/tests" "tools/upload/tests" "tools/matrix/tests" "tools/restic/tests" "tools/thanos/tests" "tools/loki/tests" "tools/db-operator/tests" "tools/external-dns/tests"]
         :requires ([clojure.test :as test]
+                   [gumshoe.apiversions-test]
                    [gumshoe.backups-test]
                    [gumshoe.catalog-test]
                    [gumshoe.main-test]
