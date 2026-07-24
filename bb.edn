@@ -83,7 +83,8 @@
                    [gumshoe.external-dns-test]
                    [gumshoe.utils-test]
                    [gumshoe.verify-test])
-        :task (let [{:keys [fail error]} (test/run-tests 'gumshoe.backups-test
+        :task (let [{:keys [fail error]} (test/run-tests 'gumshoe.apiversions-test
+                                                         'gumshoe.backups-test
                                                          'gumshoe.catalog-test
                                                          'gumshoe.main-test
                                                          'gumshoe.ceph-test

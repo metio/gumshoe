@@ -92,7 +92,13 @@
     ;; that ticks each one off as it lands - so a slow fetch reads as progress,
     ;; not a stall.
     (let [labelled (mapv (fn [type]
-                           [type (future (try (kubectl/get-all context type)
+                           ;; every evidence key resolves to a collector through
+                           ;; the registry; a plain resource type gets the get-all
+                           ;; default, a key like "api-resources" gets its
+                           ;; registered collector - one uniform seam, no special
+                           ;; case, so a custom-evidence detective composes into
+                           ;; any scan.
+                           [type (future (try ((registry/collector-for type) context type)
                                               (catch Exception _ nil)))])
                          types)
           results (progress/watch-futures! labelled)]

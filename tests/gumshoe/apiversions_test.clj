@@ -4,7 +4,16 @@
 (ns gumshoe.apiversions-test
   (:require [clojure.test :refer [deftest is testing]]
             [gumshoe.apiversions :as apiversions]
-            [gumshoe.detectives.apiversions :as detectives]))
+            [gumshoe.detectives.apiversions :as detectives]
+            [gumshoe.detectives.registry :as registry]))
+
+(deftest collector-seam-test
+  (testing "a plain resource type resolves to the shared get-all default"
+    (is (identical? (registry/collector-for "pods")
+                    (registry/collector-for "services"))))
+  (testing "api-resources has its own collector, distinct from the default"
+    (is (not (identical? (registry/collector-for "api-resources")
+                         (registry/collector-for "pods"))))))
 
 (def ^:private api-resources-sample
   ;; --no-headers output: rows with and without SHORTNAMES, core and grouped.
@@ -42,8 +51,8 @@
                       (crd "notification.toolkit.fluxcd.io" "providers" [["v1beta3" true]])
                       (crd "notification.toolkit.fluxcd.io" "receivers" [["v1" true]])]}]
     (testing "advertised version the CRD no longer serves is a critical finding"
-      (let [evidence {"crds" crds
-                      "advertised" (apiversions/parse-api-resources api-resources-sample)}
+      (let [evidence {"customresourcedefinitions" crds
+                      "api-resources" (apiversions/parse-api-resources api-resources-sample)}
             findings (detectives/detect-version-drift evidence)]
         (is (= 2 (count findings)))
         (is (every? #(= :critical (:severity %)) findings))
@@ -54,7 +63,7 @@
     (testing "when discovery agrees with the CRD, nothing is flagged"
       (let [agrees (str "alerts     notification.toolkit.fluxcd.io/v1beta3   true   Alert\n"
                         "receivers  notification.toolkit.fluxcd.io/v1        true   Receiver\n")
-            evidence {"crds" crds "advertised" (apiversions/parse-api-resources agrees)}]
+            evidence {"customresourcedefinitions" crds "api-resources" (apiversions/parse-api-resources agrees)}]
         (is (empty? (detectives/detect-version-drift evidence)))))
     (testing "a resource discovery does not list at all is not a drift (nothing to compare)"
-      (is (empty? (detectives/detect-version-drift {"crds" crds "advertised" {}}))))))
+      (is (empty? (detectives/detect-version-drift {"customresourcedefinitions" crds "api-resources" {}}))))))

@@ -5,28 +5,17 @@
   "Investigates CRD version discovery: resources whose API-server-advertised
    version has drifted from what their CRD actually serves - stale aggregated
    discovery that makes clients 404 healthy objects and Flux health-checks hang."
-  (:require [gumshoe.apiversions :as apiversions]
-            [gumshoe.detective :as detective]
-            [gumshoe.detectives.apiversions :as detectives]
-            [gumshoe.kubectl :as kubectl]
-            [gumshoe.runbook :as runbook]))
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.apiversions :as detectives]))
 
-(runbook/execute!
+(detective/book
  {:description "Investigates CRD discovery drift: served versions vs what the API server advertises"
-  :options detective/output-option
+  :when-to-run (str "Reach for this when a GitOps stage hangs in health-check reporting NotFound, "
+                    "or kubectl 404s a resource whose CRD clearly serves it. It catches stale "
+                    "aggregated discovery after a controller upgrade changed a CRD's served versions: "
+                    "the objects are fine and apply works, but every client that resolves the kind "
+                    "through discovery asks for a version the CRD no longer serves.")
+  :detectives detectives/detectives
   :prerequisites {:installed-tools ["kubectl"]
-                  :cluster-capabilities []}
-  :announce? false
-  :action (fn [opts _ctx]
-            (detective/when-to-run!
-             (str "Reach for this when a GitOps stage hangs in health-check reporting NotFound, "
-                  "or kubectl 404s a resource whose CRD clearly serves it. It catches stale "
-                  "aggregated discovery after a controller upgrade changed a CRD's served versions: "
-                  "the objects are fine and apply works, but every client that resolves the kind "
-                  "through discovery asks for a version the CRD no longer serves."))
-            (let [context (kubectl/current-context)]
-              (detective/report!
-               detectives/detectives
-               (detective/run-detectives detectives/detectives
-                                         (apiversions/collect-evidence! context))
-               (:output opts "text"))))})
+                  :cluster-capabilities []
+                  :kubectl-can-get ["customresourcedefinitions"]}})
