@@ -21,8 +21,8 @@
 (defn detect-version-drift
   "One critical per resource whose advertised version the CRD does not serve."
   [evidence]
-  (let [advertised (get evidence "advertised")]
-    (for [crd (kubectl/items-of (get evidence "crds"))
+  (let [advertised (get evidence "api-resources")]
+    (for [crd (kubectl/items-of (get evidence "customresourcedefinitions"))
           :let [group (-> crd :spec :group)
                 plural (-> crd :spec :names :plural)
                 served (served-version-names crd)
@@ -43,7 +43,9 @@
 (def detectives
   [{:name "version-drift"
     :description "CRDs whose discovery-advertised version is not one the CRD serves (stale aggregated discovery)"
-    ;; evidence is supplied by gumshoe.apiversions/collect-evidence!, so nothing
-    ;; is fetched through the standard get-all path.
-    :requires []
+    ;; "customresourcedefinitions" is a plain get; "api-resources" is a custom
+    ;; evidence source (registry/register-evidence-source!) backed by
+    ;; `kubectl api-resources`. Listing both lets this detective compose into the
+    ;; platform scan on the standard collector.
+    :requires ["customresourcedefinitions" "api-resources"]
     :detect detect-version-drift}])

@@ -13,7 +13,6 @@
 
    The detect fns stay pure over this evidence."
   (:require [clojure.string :as str]
-            [gumshoe.kubectl :as kubectl]
             [gumshoe.shell :as shell]))
 
 (defn parse-api-resources
@@ -35,12 +34,11 @@
                                       ["" apiversion])]]
           [[group plural] version])))
 
-(defn collect-evidence!
-  "The CRDs (their real served versions) and the discovery view (the version the
-   API server advertises per resource), keyed for the detect fns."
+(defn advertised-versions
+  "The discovery view: {[group plural] version} the API server advertises per
+   resource. Registered as the custom evidence source for the \"api-resources\"
+   key, so the standard collector can supply it to a composed scan."
   [context]
-  {:now (java.time.Instant/now)
-   "crds" (kubectl/get-all context "customresourcedefinitions")
-   "advertised" (parse-api-resources
-                 (shell/stdout-of "kubectl" (str "--context=" context)
-                                  "api-resources" "--no-headers"))})
+  (parse-api-resources
+   (shell/stdout-of "kubectl" (str "--context=" context)
+                    "api-resources" "--no-headers")))

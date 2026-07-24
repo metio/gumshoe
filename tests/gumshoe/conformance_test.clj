@@ -170,3 +170,34 @@
             :let [unknown (remove provided (capabilities-required file))]]
       (is (empty? unknown)
           (format "%s requires capabilities no tool package provides: %s" file (vec unknown))))))
+
+;; A *_test.clj file is loaded via the bb.edn `test` task's :requires (so it
+;; compiles) but only actually RUNS if its namespace is also in the run-tests
+;; call. A ns in :requires but not in that list is silently compiled-but-never-
+;; run - the test passes because it never executes. This check keeps the two in
+;; step: every test namespace on disk must appear in the run-tests list.
+
+(def ^:private test-files
+  (vec (concat (map str (fs/glob "tests" "**_test.clj"))
+               (map str (fs/glob "examples" "**_test.clj"))
+               (map str (fs/glob "tools" "*/tests/**_test.clj")))))
+
+(def ^:private run-list
+  "The namespaces bb.edn's `test` task passes to run-tests (the quoted `-test`
+   symbols), which is what actually decides whether a test runs."
+  (into #{} (map (comp symbol second))
+        (re-seq #"'([a-zA-Z0-9._-]+-test)" (slurp "bb.edn"))))
+
+(defn- ns-name-of
+  "The namespace a file declares, read straight from its (ns …) form. A regex,
+   not a full parse, so a test file using reader syntax edamame rejects (a #'var
+   literal, say) does not break this check."
+  [file]
+  (some-> (re-find #"\(ns\s+([a-zA-Z0-9._-]+)" (slurp file)) second symbol))
+
+(deftest every-test-namespace-is-in-the-run-list
+  (doseq [file test-files
+          :let [ns-sym (ns-name-of file)]]
+    (is (contains? run-list ns-sym)
+        (format "%s (%s) is not in bb.edn's test run-tests list -- it compiles but never runs; add '%s to the run-tests call"
+                file ns-sym ns-sym))))
