@@ -214,24 +214,39 @@ it. They compose from single domain to full cluster:
 bb runbooks/detectives/cluster.clj        # everything
 bb runbooks/detectives/workloads.clj      # controllers, jobs, pods, storage
 bb runbooks/detectives/platform.clj       # nodes + calico
-bb runbooks/detectives/gitops.clj         # flux sources + reconciliation
 bb runbooks/detectives/databases.clj      # CloudNativePG + db-operator
 bb runbooks/detectives/observability.clj  # Prometheus, Alertmanager, Thanos
 bb runbooks/detectives/events.clj         # Warning events, last hour
 bb runbooks/detectives/rbac.clj           # admins, wildcards, secret readers
 bb runbooks/detectives/security.clj       # RBAC + pod security + NetPol
 bb runbooks/detectives/dns.clj            # nameservers, SOA replication
-bb runbooks/detectives/external_dns.clj   # declared hostnames resolve
-bb runbooks/detectives/gateway_api.clj    # Gateways, listeners, HTTPRoutes
 bb runbooks/detectives/mail.clj           # MX/SPF/DKIM/DMARC/rDNS + TLS
-bb runbooks/detectives/matrix.clj         # client/federation APIs, keys
-bb runbooks/detectives/thanos.clj         # Thanos Query: stores, rules
-bb runbooks/detectives/loki.clj           # Loki readiness + ring health
-bb runbooks/detectives/upload_limits.clj -n moodle    # nginx/php-fpm uploads
-bb runbooks/detectives/restic.clj -r s3:backups     # backups landing or stale?
-bb runbooks/detectives/opennebula.clj --frontend one-fe   # hosts, VMs, stores
 ./detect                                  # interactive: pick what hurts
 bb runbooks/detectives/cluster.clj --output json    # machine-readable, jq-able
+```
+
+Each [tool package](#casebooks--plugins) brings a scan of the one system it
+knows, and registers its detectives into the composed scopes above - so
+`platform` already covers calico and `databases` already covers CloudNativePG.
+Reach for the focused scan when you know which system is in trouble:
+
+```shell
+bb tools/flux/runbooks/gitops.clj         # flux sources + reconciliation
+bb tools/stageset/runbooks/scan.clj       # StageSet staged rollouts
+bb tools/jaas/runbooks/scan.clj           # JaaS snippets + published artifacts
+bb tools/certmanager/runbooks/scan.clj    # certificates, sour ACME orders
+bb tools/gateway/runbooks/scan.clj        # Gateways, listeners, HTTPRoutes
+bb tools/external-dns/runbooks/scan.clj   # declared hostnames resolve
+bb tools/calico/runbooks/scan.clj         # tigera-operator components
+bb tools/cnpg/runbooks/scan.clj           # CloudNativePG clusters, WAL archiving
+bb tools/prometheus/runbooks/scan.clj     # Prometheus, Alertmanager, ThanosRuler
+bb tools/thanos/runbooks/scan.clj         # Thanos Query: stores, rules
+bb tools/loki/runbooks/scan.clj           # Loki readiness + ring health
+bb tools/matrix/runbooks/scan.clj         # client/federation APIs, keys
+bb tools/upload/runbooks/scan.clj -n moodle             # nginx/php-fpm uploads
+bb tools/restic/runbooks/scan.clj -r s3:backups         # backups landing or stale?
+bb tools/opennebula/runbooks/scan.clj --frontend one-fe # hosts, VMs, datastores
+bb tools/ceph/runbooks/scan.clj --host mgr-1            # health, OSDs, PGs, quorum
 ```
 
 Diagnostics go to stderr and results go to stdout, so `--output json | jq
@@ -254,10 +269,12 @@ events. The findings map onto the canonical
 (KubeControllerManagerDown, KubeQuotaFullyUsed, KubeCPUOvercommit, and so on)
 but are read straight from the cluster, so they need no metrics backend.
 
-New detectives are plain data in `libraries/gumshoe/detectives/`: a name, the
-resource types they need, and a pure `detect` function from evidence to
-findings. Register them in `registry.clj` and they join every composed
-investigation automatically.
+New detectives are plain data: a name, the resource types they need, and a pure
+`detect` function from evidence to findings. A detective about the cluster
+itself lives in `libraries/gumshoe/detectives/` and is registered in
+`registry.clj`; one about a particular operator belongs in that tool's package,
+declared under `:detectives` in its `plugin/provide!`. Either way it joins every
+composed investigation automatically.
 
 ## Ceph
 
@@ -268,13 +285,13 @@ bootstrap binary, `--cephadm-shell` wraps every command in `sudo cephadm shell
 -- ...` instead. Nothing is assumed about the host OS beyond ssh.
 
 ```shell
-bb runbooks/ceph/status.clj --host mgr-1          # status + health detail
-bb runbooks/detectives/ceph.clj --host mgr-1      # health, OSDs, PGs, quorum
-bb runbooks/ceph/archive_crashes.clj --host mgr-1 # ack inspected crash reports
-bb runbooks/ceph/restart_daemon.clj --host mgr-1 --daemon osd.3
-bb runbooks/ceph/osd_out.clj --host mgr-1 --osd 3   # data migrates away
-bb runbooks/ceph/osd_in.clj --host mgr-1 --osd 3    # data migrates back
-bb playbooks/ceph/upgrade.clj --host mgr-1 --target-version 17.2.9  # upgrade
+bb tools/ceph/runbooks/status.clj --host mgr-1          # status + health detail
+bb tools/ceph/runbooks/scan.clj --host mgr-1            # health, OSDs, PGs, quorum
+bb tools/ceph/runbooks/archive_crashes.clj --host mgr-1 # ack inspected crash reports
+bb tools/ceph/runbooks/restart_daemon.clj --host mgr-1 --daemon osd.3
+bb tools/ceph/runbooks/osd_out.clj --host mgr-1 --osd 3 # data migrates away
+bb tools/ceph/runbooks/osd_in.clj --host mgr-1 --osd 3  # data migrates back
+bb tools/ceph/playbooks/upgrade.clj --host mgr-1 --target-version 17.2.9  # upgrade
 ```
 
 SSH runs unattended (BatchMode, short connect timeout) with strict host key
@@ -300,7 +317,7 @@ Playbooks chain runbooks and detectives into full procedures.
 and drains the node, waits while you do the maintenance, uncordons, and verifies
 node health with the detectives.
 
-`playbooks/ceph/upgrade.clj` upgrades a cephadm-managed ceph cluster: preflight
+`tools/ceph/playbooks/upgrade.clj` upgrades a cephadm-managed ceph cluster: preflight
 (refusing on HEALTH_ERR), local backups of the config/osd/fs/crush/auth dumps
 (it refuses to proceed if any backup is empty - the safety net lives on your
 machine, not the cluster being changed), then `ceph orch upgrade start`,
