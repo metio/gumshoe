@@ -8,6 +8,7 @@
    the provide! below. The only other namespaces it needs are the helpers used to
    build values (a prerequisite item, a drill-down subject)."
   (:require [gumshoe.command :as command]
+            [gumshoe.kubectl :as kubectl]
             [gumshoe.plugin :as plugin]
             [gumshoe.prerequisites :as prerequisites]
             [gumshoe.subject :as subject]))
@@ -77,6 +78,19 @@
                            :subject (subject/subject "Pod"
                                                      (get-in object [:metadata :namespace])
                                                      (get-in object [:spec :pod]))}])}}
+
+  ;; The other half of the traversal: an edge only the cluster can answer. The
+  ;; pure :edges above read the object in hand; this one asks which pods carry the
+  ;; widget's label, which nothing about the WidgetSet itself can say. Isolated
+  ;; and capped by the engine, so a query against an unreachable apiserver costs
+  ;; these edges and nothing more.
+  :fetched-edges
+  {"WidgetSet"
+   (fn [context {:keys [namespace name]} _object]
+     (for [pod (kubectl/items-of (kubectl/get-selected context "pods" (str "widget-set=" name)))
+           :when (= namespace (kubectl/namespace-of pod))]
+       {:relation "widget pod"
+        :subject (subject/subject "Pod" namespace (kubectl/name-of pod))}))}
 
   ;; A report format selected with --output tally: one line per severity, the
   ;; shape a CI job greps. Real plugins add sarif or junit the same way.

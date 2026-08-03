@@ -44,6 +44,7 @@
      :prerequisites {:change-window (fn [value opts] items)}            ; a custom gate type
      :probes        [probe …]                                           ; a drill-down action
      :kinds         {\"HelmRelease\" {:type \"…\" :edges (fn [object] …)}} ; a CRD drill-down target
+     :fetched-edges {\"StageSet\" (fn [context subject object] …)}        ; edges only the cluster can answer
      :facts         {\"PersistentVolume\" (fn [pv] [[\"ceph pool\" …]])}    ; extra drill-down facts for a kind
      :resize-watchers   [(fn [signals] …)]                              ; a log source for storage resizes
      :resize-preflights [(fn [context] …)]                              ; a fail-closed resize safety check
@@ -54,7 +55,7 @@
 
    Order within the map does not matter; registrations are independent."
   [{:keys [announcers detectives capabilities tools summary-providers themes
-           pre-hooks post-hooks secrets prerequisites probes kinds
+           pre-hooks post-hooks secrets prerequisites probes kinds fetched-edges
            resize-watchers resize-preflights ui facts report-formats effect-types]}]
   (doseq [[type f] announcers] (announce/register-announcer! type f))
   (doseq [[scope ds] detectives] (detectives/register! scope ds))
@@ -68,6 +69,7 @@
   (doseq [[k f] prerequisites] (prerequisites/register-check! k f))
   (doseq [p probes] (investigation/register-probe! p))
   (doseq [[kind spec] kinds] (subject/register-kind! kind spec))
+  (doseq [[kind builder] fetched-edges] (investigation/register-fetched-edges! kind builder))
   (doseq [[kind contributor] facts] (subject/register-facts! kind contributor))
   (doseq [b resize-watchers] (watch/register-resize-watcher! b))
   (doseq [c resize-preflights] (storage/register-resize-preflight! c))

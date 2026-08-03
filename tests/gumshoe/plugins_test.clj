@@ -6,7 +6,10 @@
             [clojure.test :refer [deftest is testing]]
             [gumshoe.announce :as announce]
             [gumshoe.detectives.registry :as registry]
-            [gumshoe.plugins :as plugins]))
+            [gumshoe.investigation :as investigation]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.plugins :as plugins]
+            [gumshoe.subject :as subject]))
 
 (deftest load!-test
   (testing "an empty plugin list does nothing and never throws"
@@ -29,4 +32,14 @@
     (is (some? (get-method announce/announce-via :example))
         "a new announcer type is registered")
     (is (some #(= "example-check" (:name %)) (registry/for-scope :workloads))
-        "a detective joined the workloads scope, so a workloads scan now includes it")))
+        "a detective joined the workloads scope, so a workloads scan now includes it")
+    (is (= "widgetsets.acme.example" (subject/kind->type "WidgetSet"))
+        "a CRD became a drill-down subject")
+    (is (contains? (set (map :relation
+                             (with-redefs [kubectl/get-selected
+                                           (fn [_ _ _]
+                                             {:items [{:metadata {:namespace "apps" :name "widget-1"}}]})]
+                               (investigation/plugin-fetched-edges
+                                "ctx" (subject/subject "WidgetSet" "apps" "widgets") {}))))
+                   "widget pod")
+        "a cluster-querying edge builder joined the drill-down")))
