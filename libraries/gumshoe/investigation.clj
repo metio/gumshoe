@@ -299,24 +299,64 @@
        {:relation "exposed by"
         :subject (subject/subject "Ingress" (kubectl/namespace-of ingress) (kubectl/name-of ingress))}))))
 
+(defonce ^:private extra-fetched-edges (atom {}))
+
+(defn register-fetched-edges!
+  "Registers an edge builder for a kind that has to ASK the cluster:
+   (fn [context subject object] -> seq of {:relation \"...\" :subject <subject>}).
+
+   The pure builder on register-kind! covers everything derivable from the object
+   in hand. This is for the rest - a reverse lookup, a label query, anything only
+   the apiserver can answer. A StageSet reaching its StageInventories is the
+   shape: a shard's name carries a hash of the (StageSet, stage, shard) tuple, so
+   there is nothing to derive and the cluster has to be asked.
+
+   Several builders may serve one kind; their edges follow the built-in ones in
+   registration order."
+  [kind builder]
+  {:pre [(string? kind) (fn? builder)]}
+  (swap! extra-fetched-edges update kind (fnil conj []) builder))
+
+(defn plugin-fetched-edges
+  "The registered cluster-querying edges for a subject. Each builder is isolated
+   and capped: one that throws - an unreachable apiserver, a CRD this cluster
+   does not serve - costs its own edges and says so, while the rest of the
+   drill-down carries on, and no single builder can bury the trail under a
+   hundred rows."
+  [context {:keys [kind] :as subject} object]
+  (vec
+   (mapcat (fn [builder]
+             (try
+               ;; realized inside the try, so a query that blows up midway
+               ;; through a lazy seq is caught here rather than at the caller
+               (take related-cap (vec (builder context subject object)))
+               (catch Exception e
+                 (stdout/err-println
+                  (stdout/yellow (format "  could not fetch what relates to this %s: %s"
+                                         kind (ex-message e))))
+                 nil)))
+           (get @extra-fetched-edges kind))))
+
 (defn- fetched-edges!
   "Related subjects that need a cluster query: a node's pods, a workload's pods,
-   a service's backends and what fronts it. Unhealthy-first and capped, so a busy
-   node does not bury the trail."
-  [context {:keys [kind namespace name]} object]
-  (case kind
-    "Pod"
-    (for [service (kubectl/items-of (kubectl/get-namespaced context namespace "services"))
-          :when (subject/service-selects-pod? service object)]
-      {:relation "member of" :subject (subject/subject "Service" namespace (kubectl/name-of service))})
-    "Node"
-    (pod-edges-from "hosts pod" (unhealthy-first (kubectl/items-of (kubectl/pods-on-node context name))))
-    ("Deployment" "StatefulSet" "DaemonSet" "ReplicaSet" "Job")
-    (pod-edges-from "pod" (selected-pods context namespace (-> object :spec :selector :matchLabels)))
-    "Service"
-    (concat (exposed-by! context namespace name)
-            (pod-edges-from "backend pod" (selected-pods context namespace (-> object :spec :selector))))
-    []))
+   a service's backends and what fronts it, plus whatever a plugin registered for
+   this kind. Unhealthy-first and capped, so a busy node does not bury the trail."
+  [context {:keys [kind namespace name] :as subject} object]
+  (concat
+   (case kind
+     "Pod"
+     (for [service (kubectl/items-of (kubectl/get-namespaced context namespace "services"))
+           :when (subject/service-selects-pod? service object)]
+       {:relation "member of" :subject (subject/subject "Service" namespace (kubectl/name-of service))})
+     "Node"
+     (pod-edges-from "hosts pod" (unhealthy-first (kubectl/items-of (kubectl/pods-on-node context name))))
+     ("Deployment" "StatefulSet" "DaemonSet" "ReplicaSet" "Job")
+     (pod-edges-from "pod" (selected-pods context namespace (-> object :spec :selector :matchLabels)))
+     "Service"
+     (concat (exposed-by! context namespace name)
+             (pod-edges-from "backend pod" (selected-pods context namespace (-> object :spec :selector))))
+     [])
+   (plugin-fetched-edges context subject object)))
 
 (defn- collapse-replicaset!
   "Rewrites an 'owned by ReplicaSet' edge to its Deployment, so the operator

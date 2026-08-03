@@ -396,7 +396,8 @@ in terms of "plugins", and one can extend the whole engine at the same time:
    :tools         {"amtool"  {:version-command […] :min-version "0.25"}}
    :pre-hooks     [ … ]  :post-hooks [ … ]  :secrets [ … ]  :themes [ … ]
    :prerequisites {:change-window (fn [value opts] …)}
-   :probes        [ … ]  :kinds {"HelmRelease" {:type "…" :edges (fn [o] …)}}})
+   :probes        [ … ]  :kinds {"HelmRelease" {:type "…" :edges (fn [o] …)}}
+   :fetched-edges {"StageSet" (fn [context subject object] …)}})
 ```
 
 Every key is optional; adding a seam adds a key. The per-seam register
@@ -453,7 +454,14 @@ unifying convenience.
   :args (fn [ctx subject] …)})` - offered only when its tools are installed, so
   a tool package brings its probes. A kind teaches the drill-down to traverse a
   CRD: `(subject/register-kind! "HelmRelease" {:type "…" :edges (fn [object]
-  …)})` - a Rollout to its ReplicaSets, a CNPG Cluster to its pods.
+  …)})` - a Rollout to its ReplicaSets, a CNPG Cluster to its pods. Those edges
+  are pure, read off the object in hand. For a relation only the apiserver can
+  answer - a reverse lookup, a label query - there is
+  `(investigation/register-fetched-edges! "StageSet" (fn [context subject object]
+  …))`, which is how a StageSet reaches the StageInventories it applied through:
+  a shard's name carries a hash, so nothing about it can be derived. Such a
+  builder is isolated and capped, so a query against an unreachable apiserver
+  costs its own edges and the drill-down carries on.
 
 [`examples/example/plugin.clj`](examples/example/plugin.clj) is a worked plugin
 that extends *every* seam through one `provide!` call.

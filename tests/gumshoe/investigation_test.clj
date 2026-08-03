@@ -132,3 +132,60 @@
                                     :args (fn [_ _] [])})
     (is (not (some #(= :needs-missing (:key %)) (investigation/applicable-probes "Pod" nil)))))
   (reset! @#'investigation/extra-probes []))
+
+(deftest plugin-fetched-edges-test
+  (testing "a registered builder contributes edges for its kind and no other"
+    (investigation/register-fetched-edges!
+     "TestKind"
+     (fn [context {:keys [namespace name]} object]
+       [{:relation (format "%s/%s/%s via %s" context namespace name (:seen object))
+         :subject (subject/subject "Pod" namespace "related")}]))
+    (let [edges (investigation/plugin-fetched-edges
+                 "kind-ctx" (subject/subject "TestKind" "apps" "thing") {:seen "object"})]
+      (is (= 1 (count edges)))
+      (is (= "kind-ctx/apps/thing via object" (:relation (first edges)))
+          "the builder is handed the context, the subject, and the fetched object")
+      (is (= (subject/subject "Pod" "apps" "related") (:subject (first edges)))))
+    (is (empty? (investigation/plugin-fetched-edges
+                 "ctx" (subject/subject "OtherKind" "apps" "thing") {}))
+        "a kind with no builder contributes nothing")))
+
+(defn- quietly
+  "Runs the thunk with stderr captured, so a builder reporting its own failure
+   does not scribble over the test output."
+  [thunk]
+  (binding [*err* (java.io.StringWriter.)] (thunk)))
+
+(deftest plugin-fetched-edges-isolation-test
+  (testing "a builder that throws costs only its own edges"
+    (investigation/register-fetched-edges!
+     "ThrowingKind" (fn [_ _ _] (throw (ex-info "apiserver unreachable" {}))))
+    (investigation/register-fetched-edges!
+     "ThrowingKind" (fn [_ {:keys [namespace]} _]
+                      [{:relation "survives" :subject (subject/subject "Pod" namespace "ok")}]))
+    (is (= ["survives"]
+           (map :relation (quietly #(investigation/plugin-fetched-edges
+                                     "ctx" (subject/subject "ThrowingKind" "apps" "thing") {}))))
+        "the healthy builder still runs after the broken one")))
+
+(deftest plugin-fetched-edges-lazy-failure-test
+  (testing "a query that blows up midway through a lazy seq is caught, not thrown at the caller"
+    (investigation/register-fetched-edges!
+     "LazyKind" (fn [_ {:keys [namespace]} _]
+                  (map (fn [i]
+                         (if (= 2 i)
+                           (throw (ex-info "connection reset" {}))
+                           {:relation "one" :subject (subject/subject "Pod" namespace (str i))}))
+                       (range 5))))
+    (is (empty? (quietly #(investigation/plugin-fetched-edges
+                           "ctx" (subject/subject "LazyKind" "apps" "thing") {}))))))
+
+(deftest plugin-fetched-edges-cap-test
+  (testing "one builder cannot bury the trail"
+    (investigation/register-fetched-edges!
+     "FloodKind" (fn [_ {:keys [namespace]} _]
+                   (for [i (range 100)]
+                     {:relation "one of many"
+                      :subject (subject/subject "Pod" namespace (str "pod-" i))})))
+    (is (= 12 (count (investigation/plugin-fetched-edges
+                      "ctx" (subject/subject "FloodKind" "apps" "thing") {}))))))
