@@ -10,13 +10,15 @@
    flux lives in the engine any more."
   (:require [gumshoe.investigation :as investigation]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.plugin :as plugin]))
+            [gumshoe.plugin :as plugin]
+            [gumshoe.subject :as subject]))
 
 (def helmrelease-type "helmreleases.helm.toolkit.fluxcd.io")
 (def kustomization-type "kustomizations.kustomize.toolkit.fluxcd.io")
 (def gitrepository-type "gitrepositories.source.toolkit.fluxcd.io")
 (def ocirepository-type "ocirepositories.source.toolkit.fluxcd.io")
 (def helmchart-type "helmcharts.source.toolkit.fluxcd.io")
+(def externalartifact-type "externalartifacts.source.toolkit.fluxcd.io")
 
 (defn- ready-condition
   [resource]
@@ -81,6 +83,28 @@
     :requires [helmchart-type]
     :detect detect-helmchart-problems}])
 
+(defn externalartifact-edges
+  "The RFC-0012 back-pointer: spec.sourceRef names the object that produced this
+   artifact - a renderer, a builder, anything that publishes one. The reference is
+   {apiVersion, kind, name} with no namespace, because a producer publishes into
+   its own namespace, so the edge stays in the artifact's. This is the hop that
+   turns 'the manifests are stale' into 'this object failed to render them'."
+  [artifact]
+  (let [ref (-> artifact :spec :sourceRef)]
+    (when (and (:kind ref) (:name ref))
+      [{:relation "produced by"
+        :subject (subject/subject (:kind ref) (kubectl/namespace-of artifact) (:name ref))}])))
+
+(defn externalartifact-facts
+  [artifact]
+  (let [published (-> artifact :status :artifact)
+        ref (-> artifact :spec :sourceRef)]
+    [["revision" (:revision published)]
+     ["digest" (:digest published)]
+     ["url" (:url published)]
+     ["last update" (:lastUpdateTime published)]
+     ["produced by" (when (:name ref) (format "%s/%s" (:kind ref) (:name ref)))]]))
+
 ;; The flux CLI subcommand for a kind, so a drill-down can ask flux for its status.
 (def ^:private flux-get-kind
   {"HelmRelease" ["helmrelease"]
@@ -100,11 +124,17 @@
 
   ;; The flux CRDs become drill-down subjects (describe/yaml probes work on them);
   ;; edges default to ownerReferences.
-  :kinds {"HelmRelease"   {:type helmrelease-type}
-          "Kustomization" {:type kustomization-type}
-          "GitRepository" {:type gitrepository-type}
-          "OCIRepository" {:type ocirepository-type}
-          "HelmChart"     {:type helmchart-type}}
+  :kinds {"HelmRelease"      {:type helmrelease-type}
+          "Kustomization"    {:type kustomization-type}
+          "GitRepository"    {:type gitrepository-type}
+          "OCIRepository"    {:type ocirepository-type}
+          "HelmChart"        {:type helmchart-type}
+          "ExternalArtifact" {:type externalartifact-type :edges externalartifact-edges}}
+
+  ;; An ExternalArtifact has no phase or replicas, so the generic panel would
+  ;; show only its creation timestamp - what matters is the revision it serves
+  ;; and who produced it.
+  :facts {"ExternalArtifact" externalartifact-facts}
 
   ;; A flux-native probe: reconcile status via the flux CLI, offered only where
   ;; flux is installed. The flux2 `get` syntax is stable across its majors, so
