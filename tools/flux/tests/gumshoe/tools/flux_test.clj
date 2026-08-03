@@ -6,6 +6,7 @@
             [gumshoe.capabilities :as capabilities]
             [gumshoe.command :as command]
             [gumshoe.detectives.registry :as registry]
+            [gumshoe.subject :as subject]
             [gumshoe.tools.flux :as flux]))
 
 (defn- summaries [findings] (set (map :summary findings)))
@@ -35,3 +36,21 @@
     (is (seq (registry/for-scope :gitops)) "the gitops scan is filled by the flux package")
     (is (contains? (set (capabilities/registered)) :flux) "the :flux capability detector")
     (is (= "2.0" (command/tool-min-version "flux")) "the flux CLI tool profile")))
+
+(deftest externalartifact-back-pointer-edge-test
+  (testing "spec.sourceRef walks from an artifact to the object that produced it, in the artifact's namespace"
+    (is (= [{:relation "produced by"
+             :subject (subject/subject "JsonnetSnippet" "apps" "dashboards")}]
+           (flux/externalartifact-edges
+            {:metadata {:namespace "apps" :name "dashboards"}
+             :spec {:sourceRef {:apiVersion "jaas.metio.wtf/v1"
+                                :kind "JsonnetSnippet"
+                                :name "dashboards"}}})))))
+
+(deftest externalartifact-without-back-pointer-test
+  (testing "an artifact whose producer left no back-pointer simply has no edge"
+    (is (empty? (flux/externalartifact-edges
+                 {:metadata {:namespace "apps" :name "orphan"} :spec {}})))))
+
+(deftest externalartifact-is-a-drill-down-subject-test
+  (is (= flux/externalartifact-type (subject/kind->type "ExternalArtifact"))))
