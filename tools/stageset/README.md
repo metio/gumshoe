@@ -16,8 +16,9 @@ multi-stage delivery.
 - **Capability** - `:stageset`, detected from the StageSet CRD.
 - **Drill-down** - `StageSet` and `StageInventory` as subjects, with a per-stage
   `stagesetctl get` status probe.
-- **Runbooks** - `reconcile` (trigger reconciliation, `--update-now` to override
-  the update window) and `promote` (advance a stage held on a manual gate).
+- **Runbooks** - `stageset/reconcile` (trigger reconciliation, `--update-now` to
+  override the update window) and `stageset/promote` (advance a stage held on a
+  manual gate).
 
 ```clojure
 ;; bb.edn

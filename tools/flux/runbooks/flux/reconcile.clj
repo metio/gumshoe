@@ -1,7 +1,7 @@
 ;; SPDX-FileCopyrightText: The gumshoe Authors
 ;; SPDX-License-Identifier: 0BSD
 
-(ns runbooks.kubernetes.helmreleases.reconcile
+(ns runbooks.flux.reconcile
   "Triggers a flux reconciliation of a single HelmRelease."
   (:require [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
