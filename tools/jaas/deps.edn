@@ -1,0 +1,15 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The JaaS tool package (Jsonnet rendered in-cluster into Flux ExternalArtifacts).
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/jaas"}}}
+;; List gumshoe.tools.jaas under env.edn :plugins to join the :gitops scope, teach
+;; the wizard the :jaas capability, and get the drill-down + books.
+;;
+;; The flux package comes along because a snippet's edges end on the
+;; ExternalArtifact it publishes, and that kind - with the back-pointer edge that
+;; walks on to whatever consumes it - is flux's. JaaS is a Flux controller, so a
+;; cluster running it runs source-controller too.
+{:paths ["libraries" "runbooks"]
+ :deps {io.github.metio/gumshoe-core {:local/root "../.."}
+        io.github.metio/gumshoe-flux {:local/root "../flux"}}}
