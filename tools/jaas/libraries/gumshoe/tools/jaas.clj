@@ -141,6 +141,30 @@
       [{:relation "publishes"
         :subject (subject/subject "ExternalArtifact" namespace name)}]))))
 
+(defn library-consumer-edges
+  "The snippets that import this library. A snippet enumerates what it imports,
+   so the forward direction reads off the object; nothing on the library points
+   back, and the answer only exists in the whole snippet list - which is why this
+   asks the cluster. It answers the question worth asking before editing a shared
+   library: who breaks if I change this?
+
+   Snippets from every namespace are considered, because a library reference may
+   cross namespaces when the operator allows it, and the alias each snippet
+   imports under rides in the relation - the same library is often `g` in one
+   snippet and `grafonnet` in another."
+  [context {:keys [namespace name]} _library]
+  (->> (kubectl/items-of (kubectl/get-all context jsonnetsnippet-type))
+       (sort-by (juxt kubectl/namespace-of kubectl/name-of))
+       (mapcat (fn [snippet]
+                 (for [library (declared-libraries snippet)
+                       :when (and (= namespace (:namespace library))
+                                  (= name (:name library)))]
+                   {:relation (format "imported as '%s' by" (:import-path library))
+                    :subject (subject/subject "JsonnetSnippet"
+                                              (kubectl/namespace-of snippet)
+                                              (kubectl/name-of snippet))})))
+       (distinct)))
+
 (defn snippet-facts
   [snippet]
   (let [spec (:spec snippet)
@@ -173,6 +197,10 @@
 
   :kinds {"JsonnetSnippet" {:type jsonnetsnippet-type :edges snippet-edges}
           "JsonnetLibrary" {:type jsonnetlibrary-type}}
+
+  ;; The import graph walks both ways: a snippet's own spec names what it
+  ;; imports, and asking the cluster turns that around into who imports this.
+  :fetched-edges {"JsonnetLibrary" library-consumer-edges}
 
   ;; Neither kind has a phase or replica count, so the generic panel would show
   ;; little beyond the creation timestamp. What an operator wants at a glance is

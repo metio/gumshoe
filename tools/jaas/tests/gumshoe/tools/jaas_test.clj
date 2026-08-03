@@ -5,6 +5,8 @@
   (:require [clojure.test :refer [deftest is testing]]
             [gumshoe.capabilities :as capabilities]
             [gumshoe.detectives.registry :as registry]
+            [gumshoe.investigation :as investigation]
+            [gumshoe.kubectl :as kubectl]
             [gumshoe.subject :as subject]
             [gumshoe.tools.jaas :as jaas]))
 
@@ -116,3 +118,40 @@
 (deftest snippet-is-a-drill-down-subject-test
   (is (= jaas/jsonnetsnippet-type (subject/kind->type "JsonnetSnippet")))
   (is (= jaas/jsonnetlibrary-type (subject/kind->type "JsonnetLibrary"))))
+
+(def ^:private snippets-importing
+  {:items [{:metadata {:namespace "apps" :name "second"}
+            :spec {:libraries [{:kind "JsonnetLibrary" :name "grafonnet"}]}}
+           {:metadata {:namespace "apps" :name "first"}
+            :spec {:libraries [{:kind "JsonnetLibrary" :name "grafonnet" :importPath "g"}]}}
+           {:metadata {:namespace "other" :name "cross"}
+            :spec {:libraries [{:kind "JsonnetLibrary" :name "grafonnet" :namespace "apps"}]}}
+           {:metadata {:namespace "apps" :name "unrelated"}
+            :spec {:libraries [{:kind "JsonnetLibrary" :name "something-else"}]}}
+           {:metadata {:namespace "other" :name "own-library"}
+            :spec {:libraries [{:kind "JsonnetLibrary" :name "grafonnet"}]}}]})
+
+(deftest library-consumer-edges-test
+  (testing "a library reaches every snippet importing it, under the alias each one uses"
+    (with-redefs [kubectl/get-all (fn [_ _] snippets-importing)]
+      (is (= [{:relation "imported as 'g' by"
+               :subject (subject/subject "JsonnetSnippet" "apps" "first")}
+              {:relation "imported as 'grafonnet' by"
+               :subject (subject/subject "JsonnetSnippet" "apps" "second")}
+              {:relation "imported as 'grafonnet' by"
+               :subject (subject/subject "JsonnetSnippet" "other" "cross")}]
+             (jaas/library-consumer-edges
+              "ctx" (subject/subject "JsonnetLibrary" "apps" "grafonnet") {}))
+          "a cross-namespace importer counts; a same-named library in the importer's own namespace does not"))))
+
+(deftest library-with-no-consumers-test
+  (testing "a library nobody imports simply has no edges - the answer, not an error"
+    (with-redefs [kubectl/get-all (fn [_ _] snippets-importing)]
+      (is (empty? (jaas/library-consumer-edges
+                   "ctx" (subject/subject "JsonnetLibrary" "apps" "abandoned") {}))))))
+
+(deftest package-registers-the-library-reverse-lookup-test
+  (with-redefs [kubectl/get-all (fn [_ _] snippets-importing)]
+    (is (= 3 (count (investigation/plugin-fetched-edges
+                     "ctx" (subject/subject "JsonnetLibrary" "apps" "grafonnet") {})))
+        "provide! wired library-consumer-edges into the fetched-edges seam")))
