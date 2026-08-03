@@ -5,6 +5,8 @@
   (:require [clojure.test :refer [deftest is testing]]
             [gumshoe.capabilities :as capabilities]
             [gumshoe.detectives.registry :as registry]
+            [gumshoe.investigation :as investigation]
+            [gumshoe.kubectl :as kubectl]
             [gumshoe.subject :as subject]
             [gumshoe.tools.stageset :as stageset]))
 
@@ -96,3 +98,43 @@
 (deftest stageset-is-a-drill-down-subject-test
   (is (= stageset/stageset-type (subject/kind->type "StageSet")))
   (is (= stageset/stageinventory-type (subject/kind->type "StageInventory"))))
+
+(deftest inventory-edges-ask-the-cluster-by-label-test
+  (testing "shards are found by the stage-set label, scoped to the namespace, and each names its stage"
+    (let [asked (atom nil)]
+      (with-redefs [kubectl/get-selected (fn [context type selector]
+                                           (reset! asked {:context context :type type :selector selector})
+                                           {:items [{:metadata {:namespace "apps" :name "web-second-00-ab12cd34ef"
+                                                                :labels {(keyword stageset/stage-label) "second"}}}
+                                                    {:metadata {:namespace "apps" :name "web-first-00-9f8e7d6c5b"
+                                                                :labels {(keyword stageset/stage-label) "first"}}}
+                                                    {:metadata {:namespace "other" :name "web-first-00-ffffffffff"
+                                                                :labels {(keyword stageset/stage-label) "first"}}}]})]
+        (let [edges (stageset/inventory-edges
+                     "ctx" (subject/subject "StageSet" "apps" "web") {})]
+          (is (= {:context "ctx"
+                  :type stageset/stageinventory-type
+                  :selector "stages.metio.wtf/stage-set=web"}
+                 @asked))
+          (is (= [{:relation "stage 'first' applied via"
+                   :subject (subject/subject "StageInventory" "apps" "web-first-00-9f8e7d6c5b")}
+                  {:relation "stage 'second' applied via"
+                   :subject (subject/subject "StageInventory" "apps" "web-second-00-ab12cd34ef")}]
+                 edges)
+              "sorted by name, and a same-named StageSet in another namespace is not picked up"))))))
+
+(deftest inventory-edges-without-a-stage-label-test
+  (testing "a shard missing its stage label still walks, just without the stage in the relation"
+    (with-redefs [kubectl/get-selected (fn [_ _ _]
+                                         {:items [{:metadata {:namespace "apps" :name "web-first-00-abc"}}]})]
+      (is (= ["applied via"]
+             (map :relation (stageset/inventory-edges
+                             "ctx" (subject/subject "StageSet" "apps" "web") {})))))))
+
+(deftest package-registers-the-inventory-edges-test
+  (with-redefs [kubectl/get-selected (fn [_ _ _]
+                                       {:items [{:metadata {:namespace "apps" :name "web-first-00-abc"}}]})]
+    (is (= ["applied via"]
+           (map :relation (investigation/plugin-fetched-edges
+                           "ctx" (subject/subject "StageSet" "apps" "web") {})))
+        "provide! wired inventory-edges into the fetched-edges seam")))

@@ -14,7 +14,6 @@
    rollout that stalled leads to the artifact behind the stage that stalled it,
    and on to whatever produced that artifact."
   (:require [clojure.string :as str]
-            [gumshoe.investigation :as investigation]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.plugin :as plugin]
             [gumshoe.subject :as subject]))
@@ -22,9 +21,11 @@
 (def stageset-type "stagesets.stages.metio.wtf")
 (def stageinventory-type "stageinventories.stages.metio.wtf")
 
-;; The label the controller stamps on every StageInventory with its owning
-;; StageSet's name - the only handle on a shard, whose own name carries a hash.
+;; The labels the controller stamps on every StageInventory: its owning StageSet
+;; and the stage it records. They are the only handle on a shard, whose own name
+;; carries a hash of the (StageSet, stage, shard) tuple.
 (def stage-set-label "stages.metio.wtf/stage-set")
+(def stage-label "stages.metio.wtf/stage")
 
 ;; A Ready=False reason says how loud the finding should be: hard failures are
 ;; critical, gated or budget-frozen states are warnings, and states that just mean
@@ -120,6 +121,21 @@
             [(source-edge "migrations from" namespace
                           (-> stageset :spec :migrationsSourceRef :sourceRef))])))))
 
+(defn inventory-edges
+  "The StageInventories a StageSet applied through, labelled with the stage each
+   one records. Nothing about them can be derived from the StageSet - a shard's
+   name is hashed - so this asks the cluster by label, and answers 'what did this
+   actually apply' by making every shard a subject you can walk into."
+  [context {:keys [namespace name]} _stageset]
+  (->> (kubectl/get-selected context stageinventory-type (str stage-set-label "=" name))
+       (kubectl/items-of)
+       (filter #(= namespace (kubectl/namespace-of %)))
+       (sort-by kubectl/name-of)
+       (map (fn [inventory]
+              (let [stage (get-in inventory [:metadata :labels (keyword stage-label)])]
+                {:relation (if stage (format "stage '%s' applied via" stage) "applied via")
+                 :subject (subject/subject "StageInventory" namespace (kubectl/name-of inventory))})))))
+
 (defn stageset-facts
   [stageset]
   (let [status (:status stageset)
@@ -136,17 +152,8 @@
   :kinds {"StageSet" {:type stageset-type :edges stageset-edges}
           "StageInventory" {:type stageinventory-type}}
   :facts {"StageSet" stageset-facts}
+  :fetched-edges {"StageSet" inventory-edges}
   :probes [{:key :stageset-status :label "🎬 StageSet per-stage progress"
             :kinds #{"StageSet"} :tools ["stagesetctl"]
             :args (fn [_context {:keys [namespace name]}]
-                    ["stagesetctl" "get" name (str "--namespace=" namespace)])}
-           ;; A StageSet's inventories are found by label, which an edge (pure
-           ;; over the object) can not do - the shard names are hashed, so there
-           ;; is nothing to derive. A probe asks the cluster instead, and answers
-           ;; "what did this actually apply" without leaving the drill-down.
-           {:key :stageset-inventories :label "📒 StageInventories of this StageSet"
-            :kinds #{"StageSet"} :tools ["kubectl"]
-            :args (fn [context {:keys [namespace name]}]
-                    (investigation/with-context
-                     context namespace "get" stageinventory-type
-                     (str "--selector=" stage-set-label "=" name)))}]})
+                    ["stagesetctl" "get" name (str "--namespace=" namespace)])}]})

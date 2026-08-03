@@ -15,7 +15,9 @@ multi-stage delivery.
   cluster-wide scan.
 - **Capability** - `:stageset`, detected from the StageSet CRD.
 - **Drill-down** - `StageSet` and `StageInventory` as subjects, with a per-stage
-  `stagesetctl get` status probe.
+  `stagesetctl get` status probe, edges from each stage to the source it builds
+  from, and edges to the StageInventories the rollout applied through (found by
+  label - a shard's name carries a hash, so the cluster has to be asked).
 - **Runbooks** - `stageset/reconcile` (trigger reconciliation, `--update-now` to
   override the update window) and `stageset/promote` (advance a stage held on a
   manual gate).
