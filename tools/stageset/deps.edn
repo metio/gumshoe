@@ -5,5 +5,11 @@
 ;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/stageset"}}}
 ;; List gumshoe.tools.stageset under env.edn :plugins to fill the :delivery scope,
 ;; teach the wizard the :stageset capability, and get the drill-down + books.
+;;
+;; The flux package comes along because a stage's edges end on the
+;; ExternalArtifact it builds from, and that kind - with the back-pointer edge
+;; that walks on to the object which produced it - is flux's. StageSet is a Flux
+;; controller, so a cluster running it runs source-controller too.
 {:paths ["libraries" "runbooks"]
- :deps {io.github.metio/gumshoe-core {:local/root "../.."}}}
+ :deps {io.github.metio/gumshoe-core {:local/root "../.."}
+        io.github.metio/gumshoe-flux {:local/root "../flux"}}}
