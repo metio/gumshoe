@@ -5,6 +5,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [gumshoe.capabilities :as capabilities]
             [gumshoe.detectives.registry :as registry]
+            [gumshoe.subject :as subject]
             [gumshoe.tools.stageset :as stageset]))
 
 (defn- summaries [findings] (set (map :summary findings)))
@@ -32,12 +33,66 @@
       (is (= :warning (by-summary "StageSet is not Ready (BudgetExhausted)"))))))
 
 (deftest held-update-is-info-test
-  (is (= #{"a new revision is held by the update window"}
-         (summaries (stageset/detect-held-updates
-                     {stageset/stageset-type
-                      {:items [{:metadata {:namespace "apps" :name "web"}
-                                :status {:pendingUpdate "v2.1.0" :nextWindowOpens "2026-07-06T02:00:00Z"}}]}})))))
+  (let [findings (stageset/detect-held-updates
+                  {stageset/stageset-type
+                   {:items [{:metadata {:namespace "apps" :name "web"}
+                             :status {:pendingUpdate
+                                      {:revisions {"first" "sha256:abc"}
+                                       :nextWindowOpens "2026-07-06T02:00:00Z"}}}]}})]
+    (is (= #{"a new revision is held by the update window"} (summaries findings)))
+    (is (= "next window opens: 2026-07-06T02:00:00Z" (:hint (first findings)))
+        "nextWindowOpens is a field of pendingUpdate, so the wait's end is named")))
 
 (deftest package-registers-delivery-scope-and-capability-test
   (is (seq (registry/for-scope :delivery)) "the package fills the :delivery scan scope")
   (is (contains? (set (capabilities/registered)) :stageset)))
+
+(deftest finding-names-its-subject-test
+  (testing "a finding points at the StageSet, so a scan drills straight into it"
+    (is (= (subject/subject "StageSet" "apps" "web")
+           (:subject (first (stageset/detect-stageset-problems
+                             {stageset/stageset-type
+                              {:items [{:metadata {:namespace "apps" :name "web"}
+                                        :status {:conditions [{:type "Ready" :status "False"
+                                                               :reason "StageFailed"}]}}]}})))))))
+
+(deftest stageset-edges-follow-every-stage-source-test
+  (testing "a bare sourceRef is an ExternalArtifact; a producer kind lands on the producer itself"
+    (is (= [{:relation "stage 'first' builds from"
+             :subject (subject/subject "ExternalArtifact" "apps" "base")}
+            {:relation "stage 'second' builds from"
+             :subject (subject/subject "JsonnetSnippet" "apps" "dashboards")}]
+           (stageset/stageset-edges
+            {:metadata {:namespace "apps" :name "web"}
+             :spec {:stages [{:name "first" :sourceRef {:name "base"}}
+                             {:name "second" :sourceRef {:apiVersion "jaas.metio.wtf/v1"
+                                                         :kind "JsonnetSnippet"
+                                                         :name "dashboards"}}]}})))))
+
+(deftest stageset-edges-honour-an-explicit-namespace-test
+  (is (= [{:relation "stage 'first' builds from"
+           :subject (subject/subject "ExternalArtifact" "platform" "shared")}]
+         (stageset/stageset-edges
+          {:metadata {:namespace "apps" :name "web"}
+           :spec {:stages [{:name "first" :sourceRef {:name "shared" :namespace "platform"}}]}}))))
+
+(deftest stageset-edges-include-the-migration-ladder-test
+  (is (= [{:relation "migrations from"
+           :subject (subject/subject "ExternalArtifact" "apps" "ladder")}]
+         (stageset/stageset-edges
+          {:metadata {:namespace "apps" :name "web"}
+           :spec {:migrationsSourceRef {:sourceRef {:name "ladder"}}}}))))
+
+(deftest stageset-facts-test
+  (let [facts (into {} (stageset/stageset-facts
+                        {:metadata {:namespace "apps" :name "web"}
+                         :status {:version "2.1.0"
+                                  :stages [{:name "first" :phase "Succeeded"}
+                                           {:name "second" :phase "Progressing"}]}}))]
+    (is (= "first: Succeeded, second: Progressing" (get facts "stages")))
+    (is (= "2.1.0" (get facts "version")))
+    (is (nil? (get facts "held until")))))
+
+(deftest stageset-is-a-drill-down-subject-test
+  (is (= stageset/stageset-type (subject/kind->type "StageSet")))
+  (is (= stageset/stageinventory-type (subject/kind->type "StageInventory"))))
