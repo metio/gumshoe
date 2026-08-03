@@ -19,7 +19,9 @@ publishes the result as a Flux `ExternalArtifact`.
 - **Drill-down** - `JsonnetSnippet` and `JsonnetLibrary` as subjects, with a
   facts panel (entry file, source, revision, published artifact) and edges to
   the libraries a snippet imports, the Flux source it renders, and the
-  `ExternalArtifact` it publishes.
+  `ExternalArtifact` it publishes. The import graph walks both ways: from a
+  library, the snippets that import it - under the alias each one uses - which
+  is the question worth asking before editing a shared library.
 - **Runbooks** - `jaas/reconcile` (stamp `reconcile.fluxcd.io/requestedAt` and
   wait for the operator to acknowledge it), `jaas/suspend`, `jaas/resume`, and
   `scan` (JaaS on its own, without every Flux source alongside).
