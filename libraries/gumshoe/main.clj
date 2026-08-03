@@ -135,6 +135,8 @@
     :book "tools/flux/runbooks/gitops.clj"}
    {:label "🎬 Delivery - StageSet staged rollouts"
     :book "tools/stageset/runbooks/scan.clj"}
+   {:label "📐 Rendering - JaaS Jsonnet snippets and the artifacts they publish"
+    :book "tools/jaas/runbooks/scan.clj"}
    {:label "📈 Observability - the prometheus-operator stack"
     :book "tools/prometheus/runbooks/scan.clj"}
    {:label "⚡ Events - Warning events from the last hour"
