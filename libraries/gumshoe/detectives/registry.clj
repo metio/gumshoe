@@ -19,6 +19,7 @@
             [gumshoe.detectives.mail :as mail]
             [gumshoe.detectives.network :as network]
             [gumshoe.detectives.nodes :as nodes]
+            [gumshoe.detectives.namespaces :as namespaces]
             [gumshoe.detectives.pod-security :as pod-security]
             [gumshoe.detectives.pods :as pods]
             [gumshoe.detectives.quotas :as quotas]
@@ -79,7 +80,8 @@
 ;; --- the built-in scopes ---------------------------------------------------
 
 (register! :platform (concat controlplane/detectives nodes/detectives csi/detectives expectations/detectives
-                             ipfamily/detectives apiversions-detectives/detectives))
+                             ipfamily/detectives apiversions-detectives/detectives
+                             namespaces/detectives))
 ;; the api-version-drift detective reads `kubectl api-resources` (not a get), so
 ;; it registers that collector for every scan it joins. The collector takes
 ;; [context key]; the key is fixed here, so it is ignored.

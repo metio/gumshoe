@@ -11,6 +11,7 @@
             [gumshoe.detectives.pods :as pods]
             [gumshoe.detectives.registry :as registry]
             [gumshoe.detectives.storage :as storage]
+            [gumshoe.detectives.namespaces :as namespaces]
             [gumshoe.detectives.workloads :as workloads]))
 
 (defn- summaries
@@ -251,3 +252,34 @@
                                          "edn"))]
       (is (true? healthy))
       (is (false? unhealthy)))))
+
+(deftest stuck-namespace-names-what-refuses-test
+  (testing "a refused deletion is critical and carries the refusal verbatim"
+    (let [findings (namespaces/detect-stuck-namespaces
+                    {"namespaces"
+                     {:items [{:metadata {:name "old-app" :deletionTimestamp "2026-09-25T09:17:19Z"}
+                               :status {:phase "Terminating"
+                                        :conditions
+                                        [{:type "NamespaceDeletionDiscoveryFailure" :status "False"}
+                                         {:type "NamespaceContentRemaining" :status "False"}
+                                         {:type "NamespaceDeletionContentFailure" :status "True"
+                                          :message "limitranges \"Unknown\" is forbidden: ValidatingAdmissionPolicy denied request"}]}}]}})]
+      (is (= 1 (count findings)))
+      (is (= :critical (:severity (first findings))))
+      (is (= "old-app" (:component (first findings))))
+      (is (re-find #"ValidatingAdmissionPolicy" (:hint (first findings))))
+      (is (re-find #"2026-09-25T09:17:19Z" (:hint (first findings)))
+          "how long it has been stuck"))))
+
+(deftest namespace-deleting-normally-is-quiet-test
+  (testing "content still going away is an in-flight deletion, not a fault"
+    (is (empty? (namespaces/detect-stuck-namespaces
+                 {"namespaces"
+                  {:items [{:metadata {:name "going"}
+                            :status {:phase "Terminating"
+                                     :conditions [{:type "NamespaceContentRemaining" :status "True"
+                                                   :message "Some resources are remaining"}]}}]}})))))
+
+(deftest active-namespace-is-quiet-test
+  (is (empty? (namespaces/detect-stuck-namespaces
+               {"namespaces" {:items [{:metadata {:name "live"} :status {:phase "Active"}}]}}))))
