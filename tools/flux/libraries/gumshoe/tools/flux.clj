@@ -8,7 +8,8 @@
    flux's detectives, its :flux cluster capability, the flux CLI tool profile, and
    the drill-down (its CRD kinds plus a reconcile-status probe). Nothing about
    flux lives in the engine any more."
-  (:require [gumshoe.investigation :as investigation]
+  (:require [clojure.string]
+            [gumshoe.investigation :as investigation]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.plugin :as plugin]
             [gumshoe.subject :as subject]))
@@ -23,6 +24,46 @@
 (defn- ready-condition
   [resource]
   (first (filter #(= "Ready" (:type %)) (-> resource :status :conditions))))
+
+(def ^:private reconcile-annotations
+  ["kustomize.toolkit.fluxcd.io/reconcile"
+   "fluxcd.controlplane.io/reconcile"])
+
+(defn- annotation
+  [resource key]
+  (get-in resource [:metadata :annotations (keyword key)]))
+
+(defn inert?
+  "An object told not to reconcile. It carries every label and annotation of a
+   managed object and is not managed - a gate left on after a migration reads as
+   healthy from every angle except the age of what it serves."
+  [resource]
+  (some #(= "disabled" (annotation resource %)) reconcile-annotations))
+
+(defn- retry-on-failure?
+  [release phase]
+  (= "RetryOnFailure" (get-in release [:spec phase :strategy :name])))
+
+(defn- failures
+  [release key]
+  (or (get-in release [:status key]) 0))
+
+(defn- retries
+  [release phase]
+  (or (get-in release [:spec phase :remediation :retries]) 0))
+
+(defn parked?
+  "A failed release that will not try again. Flux defaults both install and
+   upgrade to `retries: 0`, and once they are spent the release is left failed
+   until its spec or chart changes - so `status.conditions` keeps describing a
+   cause that may have cleared long ago. `RetryOnFailure` keeps retrying on its
+   own interval, so a release using it is never parked."
+  [release]
+  (boolean
+   (or (and (not (retry-on-failure? release :install))
+            (> (failures release :installFailures) (retries release :install)))
+       (and (not (retry-on-failure? release :upgrade))
+            (> (failures release :upgradeFailures) (retries release :upgrade))))))
 
 (defn flux-findings
   [resources kind]
@@ -43,7 +84,67 @@
 
 (defn detect-helmrelease-problems
   [evidence]
-  (flux-findings (kubectl/items-of (get evidence helmrelease-type)) "HelmRelease"))
+  (let [releases (kubectl/items-of (get evidence helmrelease-type))
+        stuck (filter parked? releases)]
+    (concat
+     ;; a parked release is reported here instead, with the remedy
+     (flux-findings (remove parked? releases) "HelmRelease")
+     (for [release stuck
+           :let [ready (ready-condition release)]]
+       {:severity :critical
+        :component (kubectl/namespace-name-of release)
+        :summary (format "HelmRelease is parked after %s and will not retry"
+                         (or (:reason ready) "a failure"))
+        :hint (format "%s -- the message describes the last attempt (revision %s), which may no longer be true; verify the cause is still present, then clear the counters with `kubectl annotate helmrelease %s reconcile.fluxcd.io/resetAt=$(date -u +%%FT%%TZ) reconcile.fluxcd.io/requestedAt=$(date -u +%%FT%%TZ)`"
+                      (or (:message ready) "no message")
+                      (or (-> release :status :lastAttemptedRevision) "unknown")
+                      (kubectl/name-of release))}))))
+
+(defn detect-inert-deliveries
+  [evidence]
+  (for [resource (concat (kubectl/items-of (get evidence helmrelease-type))
+                         (kubectl/items-of (get evidence kustomization-type)))
+        :when (inert? resource)]
+    {:severity :warning
+     :component (kubectl/namespace-name-of resource)
+     :summary "delivery is annotated to skip reconciliation"
+     :hint "it will not change whatever it already applied; remove the reconcile annotation once the migration or gate it belongs to is finished"}))
+
+(defn- crash-looping
+  "Containers a kubelet keeps restarting. A pod can be Running and still be in
+   this state, so a replica count does not show it."
+  [pod]
+  (for [status (concat (-> pod :status :containerStatuses)
+                       (-> pod :status :initContainerStatuses))
+        :let [reason (-> status :state :waiting :reason)]
+        :when (contains? #{"CrashLoopBackOff" "CreateContainerConfigError" "RunContainerError"} reason)]
+    {:container (:name status) :reason reason :restarts (or (:restartCount status) 0)}))
+
+(defn detect-succeeded-over-broken
+  "The contradiction worth surfacing: a release whose last Helm operation
+   succeeded, over a workload that cannot run. `Ready` on a HelmRelease is a
+   statement about Helm, not about the software - so a green delivery and a
+   crash-looping pod coexist happily, and every dashboard reads fine."
+  [evidence]
+  (let [pods (kubectl/items-of (get evidence "pods"))
+        broken (group-by kubectl/namespace-of
+                         (filter #(seq (crash-looping %)) pods))]
+    (for [release (kubectl/items-of (get evidence helmrelease-type))
+          :let [ready (ready-condition release)
+                namespace (kubectl/namespace-of release)
+                casualties (get broken namespace)]
+          :when (and (= "True" (:status ready)) (seq casualties))]
+      {:severity :critical
+       :component (kubectl/namespace-name-of release)
+       :summary (format "HelmRelease reports success while %d pod(s) in its namespace cannot start"
+                        (count casualties))
+       :hint (format "%s -- Ready on a HelmRelease means the Helm operation succeeded, nothing more; look at %s"
+                     (->> casualties
+                          (mapcat crash-looping)
+                          (map #(format "%s (%s, %d restarts)" (:container %) (:reason %) (:restarts %)))
+                          distinct
+                          (clojure.string/join ", "))
+                     (clojure.string/join ", " (map kubectl/name-of casualties)))})))
 
 (defn detect-kustomization-problems
   [evidence]
@@ -81,7 +182,15 @@
    {:name "helmcharts"
     :description "HelmCharts that fail to build or are suspended"
     :requires [helmchart-type]
-    :detect detect-helmchart-problems}])
+    :detect detect-helmchart-problems}
+   {:name "inert-deliveries"
+    :description "HelmReleases and Kustomizations annotated to skip reconciliation"
+    :requires [helmrelease-type kustomization-type]
+    :detect detect-inert-deliveries}
+   {:name "succeeded-over-broken"
+    :description "HelmReleases reporting success over pods that cannot start"
+    :requires [helmrelease-type "pods"]
+    :detect detect-succeeded-over-broken}])
 
 (defn externalartifact-edges
   "The RFC-0012 back-pointer: spec.sourceRef names the object that produced this
