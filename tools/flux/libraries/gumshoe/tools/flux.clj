@@ -9,6 +9,7 @@
    the drill-down (its CRD kinds plus a reconcile-status probe). Nothing about
    flux lives in the engine any more."
   (:require [clojure.string]
+            [gumshoe.effect :as effect]
             [gumshoe.investigation :as investigation]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.plugin :as plugin]
@@ -220,6 +221,25 @@
     :description "HelmReleases whose live objects no longer match what they applied"
     :requires [helmrelease-type]
     :detect detect-drifted-releases}])
+
+(defn parked-first
+  "Release names with the parked ones ahead of the rest, for a picker whose whole
+   purpose is the parked ones."
+  [releases]
+  (mapv kubectl/namespace-name-of
+        (concat (filter parked? releases) (remove parked? releases))))
+
+(defn reset-effect
+  "Clears the failure counters and asks for a reconcile. `requestedAt` alone
+   triggers the reconcile and leaves the exhausted counters in place, so the
+   release fails again immediately; `resetAt` is the one that clears them. One
+   timestamp for both, so they agree."
+  [context namespace name timestamp]
+  (effect/plan
+   (effect/note (format "clearing the failure counters of %s/%s" namespace name))
+   (effect/kubectl context "-n" namespace "annotate" helmrelease-type name "--overwrite"
+                   (str "reconcile.fluxcd.io/resetAt=" timestamp)
+                   (str "reconcile.fluxcd.io/requestedAt=" timestamp))))
 
 (defn externalartifact-edges
   "The RFC-0012 back-pointer: spec.sourceRef names the object that produced this

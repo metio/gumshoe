@@ -29,7 +29,10 @@ about Flux, in one place, registered through a single `plugin/provide!` in
 - **Tool profile** - the `flux` CLI (≥ 2.0), inherited by any book that lists it.
 - **Drill-down** - the Flux CRD kinds as subjects, plus a `flux reconcile status`
   probe offered when the CLI is installed.
-- **Books** - `runbooks/gitops.clj` (the gitops scan) and `runbooks/flux/reconcile.clj`.
+- **Books** - `runbooks/gitops.clj` (the gitops scan), `runbooks/flux/reconcile.clj`,
+  `runbooks/flux/reset.clj` (clears a parked release's failure counters — the
+  counters are what `reconcile` alone leaves in place) and `runbooks/flux/drift.clj`
+  (diffs the stored manifest against live, field by field).
 
 ## Use
 

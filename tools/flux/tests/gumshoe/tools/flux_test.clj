@@ -166,3 +166,26 @@
                 {:items [{:metadata {:namespace "web" :name "site"}
                           :status {:conditions [{:type "Ready" :status "True"}
                                                 {:type "Drifted" :status "False"}]}}]}}))))
+
+(deftest parked-releases-are-offered-first-test
+  (testing "the picker offers spent releases before healthy ones"
+    (is (= ["web/parked" "web/healthy"]
+           (flux/parked-first
+            [{:metadata {:namespace "web" :name "healthy"}
+              :status {:conditions [{:type "Ready" :status "True"}]}}
+             {:metadata {:namespace "web" :name "parked"}
+              :status {:upgradeFailures 1
+                       :conditions [{:type "Ready" :status "False"}]}}])))))
+
+(deftest reset-emits-both-annotations-test
+  (testing "resetAt clears the counters; requestedAt alone would not"
+    (let [plan (flux/reset-effect "ctx" "web" "site" "2026-09-28T00:00:00Z")
+          flat (pr-str plan)]
+      (is (re-find #"reconcile\.fluxcd\.io/resetAt=2026-09-28T00:00:00Z" flat))
+      (is (re-find #"reconcile\.fluxcd\.io/requestedAt=2026-09-28T00:00:00Z" flat))
+      (is (re-find #"--overwrite" flat) "an existing annotation must be replaced"))))
+
+(deftest retry-on-failure-is-not-parked-for-the-reset-book-test
+  (is (false? (flux/parked?
+               {:spec {:upgrade {:strategy {:name "RetryOnFailure"}}}
+                :status {:upgradeFailures 5}}))))
