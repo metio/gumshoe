@@ -110,6 +110,31 @@
      :summary "delivery is annotated to skip reconciliation"
      :hint "it will not change whatever it already applied; remove the reconcile annotation once the migration or gate it belongs to is finished"}))
 
+(defn- condition
+  [resource type]
+  (first (filter #(= type (:type %)) (-> resource :status :conditions))))
+
+(defn detect-drifted-releases
+  "A release whose live objects no longer match what it applied. `Ready` stays
+   True -- the Helm operation did succeed -- so nothing else reports this. With
+   `driftDetection.mode: warn` the drift is named and never corrected, and a
+   field whose desired value has not changed between releases is never in an
+   upgrade's patch either, so it persists indefinitely."
+  [evidence]
+  (for [release (kubectl/items-of (get evidence helmrelease-type))
+        :let [drifted (condition release "Drifted")
+              mode (-> release :spec :driftDetection :mode)]
+        :when (= "True" (:status drifted))]
+    {:severity (if (= "enabled" mode) :warning :critical)
+     :component (kubectl/namespace-name-of release)
+     :summary (format "HelmRelease has drifted from what it applied (mode: %s)"
+                      (or mode "warn"))
+     :hint (format "%s%s"
+                   (or (:message drifted) "no detail")
+                   (if (= "enabled" mode)
+                     " -- correction is on, so this should clear on the next reconcile"
+                     " -- correction is off: nothing will fix this, and an upgrade patches only fields whose desired value changed. Diff it with `flux/drift`, then force a re-apply with reconcile.fluxcd.io/forceAt"))}))
+
 (defn- crash-looping
   "Containers a kubelet keeps restarting. A pod can be Running and still be in
    this state, so a replica count does not show it."
@@ -190,7 +215,11 @@
    {:name "succeeded-over-broken"
     :description "HelmReleases reporting success over pods that cannot start"
     :requires [helmrelease-type "pods"]
-    :detect detect-succeeded-over-broken}])
+    :detect detect-succeeded-over-broken}
+   {:name "drifted-releases"
+    :description "HelmReleases whose live objects no longer match what they applied"
+    :requires [helmrelease-type]
+    :detect detect-drifted-releases}])
 
 (defn externalartifact-edges
   "The RFC-0012 back-pointer: spec.sourceRef names the object that produced this

@@ -132,3 +132,37 @@
                                              :annotations {:kustomize.toolkit.fluxcd.io/reconcile "disabled"}}}]}
                         flux/kustomization-type
                         {:items [{:metadata {:namespace "flux-system" :name "platform"}}]}}))))))
+
+(deftest drifted-release-is-reported-test
+  (testing "Ready stays True while the live objects no longer match, so drift needs its own finding"
+    (let [findings (flux/detect-drifted-releases
+                    {flux/helmrelease-type
+                     {:items [{:metadata {:namespace "grafana" :name "grafana"}
+                               :spec {:driftDetection {:mode "warn"}}
+                               :status {:conditions [{:type "Ready" :status "True"}
+                                                     {:type "Drifted" :status "True"
+                                                      :message "Probe/grafana/grafana-ipv4 changed"}]}}]}})]
+      (is (= #{"HelmRelease has drifted from what it applied (mode: warn)"}
+             (summaries findings)))
+      (is (= :critical (:severity (first findings)))
+          "warn never corrects, so the drift is permanent until someone acts")
+      (is (re-find #"forceAt" (:hint (first findings)))
+          "the hint names how to force a re-apply"))))
+
+(deftest drift-with-correction-on-is-only-a-warning-test
+  (testing "mode enabled corrects on the next reconcile, so it is transient"
+    (let [findings (flux/detect-drifted-releases
+                    {flux/helmrelease-type
+                     {:items [{:metadata {:namespace "web" :name "site"}
+                               :spec {:driftDetection {:mode "enabled"}}
+                               :status {:conditions [{:type "Drifted" :status "True"
+                                                      :message "Deployment/web/site changed"}]}}]}})]
+      (is (= :warning (:severity (first findings))))
+      (is (re-find #"should clear" (:hint (first findings)))))))
+
+(deftest undrifted-release-is-quiet-test
+  (is (empty? (flux/detect-drifted-releases
+               {flux/helmrelease-type
+                {:items [{:metadata {:namespace "web" :name "site"}
+                          :status {:conditions [{:type "Ready" :status "True"}
+                                                {:type "Drifted" :status "False"}]}}]}}))))
