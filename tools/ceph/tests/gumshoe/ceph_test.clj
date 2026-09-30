@@ -16,7 +16,13 @@
   (testing "ssh runs unattended, and '--' precedes the host so the remote command is clean"
     (is (= ["ssh" "-q" "-o" "BatchMode=yes" "-o" "ConnectTimeout=5"
             "--" "ceph-1.example.org" "exit" "0"]
-           (ssh/ssh-args {:host "ceph-1.example.org"} ["exit" "0"]))))
+           (binding [ssh/*user-config* nil]
+             (ssh/ssh-args {:host "ceph-1.example.org"} ["exit" "0"])))))
+  (testing "a user ssh config is named with -F, so a system config owned by an unmapped uid is never read"
+    (is (= ["ssh" "-q" "-F" "/home/op/.ssh/config" "-o" "BatchMode=yes" "-o" "ConnectTimeout=5"
+            "--" "h" "exit" "0"]
+           (binding [ssh/*user-config* "/home/op/.ssh/config"]
+             (ssh/ssh-args {:host "h"} ["exit" "0"])))))
   (testing "the '--' option terminator is never placed after the host"
     (let [args (ssh/ssh-args {:host "h"} ["ceph" "status"])
           host-index (.indexOf args "h")

@@ -6,11 +6,42 @@
    with a short connect timeout, so a book fails fast instead of hanging on a
    password prompt. Works against any distribution - all it needs is ssh on
    the far end (and sudo only for the books that ask for it)."
-  (:require [gumshoe.shell :as shell]
+  (:require [babashka.fs :as fs]
+            [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
 (def ^:private options
   ["-o" "BatchMode=yes" "-o" "ConnectTimeout=5"])
+
+(def ^:dynamic *user-config*
+  "Which ssh config to name with -F. ::probe looks for the invoking user's, nil
+   names none, a string names that file. Bind it in tests so the assembled command
+   does not depend on whether the machine running them has an ssh config."
+  ::probe)
+
+(defn- probe-user-config
+  "The invoking user's ssh config, when it exists.
+
+  Naming it with -F makes ssh ignore /etc/ssh/ssh_config and everything it
+  includes, which is deliberate rather than incidental: ssh refuses a config file
+  owned by neither root nor the caller, and inside a rootless user namespace - a
+  nix-portable devshell, a container without a uid mapping - uid 0 is unmapped, so
+  a perfectly correct system config resolves to an unknown owner and ssh aborts
+  before it ever connects. The user's own config is owned by a mapped uid, so it
+  stays readable everywhere.
+
+  The cost is that site-wide settings are not consulted. Where a ProxyJump or an
+  IdentityAgent lives in /etc/ssh/ssh_config rather than the user's config, copy
+  it there."
+  []
+  (let [path (fs/path (System/getProperty "user.home") ".ssh" "config")]
+    (when (fs/regular-file? path)
+      (str path))))
+
+(defn- config-arg
+  []
+  (when-let [config (if (= ::probe *user-config*) (probe-user-config) *user-config*)]
+    ["-F" config]))
 
 (defn target
   [{:keys [host user]}]
@@ -22,7 +53,11 @@
    so a '--' there would be sent to the remote shell instead of ending ssh's
    own options."
   [connection command-args]
-  (vec (concat ["ssh" "-q"] options ["--" (target connection)] command-args)))
+  (vec (concat ["ssh" "-q"]
+               (config-arg)
+               options
+               ["--" (target connection)]
+               command-args)))
 
 (defn connects?
   [connection]
