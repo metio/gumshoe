@@ -104,29 +104,44 @@
      :macs (vec (concat sudo ["vtysh" "-c" (str "show evpn mac vni " vni)]))
      :fdb ["bridge" "fdb" "show"]}))
 
+(defn ssh-runner
+  "The default transport: one remote command, stdout back.
+
+  ssh/stdout-of is variadic, so the argv has to be spread rather than handed over
+  as a single value - passing the vector makes the whole thing one remote token,
+  which the far end cannot run and which fails by printing nothing."
+  [connection argv]
+  (apply ssh/stdout-of connection argv))
+
 (defn collect-host
   "Everything one host knows about one VNI. Never throws: an unreachable host or a
-  missing command comes back as `:error` and the caller turns that into a finding."
-  [{:keys [timeout-ms] :as connection} vni]
-  (let [cmds (host-commands connection vni)
-        host (:host connection)]
-    (binding [shell/*timeout-ms* (or timeout-ms 30000)]
-      (if-not (ssh/connects? connection)
-        {:host host :vni vni :error "host is not reachable over ssh"}
-        (let [out (reduce-kv (fn [acc k argv]
-                               (assoc acc k (ssh/stdout-of connection argv)))
-                             {}
-                             cmds)
-              host-vtep (parse-local-vtep (:vni out))]
-          (if (str/blank? (or (:macs out) ""))
-            {:host host :vni vni
-             :error (str "no output from '" (str/join " " (:macs cmds))
-                         "' - is FRR running, and does this account have sudo?")}
-            {:host host
-             :vni vni
-             :host-vtep host-vtep
-             :macs (vec (parse-macs vni host host-vtep (:macs out)))
-             :fdb (vec (parse-fdb vni host (:fdb out)))}))))))
+  missing command comes back as `:error` and the caller turns that into a finding.
+
+  The transport is injectable because every defect found while building this lived
+  in the seam rather than in the parsing - a pure test of the parsers passes
+  happily while nothing can actually execute."
+  ([connection vni]
+   (collect-host connection vni ssh-runner (partial ssh/connects?)))
+  ([{:keys [timeout-ms] :as connection} vni run reachable?]
+   (let [cmds (host-commands connection vni)
+         host (:host connection)]
+     (binding [shell/*timeout-ms* (or timeout-ms 30000)]
+       (if-not (reachable? connection)
+         {:host host :vni vni :error "host is not reachable over ssh"}
+         (let [out (reduce-kv (fn [acc k argv]
+                                (assoc acc k (run connection argv)))
+                              {}
+                              cmds)
+               host-vtep (parse-local-vtep (:vni out))]
+           (if (str/blank? (or (:macs out) ""))
+             {:host host :vni vni
+              :error (str "no output from '" (str/join " " (:macs cmds))
+                          "' - is FRR running, and does this account have sudo?")}
+             {:host host
+              :vni vni
+              :host-vtep host-vtep
+              :macs (vec (parse-macs vni host host-vtep (:macs out)))
+              :fdb (vec (parse-fdb vni host (:fdb out)))})))))))
 
 (defn collect-evidence!
   "Fan out across every host and VNI, then flatten into the evidence a detective
