@@ -102,11 +102,10 @@
                      (if (zero? (:exit result))
                        true
                        (do (stdout/error (:err result)) false)))
+    ;; assembled by ssh/ssh-args rather than spelled again here, so an option
+    ;; added for the read-only path cannot go missing on the mutating one
     :ssh (let [[connection & command] args]
-           (zero? (apply shell/run-with-output
-                         (concat ["ssh" "-q" "-o" "BatchMode=yes" "-o" "ConnectTimeout=5"
-                                  "--" (ssh/target connection)]
-                                 command))))
+           (zero? (apply shell/run-with-output (ssh/ssh-args connection command))))
     :cmd (zero? (apply shell/run-with-output args))
     :note (do (stdout/err-println (str "  " (first args))) true)
     (if-let [act (:perform (get @effect-types op))]
