@@ -193,6 +193,32 @@
       (is (= ["bridge" "fdb" "show"] (:fdb with-sudo)))
       (is (= ["bridge" "fdb" "show"] (:fdb without))))))
 
+(deftest the-transport-receives-a-flat-argv
+  (testing "a vector handed over whole becomes one unrunnable remote token"
+    (let [seen (atom [])
+          run (fn [_conn argv]
+                (swap! seen conj argv)
+                (when (= "show evpn mac vni 4208" (last argv)) mac-output))
+          result (collect/collect-host {:host "host-a" :needs-sudo? true} 4208
+                                       run (constantly true))]
+      (is (every? (fn [argv] (every? string? argv)) @seen)
+          "every token reaching the transport is a string, not a nested collection")
+      (is (some #(= ["sudo" "vtysh" "-c" "show evpn mac vni 4208"] %) @seen))
+      (is (nil? (:error result)))
+      (is (= 4 (count (:macs result)))))))
+
+(deftest an-unreachable-host-short-circuits
+  (let [result (collect/collect-host {:host "host-a"} 4208
+                                     (fn [_ _] (throw (ex-info "must not run" {})))
+                                     (constantly false))]
+    (is (= "host is not reachable over ssh" (:error result)))))
+
+(deftest a-silent-command-is-an-error-not-an-empty-fabric
+  (let [result (collect/collect-host {:host "host-a" :needs-sudo? true} 4208
+                                     (fn [_ _] "") (constantly true))]
+    (is (str/includes? (:error result) "no output from 'sudo vtysh"))
+    (is (nil? (:macs result)) "an empty parse would read as a clean fabric")))
+
 (deftest building-connections
   (let [conns (vec (collect/connections ["h1" "h2"] {:user "ops"}))]
     (is (= 2 (count conns)))
