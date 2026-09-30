@@ -115,15 +115,30 @@
                 "black-holes the guest exactly as the fault did")}))
 
 (defn detect-host-problems
+  "A host that could not be read is a gap in the evidence, and the severity says
+  how big. One unreadable host among several leaves the other hosts' disagreements
+  visible, so it is a warning. None readable means nothing was compared at all -
+  and because a detective with no evidence reports nothing, the run would otherwise
+  end by calling every other check clean. That is the one outcome worse than a
+  finding, so it is critical."
   [evidence]
-  (for [{:keys [host vni error]} (get evidence "evpn-hosts")
-        :when error]
-    {:severity :warning
-     :component (str host "/vni " vni)
-     :summary (str "fabric evidence could not be collected: " error)
-     :hint (str "the scan is incomplete, so an ownership conflict involving this "
-                "host's guests cannot be seen. During a partition the unreachable "
-                "host is often the symptom - check it before trusting a clean result")}))
+  (let [hosts (get evidence "evpn-hosts")
+        failed (filter :error hosts)
+        total-failure? (and (seq hosts) (= (count failed) (count hosts)))]
+    (for [{:keys [host vni error]} failed]
+      {:severity (if total-failure? :critical :warning)
+       :component (str host "/vni " vni)
+       :summary (str "fabric evidence could not be collected: " error)
+       :hint (if total-failure?
+               (str "no host could be read, so nothing was compared - treat the other "
+                    "checks as unrun rather than clean. Inside a rootless namespace "
+                    "ssh refuses a system config owned by an unmapped uid; gumshoe.ssh "
+                    "names the user's own config with -F to avoid that, so a failure "
+                    "here is more likely credentials, the host, or the network")
+               (str "the scan is incomplete, so an ownership conflict involving this "
+                    "host's guests cannot be seen. During a partition the unreachable "
+                    "host is often the symptom - check it before trusting a clean "
+                    "result"))})))
 
 (def detectives
   [{:name "evpn-mac-ownership"
