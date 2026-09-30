@@ -332,8 +332,9 @@ separately-confirmed step; `--status` just shows current progress.
 
 ## Firebooks
 
-Firebooks start a reproducible, contained problem for fire drills - always
-inside the `fire-drill` namespace, so a drill can never touch real workloads:
+Firebooks start a reproducible, contained problem for fire drills. A cluster drill
+burns inside the `fire-drill` namespace, so extinguishing it is one namespace
+delete and it can never touch real workloads:
 
 ```shell
 bb firebooks/kubernetes/crash_loop.clj                # start the fire
@@ -341,8 +342,20 @@ bb runbooks/detectives/cluster.clj                    # the team hunts it down
 bb firebooks/kubernetes/crash_loop.clj --extinguish   # clean up
 ```
 
+A fabric drill has no namespace to burn in - it edits a hypervisor's forwarding
+table - so it is contained by its values instead: the MAC and the destination both
+come from RFC 5737 documentation ranges, so no guest can hold that MAC and nothing
+is attracted to that destination. It is inert on any fabric, and still exactly the
+shape `evpn-static-fdb` reports:
+
+```shell
+bb firebooks/fabric/stale_fdb_entry.clj -H hv-1 -n 4208               # start
+bb runbooks/detectives/fabric.clj --vni 4208                          # hunt
+bb firebooks/fabric/stale_fdb_entry.clj -H hv-1 -n 4208 --extinguish  # clean up
+```
+
 The drill is over when the detectives are green again. Available drills:
-`crash_loop`, `image_pull`, `pending_pvc`.
+`crash_loop`, `image_pull`, `pending_pvc`, `stale_fdb_entry`.
 
 ## Casebooks & plugins
 
