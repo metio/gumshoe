@@ -93,17 +93,22 @@
        :static? (contains? flags "static")
        :extern-learn? (contains? flags "extern_learn")})))
 
-(defn- host-commands
-  [vni]
-  {:vni ["vtysh" "-c" (str "show evpn vni " vni)]
-   :macs ["vtysh" "-c" (str "show evpn mac vni " vni)]
-   :fdb ["bridge" "fdb" "show"]})
+(defn host-commands
+  "The three read-only commands, with sudo only where it is needed: vtysh talks to
+  FRR's control socket and needs it, `bridge fdb show` reads the kernel's table and
+  does not. gumshoe.ssh carries :needs-sudo? but does not apply it - probing sudo
+  and using it are separate concerns - so the prefix belongs here."
+  [connection vni]
+  (let [sudo (if (:needs-sudo? connection) ["sudo"] [])]
+    {:vni (vec (concat sudo ["vtysh" "-c" (str "show evpn vni " vni)]))
+     :macs (vec (concat sudo ["vtysh" "-c" (str "show evpn mac vni " vni)]))
+     :fdb ["bridge" "fdb" "show"]}))
 
 (defn collect-host
   "Everything one host knows about one VNI. Never throws: an unreachable host or a
   missing command comes back as `:error` and the caller turns that into a finding."
   [{:keys [timeout-ms] :as connection} vni]
-  (let [cmds (host-commands vni)
+  (let [cmds (host-commands connection vni)
         host (:host connection)]
     (binding [shell/*timeout-ms* (or timeout-ms 30000)]
       (if-not (ssh/connects? connection)
@@ -115,7 +120,8 @@
               host-vtep (parse-local-vtep (:vni out))]
           (if (str/blank? (or (:macs out) ""))
             {:host host :vni vni
-             :error "no output from 'show evpn mac' - is FRR running, and is sudo available?"}
+             :error (str "no output from '" (str/join " " (:macs cmds))
+                         "' - is FRR running, and does this account have sudo?")}
             {:host host
              :vni vni
              :host-vtep host-vtep

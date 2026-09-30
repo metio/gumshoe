@@ -183,6 +183,16 @@
   (is (nil? (collect/parse-local-vtep "VNI: 4208\n")) "absent rather than wrong")
   (is (nil? (collect/parse-local-vtep nil))))
 
+(deftest sudo-only-where-it-is-needed
+  (let [with-sudo (collect/host-commands {:host "h" :needs-sudo? true} 4208)
+        without (collect/host-commands {:host "h" :needs-sudo? false} 4208)]
+    (testing "vtysh talks to FRR's socket"
+      (is (= ["sudo" "vtysh" "-c" "show evpn mac vni 4208"] (:macs with-sudo)))
+      (is (= ["vtysh" "-c" "show evpn mac vni 4208"] (:macs without))))
+    (testing "the kernel's fdb is readable unprivileged either way"
+      (is (= ["bridge" "fdb" "show"] (:fdb with-sudo)))
+      (is (= ["bridge" "fdb" "show"] (:fdb without))))))
+
 (deftest building-connections
   (let [conns (vec (collect/connections ["h1" "h2"] {:user "ops"}))]
     (is (= 2 (count conns)))
