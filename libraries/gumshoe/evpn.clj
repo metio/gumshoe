@@ -66,13 +66,20 @@
       local? (assoc :intf where)
       (not local?) (assoc :vtep where))))
 
-(defn parse-fdb
-  "Rows of `bridge fdb show`, kept only for the VXLAN device of this VNI and for
-  the taps that carry the same MACs.
+(def ^:private vxlan-dev-pattern #"^lo\.(\d+)$")
 
-  `dst` marks an entry that sends the MAC across the fabric; its absence on a
-  non-VXLAN device marks the local tap. Both existing for one MAC on one host is
-  the contradiction the fdb-conflict detective looks for."
+(defn parse-fdb
+  "Rows of `bridge fdb show`, kept only for this VNI: its own VXLAN device and the
+  guest taps.
+
+  Every overlay on the host shows up in one table, so another VNI's VXLAN device
+  has to be dropped rather than mistaken for a tap - otherwise every legitimate
+  remote entry on a neighbouring VNI pairs with its own overlay device and reads as
+  a conflict. A tap is any device that is not an `lo.<vni>`.
+
+  `dst` marks an entry that sends the MAC across the fabric; its absence on a tap
+  marks local ownership. Both existing for one MAC on one host is the contradiction
+  the fdb-conflict detective looks for."
   [vni host output]
   (let [vxlan-dev (str "lo." vni)]
     (for [line (str/split-lines (or output ""))
@@ -83,8 +90,11 @@
                                               (when (odd? (count (rest tokens))) [nil])))
                 dev (get pairs "dev")
                 dst (get pairs "dst")
-                flags (set (rest tokens))]
-          :when dev]
+                flags (set (rest tokens))
+                other-overlay? (and dev
+                                    (re-matches vxlan-dev-pattern dev)
+                                    (not= dev vxlan-dev))]
+          :when (and dev (not other-overlay?))]
       {:host host
        :mac (str/lower-case mac)
        :dev dev
