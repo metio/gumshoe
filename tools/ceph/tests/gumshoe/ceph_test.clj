@@ -23,6 +23,17 @@
             "--" "h" "exit" "0"]
            (binding [ssh/*user-config* "/home/op/.ssh/config"]
              (ssh/ssh-args {:host "h"} ["exit" "0"])))))
+  (testing "an argument with a space is quoted, or the remote shell splits it"
+    (is (= ["ssh" "-q" "-o" "BatchMode=yes" "-o" "ConnectTimeout=5" "--" "h"
+            "vtysh" "-c" "'show evpn mac vni 4208'"]
+           (binding [ssh/*user-config* nil]
+             (ssh/ssh-args {:host "h"} ["vtysh" "-c" "show evpn mac vni 4208"])))))
+  (testing "a token needing no quoting is passed through, so a reproducer stays readable"
+    (is (= ["ceph" "status"]
+           (binding [ssh/*user-config* nil]
+             (subvec (ssh/ssh-args {:host "h"} ["ceph" "status"]) 8)))))
+  (testing "an embedded single quote survives"
+    (is (= "'it'\\''s'" (ssh/shell-quote "it's"))))
   (testing "the '--' option terminator is never placed after the host"
     (let [args (ssh/ssh-args {:host "h"} ["ceph" "status"])
           host-index (.indexOf args "h")
