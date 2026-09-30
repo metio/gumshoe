@@ -99,6 +99,15 @@
     (is (= :warning (:severity (first findings))))
     (is (str/includes? (:summary (first findings)) host-b-vtep))))
 
+(deftest every-host-unreadable-is-critical-because-nothing-was-compared
+  (testing "a scan that collected nothing must not end by calling the rest clean"
+    (let [findings (evpn/detect-host-problems
+                    {"evpn-hosts" [{:host "host-a" :vni 4208 :error "host is not reachable over ssh"}
+                                   {:host "host-b" :vni 4208 :error "host is not reachable over ssh"}]})]
+      (is (= 2 (count findings)))
+      (is (every? #(= :critical (:severity %)) findings))
+      (is (str/includes? (:hint (first findings)) "unrun rather than clean")))))
+
 (deftest an-unreadable-host-makes-the-scan-incomplete
   (let [findings (evpn/detect-host-problems
                   {"evpn-hosts" [{:host "host-c" :vni 4208 :error "host is not reachable over ssh"}
