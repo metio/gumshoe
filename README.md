@@ -221,6 +221,7 @@ bb runbooks/detectives/rbac.clj           # admins, wildcards, secret readers
 bb runbooks/detectives/security.clj       # RBAC + pod security + NetPol
 bb runbooks/detectives/dns.clj            # nameservers, SOA replication
 bb runbooks/detectives/mail.clj           # MX/SPF/DKIM/DMARC/rDNS + TLS
+bb runbooks/detectives/fabric.clj         # EVPN-VXLAN MAC ownership, over ssh
 ./detect                                  # interactive: pick what hurts
 bb runbooks/detectives/cluster.clj --output json    # machine-readable, jq-able
 ```
@@ -263,8 +264,12 @@ attachments and driver registration, Released/Failed volumes, local volumes
 pinned to missing nodes - see `runbooks/detectives/csi.clj`),
 PodDisruptionBudgets and HPAs, ResourceQuotas, cluster CPU/memory overcommit
 (failure-tolerant capacity), cert-manager, flux, CloudNativePG and db-operator,
-calico (tigera-operator), the prometheus-operator monitoring stack, and Warning
-events. The findings map onto the canonical
+calico (tigera-operator), the prometheus-operator monitoring stack, Warning
+events, and - over ssh rather than kubectl - an EVPN-VXLAN fabric's MAC
+ownership (guest MACs the fabric attributes to a VTEP that is not their host's,
+hosts holding both a local tap and a remote entry for one MAC, and static fdb
+entries that outrank what EVPN learns; see `runbooks/detectives/fabric.clj`).
+The findings map onto the canonical
 [kube-prometheus runbook](https://runbooks.prometheus-operator.dev/) alerts
 (KubeControllerManagerDown, KubeQuotaFullyUsed, KubeCPUOvercommit, and so on)
 but are read straight from the cluster, so they need no metrics backend.

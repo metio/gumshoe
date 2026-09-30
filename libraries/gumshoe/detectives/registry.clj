@@ -14,6 +14,7 @@
             [gumshoe.detectives.csi :as csi]
             [gumshoe.detectives.disruption :as disruption]
             [gumshoe.detectives.events :as events]
+            [gumshoe.detectives.evpn :as evpn]
             [gumshoe.detectives.expectations :as expectations]
             [gumshoe.detectives.ipfamily :as ipfamily]
             [gumshoe.detectives.mail :as mail]
@@ -91,3 +92,6 @@
 (register! :signals events/detectives)
 (register! :security (concat rbac/detectives pod-security/detectives network/detectives))
 (register! :mail mail/detectives)
+;; the fabric detectives read evidence collected over ssh, so they contribute
+;; nothing to a kubectl-only scan and simply stay silent there.
+(register! :fabric evpn/detectives)
