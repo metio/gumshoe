@@ -119,6 +119,8 @@
     :book "runbooks/detectives/security.clj"}
    {:label "🌐 DNS - nameservers, replication, dual stack"
     :book "runbooks/detectives/dns.clj"}
+   {:label "🕸️  Fabric - EVPN-VXLAN MAC ownership across the hypervisors"
+    :book "runbooks/detectives/fabric.clj"}
    {:label "📡 external-dns - do all declared hostnames resolve?"
     :book "tools/external-dns/runbooks/scan.clj"}
    {:label "🔀 Traffic - Gateway API gateways and routes"
