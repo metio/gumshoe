@@ -178,6 +178,18 @@
       (is (= :critical (severity-of (evpn/detect-fdb-conflicts {"evpn-fdb" rows})
                                     "one-256-0"))))))
 
+(deftest another-vnis-overlay-is-not-a-tap
+  (testing "one fdb table holds every overlay, so a neighbouring VNI must be dropped"
+    (let [out (str "02:00:0a:18:00:0d dev lo.4208 dst 10.0.0.1 self extern_learn\n"
+                   "02:00:0a:18:00:0d dev one-256-0 master onebr8\n"
+                   "02:00:2d:5c:31:d9 dev lo.4200 dst 10.0.2.73 self extern_learn\n"
+                   "02:00:0a:15:09:0e dev lo.4201 dst 10.0.2.71 self extern_learn\n")
+          rows (vec (collect/parse-fdb 4208 "host-a" out))]
+      (is (= 2 (count rows)) "only this VNI's overlay and the tap survive")
+      (is (every? #(#{"lo.4208" "one-256-0"} (:dev %)) rows))
+      (testing "and the conflict detective then sees one finding, not three"
+        (is (= 1 (count (evpn/detect-fdb-conflicts {"evpn-fdb" rows}))))))))
+
 (deftest parsing-the-local-vtep
   (is (= "10.0.2.70" (collect/parse-local-vtep "VNI: 4208\n Local VTEP IP: 10.0.2.70\n")))
   (is (nil? (collect/parse-local-vtep "VNI: 4208\n")) "absent rather than wrong")
