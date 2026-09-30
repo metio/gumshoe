@@ -41,6 +41,36 @@
           :storageClassName storage-class
           :resources {:requests {:storage size}}}})
 
+(def drill-mac
+  "The MAC every fabric drill pins.
+
+   A kubernetes drill is contained by burning inside the fire-drill namespace. A
+   fabric drill has no namespace - it edits a hypervisor's forwarding table, where
+   a real guest's MAC would make a real machine unreachable. So containment comes
+   from the value instead: this is OpenNebula's 02:00: prefix followed by
+   203.0.113.1 from RFC 5737's documentation range, an address that cannot be
+   assigned, so the MAC cannot belong to a guest on any fabric."
+  "02:00:cb:00:71:01")
+
+(def drill-vtep
+  "Where the drill entry points: RFC 5737 TEST-NET-1, which is not a VTEP anywhere.
+   Nothing can be attracted to it, so the entry is inert while still being exactly
+   the shape a fabric detective reports."
+  "192.0.2.1")
+
+(defn fabric-pin-args
+  "The static fdb entry that is the fire. `replace` rather than `add` so relighting
+   a drill that is already burning is not an error."
+  [vni]
+  ["sudo" "bridge" "fdb" "replace" drill-mac "dev" (str "lo." vni)
+   "dst" drill-vtep "self" "static"])
+
+(defn fabric-unpin-args
+  "Putting it out. The kernel errors when the entry is already gone, which the
+   caller treats as extinguished rather than as a failure."
+  [vni]
+  ["sudo" "bridge" "fdb" "del" drill-mac "dev" (str "lo." vni)])
+
 (defn ignite!
   "Applies the drill manifests inside the drill namespace. Returns true when
    the fire is burning."
