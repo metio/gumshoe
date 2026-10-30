@@ -26,9 +26,10 @@ jobs:
     permissions:
       contents: write # create the tag and the release
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0 # needs-release/calver read tags and history
+          persist-credentials: false
       - id: gate
         uses: metio/ci/needs-release@afbf10fe3c5ceb438a1da090e78cc6c0159c4754 # 2026.7.5093733
         with:
