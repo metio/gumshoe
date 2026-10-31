@@ -2,6 +2,21 @@
 # SPDX-License-Identifier: 0BSD
 
 .idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.project
+.classpath
+.DS_Store
+.claude/settings.local.json
+result
+result-*
+.direnv/
+.cpcache/
+.clj-kondo/.cache/
+.lsp/.cache/
+.nrepl-port
 .clj-kondo/
 .lsp/
 .claude/
