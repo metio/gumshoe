@@ -529,3 +529,7 @@ That is why a book's mutation can be asserted without a cluster, and why
 - `./tools`: optional tool packages (flux, ceph, cert-manager, ...), each a
   git-deps subpath
 - `./tests`: unit tests for the shared libraries
+
+## License
+
+[0BSD](LICENSES/0BSD.txt).
