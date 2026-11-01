@@ -27,31 +27,19 @@ repo that depends on gumshoe (see [Casebooks & plugins](#casebooks--plugins)).
 
 The five-minute version, no prior knowledge assumed.
 
-**With nix (recommended)** - one command installs every tool any book needs:
+**With [breto](https://github.com/metio/breto) (recommended)** - one command
+installs every tool any book needs:
 
 ```shell
 git clone <this repository> && cd gumshoe
-nix develop        # babashka, kubectl, flux, psql, dig, fzf, gum, ...
-kubectl krew install netshoot  # once, only for the netshoot books
-./gumshoe                      # the guided menu - it asks what you're doing
+eval "$(breto env)"            # babashka, kubectl, flux, psql, fzf, gum, ... on PATH
+krew install netshoot          # once, only for the netshoot books
+gumshoe                        # the guided menu - it asks what you're doing
 ```
 
-**With a container (ilo)** - if you would rather not install anything on the
-host, `dev/Containerfile` builds an image with every tool on board. It builds
-the same toolset the flake defines, so it never drifts from `nix develop`. Copy
-`dev/ilo.rc.example` to `.ilo.rc` (gitignored - it holds host-specific paths),
-adjust the mounts to your machine, and:
+`git`, `dig`, `openssl`, `ping` and `ssh` come from your system.
 
-```shell
-ilo shell        # builds the image once, drops you in with every tool
-./gumshoe        # then work exactly as you would on the host
-```
-
-The mounts in `.ilo.rc` are the host-specific wiring: `--network host` so books
-reach private hosts over your VPN, plus your kubeconfig, SSH keys, GnuPG, and
-gopass config. Nothing host-specific is baked into the image.
-
-**Without nix** - install [babashka](https://babashka.org/) plus whatever the
+**Without breto** - install [babashka](https://babashka.org/) plus whatever the
 book you want asks for. You do not need to guess: every book checks its
 prerequisites first and tells you exactly which tool is missing. The usual
 suspects: `kubectl`, `fzf`, `dig`, `gopass`. For everything else, run the book
@@ -383,7 +371,7 @@ them.
 Run the front doors as tasks - `bb gumshoe`, `bb detect`, `bb run`. Pinning a
 released `:git/tag` (with its `:git/sha`) keeps the set reproducible and lets
 Renovate bump it. babashka resolves the dep once via tools.deps - which needs a
-JVM, provided by the flake's devShell - and caches it under the `GITLIBS` dir.
+JVM, which `@jdk25` in `.breto.edn` provides - and caches it under `~/.gitlibs`.
 Copy [`casebook-example/`](casebook-example/) to start one.
 
 **Tool packages.** The optional tools (flux, ceph, cert-manager, ...) live

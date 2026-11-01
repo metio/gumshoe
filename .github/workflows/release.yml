@@ -33,12 +33,14 @@ jobs:
       - id: gate
         uses: metio/ci/needs-release@df245b0c4dacc9bb14c804bb5d4305a405e26fb1 # 2026.11.1153404
         with:
-          paths: libraries runbooks playbooks firebooks tools examples casebook-example dev bb.edn deps.edn flake.nix flake.lock gumshoe detect run investigate README.md
-      - uses: metio/nix-devshell@d0c25fdb0d2c08f23bc62c867317a266b6f1a5c1 # 2026.9.12204255
+          paths: libraries runbooks playbooks firebooks tools examples casebook-example bb.edn deps.edn gumshoe detect run investigate README.md
+      - uses: metio/ci/breto@df245b0c4dacc9bb14c804bb5d4305a405e26fb1 # 2026.11.1153404
         if: steps.gate.outputs.needed == 'true'
+        with:
+          registries: github:metio/toolchains
       - name: Run the book test suite before releasing
         if: steps.gate.outputs.needed == 'true'
-        run: nix develop --command bb test
+        run: bb test
       - id: version
         if: steps.gate.outputs.needed == 'true'
         uses: metio/ci/calver@df245b0c4dacc9bb14c804bb5d4305a405e26fb1 # 2026.11.1153404

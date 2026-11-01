@@ -10,6 +10,6 @@
 ;;   {:deps  {io.github.metio/gumshoe {:git/tag "2026.7.5" :git/sha "…"}}
 ;;    :paths ["libraries" "runbooks" "playbooks" "firebooks"]}
 ;;
-;; babashka resolves git deps via tools.deps, which needs a JVM (the flake's
-;; devShell provides it); the resolution is cached under ~/.gitlibs afterwards.
+;; babashka resolves git deps via tools.deps, which needs a JVM (@jdk25 in
+;; .breto.edn provides it); the resolution is cached under ~/.gitlibs afterwards.
 {:paths ["libraries" "runbooks" "playbooks" "firebooks"]}

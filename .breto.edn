@@ -1,0 +1,7 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+{:packages ["@babashka" "@jdk25" "@lint" "@postgres"
+            "alertmanager" "cmctl" "flux2" "fzf" "gopass" "gum" "krew" "kubectl" "restic" "upterm"]
+ :commands {"gumshoe" {:run "exec bb gumshoe \"$@\""
+                       :description "The guided front door"}}}
