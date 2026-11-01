@@ -8,6 +8,8 @@
 
 FROM docker.io/nixos/nix:latest
 
+LABEL wtf.metio.ci.root-allowed="development image run by ilo with the repository mounted"
+
 # Flakes are still gated behind experimental features on the stock nix image.
 RUN mkdir -p /etc/nix \
     && printf '%s\n' 'experimental-features = nix-command flakes' >> /etc/nix/nix.conf
