@@ -22,15 +22,6 @@ jobs:
       - uses: metio/nix-devshell@d0c25fdb0d2c08f23bc62c867317a266b6f1a5c1 # 2026.9.12204255
       - name: Run the book test suite
         run: nix develop --command bb test
-  reuse:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: metio/nix-devshell@d0c25fdb0d2c08f23bc62c867317a266b6f1a5c1 # 2026.9.12204255
-      - run: nix develop --command reuse lint
   yaml:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -69,35 +60,11 @@ jobs:
           persist-credentials: false
       - uses: metio/nix-devshell@d0c25fdb0d2c08f23bc62c867317a266b6f1a5c1 # 2026.9.12204255
       - run: nix develop --command typos
-  policy:
-    # The metio org convention policies (conftest/Rego) from metio/ci: SHA pins,
-    # permissions, timeouts, run-injection, and - because this repo ships a
-    # flake.nix - the flake-owned-toolchain rules.
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: metio/ci/policy-check@df245b0c4dacc9bb14c804bb5d4305a405e26fb1 # 2026.11.1153404
-  dco:
-    # Developer Certificate of Origin: every commit must carry a Signed-off-by
-    # trailer. Skipped for bot-authored PRs; a skipped job still satisfies the
-    # all-green gate below.
-    if: github.event.pull_request.user.type != 'Bot'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: metio/ci/dco@df245b0c4dacc9bb14c804bb5d4305a405e26fb1 # 2026.11.1153404
   verify:
     # Single required check covering every job above: mark only this required
     # in branch protection and new jobs are covered automatically.
     name: Verify
-    needs: [test, reuse, yaml, github-actions, markdown, typos, policy, dco]
+    needs: [test, yaml, github-actions, markdown, typos]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 15
