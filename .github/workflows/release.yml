@@ -31,21 +31,21 @@ jobs:
           fetch-depth: 0 # needs-release/calver read tags and history
           persist-credentials: false
       - id: gate
-        uses: metio/ci/needs-release@d4a165ac035d1fa1a7aee5b27192d0aed9c7a0b0 # 2026.11.1111906
+        uses: metio/ci/needs-release@df245b0c4dacc9bb14c804bb5d4305a405e26fb1 # 2026.11.1153404
         with:
           paths: libraries runbooks playbooks firebooks tools examples casebook-example dev bb.edn deps.edn flake.nix flake.lock gumshoe detect run investigate README.md
-      - uses: metio/nix-devshell@1976169d4c51b321be318ade369ccf689849f9f0 # 2026.7.6091757
+      - uses: metio/nix-devshell@d0c25fdb0d2c08f23bc62c867317a266b6f1a5c1 # 2026.9.12204255
         if: steps.gate.outputs.needed == 'true'
       - name: Run the book test suite before releasing
         if: steps.gate.outputs.needed == 'true'
         run: nix develop --command bb test
       - id: version
         if: steps.gate.outputs.needed == 'true'
-        uses: metio/ci/calver@d4a165ac035d1fa1a7aee5b27192d0aed9c7a0b0 # 2026.11.1111906
+        uses: metio/ci/calver@df245b0c4dacc9bb14c804bb5d4305a405e26fb1 # 2026.11.1153404
       - id: notes
         name: Generate release notes
         if: steps.gate.outputs.needed == 'true'
-        uses: metio/ci/release-notes@d4a165ac035d1fa1a7aee5b27192d0aed9c7a0b0 # 2026.11.1111906
+        uses: metio/ci/release-notes@df245b0c4dacc9bb14c804bb5d4305a405e26fb1 # 2026.11.1153404
         with:
           version: ${{ steps.version.outputs.version }}
           previous: ${{ steps.gate.outputs.last }}
