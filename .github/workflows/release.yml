@@ -31,10 +31,10 @@ jobs:
           fetch-depth: 0 # needs-release/calver read tags and history
           persist-credentials: false
       - id: gate
-        uses: metio/ci/needs-release@df245b0c4dacc9bb14c804bb5d4305a405e26fb1 # 2026.11.1153404
+        uses: metio/ci/needs-release@bfcb1a4d37c4fd4d5d9c27181191dcad0d04f90c # 2026.11.1211658
         with:
           paths: libraries runbooks playbooks firebooks tools examples casebook-example bb.edn deps.edn gumshoe detect run investigate README.md
-      - uses: metio/ci/breto@df245b0c4dacc9bb14c804bb5d4305a405e26fb1 # 2026.11.1153404
+      - uses: metio/ci/breto@bfcb1a4d37c4fd4d5d9c27181191dcad0d04f90c # 2026.11.1211658
         if: steps.gate.outputs.needed == 'true'
         with:
           registries: github:metio/toolchains
@@ -43,11 +43,11 @@ jobs:
         run: bb test
       - id: version
         if: steps.gate.outputs.needed == 'true'
-        uses: metio/ci/calver@df245b0c4dacc9bb14c804bb5d4305a405e26fb1 # 2026.11.1153404
+        uses: metio/ci/calver@bfcb1a4d37c4fd4d5d9c27181191dcad0d04f90c # 2026.11.1211658
       - id: notes
         name: Generate release notes
         if: steps.gate.outputs.needed == 'true'
-        uses: metio/ci/release-notes@df245b0c4dacc9bb14c804bb5d4305a405e26fb1 # 2026.11.1153404
+        uses: metio/ci/release-notes@bfcb1a4d37c4fd4d5d9c27181191dcad0d04f90c # 2026.11.1211658
         with:
           version: ${{ steps.version.outputs.version }}
           previous: ${{ steps.gate.outputs.last }}
