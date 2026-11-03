@@ -11,8 +11,8 @@
 ;; gumshoe's entry points with this casebook's deps on the classpath). babashka
 ;; resolves the git dep once via tools.deps (needs a JVM - the gumshoe devShell
 ;; provides it) and caches it under ~/.gitlibs.
-{:deps {io.github.metio/gumshoe {:git/tag "2026.11.2190007"
-                                 :git/sha "91a23de3d7614454a442dbc0c621da2f65cd4ef4"}}
+{:deps {io.github.metio/gumshoe {:git/tag "2026.11.3010033"
+                                 :git/sha "9403436a77b54ce997d2e1289ae00b5cc7dff172"}}
  :paths ["libraries" "runbooks" "playbooks" "firebooks"]
  :tasks {gumshoe  {:doc "The one front door" :task (exec 'gumshoe.main/front-door)}
          detect   {:doc "Scan for symptoms"  :task (exec 'gumshoe.main/detect)}
