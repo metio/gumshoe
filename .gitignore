@@ -10,9 +10,7 @@
 .classpath
 .DS_Store
 .claude/settings.local.json
-result
-result-*
-.direnv/
+.breto.local.edn
 .cpcache/
 .clj-kondo/.cache/
 .lsp/.cache/
