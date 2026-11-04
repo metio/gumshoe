@@ -324,6 +324,19 @@
                       (run-detectives detectives (collect-evidence! context detectives))
                       (:output opts "text"))))
 
+(defn no-detectives-message
+  "Why a book found nothing to run. A scan with no detectives examines no
+   evidence and can report no findings, which renders as a clean cluster - so it
+   is an error, not a pass. The usual cause is a scope whose detectives come
+   from a plugin that env.edn does not list."
+  [scope]
+  (if scope
+    (format (str "the %s scope has no detectives registered, so this scan checked nothing - "
+                 "a scope's detectives come from plugins, so add the one that provides them "
+                 "to :plugins in env.edn")
+            scope)
+    "this book lists no detectives, so the scan checked nothing"))
+
 (defn book
   "Builds a read-only detective runbook that investigates a fixed set of
    detectives over the current cluster. The whole book is this one call: the
@@ -335,7 +348,9 @@
           :when-to-run \"one-line orientation shown before the run\" (optional)}
 
    With :scope the detectives are resolved from the registry when the book runs -
-   so a plugin that registered detectives into that scope joins this scan."
+   so a plugin that registered detectives into that scope joins this scan. A
+   scope that resolves to nothing fails rather than reporting a clean cluster;
+   see no-detectives-message."
   [{:keys [description detectives scope prerequisites when-to-run]}]
   (runbook/execute!
    {:description description
@@ -343,7 +358,8 @@
     :prerequisites prerequisites
     :announce? false
     :action (fn [opts _ctx]
-              (when-to-run! when-to-run)
-              (investigate! (kubectl/current-context)
-                            (or detectives (registry/for-scope scope))
-                            opts))}))
+              (let [resolved (or detectives (registry/for-scope scope))]
+                (if (empty? resolved)
+                  (do (stdout/error (no-detectives-message scope)) false)
+                  (do (when-to-run! when-to-run)
+                      (investigate! (kubectl/current-context) resolved opts)))))}))

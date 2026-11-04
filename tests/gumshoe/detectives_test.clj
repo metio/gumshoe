@@ -283,3 +283,16 @@
 (deftest active-namespace-is-quiet-test
   (is (empty? (namespaces/detect-stuck-namespaces
                {"namespaces" {:items [{:metadata {:name "live"} :status {:phase "Active"}}]}}))))
+
+(deftest an-unregistered-scope-is-an-error-not-a-clean-scan-test
+  (let [message (detective/no-detectives-message :databases)]
+    (is (re-find #":databases scope has no detectives" message))
+    (is (re-find #"checked nothing" message)
+        "the message says the scan proved nothing, not that the cluster is well")
+    (is (re-find #"env\.edn" message)
+        "it names the usual cause so the reader can fix it"))
+  (is (re-find #"lists no detectives" (detective/no-detectives-message nil))))
+
+(deftest an-empty-registry-scope-resolves-to-nothing-test
+  (is (empty? (registry/for-scope :a-scope-nothing-registers))
+      "the guard's premise: an unregistered scope yields no detectives"))
