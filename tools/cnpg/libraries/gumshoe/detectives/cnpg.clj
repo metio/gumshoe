@@ -8,8 +8,13 @@
    The last of those is not visible in the phase or the ready count. A cluster
    can report a plausible phase and two of three instances ready while the one
    instance it designates primary is the unhealthy one - replicas in recovery
-   and nothing accepting writes."
-  (:require [gumshoe.kubectl :as kubectl]))
+   and nothing accepting writes.
+
+   Nor is a crashlooping instance visible there. An instance whose postgres
+   never starts leaves the pod restarting indefinitely while the cluster reports
+   a storage phase and a ready count that look survivable."
+  (:require [gumshoe.cnpg.instances :as inst]
+            [gumshoe.kubectl :as kubectl]))
 
 (def cluster-type "clusters.postgresql.cnpg.io")
 (def backup-type "backups.postgresql.cnpg.io")
@@ -80,6 +85,43 @@
         :hint (str "reason " (or (:reason ready) "unknown")
                    " - a roll clears in minutes, so this is stuck rather than in progress")}))))
 
+(def ^:private crashloop-reason "CrashLoopBackOff")
+
+(defn- crashlooping-containers
+  [pod]
+  (filter #(= crashloop-reason (-> % :state :waiting :reason))
+          (-> pod :status :containerStatuses)))
+
+(defn- designated-primary?
+  "Whether this pod is the one its cluster names in status.currentPrimary. An
+   absent or unreadable cluster leaves the finding unenriched rather than
+   suppressing it: a crashlooping instance is reportable either way."
+  [clusters pod]
+  (let [namespace (kubectl/namespace-of pod)
+        cluster (inst/cluster-of pod)]
+    (boolean
+     (some #(and (= namespace (kubectl/namespace-of %))
+                 (= cluster (kubectl/name-of %))
+                 (= (kubectl/name-of pod) (-> % :status :currentPrimary)))
+           clusters))))
+
+(defn detect-crashlooping-instances
+  "Instance pods whose container is in CrashLoopBackOff. The restart count is
+   the part that distinguishes a pod that will recover from one that has been
+   failing for days."
+  [evidence]
+  (let [clusters (kubectl/items-of (get evidence cluster-type))]
+    (for [pod (filter inst/instance-pod? (kubectl/items-of (get evidence "pods")))
+          container (crashlooping-containers pod)]
+      {:severity :critical
+       :component (kubectl/namespace-name-of pod)
+       :summary (format "%s is in CrashLoopBackOff after %d restarts"
+                        (:name container) (or (:restartCount container) 0))
+       :hint (str (when (designated-primary? clusters pod)
+                    "this is the cluster's designated primary, so nothing accepts writes - ")
+                  "read the pod log for the reason; an instance with no room for WALs "
+                  "refuses to start at all, so the count climbs without the cluster recovering")})))
+
 (defn detect-cnpg-problems
   [evidence]
   (let [clusters (kubectl/items-of (get evidence cluster-type))]
@@ -131,6 +173,10 @@
     :description "Clusters whose designated primary is unhealthy, or stuck not-Ready"
     :requires [cluster-type]
     :detect detect-primary-problems}
+   {:name "cnpg-instance-crashloop"
+    :description "Postgres instance pods stuck in CrashLoopBackOff"
+    :requires [cluster-type "pods"]
+    :detect detect-crashlooping-instances}
    {:name "cnpg-backups"
     :description "CloudNativePG backups that failed or are suspended"
     :requires [backup-type scheduled-backup-type]

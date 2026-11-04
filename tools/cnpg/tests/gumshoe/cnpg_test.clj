@@ -2,7 +2,8 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.cnpg-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is]]
             [gumshoe.capabilities :as capabilities]
             [gumshoe.detectives.cnpg :as cnpg]
             [gumshoe.detectives.registry :as registry]
@@ -116,3 +117,78 @@
                    (assoc-in [:status :instancesStatus] {})
                    (assoc-in [:status :conditions] [{:type "Ready" :status "True"}]))
                "2026-11-04T20:00:00Z"))))
+
+;; The live pods from the same cluster: -2 had reached 1398 restarts over 8 days
+;; while the cluster reported a storage phase and 2 of 3 instances ready.
+(def ^:private crashlooping-instance-pod
+  {:metadata {:namespace "cloudnative-pg-cluster-general"
+              :name "cloudnative-pg-cluster-general-2"
+              :labels {:cnpg.io/cluster "cloudnative-pg-cluster-general"
+                       :cnpg.io/podRole "instance"
+                       :cnpg.io/instanceName "cloudnative-pg-cluster-general-2"}
+              :ownerReferences [{:kind "Cluster" :name "cloudnative-pg-cluster-general"}]}
+   :status {:containerStatuses
+            [{:name "postgres" :ready false :restartCount 1398
+              :state {:waiting {:reason "CrashLoopBackOff"
+                                :message "back-off 5m0s restarting failed container=postgres"}}}]}})
+
+(def ^:private running-instance-pod
+  {:metadata {:namespace "cloudnative-pg-cluster-general"
+              :name "cloudnative-pg-cluster-general-1"
+              :labels {:cnpg.io/cluster "cloudnative-pg-cluster-general"
+                       :cnpg.io/podRole "instance"}
+              :ownerReferences [{:kind "Cluster" :name "cloudnative-pg-cluster-general"}]}
+   :status {:containerStatuses
+            [{:name "postgres" :ready true :restartCount 0
+              :state {:running {:startedAt "2026-10-27T01:39:53Z"}}}]}})
+
+;; A pooler's own pods carry cnpg.io/cluster as well, so a crashlooping
+;; PgBouncer must not be reported as a Postgres instance.
+(def ^:private crashlooping-pooler-pod
+  {:metadata {:namespace "cloudnative-pg-cluster-general"
+              :name "cloudnative-pg-cluster-general-rw-session-5f9d546867-nnlcd"
+              :labels {:cnpg.io/cluster "cloudnative-pg-cluster-general"
+                       :cnpg.io/poolerName "cloudnative-pg-cluster-general-rw-session"
+                       :pod-template-hash "5f9d546867"}}
+   :status {:containerStatuses
+            [{:name "pgbouncer" :ready false :restartCount 12
+              :state {:waiting {:reason "CrashLoopBackOff"}}}]}})
+
+(defn- crashloop-findings
+  [pods clusters]
+  (cnpg/detect-crashlooping-instances
+   {"pods" {:items pods} cnpg/cluster-type {:items clusters}}))
+
+(deftest a-crashlooping-instance-is-critical-test
+  (let [findings (crashloop-findings [crashlooping-instance-pod] [stuck-primary-cluster])]
+    (is (= 1 (count findings)))
+    (is (= :critical (:severity (first findings))))
+    (is (= "cloudnative-pg-cluster-general/cloudnative-pg-cluster-general-2"
+           (:component (first findings))))
+    (is (= #{"postgres is in CrashLoopBackOff after 1398 restarts"} (summaries findings)))))
+
+(deftest a-crashlooping-primary-says-nothing-accepts-writes-test
+  (let [finding (first (crashloop-findings [crashlooping-instance-pod] [stuck-primary-cluster]))]
+    (is (str/includes? (:hint finding) "designated primary"))))
+
+(deftest a-crashlooping-replica-does-not-claim-the-primary-test
+  (let [replica (assoc-in crashlooping-instance-pod [:metadata :name]
+                          "cloudnative-pg-cluster-general-3")
+        finding (first (crashloop-findings [replica] [stuck-primary-cluster]))]
+    (is (some? finding))
+    (is (not (str/includes? (:hint finding) "designated primary")))))
+
+(deftest a-crashlooping-pooler-pod-is-not-an-instance-test
+  (is (empty? (crashloop-findings [crashlooping-pooler-pod] [stuck-primary-cluster]))))
+
+(deftest a-running-instance-is-quiet-test
+  (is (empty? (crashloop-findings [running-instance-pod] [stuck-primary-cluster]))))
+
+(deftest an-absent-cluster-still-reports-the-crashloop-test
+  (let [finding (first (crashloop-findings [crashlooping-instance-pod] []))]
+    (is (= :critical (:severity finding)))
+    (is (not (str/includes? (:hint finding) "designated primary")))))
+
+(deftest a-pod-without-container-statuses-is-quiet-test
+  (is (empty? (crashloop-findings [(dissoc crashlooping-instance-pod :status)]
+                                  [stuck-primary-cluster]))))

@@ -10,6 +10,11 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
 - **Detectives** - join the `:databases` scan scope (clusters not in a healthy
   phase, too few ready instances, failing WAL archiving, failed/suspended
   backups), so they also run in the cluster-wide scan.
+- **Crashloop detective** - an instance pod stuck in `CrashLoopBackOff` is
+  reported with its restart count, which is what separates a pod that will
+  recover from one that has been failing for days. A Pooler's own pods carry the
+  same `cnpg.io/cluster` label, so the sweep matches on the instance pod role
+  and excludes anything labelled with a `poolerName`.
 - **Primary detective** - a cluster whose `currentPrimary` is not among its
   healthy instances accepts no writes however plausible its phase and ready
   count look, and one that has been not-Ready for over an hour is stuck rather

@@ -17,48 +17,26 @@
    unreachable and has nothing to do with the pooler. An unhealthy cluster is
    reported by the cnpg detectives instead, because a stale pooler cannot be
    told from an unreachable one until the cluster itself is well."
-  (:require [gumshoe.kubectl :as kubectl]))
+  (:require [gumshoe.cnpg.instances :as inst]
+            [gumshoe.kubectl :as kubectl]))
 
 (def pooler-type "poolers.postgresql.cnpg.io")
 (def cluster-type "clusters.postgresql.cnpg.io")
 
 (def ^:private healthy-phase "Cluster in healthy state")
 
-(def ^:private pooler-name-label :cnpg.io/poolerName)
-(def ^:private cluster-label :cnpg.io/cluster)
 (def ^:private template-hash-label :pod-template-hash)
-(def ^:private pod-role-label :cnpg.io/podRole)
 
-(defn- labels-of [pod] (-> pod :metadata :labels))
+(def ^:private labels-of inst/labels-of)
 
 (defn- created-at
   [pod]
   (some-> pod :metadata :creationTimestamp java.time.Instant/parse))
 
-(defn- owned-by-cluster?
-  "Instance pods are created by the operator with an ownerReference to the
-   Cluster; pooler pods are owned by a ReplicaSet. Checked alongside the label
-   so neither alone has to be load-bearing."
-  [cluster pod]
-  (some #(and (= "Cluster" (:kind %)) (= cluster (:name %)))
-        (-> pod :metadata :ownerReferences)))
-
-(defn- instance-pods
-  "The cluster's Postgres pods. A Pooler's own pods carry the same
-   `cnpg.io/cluster` label, so matching on it alone collects them too - and
-   then the oldest 'instance' is a pooler pod, which nothing can predate."
-  [pods namespace cluster]
-  (filter #(and (= namespace (kubectl/namespace-of %))
-                (not (get (labels-of %) pooler-name-label))
-                (or (owned-by-cluster? cluster %)
-                    (and (= cluster (get (labels-of %) cluster-label))
-                         (= "instance" (get (labels-of %) pod-role-label)))))
-          pods))
-
 (defn- pooler-pods
   [pods namespace pooler]
   (filter #(and (= namespace (kubectl/namespace-of %))
-                (= pooler (get (labels-of %) pooler-name-label)))
+                (= pooler (get (labels-of %) inst/pooler-name-label)))
           pods))
 
 (defn- ready?
@@ -111,7 +89,7 @@
     (for [pooler (kubectl/items-of (get evidence pooler-type))
           :let [namespace (kubectl/namespace-of pooler)
                 cluster (cluster-of pooler)
-                instances (keep created-at (instance-pods pods namespace cluster))
+                instances (keep created-at (inst/instance-pods pods namespace cluster))
                 ;; the OLDEST instance pod: every instance must postdate the
                 ;; pooler, which is a rebuild. Against the newest, any single
                 ;; instance replacement - a failover, a reschedule - would fire.
