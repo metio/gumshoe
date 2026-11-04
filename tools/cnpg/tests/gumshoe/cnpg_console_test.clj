@@ -89,3 +89,14 @@
   (is (= "unknown" (console/describe-bytes nil)))
   (is (= "512 bytes" (console/describe-bytes 512)))
   (is (= "2.00GiB" (console/describe-bytes 2147483648))))
+
+(deftest the-promotion-post-check-finds-the-cluster-it-is-given-test
+  (let [clusters [{:metadata {:namespace "other" :name "db"}
+                   :status {:currentPrimary "db-1"}}
+                  {:metadata {:namespace "cloudnative-pg-cluster-general"
+                              :name "cloudnative-pg-cluster-general"}
+                   :status {:currentPrimary "cloudnative-pg-cluster-general-2"}}]]
+    (is (= "cloudnative-pg-cluster-general-2"
+           (console/current-primary clusters "cloudnative-pg-cluster-general/cloudnative-pg-cluster-general")))
+    (is (nil? (console/current-primary clusters "nope/nope"))
+        "a lookup that finds nothing is nil, not a crash")))

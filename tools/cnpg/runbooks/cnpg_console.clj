@@ -115,10 +115,9 @@
                      :timeout 120
                      :check (fn []
                               (= instance
-                                 (-> (kubectl/find-item
-                                      (kubectl/items-of (kubectl/get-all context cnpg/cluster-type))
-                                      namespace cluster)
-                                     :status :currentPrimary)))}]})))
+                                 (console/current-primary
+                                  (kubectl/items-of (kubectl/get-all context cnpg/cluster-type))
+                                  (format "%s/%s" namespace cluster))))}]})))
 
 (defn- console
   [opts _ctx]
@@ -129,7 +128,7 @@
     (if (nil? chosen)
       (do (stdout/error "no cluster selected") false)
       (let [{:keys [namespace name]} (kubectl/split-namespace-name chosen)
-            cluster (kubectl/find-item clusters namespace name)
+            cluster (kubectl/find-item clusters chosen)
             pods (kubectl/items-of (kubectl/get-all context "pods"))
             instances (mapv kubectl/name-of (inst/instance-pods pods namespace name))]
         (if (empty? instances)

@@ -21,6 +21,7 @@
 (def scheduled-backup-type "scheduledbackups.postgresql.cnpg.io")
 
 (def ^:private healthy-phase "Cluster in healthy state")
+(def ^:private healthy-bucket "healthy")
 
 (defn- condition
   [resource type]
@@ -58,16 +59,16 @@
      (for [cluster clusters
            :let [buckets (instance-buckets cluster)
                  primary (-> cluster :status :currentPrimary)
-                 target (-> cluster :status :targetPrimary)]
-           ;; no buckets means the operator reported no instance states, which
-           ;; is unknown rather than broken
-           :when (and primary (seq buckets)
-                      (not (some #{primary} (:healthy buckets))))]
+                 target (-> cluster :status :targetPrimary)
+                 state (bucket-holding buckets primary)]
+           ;; The operator must positively place the primary in a state that is
+           ;; not healthy. A primary in no bucket at all is unknown, not broken:
+           ;; that is how a primary being restarted on purpose reads, and
+           ;; reporting it would call a deliberate restart an outage.
+           :when (and primary (seq buckets) state (not= healthy-bucket state))]
        {:severity :critical
         :component (kubectl/namespace-name-of cluster)
-        :summary (format "the primary %s is not healthy%s" primary
-                         (if-let [state (bucket-holding buckets primary)]
-                           (format " (listed as %s)" state) ""))
+        :summary (format "the primary %s is not healthy (listed as %s)" primary state)
         :hint (if (= primary target)
                 (str "currentPrimary equals targetPrimary, so no switchover is under way - "
                      "the cluster can have healthy replicas and still accept no writes, and "

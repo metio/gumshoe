@@ -11,7 +11,8 @@
    trade between availability now and transactions already acknowledged. That
    is an operator's call. These functions lay out the positions and name the
    cost; they never decide, and the proposal they produce says so."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [gumshoe.kubectl :as kubectl]))
 
 (defn parse-lsn
   "A PostgreSQL LSN (`125/27000000`) as a byte offset. nil for anything that is
@@ -95,6 +96,14 @@
                  (str/join ", " unreadable) candidate)])
       ["this is a proposal from WAL positions alone - it weighs no application, "
        "no backup and no disk headroom, and promoting is a write that needs your approval"]))))
+
+(defn current-primary
+  "The instance a cluster reports as its primary, looked up by \"namespace/name\"
+   in an already-fetched list. A promotion's post-check turns on this, and a
+   lookup that silently finds nothing would report every promotion as failed, so
+   it lives here under test rather than inline in the book."
+  [clusters namespace-name]
+  (-> (kubectl/find-item clusters namespace-name) :status :currentPrimary))
 
 (defn retaining-slots
   "Replication slots holding WAL for a consumer that is not reading it. An

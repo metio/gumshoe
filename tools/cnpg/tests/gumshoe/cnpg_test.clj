@@ -192,3 +192,22 @@
 (deftest a-pod-without-container-statuses-is-quiet-test
   (is (empty? (crashloop-findings [(dissoc crashlooping-instance-pod :status)]
                                   [stuck-primary-cluster]))))
+
+(deftest a-primary-in-no-instance-bucket-is-quiet-test
+  ;; A primary the operator places in no bucket is how a deliberate restart
+  ;; reads - observed with phase "Primary instance is being restarted without a
+  ;; switchover" - and claiming it is unhealthy calls that restart an outage.
+  (let [restarting (assoc-in stuck-primary-cluster [:status :instancesStatus]
+                             {:healthy ["cloudnative-pg-cluster-general-1"]
+                              :failed ["cloudnative-pg-cluster-general-3"]})
+        findings (primary-findings (assoc-in restarting [:status :phase]
+                                             "Primary instance is being restarted without a switchover")
+                                   "2026-11-04T20:50:46Z")]
+    (is (not-any? #(str/includes? (:summary %) "is not healthy") findings)
+        "the primary is in neither the healthy nor any other bucket, so its state is unknown")))
+
+(deftest a-primary-in-a-named-unhealthy-state-still-reports-test
+  (let [findings (primary-findings stuck-primary-cluster "2026-11-04T20:00:00Z")]
+    (is (some #(= "the primary cloudnative-pg-cluster-general-2 is not healthy (listed as replicating)"
+                  (:summary %))
+              findings))))

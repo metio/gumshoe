@@ -58,7 +58,7 @@
     (if (nil? chosen)
       (do (stdout/error "no pooler selected") false)
       (let [{:keys [namespace name]} (kubectl/split-namespace-name chosen)
-            pooler (kubectl/find-item poolers namespace name)
+            pooler (kubectl/find-item poolers chosen)
             pod (pod-of context namespace name)]
         (if (nil? pod)
           (do (stdout/error (format "no pod found for pooler %s" chosen)) false)
