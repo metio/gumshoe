@@ -35,8 +35,11 @@
    :kubectl-can-get [cnpg/cluster-type "pods"]})
 
 (def ^:private instance-sql
+  ;; a primary is not in recovery and so has no receive LSN; its position is
+  ;; pg_current_wal_lsn, without which it ranks below every standby
   (str "select pg_is_in_recovery(), "
-       "coalesce(pg_last_wal_receive_lsn()::text, ''), "
+       "coalesce((case when pg_is_in_recovery() "
+       "then pg_last_wal_receive_lsn() else pg_current_wal_lsn() end)::text, ''), "
        "coalesce(pg_last_wal_replay_lsn()::text, ''), "
        "coalesce((now() - pg_last_xact_replay_timestamp())::text, '')"))
 
@@ -136,7 +139,12 @@
           (let [readings (mapv #(read-instance context namespace %) instances)
                 slots (mapcat #(read-slots context namespace %)
                               (map :instance (filter :readable? readings)))
-                proposal (console/proposal readings)]
+                current (-> cluster :status :currentPrimary)
+                proposal (console/proposal
+                          readings
+                          {:name current
+                           :healthy? (boolean (some #{current}
+                                                    (-> cluster :status :instancesStatus :healthy)))})]
             (stdout/print-data-table {:cluster chosen
                                       :phase (-> cluster :status :phase)
                                       :current-primary (-> cluster :status :currentPrimary)

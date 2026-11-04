@@ -41,15 +41,8 @@
        (filter position-of)
        (sort-by position-of >)))
 
-(defn proposal
-  "What the positions suggest, with the cost of acting on it.
-
-   :candidate is the instance furthest ahead - the one promotion discards least
-   from, not the one that is safe to promote. Promoting it discards nothing by
-   construction, so the number worth stating is the other direction: :behind
-   says what choosing each alternative instead would throw away. :ties names
-   instances sharing the candidate's position, where the positions alone cannot
-   choose."
+(defn- rank
+  "The positions alone, furthest ahead first, with the cost of each alternative."
   [readings]
   (let [ranked (positioned readings)
         best (first ranked)
@@ -70,6 +63,31 @@
                           :bytes (- top (position-of reading))})
                        (rest ranked))
          :unreadable (mapv :instance unreadable)}))))
+
+(defn proposal
+  "What the positions suggest, with the cost of acting on it.
+
+   A cluster whose operator reports a healthy primary gets no candidate at all.
+   Promoting a standby over a working primary is not a repair, and the positions
+   invite exactly that: a primary is not in recovery, so it has no receive LSN
+   and ranks below every standby that does.
+
+   Otherwise :candidate is the instance furthest ahead - the one promotion
+   discards least from, not the one that is safe to promote. Promoting it
+   discards nothing by construction, so the number worth stating is the other
+   direction: :behind says what choosing each alternative instead would throw
+   away. :ties names instances sharing the candidate's position, where the
+   positions alone cannot choose."
+  ([readings] (proposal readings nil))
+  ([readings primary]
+   (if (and (:name primary) (:healthy? primary))
+     {:candidate nil
+      :primary (:name primary)
+      :reason (format (str "the cluster reports %s as a healthy primary, so no promotion is "
+                           "called for - promoting a standby over a working primary discards "
+                           "everything the primary holds beyond it")
+                      (:name primary))}
+     (rank readings))))
 
 (defn proposal-lines
   "The proposal as lines for an operator to read. It states what is unknown as

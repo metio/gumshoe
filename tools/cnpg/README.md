@@ -39,7 +39,9 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
 - **Books** - `runbooks/scan.clj` for the scan, and `runbooks/pooler_console.clj`
   which reads one Pooler's PgBouncer admin console (`SHOW DATABASES`, `POOLS`,
   `SERVERS`) plus its recent log, and reports which of the two look-alike
-  faults it shows: a rejected credential, or an unreachable backend.
+  faults it shows: a rejected credential, or an unreachable backend. A log tail
+  spans whatever it spans, so the verdict says whether its failures are current
+  or left behind by something already over.
   `runbooks/cnpg_console.clj` reads every instance of one cluster - WAL
   positions, recovery state, replication slots - for the question no detective
   answers: when a cluster has no working primary, which instance should become
@@ -48,7 +50,10 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
   that path states the cost, asks for the literal word `yes`, and verifies the
   new primary afterwards; `--dry-run` shows the command and writes nothing. An
   instance it could not read is named as a gap in the proposal, since an unread
-  instance may hold the furthest position of all.
+  instance may hold the furthest position of all. A cluster whose operator
+  reports a healthy primary gets no candidate: a primary is not in recovery and
+  so ranks below every standby that has a receive position, which would read as
+  a promotion worth making.
 
 ```clojure
 ;; bb.edn

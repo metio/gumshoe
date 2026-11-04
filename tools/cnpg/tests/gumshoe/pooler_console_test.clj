@@ -62,3 +62,30 @@
   (is (re-find #"not evidence"
                (first (console/guidance {:verdict :quiet}
                                         {:metadata {:namespace "db" :name "db-rw"}})))))
+
+(defn- stamped [at line] (format "{\"ts\":\"%s\",\"msg\":\"%s\"}" at line))
+
+(deftest a-failure-at-the-end-of-the-window-describes-the-present-test
+  (let [verdict (console/classify
+                 (str/join "\n" [(stamped "2026-11-04T20:59:00Z" health-check)
+                                 (stamped "2026-11-04T20:59:30Z" connect-failure)]))]
+    (is (= :unreachable (:verdict verdict)))
+    (is (not (:stale? verdict)))
+    (is (re-find #"not a pooler fault"
+                 (first (console/guidance verdict {:metadata {:namespace "db" :name "db-rw"}}))))))
+
+(deftest a-failure-left-behind-in-the-window-is-reported-as-historical-test
+  (let [verdict (console/classify
+                 (str/join "\n" [(stamped "2026-10-30T19:56:03Z" connect-failure)
+                                 (stamped "2026-11-04T20:59:30Z" health-check)]))
+        advice (first (console/guidance verdict {:metadata {:namespace "db" :name "db-rw"}}))]
+    (is (= :unreachable (:verdict verdict)))
+    (is (:stale? verdict))
+    (is (re-find #"historical" advice))
+    (is (re-find #"5d 1h" advice))
+    (is (not (re-find #"not a pooler fault" advice)))))
+
+(deftest a-window-without-timestamps-makes-no-claim-about-recency-test
+  (let [verdict (console/classify connect-failure)]
+    (is (nil? (:window-end verdict)))
+    (is (not (:stale? verdict)))))

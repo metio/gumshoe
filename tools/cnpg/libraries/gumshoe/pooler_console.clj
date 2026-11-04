@@ -28,37 +28,90 @@
   [log]
   (vec (remove noise? (str/split-lines (str log)))))
 
+(def ^:private timestamp-pattern #"\"ts\":\"([^\"]+)\"")
+
+(defn line-instant
+  "The timestamp the pooler manager stamps on each record, or nil."
+  [line]
+  (when-let [[_ ts] (re-find timestamp-pattern (str line))]
+    (try (java.time.Instant/parse ts) (catch Exception _ nil))))
+
+(defn- newest
+  [instants]
+  (when (seq instants) (reduce #(if (.isAfter ^java.time.Instant %2 %1) %2 %1) instants)))
+
+(def stale-after
+  "How far behind the end of the window a failure may sit and still describe the
+   present. A log tail spans whatever it spans, so a window that reaches back
+   into a resolved outage counts those failures exactly as it counts current
+   ones."
+  (java.time.Duration/ofMinutes 5))
+
+(defn describe-duration
+  [^java.time.Duration d]
+  (let [days (.toDays d)]
+    (cond (pos? days) (format "%dd %dh" days (.toHoursPart d))
+          (pos? (.toHours d)) (format "%dh %dm" (.toHours d) (.toMinutesPart d))
+          :else (format "%dm" (.toMinutes d)))))
+
 (defn classify
+  "What the window contains, and whether it still describes the present. The
+   counts answer `what failed in this log`; :stale? answers `is any of it still
+   happening`, which is the question an operator reading a verdict is asking."
   [log]
   (let [lines (interesting-lines log)
-        auth (count (filter #(str/includes? % auth-signature) lines))
-        connect (count (filter #(str/includes? % connect-signature) lines))]
-    {:verdict (cond (and (pos? auth) (pos? connect)) :both
-                    (pos? auth) :authentication
-                    (pos? connect) :unreachable
+        auth-lines (filter #(str/includes? % auth-signature) lines)
+        connect-lines (filter #(str/includes? % connect-signature) lines)
+        ;; the end of the window is the newest line of any kind: measured over
+        ;; the interesting lines alone, an old failure is its own window end
+        window-end (newest (keep line-instant (str/split-lines (str log))))
+        latest-failure (newest (keep line-instant (concat auth-lines connect-lines)))
+        behind (when (and window-end latest-failure)
+                 (java.time.Duration/between latest-failure window-end))]
+    {:verdict (cond (and (seq auth-lines) (seq connect-lines)) :both
+                    (seq auth-lines) :authentication
+                    (seq connect-lines) :unreachable
                     :else :quiet)
-     :authentication auth
-     :unreachable connect
+     :authentication (count auth-lines)
+     :unreachable (count connect-lines)
+     :latest-failure latest-failure
+     :window-end window-end
+     :behind behind
+     :stale? (boolean (and behind (pos? (.compareTo behind stale-after))))
      :lines (count lines)}))
+
+(defn- stale-note
+  [{:keys [behind authentication unreachable]}]
+  (let [total (+ authentication unreachable)]
+    (format (str "The %d login failure%s in this window %s historical: the newest sits %s "
+                 "before the end of the window, so the log reaches back into something "
+                 "already over. Read SHOW SERVERS above for a live backing connection "
+                 "before acting on them.")
+            total (if (= 1 total) "" "s") (if (= 1 total) "is" "are")
+            (describe-duration behind))))
 
 (defn guidance
   "What the verdict means, and what it does not license. The quiet case
-   deliberately refuses to claim health: an idle pooler logs nothing."
-  [{:keys [verdict]} pooler]
-  (case verdict
-    :authentication
-    [(format (str "The backend rejects the credential this pooler presents. A pooler left "
-                  "behind by an instance rebuild does this; roll it: "
-                  "kubectl -n %s rollout restart deployment/%s")
-             (kubectl/namespace-of pooler) (kubectl/name-of pooler))]
-    :unreachable
-    [(str "The backend cannot be reached, which is not a pooler fault. Check the "
-          "cluster's phase and ready instances - rolling the pooler will not fix it.")]
-    :both
-    [(str "Both signatures are present. Resolve the unreachable backend first: while "
-          "the cluster is unwell, a rejected credential cannot be told from a cluster "
-          "that is simply absent.")]
-    :quiet
-    [(str "No login failure in the window read. An idle pooler logs nothing, so this is "
-          "not evidence that pooled logins work - check SHOW SERVERS for a backing "
-          "connection, or generate one from an application pod.")]))
+   deliberately refuses to claim health: an idle pooler logs nothing. A window
+   whose newest failure is old leads with that, because a count alone reads as
+   the present."
+  [{:keys [verdict stale?] :as classification} pooler]
+  (if stale?
+    [(stale-note classification)]
+    (case verdict
+      :authentication
+      [(format (str "The backend rejects the credential this pooler presents. A pooler left "
+                    "behind by an instance rebuild does this; roll it: "
+                    "kubectl -n %s rollout restart deployment/%s")
+               (kubectl/namespace-of pooler) (kubectl/name-of pooler))]
+      :unreachable
+      [(str "The backend cannot be reached, which is not a pooler fault. Check the "
+            "cluster's phase and ready instances - rolling the pooler will not fix it.")]
+      :both
+      [(str "Both signatures are present. Resolve the unreachable backend first: while "
+            "the cluster is unwell, a rejected credential cannot be told from a cluster "
+            "that is simply absent.")]
+      :quiet
+      [(str "No login failure in the window read. An idle pooler logs nothing, so this is "
+            "not evidence that pooled logins work - check SHOW SERVERS for a backing "
+            "connection, or generate one from an application pod.")])))

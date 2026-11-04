@@ -100,3 +100,22 @@
            (console/current-primary clusters "cloudnative-pg-cluster-general/cloudnative-pg-cluster-general")))
     (is (nil? (console/current-primary clusters "nope/nope"))
         "a lookup that finds nothing is nil, not a crash")))
+
+(deftest a-healthy-primary-is-not-displaced-by-a-standby-test
+  (let [{:keys [candidate primary reason]}
+        (console/proposal readings {:name "cloudnative-pg-cluster-general-2" :healthy? true})]
+    (is (nil? candidate))
+    (is (= "cloudnative-pg-cluster-general-2" primary))
+    (is (re-find #"healthy primary" reason))
+    (is (= ["no promotion candidate: the cluster reports cloudnative-pg-cluster-general-2 as a healthy primary, so no promotion is called for - promoting a standby over a working primary discards everything the primary holds beyond it"]
+           (console/proposal-lines
+            (console/proposal readings {:name "cloudnative-pg-cluster-general-2" :healthy? true}))))))
+
+(deftest an-unhealthy-primary-leaves-the-ranking-alone-test
+  (is (= "cloudnative-pg-cluster-general-3"
+         (:candidate (console/proposal readings {:name "cloudnative-pg-cluster-general-2"
+                                                 :healthy? false})))))
+
+(deftest a-cluster-with-no-named-primary-leaves-the-ranking-alone-test
+  (is (= "cloudnative-pg-cluster-general-3"
+         (:candidate (console/proposal readings {:name nil :healthy? true})))))
