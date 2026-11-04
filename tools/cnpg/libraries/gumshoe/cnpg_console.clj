@@ -177,9 +177,20 @@
     (= "lost" wal-status) "n/a"
     :else "unbounded"))
 
+(defn primary-slots
+  "The slots held by the instance that generates WAL. Every standby carries a
+   copy of the cluster's slots so a promotion does not lose them, and nothing
+   ever connects to a copy - so on a standby `active = false` is the resting
+   state and says nothing about retention. Only the primary's own slots hold
+   back WAL on the volume that fills."
+  [slots primary]
+  (if primary (filter #(= primary (:instance %)) slots) slots))
+
 (defn slot-lines
-  [slots]
-  (for [slot slots
+  "Comments on the primary's slots. Without a named primary every slot is read,
+   since a cluster with no primary is the case where the slots matter most."
+  [slots primary]
+  (for [slot (primary-slots slots primary)
         :let [state (slot-state slot)]
         :when state]
     (slot-line slot state)))

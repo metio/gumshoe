@@ -78,8 +78,8 @@
                 :wal-status "reserved" :safe-wal-size "2 GB"}]]
     (is (= 1 (count (console/retaining-slots slots))))
     (is (some #(str/includes? % "_cnpg_cloudnative_pg_cluster_general_1")
-              (console/slot-lines slots)))
-    (is (not-any? #(str/includes? % "_general_3") (console/slot-lines slots)))))
+              (console/slot-lines slots nil)))
+    (is (not-any? #(str/includes? % "_general_3") (console/slot-lines slots nil)))))
 
 (deftest a-lost-slot-is-not-reported-as-retaining-test
   (is (empty? (console/retaining-slots [{:slot-name "s" :active false :wal-status "lost"}]))))
@@ -131,7 +131,7 @@
     :active true :wal-status "reserved" :safe-wal-size "10 GB"}])
 
 (deftest a-lost-slot-names-the-rebuild-it-forces-test
-  (let [lines (console/slot-lines live-slots)]
+  (let [lines (console/slot-lines live-slots nil)]
     (is (= 1 (count lines)))
     (is (re-find #"_cnpg_cloudnative_pg_cluster_general_1 on cloudnative-pg-cluster-general-2 is lost"
                  (first lines)))
@@ -140,7 +140,7 @@
 
 (deftest a-streaming-slot-with-headroom-needs-no-comment-test
   (is (nil? (console/slot-state (second live-slots))))
-  (is (not-any? #(str/includes? % "_general_3") (console/slot-lines live-slots))))
+  (is (not-any? #(str/includes? % "_general_3") (console/slot-lines live-slots nil))))
 
 (deftest an-extended-slot-is-retaining-not-safe-test
   (is (= :retaining (console/slot-state {:active false :wal-status "extended"})))
@@ -148,22 +148,22 @@
                    [{:slot-name "s" :active false :wal-status "extended"}]))))
   (is (re-find #"grows the volume"
                (first (console/slot-lines [{:slot-name "s" :instance "i"
-                                            :active false :wal-status "extended"}])))))
+                                            :active false :wal-status "extended"}] nil)))))
 
 (deftest an-unreserved-slot-is-about-to-be-invalidated-test
   (is (= :expiring (console/slot-state {:active false :wal-status "unreserved"})))
   (is (re-find #"next to be released"
                (first (console/slot-lines [{:slot-name "s" :instance "i"
-                                            :active false :wal-status "unreserved"}])))))
+                                            :active false :wal-status "unreserved"}] nil)))))
 
 (deftest a-lost-slot-is-reported-even-with-a-consumer-attached-test
   (is (= :lost (console/slot-state {:active true :wal-status "lost"})))
   (is (seq (console/slot-lines [{:slot-name "s" :instance "i"
-                                 :active true :wal-status "lost"}]))))
+                                 :active true :wal-status "lost"}] nil))))
 
 (deftest a-reading-consumer-past-max-wal-size-is-behind-not-gone-test
   (let [line (first (console/slot-lines [{:slot-name "s" :instance "i"
-                                          :active true :wal-status "extended"}]))]
+                                          :active true :wal-status "extended"}] nil))]
     (is (= :behind (console/slot-state {:active true :wal-status "extended"})))
     (is (re-find #"behind, not gone" line))))
 
@@ -172,3 +172,39 @@
   (is (= "10 GB" (console/describe-safe-wal-size (second live-slots))))
   (is (= "unbounded" (console/describe-safe-wal-size {:wal-status "reserved" :safe-wal-size ""}))
       "no cap configured is unbounded; a lost slot's absent cap is not"))
+
+;; Every instance of a healthy cloudnative-pg-cluster-general carries the
+;; cluster's slots: the primary -2 holds both, streaming, and each standby holds
+;; a copy of the other standby's, which nothing connects to.
+(def ^:private mirrored-slots
+  [{:instance "cloudnative-pg-cluster-general-1"
+    :slot-name "_cnpg_cloudnative_pg_cluster_general_3"
+    :active false :wal-status "reserved" :safe-wal-size "1183 GB"}
+   {:instance "cloudnative-pg-cluster-general-2"
+    :slot-name "_cnpg_cloudnative_pg_cluster_general_1"
+    :active true :wal-status "reserved" :safe-wal-size "10 GB"}
+   {:instance "cloudnative-pg-cluster-general-2"
+    :slot-name "_cnpg_cloudnative_pg_cluster_general_3"
+    :active true :wal-status "reserved" :safe-wal-size "10 GB"}
+   {:instance "cloudnative-pg-cluster-general-3"
+    :slot-name "_cnpg_cloudnative_pg_cluster_general_1"
+    :active false :wal-status "reserved" :safe-wal-size "1183 GB"}])
+
+(deftest a-standbys-copy-of-a-slot-is-not-retention-test
+  (is (empty? (console/slot-lines mirrored-slots "cloudnative-pg-cluster-general-2"))
+      "an inactive copy on a standby is its resting state, not WAL growing a volume"))
+
+(deftest only-the-primarys-slots-are-read-test
+  (is (= 2 (count (console/primary-slots mirrored-slots "cloudnative-pg-cluster-general-2"))))
+  (is (every? #(= "cloudnative-pg-cluster-general-2" (:instance %))
+              (console/primary-slots mirrored-slots "cloudnative-pg-cluster-general-2"))))
+
+(deftest an-inactive-slot-on-the-primary-is-still-reported-test
+  (let [stalled (assoc-in mirrored-slots [1 :active] false)]
+    (is (= 1 (count (console/slot-lines stalled "cloudnative-pg-cluster-general-2"))))
+    (is (re-find #"_cnpg_cloudnative_pg_cluster_general_1 on cloudnative-pg-cluster-general-2 is inactive"
+                 (first (console/slot-lines stalled "cloudnative-pg-cluster-general-2"))))))
+
+(deftest with-no-primary-every-slot-is-read-test
+  (is (= 2 (count (console/slot-lines mirrored-slots nil)))
+      "a cluster with no primary is where the slots matter most, so none are filtered"))

@@ -157,7 +157,7 @@
                 (stdout/print-data-table {:on instance :slot slot-name
                                           :active (str active) :wal-status wal-status
                                           :safe-wal-size (console/describe-safe-wal-size slot)}))
-              (doseq [line (console/slot-lines slots)] (stdout/warn line)))
+              (doseq [line (console/slot-lines slots current)] (stdout/warn line)))
             (stdout/print-section "Promotion proposal")
             (doseq [line (console/proposal-lines proposal)] (stdout/warn line))
             (if-let [instance (:promote opts)]

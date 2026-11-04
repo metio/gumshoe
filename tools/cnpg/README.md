@@ -77,7 +77,10 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
   instance may hold the furthest position of all. The slot table reads each
   slot by its `wal_status`: `lost` names the standby that needs re-cloning,
   `unreserved` the one about to, and an inactive `reserved` or `extended` slot
-  the WAL growing the volume meanwhile. A lost slot's headroom column reads
+  the WAL growing the volume meanwhile. Only the primary's slots are read that
+  way: every standby carries a copy of the cluster's slots so a promotion does
+  not lose them, nothing ever connects to a copy, and an inactive copy is its
+  resting state rather than retention. A lost slot's headroom column reads
   `n/a` rather than `unbounded`, since the cap no longer applies to it. A cluster whose operator
   reports a healthy primary gets no candidate: a primary is not in recovery and
   so ranks below every standby that has a receive position, which would read as
