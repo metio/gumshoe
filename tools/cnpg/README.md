@@ -74,7 +74,11 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
   that path states the cost, asks for the literal word `yes`, and verifies the
   new primary afterwards; `--dry-run` shows the command and writes nothing. An
   instance it could not read is named as a gap in the proposal, since an unread
-  instance may hold the furthest position of all. A cluster whose operator
+  instance may hold the furthest position of all. The slot table reads each
+  slot by its `wal_status`: `lost` names the standby that needs re-cloning,
+  `unreserved` the one about to, and an inactive `reserved` or `extended` slot
+  the WAL growing the volume meanwhile. A lost slot's headroom column reads
+  `n/a` rather than `unbounded`, since the cap no longer applies to it. A cluster whose operator
   reports a healthy primary gets no candidate: a primary is not in recovery and
   so ranks below every standby that has a receive position, which would read as
   a promotion worth making.

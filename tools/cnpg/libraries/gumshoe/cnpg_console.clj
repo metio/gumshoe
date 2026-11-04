@@ -124,14 +124,62 @@
   (-> (kubectl/find-item clusters namespace-name) :status :currentPrimary))
 
 (defn retaining-slots
-  "Replication slots holding WAL for a consumer that is not reading it. An
-   inactive slot with WAL still reserved grows the volume for as long as it
-   exists, and with no `max_slot_wal_keep_size` there is no bound on it."
+  "Replication slots holding WAL for a consumer that is not reading it. Both
+   `reserved` and `extended` are still held: `extended` is past max_wal_size and
+   kept anyway, which is the state a slot passes through on its way to filling
+   the volume."
   [slots]
-  (filter #(and (false? (:active %)) (= "reserved" (:wal-status %))) slots))
+  (filter #(and (false? (:active %)) (contains? #{"reserved" "extended"} (:wal-status %)))
+          slots))
+
+(defn lost-slots
+  "Slots whose WAL has been released. The consumer cannot resume from one of
+   these, whatever its own state - it needs re-cloning from the primary."
+  [slots]
+  (filter #(= "lost" (:wal-status %)) slots))
+
+(defn slot-state
+  "What one slot means for the operator, as :lost, :retaining, :expiring,
+   :behind or nil for a slot that needs no comment. A slot is read by its
+   wal_status first: `lost` is terminal whether or not a consumer is attached."
+  [{:keys [active wal-status]}]
+  (cond
+    (= "lost" wal-status) :lost
+    (and (false? active) (= "unreserved" wal-status)) :expiring
+    (false? active) (when (contains? #{"reserved" "extended"} wal-status) :retaining)
+    (= "unreserved" wal-status) :expiring
+    (= "extended" wal-status) :behind))
+
+(defn- slot-line
+  [{:keys [slot-name instance]} state]
+  (case state
+    :lost (format (str "slot %s on %s is lost - its WAL has been released, so the standby it "
+                       "belongs to cannot resume and needs re-cloning from the primary")
+                  slot-name instance)
+    :retaining (format (str "slot %s on %s is inactive and still holding WAL - it grows the "
+                            "volume until its consumer returns, it is dropped, or "
+                            "max_slot_wal_keep_size invalidates it")
+                       slot-name instance)
+    :expiring (format (str "slot %s on %s is unreserved - its WAL is next to be released, "
+                           "after which the standby needs re-cloning")
+                      slot-name instance)
+    :behind (format (str "slot %s on %s is holding WAL past max_wal_size for a consumer that "
+                         "is reading - the standby is behind, not gone")
+                    slot-name instance)))
+
+(defn describe-safe-wal-size
+  "What the headroom column should read. An empty value means two different
+   things: no cap configured, or no cap that applies - a lost slot reports none
+   because the WAL is already gone."
+  [{:keys [wal-status safe-wal-size]}]
+  (cond
+    (not (str/blank? safe-wal-size)) safe-wal-size
+    (= "lost" wal-status) "n/a"
+    :else "unbounded"))
 
 (defn slot-lines
   [slots]
-  (for [{:keys [slot-name]} (retaining-slots slots)]
-    (format "slot %s is inactive and still reserving WAL - it grows the volume until its consumer returns or it is dropped"
-            slot-name)))
+  (for [slot slots
+        :let [state (slot-state slot)]
+        :when state]
+    (slot-line slot state)))

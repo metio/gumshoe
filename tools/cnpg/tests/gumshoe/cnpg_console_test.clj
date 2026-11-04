@@ -119,3 +119,56 @@
 (deftest a-cluster-with-no-named-primary-leaves-the-ranking-alone-test
   (is (= "cloudnative-pg-cluster-general-3"
          (:candidate (console/proposal readings {:name nil :healthy? true})))))
+
+;; The slot table on cloudnative-pg-cluster-general once the 10GB cap was
+;; applied: -1's slot invalidated and -3's streaming with headroom.
+(def ^:private live-slots
+  [{:instance "cloudnative-pg-cluster-general-2"
+    :slot-name "_cnpg_cloudnative_pg_cluster_general_1"
+    :active false :wal-status "lost" :safe-wal-size ""}
+   {:instance "cloudnative-pg-cluster-general-2"
+    :slot-name "_cnpg_cloudnative_pg_cluster_general_3"
+    :active true :wal-status "reserved" :safe-wal-size "10 GB"}])
+
+(deftest a-lost-slot-names-the-rebuild-it-forces-test
+  (let [lines (console/slot-lines live-slots)]
+    (is (= 1 (count lines)))
+    (is (re-find #"_cnpg_cloudnative_pg_cluster_general_1 on cloudnative-pg-cluster-general-2 is lost"
+                 (first lines)))
+    (is (re-find #"needs re-cloning from the primary" (first lines)))
+    (is (= 1 (count (console/lost-slots live-slots))))))
+
+(deftest a-streaming-slot-with-headroom-needs-no-comment-test
+  (is (nil? (console/slot-state (second live-slots))))
+  (is (not-any? #(str/includes? % "_general_3") (console/slot-lines live-slots))))
+
+(deftest an-extended-slot-is-retaining-not-safe-test
+  (is (= :retaining (console/slot-state {:active false :wal-status "extended"})))
+  (is (= 1 (count (console/retaining-slots
+                   [{:slot-name "s" :active false :wal-status "extended"}]))))
+  (is (re-find #"grows the volume"
+               (first (console/slot-lines [{:slot-name "s" :instance "i"
+                                            :active false :wal-status "extended"}])))))
+
+(deftest an-unreserved-slot-is-about-to-be-invalidated-test
+  (is (= :expiring (console/slot-state {:active false :wal-status "unreserved"})))
+  (is (re-find #"next to be released"
+               (first (console/slot-lines [{:slot-name "s" :instance "i"
+                                            :active false :wal-status "unreserved"}])))))
+
+(deftest a-lost-slot-is-reported-even-with-a-consumer-attached-test
+  (is (= :lost (console/slot-state {:active true :wal-status "lost"})))
+  (is (seq (console/slot-lines [{:slot-name "s" :instance "i"
+                                 :active true :wal-status "lost"}]))))
+
+(deftest a-reading-consumer-past-max-wal-size-is-behind-not-gone-test
+  (let [line (first (console/slot-lines [{:slot-name "s" :instance "i"
+                                          :active true :wal-status "extended"}]))]
+    (is (= :behind (console/slot-state {:active true :wal-status "extended"})))
+    (is (re-find #"behind, not gone" line))))
+
+(deftest a-lost-slots-headroom-is-not-reported-as-unbounded-test
+  (is (= "n/a" (console/describe-safe-wal-size (first live-slots))))
+  (is (= "10 GB" (console/describe-safe-wal-size (second live-slots))))
+  (is (= "unbounded" (console/describe-safe-wal-size {:wal-status "reserved" :safe-wal-size ""}))
+      "no cap configured is unbounded; a lost slot's absent cap is not"))

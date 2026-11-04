@@ -153,11 +153,10 @@
             (print-readings! readings)
             (when (seq slots)
               (stdout/print-section "Replication slots")
-              (doseq [{:keys [instance slot-name active wal-status safe-wal-size]} slots]
+              (doseq [{:keys [instance slot-name active wal-status] :as slot} slots]
                 (stdout/print-data-table {:on instance :slot slot-name
                                           :active (str active) :wal-status wal-status
-                                          :safe-wal-size (if (str/blank? safe-wal-size)
-                                                           "unbounded" safe-wal-size)}))
+                                          :safe-wal-size (console/describe-safe-wal-size slot)}))
               (doseq [line (console/slot-lines slots)] (stdout/warn line)))
             (stdout/print-section "Promotion proposal")
             (doseq [line (console/proposal-lines proposal)] (stdout/warn line))
