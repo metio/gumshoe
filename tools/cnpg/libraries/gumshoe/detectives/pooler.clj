@@ -6,14 +6,23 @@
    rebuild, a rollout that never finished, and pooler pods with no resources.
 
    A Pooler's PgBouncer pods hold credential state that the operator does not
-   refresh when it replaces the cluster's instances, so a pooler older than the
-   instances it fronts fails every backend login with `password authentication
-   failed` while the same credential works against the cluster directly. The
-   application sees a hang rather than an error, because server_login_retry
-   caches the failed login and replays it."
+   refresh when it replaces the cluster's instances. A pooler older than the
+   instances it fronts has been seen to fail every backend login with `password
+   authentication failed` while the same credential works against the cluster
+   directly, which a restart of the pooler clears.
+
+   Pod age alone does not prove that, so the finding reports the structural fact
+   and names the two signatures that tell the causes apart: `password
+   authentication failed` is this, while `connect failed` is the backend being
+   unreachable and has nothing to do with the pooler. An unhealthy cluster is
+   reported by the cnpg detectives instead, because a stale pooler cannot be
+   told from an unreachable one until the cluster itself is well."
   (:require [gumshoe.kubectl :as kubectl]))
 
 (def pooler-type "poolers.postgresql.cnpg.io")
+(def cluster-type "clusters.postgresql.cnpg.io")
+
+(def ^:private healthy-phase "Cluster in healthy state")
 
 (def ^:private pooler-name-label :cnpg.io/poolerName)
 (def ^:private cluster-label :cnpg.io/cluster)
@@ -51,9 +60,9 @@
   (some #(and (= "Ready" (:type %)) (= "True" (:status %)))
         (-> pod :status :conditions)))
 
-(defn- latest
+(defn- earliest
   [instants]
-  (when (seq instants) (reduce #(if (.isAfter %2 %1) %2 %1) instants)))
+  (when (seq instants) (reduce #(if (.isBefore %2 %1) %2 %1) instants)))
 
 (defn- cluster-of [pooler] (-> pooler :spec :cluster :name))
 
@@ -69,24 +78,48 @@
             (or (empty? (:requests resources)) (empty? (:limits resources)))))
         (-> pod :spec :containers)))
 
+(defn- healthy?
+  "A cluster in its healthy phase with every instance ready. While a cluster is
+   unwell its poolers cannot connect for reasons of their own, so pooler age
+   says nothing actionable and the cnpg detectives carry the report."
+  [cluster]
+  (and cluster
+       (= healthy-phase (-> cluster :status :phase))
+       (let [instances (-> cluster :spec :instances)
+             ready (-> cluster :status :readyInstances)]
+         (or (nil? instances) (nil? ready) (= ready instances)))))
+
+(defn- cluster-named
+  [clusters namespace name]
+  (first (filter #(and (= namespace (kubectl/namespace-of %)) (= name (kubectl/name-of %)))
+                 clusters)))
+
 (defn detect-stale-poolers
-  "A pooler pod created before the newest instance pod of its cluster."
+  "Pooler pods created before every instance pod of their cluster, which is what
+   a rebuild leaves behind. Quiet while the cluster itself is unhealthy."
   [evidence]
-  (let [pods (kubectl/items-of (get evidence "pods"))]
+  (let [pods (kubectl/items-of (get evidence "pods"))
+        clusters (kubectl/items-of (get evidence cluster-type))]
     (for [pooler (kubectl/items-of (get evidence pooler-type))
           :let [namespace (kubectl/namespace-of pooler)
                 cluster (cluster-of pooler)
-                rebuilt (latest (keep created-at (instance-pods pods namespace cluster)))
-                stale (when rebuilt
-                        (filter #(when-let [created (created-at %)] (.isBefore created rebuilt))
+                instances (keep created-at (instance-pods pods namespace cluster))
+                ;; the OLDEST instance pod: every instance must postdate the
+                ;; pooler, which is a rebuild. Against the newest, any single
+                ;; instance replacement - a failover, a reschedule - would fire.
+                oldest (earliest instances)
+                stale (when oldest
+                        (filter #(when-let [created (created-at %)] (.isBefore created oldest))
                                 (pooler-pods pods namespace (kubectl/name-of pooler))))]
-          :when (seq stale)]
-      {:severity :critical
+          :when (and (seq stale) (healthy? (cluster-named clusters namespace cluster)))]
+      {:severity :warning
        :component (kubectl/namespace-name-of pooler)
-       :summary (format "%d of its pods predate the instances of cluster %s"
+       :summary (format "%d of its pods predate every instance of cluster %s"
                         (count stale) cluster)
-       :hint (str "pooled logins fail with `password authentication failed` until "
-                  "the pooler is restarted - " (roll-hint pooler))})))
+       :hint (str "read the pooler log before acting: `password authentication failed` "
+                  "is a pooler the rebuild left behind, cleared by " (roll-hint pooler)
+                  "; `connect failed` is the backend being unreachable, which a "
+                  "restart will not fix")})))
 
 (defn detect-unfinished-rollouts
   "Ready pooler pods from more than one generation: a rollout whose old pods
@@ -124,8 +157,8 @@
 
 (def detectives
   [{:name "cnpg-pooler-stale"
-    :description "Poolers left behind by an instance rebuild, which fail every pooled login"
-    :requires [pooler-type "pods"]
+    :description "Poolers left behind by an instance rebuild"
+    :requires [pooler-type cluster-type "pods"]
     :detect detect-stale-poolers}
    {:name "cnpg-pooler-rollout"
     :description "Poolers serving traffic from more than one pod generation"

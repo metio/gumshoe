@@ -32,20 +32,62 @@
    :spec {:containers [{:name "postgres" :resources {:requests {:cpu "1"}
                                                      :limits {:memory "2Gi"}}}]}})
 
-(defn- evidence
-  [poolers pods]
-  {pooler/pooler-type {:items poolers} "pods" {:items pods}})
+(defn- cluster-of
+  [namespace name & {:keys [phase instances ready]
+                     :or {phase "Cluster in healthy state" instances 3 ready 3}}]
+  {:metadata {:namespace namespace :name name}
+   :spec {:instances instances}
+   :status {:phase phase :readyInstances ready}})
 
-(deftest pooler-older-than-its-cluster-instances-is-flagged-test
+(defn- evidence
+  ([poolers pods] (evidence poolers pods [(cluster-of "db" "db")]))
+  ([poolers pods clusters]
+   {pooler/pooler-type {:items poolers}
+    pooler/cluster-type {:items clusters}
+    "pods" {:items pods}}))
+
+(deftest pooler-older-than-every-cluster-instance-is-flagged-test
   (let [findings (pooler/detect-stale-poolers
                   (evidence [(pooler-of "db" "db-rw-transaction" "db")]
                             [(instance-pod "db" "db-1" "db" "2026-11-04T06:20:00Z")
                              (instance-pod "db" "db-2" "db" "2026-11-04T06:28:00Z")
                              (pooler-pod "db" "db-rw-transaction-abc" "db-rw-transaction"
                                          "2026-10-21T17:16:00Z")]))]
-    (is (= #{"1 of its pods predate the instances of cluster db"} (summaries findings)))
-    (is (= [:critical] (map :severity findings)))
-    (is (re-find #"rollout restart deployment/db-rw-transaction" (:hint (first findings))))))
+    (is (= #{"1 of its pods predate every instance of cluster db"} (summaries findings)))
+    (is (= [:warning] (map :severity findings)))
+    (is (re-find #"rollout restart deployment/db-rw-transaction" (:hint (first findings))))
+    (is (re-find #"connect failed" (:hint (first findings)))
+        "the hint distinguishes the unreachable-backend signature")))
+
+(deftest one-replaced-instance-is-not-a-rebuild-test
+  (is (empty? (pooler/detect-stale-poolers
+               (evidence [(pooler-of "db" "db-rw" "db")]
+                         [(instance-pod "db" "db-1" "db" "2026-10-01T00:00:00Z")
+                          (instance-pod "db" "db-2" "db" "2026-11-04T06:20:00Z")
+                          (pooler-pod "db" "db-rw-abc" "db-rw" "2026-10-21T17:16:00Z")])))
+      "a failover or reschedule renews one instance pod and must stay quiet"))
+
+(deftest an-unhealthy-cluster-suppresses-the-pooler-finding-test
+  (let [pods [(instance-pod "db" "db-1" "db" "2026-11-04T06:20:00Z")
+              (pooler-pod "db" "db-rw-abc" "db-rw" "2026-10-19T18:27:00Z")]
+        poolers [(pooler-of "db" "db-rw" "db")]]
+    (is (empty? (pooler/detect-stale-poolers
+                 (evidence poolers pods
+                           [(cluster-of "db" "db" :phase "Not enough disk space")])))
+        "the cnpg detectives report the cluster; pooler age is not actionable")
+    (is (empty? (pooler/detect-stale-poolers
+                 (evidence poolers pods
+                           [(cluster-of "db" "db" :instances 3 :ready 2)])))
+        "an instance short of ready means the backend may be unreachable")
+    (is (seq (pooler/detect-stale-poolers (evidence poolers pods)))
+        "the same evidence on a healthy cluster is a finding")))
+
+(deftest a-pooler-whose-cluster-is-absent-is-quiet-test
+  (is (empty? (pooler/detect-stale-poolers
+               (evidence [(pooler-of "db" "db-rw" "db")]
+                         [(instance-pod "db" "db-1" "db" "2026-11-04T06:20:00Z")
+                          (pooler-pod "db" "db-rw-abc" "db-rw" "2026-10-19T18:27:00Z")]
+                         [])))))
 
 (deftest pooler-newer-than-its-cluster-instances-is-quiet-test
   (is (empty? (pooler/detect-stale-poolers
