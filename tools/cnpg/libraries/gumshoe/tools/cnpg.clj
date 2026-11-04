@@ -9,13 +9,14 @@
             [gumshoe.detectives.cnpg :as cnpg]
             [gumshoe.detectives.cnpg-volumes :as cnpg-volumes]
             [gumshoe.detectives.cnpg-retention :as cnpg-retention]
+            [gumshoe.detectives.cnpg-storage :as cnpg-storage]
             [gumshoe.detectives.pooler :as pooler]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.plugin :as plugin]))
 
 (plugin/provide!
  {:detectives {:databases (concat cnpg/detectives pooler/detectives cnpg-volumes/detectives
-                              cnpg-retention/detectives)}
+                              cnpg-retention/detectives cnpg-storage/detectives)}
   ;; PVC usage is not in the resource API, so the volume detective brings its
   ;; own collector; it reads kubelet stats for the nodes hosting instance pods.
   :collectors {volumes/evidence-key volumes/collector}

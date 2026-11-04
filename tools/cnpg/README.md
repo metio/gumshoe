@@ -44,6 +44,14 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
   repair is still a parameter change. Postgres sizes are its own binary units
   (`kB`, `MB`, `GB`), so a Kubernetes quantity like `10Gi` is reported as
   unreadable rather than taken as safe.
+- **Pending storage detective** - the operator does not enlarge a volume. It
+  reports that the claim group needs enlarging and waits, so a cluster can sit
+  with a spec that says one size and claims that say another while the instance
+  it cannot start for want of room keeps restarting. A claim below the spec is
+  critical and names the patch; a claim above its own capacity is the driver
+  still expanding, which stops until the pod restarts where the filesystem
+  needs it. Claims are matched by `cnpg.io/cluster` or by the name prefix, so
+  one the operator adopted without the label is still compared.
 - **Capability** - `:cnpg`, detected from the CloudNativePG CRDs.
 - **Books** - `runbooks/scan.clj` for the scan, and `runbooks/pooler_console.clj`
   which reads one Pooler's PgBouncer admin console (`SHOW DATABASES`, `POOLS`,

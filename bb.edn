@@ -33,6 +33,7 @@
                    [gumshoe.cnpg-volumes-test]
                    [gumshoe.cnpg-console-test]
                    [gumshoe.cnpg-retention-test]
+                   [gumshoe.cnpg-storage-test]
                    [gumshoe.db-operator-test]
                    [gumshoe.stageset-test]
                    [gumshoe.tools.jaas-test]
@@ -114,6 +115,7 @@
                                                          'gumshoe.cnpg-volumes-test
                                                          'gumshoe.cnpg-console-test
                                                          'gumshoe.cnpg-retention-test
+                                                         'gumshoe.cnpg-storage-test
                                                          'gumshoe.db-operator-test
                                                          'gumshoe.stageset-test
                                                          'gumshoe.tools.jaas-test
