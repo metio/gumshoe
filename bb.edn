@@ -32,6 +32,7 @@
                    gumshoe.pooler-console-test
                    [gumshoe.cnpg-volumes-test]
                    [gumshoe.cnpg-console-test]
+                   [gumshoe.cnpg-retention-test]
                    [gumshoe.db-operator-test]
                    [gumshoe.stageset-test]
                    [gumshoe.tools.jaas-test]
@@ -112,6 +113,7 @@
                                                          'gumshoe.pooler-console-test
                                                          'gumshoe.cnpg-volumes-test
                                                          'gumshoe.cnpg-console-test
+                                                         'gumshoe.cnpg-retention-test
                                                          'gumshoe.db-operator-test
                                                          'gumshoe.stageset-test
                                                          'gumshoe.tools.jaas-test

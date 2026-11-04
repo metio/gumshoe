@@ -35,6 +35,15 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
   quiet while the cluster itself is unhealthy, and its hint distinguishes
   `password authentication failed` (the pooler) from `connect failed` (the
   backend being unreachable, which a restart will not fix).
+- **WAL retention detective** - a cluster with no `max_slot_wal_keep_size`, or
+  with it set to `-1`, puts no floor under replication slot retention: one
+  standby that stops reading retains WAL until the volume is full, which stops
+  postgres rather than slowing it. A cap worth half the volume or more is
+  reported too, since it invalidates no slot before the disk fills. The check
+  reads the Cluster spec alone, so it fires on every cluster at once while the
+  repair is still a parameter change. Postgres sizes are its own binary units
+  (`kB`, `MB`, `GB`), so a Kubernetes quantity like `10Gi` is reported as
+  unreadable rather than taken as safe.
 - **Capability** - `:cnpg`, detected from the CloudNativePG CRDs.
 - **Books** - `runbooks/scan.clj` for the scan, and `runbooks/pooler_console.clj`
   which reads one Pooler's PgBouncer admin console (`SHOW DATABASES`, `POOLS`,
