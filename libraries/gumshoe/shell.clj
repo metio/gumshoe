@@ -19,6 +19,7 @@
    session, a shared upterm terminal - and must run until the operator ends
    them."
   (:require [babashka.process :as process]
+            [clojure.java.io :as io]
             [clojure.string :as str]))
 
 (def ^:dynamic *timeout-ms*
@@ -147,17 +148,25 @@
                                            args)))))
     (catch Exception _ nil)))
 
+(def ^:private discard
+  "The null device, for a child whose output is of no interest."
+  (io/file (if (str/includes? (str/lower-case (str (System/getProperty "os.name"))) "windows")
+             "NUL" "/dev/null")))
+
 (defn pipe-to!
-  "Feeds input to a command's stdin without capturing its output, bounded by a
-   short deadline. Clipboard tools like wl-copy daemonize and would hold a
-   captured pipe open forever, so their output is inherited, never captured,
-   and a hung tool is destroyed rather than freezing the caller. Returns the
-   exit code (non-zero on any trouble); this is best-effort plumbing and never
-   throws."
+  "Feeds input to a command's stdin, bounded by a short deadline, and discards
+   whatever it writes. Clipboard tools daemonize: wl-copy forks a process that
+   serves the selection until it is replaced, long after the parent exits. A
+   captured pipe would hold that output forever, and an inherited one hands the
+   daemon our own stdout - which keeps the write end of `gumshoe | tee` open
+   after we are done, so the reader never sees EOF and the pipeline hangs. The
+   null device belongs to neither. Returns the exit code (non-zero on any
+   trouble); this is best-effort plumbing and never throws."
   [input & args]
   (try
     (let [proc (apply process/process
-                      {:in input :out :inherit :err :inherit :continue true}
+                      {:in input :out :write :out-file discard
+                       :err :write :err-file discard :continue true}
                       args)
           result (deref (future @proc) 3000 ::timeout)]
       (if (= ::timeout result)
