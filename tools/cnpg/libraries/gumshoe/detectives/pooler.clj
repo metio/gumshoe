@@ -50,9 +50,9 @@
 
 (defn- cluster-of [pooler] (-> pooler :spec :cluster :name))
 
-(defn- roll-hint
+(defn- roll-command
   [pooler]
-  (format "roll it: kubectl -n %s rollout restart deployment/%s"
+  (format "kubectl -n %s rollout restart deployment/%s"
           (kubectl/namespace-of pooler) (kubectl/name-of pooler)))
 
 (defn- without-resources?
@@ -103,9 +103,9 @@
        :summary (format "%d of its pods predate every instance of cluster %s"
                         (count stale) cluster)
        :hint (str "read the pooler log before acting: `password authentication failed` "
-                  "is a pooler the rebuild left behind, cleared by " (roll-hint pooler)
-                  "; `connect failed` is the backend being unreachable, which a "
-                  "restart will not fix")})))
+                  "is a pooler the rebuild left behind, cleared by `"
+                  (roll-command pooler)
+                  "`; `connect failed` is the backend being unreachable")})))
 
 (defn detect-unfinished-rollouts
   "Ready pooler pods from more than one generation: a rollout whose old pods
