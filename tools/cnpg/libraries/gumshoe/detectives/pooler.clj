@@ -27,6 +27,7 @@
 (def ^:private pooler-name-label :cnpg.io/poolerName)
 (def ^:private cluster-label :cnpg.io/cluster)
 (def ^:private template-hash-label :pod-template-hash)
+(def ^:private pod-role-label :cnpg.io/podRole)
 
 (defn- labels-of [pod] (-> pod :metadata :labels))
 
@@ -43,10 +44,15 @@
         (-> pod :metadata :ownerReferences)))
 
 (defn- instance-pods
+  "The cluster's Postgres pods. A Pooler's own pods carry the same
+   `cnpg.io/cluster` label, so matching on it alone collects them too - and
+   then the oldest 'instance' is a pooler pod, which nothing can predate."
   [pods namespace cluster]
   (filter #(and (= namespace (kubectl/namespace-of %))
-                (or (= cluster (get (labels-of %) cluster-label))
-                    (owned-by-cluster? cluster %)))
+                (not (get (labels-of %) pooler-name-label))
+                (or (owned-by-cluster? cluster %)
+                    (and (= cluster (get (labels-of %) cluster-label))
+                         (= "instance" (get (labels-of %) pod-role-label)))))
           pods))
 
 (defn- pooler-pods
@@ -87,7 +93,9 @@
        (= healthy-phase (-> cluster :status :phase))
        (let [instances (-> cluster :spec :instances)
              ready (-> cluster :status :readyInstances)]
-         (or (nil? instances) (nil? ready) (= ready instances)))))
+         ;; absent counts suppress rather than report: a detective that cannot
+         ;; see the cluster's health must not claim its poolers are at fault
+         (and instances ready (= ready instances)))))
 
 (defn- cluster-named
   [clusters namespace name]

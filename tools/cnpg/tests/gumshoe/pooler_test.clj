@@ -20,7 +20,9 @@
   {:metadata {:namespace namespace
               :name name
               :creationTimestamp created
-              :labels {:cnpg.io/poolerName pooler :pod-template-hash hash}}
+              ;; a Pooler's pods carry the cluster label too, as the live ones do
+              :labels {:cnpg.io/poolerName pooler :pod-template-hash hash
+                       :cnpg.io/cluster "db" :cnpg.io/podRole "pooler"}}
    :spec {:containers [{:name "pgbouncer" :resources resources}]}
    :status {:conditions [{:type "Ready" :status (if ready "True" "False")}]}})
 
@@ -28,7 +30,8 @@
   [namespace name cluster created & {:keys [by-owner]}]
   {:metadata (cond-> {:namespace namespace :name name :creationTimestamp created}
                by-owner (assoc :ownerReferences [{:kind "Cluster" :name cluster}])
-               (not by-owner) (assoc :labels {:cnpg.io/cluster cluster}))
+               (not by-owner) (assoc :labels {:cnpg.io/cluster cluster
+                                              :cnpg.io/podRole "instance"}))
    :spec {:containers [{:name "postgres" :resources {:requests {:cpu "1"}
                                                      :limits {:memory "2Gi"}}}]}})
 
@@ -155,3 +158,40 @@
   (is (empty? (pooler/detect-poolers-without-resources
                (evidence [(pooler-of "db" "db-rw" "db")]
                          [(pooler-pod "db" "db-rw-a" "db-rw" "2026-11-04T12:38:00Z")])))))
+
+(deftest a-poolers-own-pods-are-not-its-clusters-instances-test
+  (let [findings (pooler/detect-stale-poolers
+                  (evidence [(pooler-of "db" "db-rw" "db")]
+                            [(instance-pod "db" "db-1" "db" "2026-11-04T01:38:36Z")
+                             (instance-pod "db" "db-2" "db" "2026-11-04T01:40:39Z")
+                             (pooler-pod "db" "db-rw-old" "db-rw" "2026-10-19T18:45:09Z")]))]
+    (is (= 1 (count findings))
+        "pooler pods carry cnpg.io/cluster; counting them as instances makes the
+         oldest instance a pooler pod, which nothing can predate")))
+
+(deftest a-pod-with-the-cluster-label-but-no-instance-role-is-not-an-instance-test
+  (is (empty? (pooler/detect-stale-poolers
+               (evidence [(pooler-of "db" "db-rw" "db")]
+                         [{:metadata {:namespace "db" :name "db-sidecar"
+                                      :creationTimestamp "2026-11-04T01:38:36Z"
+                                      :labels {:cnpg.io/cluster "db"}}
+                           :spec {:containers []}}
+                          (pooler-pod "db" "db-rw-old" "db-rw" "2026-10-19T18:45:09Z")])))
+      "without a Cluster owner or the instance role, nothing dates the rebuild"))
+
+(deftest absent-health-counts-suppress-rather-than-report-test
+  (let [pods [(instance-pod "db" "db-1" "db" "2026-11-04T01:38:36Z")
+              (pooler-pod "db" "db-rw-old" "db-rw" "2026-10-19T18:45:09Z")]
+        poolers [(pooler-of "db" "db-rw" "db")]]
+    (is (empty? (pooler/detect-stale-poolers
+                 (evidence poolers pods
+                           [{:metadata {:namespace "db" :name "db"}
+                             :spec {}
+                             :status {:phase "Cluster in healthy state"}}])))
+        "no readyInstances means the health is unknown, not good")
+    (is (empty? (pooler/detect-stale-poolers
+                 (evidence poolers pods
+                           [{:metadata {:namespace "db" :name "db"}
+                             :spec {:instances 2}
+                             :status {:phase "Cluster in healthy state"}}])))
+        "spec without status is still unknown")))
