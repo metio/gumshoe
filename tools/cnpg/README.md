@@ -18,7 +18,10 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
   `password authentication failed` (the pooler) from `connect failed` (the
   backend being unreachable, which a restart will not fix).
 - **Capability** - `:cnpg`, detected from the CloudNativePG CRDs.
-- **Book** - `runbooks/scan.clj`.
+- **Books** - `runbooks/scan.clj` for the scan, and `runbooks/pooler_console.clj`
+  which reads one Pooler's PgBouncer admin console (`SHOW DATABASES`, `POOLS`,
+  `SERVERS`) plus its recent log, and reports which of the two look-alike
+  faults it shows: a rejected credential, or an unreachable backend.
 
 ```clojure
 ;; bb.edn

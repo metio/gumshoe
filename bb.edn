@@ -29,6 +29,7 @@
                    [gumshoe.gateway-test]
                    [gumshoe.cnpg-test]
                    [gumshoe.pooler-test]
+                   gumshoe.pooler-console-test
                    [gumshoe.db-operator-test]
                    [gumshoe.stageset-test]
                    [gumshoe.tools.jaas-test]
@@ -106,6 +107,7 @@
                                                          'gumshoe.gateway-test
                                                          'gumshoe.cnpg-test
                                                          'gumshoe.pooler-test
+                                                         'gumshoe.pooler-console-test
                                                          'gumshoe.db-operator-test
                                                          'gumshoe.stageset-test
                                                          'gumshoe.tools.jaas-test
