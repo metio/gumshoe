@@ -2,16 +2,19 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns runbooks.detectives.cnpg
-  "Investigates CloudNativePG: unhealthy clusters, missing replicas, failing WAL
-   archiving, and poolers left behind by an instance rebuild."
+  "Investigates the databases scan scope: CloudNativePG clusters, their
+   designated primaries, crashlooping instances, volume pressure and poolers.
+
+   The scope is resolved when the book runs, so a detective this package adds
+   joins without editing the book - and so does another database package's, when
+   one is loaded."
   (:require [gumshoe.detective :as detective]
             [gumshoe.detectives.cnpg :as cnpg]
-            [gumshoe.detectives.pooler :as pooler]
             [gumshoe.tools.cnpg]))
 
 (detective/book
- {:description "Investigates CloudNativePG: cluster phase, ready instances, WAL archiving, poolers"
-  :detectives (concat cnpg/detectives pooler/detectives)
+ {:description "Investigates the databases scope: CloudNativePG clusters, primaries, instance crashloops, volumes, poolers"
+  :scope :databases
   :prerequisites {:installed-tools ["kubectl"]
                   :cluster-capabilities []
-                  :kubectl-can-get [cnpg/cluster-type]}})
+                  :kubectl-can-get [cnpg/cluster-type "pods"]}})
