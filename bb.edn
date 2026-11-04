@@ -28,6 +28,7 @@
                    [gumshoe.certificates-test]
                    [gumshoe.gateway-test]
                    [gumshoe.cnpg-test]
+                   [gumshoe.pooler-test]
                    [gumshoe.db-operator-test]
                    [gumshoe.stageset-test]
                    [gumshoe.tools.jaas-test]
@@ -104,6 +105,7 @@
                                                          'gumshoe.certificates-test
                                                          'gumshoe.gateway-test
                                                          'gumshoe.cnpg-test
+                                                         'gumshoe.pooler-test
                                                          'gumshoe.db-operator-test
                                                          'gumshoe.stageset-test
                                                          'gumshoe.tools.jaas-test

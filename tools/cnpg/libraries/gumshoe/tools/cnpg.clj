@@ -6,9 +6,10 @@
    (alongside any other database operator's), and it teaches the setup wizard the
    :cnpg capability - both through one plugin/provide!."
   (:require [gumshoe.detectives.cnpg :as cnpg]
+            [gumshoe.detectives.pooler :as pooler]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.plugin :as plugin]))
 
 (plugin/provide!
- {:detectives {:databases cnpg/detectives}
+ {:detectives {:databases (concat cnpg/detectives pooler/detectives)}
   :capabilities {:cnpg #(kubectl/serves-crd? "clusters.postgresql.cnpg.io")}})
