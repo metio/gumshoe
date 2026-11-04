@@ -40,6 +40,15 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
   which reads one Pooler's PgBouncer admin console (`SHOW DATABASES`, `POOLS`,
   `SERVERS`) plus its recent log, and reports which of the two look-alike
   faults it shows: a rejected credential, or an unreachable backend.
+  `runbooks/cnpg_console.clj` reads every instance of one cluster - WAL
+  positions, recovery state, replication slots - for the question no detective
+  answers: when a cluster has no working primary, which instance should become
+  one. It proposes the instance furthest ahead and states what choosing any
+  other would discard, then stops. Promoting needs `--promote <instance>`, and
+  that path states the cost, asks for the literal word `yes`, and verifies the
+  new primary afterwards; `--dry-run` shows the command and writes nothing. An
+  instance it could not read is named as a gap in the proposal, since an unread
+  instance may hold the furthest position of all.
 
 ```clojure
 ;; bb.edn
