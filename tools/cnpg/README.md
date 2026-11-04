@@ -52,6 +52,13 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
   still expanding, which stops until the pod restarts where the filesystem
   needs it. Claims are matched by `cnpg.io/cluster` or by the name prefix, so
   one the operator adopted without the label is still compared.
+- **Recoverability detective** - the backup detective reports a backup that
+  failed; a cluster that has never attempted one looks clean there. This one
+  reports a cluster with no destination in its spec - neither a
+  `barmanObjectStore` nor a plugin declaring `isWALArchiver` - and a cluster
+  with a destination no backup has ever completed to. Healthy WAL archiving
+  does not close either gap: archived segments apply to a base backup, so
+  without one there is nothing to apply them to.
 - **Capability** - `:cnpg`, detected from the CloudNativePG CRDs.
 - **Books** - `runbooks/scan.clj` for the scan, and `runbooks/pooler_console.clj`
   which reads one Pooler's PgBouncer admin console (`SHOW DATABASES`, `POOLS`,
