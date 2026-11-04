@@ -305,6 +305,21 @@
   (parse (shell/stdout-of "kubectl" (str "--context=" context) request-timeout
                           "get" type "--all-namespaces" "--output=json")))
 
+(defn get-raw
+  "Reads a raw API path, parsed as JSON. Needed for data the resource API does
+   not carry - kubelet's per-node stats among it. A failed call parses to nil,
+   like every other read here."
+  [context path]
+  (parse (shell/stdout-of "kubectl" (str "--context=" context) request-timeout
+                          "get" "--raw" path)))
+
+(defn node-stats-summary
+  "One node's kubelet stats summary, which reports per-pod volume consumption.
+   A pod whose containers are not running has been observed to be absent from
+   it, so a caller must treat a missing pod as unknown rather than as idle."
+  [context node]
+  (get-raw context (format "/api/v1/nodes/%s/proxy/stats/summary" node)))
+
 (defn get-selected
   [context type selector]
   (parse (shell/stdout-of "kubectl" (str "--context=" context) request-timeout

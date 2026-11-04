@@ -10,6 +10,13 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
 - **Detectives** - join the `:databases` scan scope (clusters not in a healthy
   phase, too few ready instances, failing WAL archiving, failed/suspended
   backups), so they also run in the cluster-wide scan.
+- **Volume detective** - PVC usage is absent from the resource API, where
+  `status.capacity` reports the size requested rather than the size in use, so
+  this one brings its own evidence collector reading kubelet's
+  `/api/v1/nodes/<node>/proxy/stats/summary` for the nodes that host instance
+  pods. An instance pod the kubelet reported nothing for is called unknown, not
+  healthy: the pod most likely to be missing from that answer is one whose
+  containers are not running.
 - **Crashloop detective** - an instance pod stuck in `CrashLoopBackOff` is
   reported with its restart count, which is what separates a pod that will
   recover from one that has been failing for days. A Pooler's own pods carry the

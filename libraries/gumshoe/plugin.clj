@@ -33,6 +33,7 @@
 
      :announcers    {:irc      (fn [announcer system data message] …)}  ; a change target
      :detectives    {:workloads [detective …]}                          ; join a scan scope
+     :collectors    {\"cnpg-volume-stats\" (fn [context key] …)}           ; how a custom evidence key is read
      :capabilities  {:ceph     (fn [] boolean)}                         ; detect a cluster capability
      :tools         {\"amtool\" {:version-command […] :min-version \"…\"  ; a tool profile
                                :prerequisites (fn [opts] …)}}
@@ -54,11 +55,12 @@
                                         :perform  (fn [args] …)}}
 
    Order within the map does not matter; registrations are independent."
-  [{:keys [announcers detectives capabilities tools summary-providers themes
+  [{:keys [announcers detectives collectors capabilities tools summary-providers themes
            pre-hooks post-hooks secrets prerequisites probes kinds fetched-edges
            resize-watchers resize-preflights ui facts report-formats effect-types]}]
   (doseq [[type f] announcers] (announce/register-announcer! type f))
   (doseq [[scope ds] detectives] (detectives/register! scope ds))
+  (doseq [[key collect] collectors] (detectives/register-collector! key collect))
   (doseq [[cap f] capabilities] (capabilities/register-detector! cap f))
   (doseq [[binary profile] tools] (command/register-tool! binary profile))
   (doseq [provider summary-providers] (summary/register-provider! provider))

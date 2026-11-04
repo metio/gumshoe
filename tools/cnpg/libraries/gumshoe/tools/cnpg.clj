@@ -5,11 +5,16 @@
   "The CloudNativePG tool package: its detectives join the :databases scan scope
    (alongside any other database operator's), and it teaches the setup wizard the
    :cnpg capability - both through one plugin/provide!."
-  (:require [gumshoe.detectives.cnpg :as cnpg]
+  (:require [gumshoe.cnpg.volumes :as volumes]
+            [gumshoe.detectives.cnpg :as cnpg]
+            [gumshoe.detectives.cnpg-volumes :as cnpg-volumes]
             [gumshoe.detectives.pooler :as pooler]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.plugin :as plugin]))
 
 (plugin/provide!
- {:detectives {:databases (concat cnpg/detectives pooler/detectives)}
+ {:detectives {:databases (concat cnpg/detectives pooler/detectives cnpg-volumes/detectives)}
+  ;; PVC usage is not in the resource API, so the volume detective brings its
+  ;; own collector; it reads kubelet stats for the nodes hosting instance pods.
+  :collectors {volumes/evidence-key volumes/collector}
   :capabilities {:cnpg #(kubectl/serves-crd? "clusters.postgresql.cnpg.io")}})
