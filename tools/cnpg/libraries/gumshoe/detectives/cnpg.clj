@@ -2,8 +2,13 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.detectives.cnpg
-  "Detectives for CloudNativePG: unhealthy clusters, missing replicas, and
-   failing WAL archiving."
+  "Detectives for CloudNativePG: unhealthy clusters, missing replicas, failing
+   WAL archiving, and a cluster left with no writable primary.
+
+   The last of those is not visible in the phase or the ready count. A cluster
+   can report a plausible phase and two of three instances ready while the one
+   instance it designates primary is the unhealthy one - replicas in recovery
+   and nothing accepting writes."
   (:require [gumshoe.kubectl :as kubectl]))
 
 (def cluster-type "clusters.postgresql.cnpg.io")
@@ -15,6 +20,65 @@
 (defn- condition
   [resource type]
   (first (filter #(= type (:type %)) (-> resource :status :conditions))))
+
+(def ^:private stuck-after (java.time.Duration/ofHours 1))
+
+(defn- instant
+  [value]
+  (when value (try (java.time.Instant/parse value) (catch Exception _ nil))))
+
+(defn- describe-duration
+  [^java.time.Duration d]
+  (let [days (.toDays d) hours (.toHoursPart d)]
+    (if (pos? days) (format "%dd %dh" days hours) (format "%dh" (.toHours d)))))
+
+(defn- instance-buckets
+  "status.instancesStatus groups instance names by state: healthy, replicating,
+   failed. The primary is expected among the healthy ones."
+  [cluster]
+  (-> cluster :status :instancesStatus))
+
+(defn- bucket-holding
+  [buckets instance]
+  (some (fn [[state names]] (when (some #{instance} names) (name state))) buckets))
+
+(defn detect-primary-problems
+  "A cluster whose designated primary is not among its healthy instances, and a
+   cluster that has been not-Ready long enough that it is stuck rather than
+   rolling."
+  [evidence]
+  (let [now (:now evidence)
+        clusters (kubectl/items-of (get evidence cluster-type))]
+    (concat
+     (for [cluster clusters
+           :let [buckets (instance-buckets cluster)
+                 primary (-> cluster :status :currentPrimary)
+                 target (-> cluster :status :targetPrimary)]
+           ;; no buckets means the operator reported no instance states, which
+           ;; is unknown rather than broken
+           :when (and primary (seq buckets)
+                      (not (some #{primary} (:healthy buckets))))]
+       {:severity :critical
+        :component (kubectl/namespace-name-of cluster)
+        :summary (format "the primary %s is not healthy%s" primary
+                         (if-let [state (bucket-holding buckets primary)]
+                           (format " (listed as %s)" state) ""))
+        :hint (if (= primary target)
+                (str "currentPrimary equals targetPrimary, so no switchover is under way - "
+                     "the cluster can have healthy replicas and still accept no writes, and "
+                     "the -rw service follows the primary")
+                (format "a switchover to %s is under way; if it does not complete, nothing accepts writes"
+                        target))})
+     (for [cluster clusters
+           :let [ready (condition cluster "Ready")
+                 since (instant (:lastTransitionTime ready))
+                 age (when (and now since) (java.time.Duration/between since now))]
+           :when (and (= "False" (:status ready)) age (pos? (.compareTo age stuck-after)))]
+       {:severity :critical
+        :component (kubectl/namespace-name-of cluster)
+        :summary (format "not Ready for %s" (describe-duration age))
+        :hint (str "reason " (or (:reason ready) "unknown")
+                   " - a roll clears in minutes, so this is stuck rather than in progress")}))))
 
 (defn detect-cnpg-problems
   [evidence]
@@ -63,6 +127,10 @@
     :description "CloudNativePG clusters: phase, ready instances, WAL archiving"
     :requires [cluster-type]
     :detect detect-cnpg-problems}
+   {:name "cnpg-primary"
+    :description "Clusters whose designated primary is unhealthy, or stuck not-Ready"
+    :requires [cluster-type]
+    :detect detect-primary-problems}
    {:name "cnpg-backups"
     :description "CloudNativePG backups that failed or are suspended"
     :requires [backup-type scheduled-backup-type]
