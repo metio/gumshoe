@@ -86,6 +86,26 @@
     (is (re-find #"not a pooler fault" advice))
     (is (not (re-find #"rollout restart" advice)))))
 
+(def ^:private served-connection
+  "S-0x9: db/app@10.24.160.213:5432 closing because: server idle timeout (age=1215s)")
+
+(deftest a-connection-that-lived-counts-as-served-test
+  (let [verdict (console/classify (str/join "\n" [served-connection health-check]))]
+    (is (= :quiet (:verdict verdict)))
+    (is (= 1 (:served verdict)))))
+
+(deftest a-rejected-login-closes-at-age-zero-and-is-not-served-test
+  (let [verdict (console/classify
+                 "S-0x9: db/app@10.24.160.213:5432 closing because: password authentication failed for user \"app\" (age=0s)")]
+    (is (zero? (:served verdict)) "a login that failed never lived")))
+
+(deftest a-quiet-window-with-a-served-connection-reports-it-test
+  (let [verdict (console/classify served-connection
+                 )
+        advice (first (console/guidance verdict {:metadata {:namespace "db" :name "db-rw"}}))]
+    (is (re-find #"1 server connection in it" advice))
+    (is (re-find #"a claim about the window and not about the present" advice))))
+
 (deftest a-quiet-verdict-does-not-claim-health-test
   (is (re-find #"not evidence"
                (first (console/guidance {:verdict :quiet}

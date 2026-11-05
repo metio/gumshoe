@@ -43,6 +43,20 @@
   (when-let [[_ ts] (re-find timestamp-pattern (str line))]
     (try (java.time.Instant/parse ts) (catch Exception _ nil))))
 
+(def ^:private age-pattern #"\(age=(\d+)s\)")
+(def ^:private server-marker "S-0x")
+
+(defn served-connections
+  "How many pooler-to-backend connections the window shows having lived. A
+   server line closing with a positive age logged in successfully, whatever
+   closed it afterwards; a rejected login closes at age=0s."
+  [log]
+  (count (filter (fn [line]
+                   (and (str/includes? line server-marker)
+                        (when-let [[_ age] (re-find age-pattern line)]
+                          (pos? (parse-long age)))))
+                 (interesting-lines log))))
+
 (defn- newest
   [instants]
   (when (seq instants) (reduce #(if (.isAfter ^java.time.Instant %2 %1) %2 %1) instants)))
@@ -82,6 +96,7 @@
                     :else :quiet)
      :authentication (count auth-lines)
      :server-login (count server-login-lines)
+     :served (served-connections log)
      :unreachable (count connect-lines)
      :latest-failure latest-failure
      :window-end window-end
@@ -143,6 +158,14 @@
             "the cluster is unwell, a rejected credential cannot be told from a cluster "
             "that is simply absent.")]
       :quiet
-      [(str "No login failure in the window read. An idle pooler logs nothing, so this is "
-            "not evidence that pooled logins work - check SHOW SERVERS for a backing "
-            "connection, or generate one from an application pod.")])))
+      [(let [served (:served classification 0)]
+         (if (pos? served)
+           (format (str "No login failure in the window read, and %d server connection%s in it "
+                        "logged in and lived, so pooled logins worked while the window lasted. "
+                        "An idle pooler logs nothing afterwards, so this is a claim about the "
+                        "window and not about the present.")
+                   served (if (= 1 served) "" "s"))
+           (str "No login failure in the window read, and no server connection in it is shown "
+                "living either. An idle pooler logs nothing, so this is not evidence that "
+                "pooled logins work - check SHOW SERVERS for a backing connection, or "
+                "generate one from an application pod.")))])))
