@@ -18,6 +18,9 @@
 (def ^:private connect-failure
   "C-0x2: postgres/app@10.24.160.213:38018 closing because: server login has been failing, cached error: connect failed (server_login_retry) (age=0s)")
 
+(def ^:private client-auth-failure
+  "C-0x3: db/app@10.24.160.9:51468 closing because: password authentication failed for user \"app\" (age=4209s)")
+
 (deftest health-checks-and-absent-metrics-are-noise-test
   (is (console/noise? health-check))
   (is (console/noise? missing-metric))
@@ -51,6 +54,31 @@
   (is (re-find #"rollout restart deployment/db-rw"
                (first (console/guidance {:verdict :authentication}
                                         {:metadata {:namespace "db" :name "db-rw"}})))))
+
+(deftest a-server-login-failure-is-counted-as-its-own-leg-test
+  (let [verdict (console/classify (str/join "\n" [auth-failure client-auth-failure]))]
+    (is (= 2 (:authentication verdict)))
+    (is (= 1 (:server-login verdict)) "only the server-leg line counts as a server login")))
+
+(deftest a-server-leg-rejection-names-the-version-and-calls-a-roll-relief-test
+  (let [verdict (console/classify auth-failure)
+        advice (first (console/guidance verdict {:metadata {:namespace "db" :name "db-rw"}}))]
+    (is (re-find #"on a client's behalf" advice))
+    (is (re-find #"1\.25\.1 and 1\.25\.2" advice))
+    (is (re-find #"relief rather than a fix" advice))
+    (is (re-find #"rollout restart deployment/db-rw" advice))
+    (is (not (re-find #"instance rebuild" advice))
+        "a stale pooler is one cause of a rejected credential, not the only one")))
+
+(deftest a-client-leg-rejection-points-at-the-credential-path-test
+  (let [verdict (console/classify client-auth-failure)
+        advice (first (console/guidance verdict {:metadata {:namespace "db" :name "db-rw"}}))]
+    (is (= :authentication (:verdict verdict)))
+    (is (zero? (:server-login verdict)))
+    (is (re-find #"before reaching the backend" advice))
+    (is (re-find #"auth_query" advice))
+    (is (not (re-find #"1\.25\.1" advice))
+        "the pooler never reached the backend, so the server-leg defect is not implicated")))
 
 (deftest the-unreachable-verdict-does-not-suggest-rolling-test
   (let [advice (first (console/guidance {:verdict :unreachable}
