@@ -67,3 +67,25 @@
         (is (empty? (detectives/detect-version-drift evidence)))))
     (testing "a resource discovery does not list at all is not a drift (nothing to compare)"
       (is (empty? (detectives/detect-version-drift {"customresourcedefinitions" crds "api-resources" {}}))))))
+
+(deftest detect-partial-group-drift-test
+  ;; Staleness is per group-version, so one group can be half wrong: on
+  ;; kube.infra.run the two CRDs a db-operator upgrade had changed were
+  ;; advertised at a version they no longer served, while the untouched third
+  ;; was correct. That mix is what separates a stale cache from a CRD problem.
+  (let [crds {:items [(crd "kinda.rocks" "databases" [["v1beta1" true]])
+                      (crd "kinda.rocks" "dbinstances" [["v1beta1" true]])
+                      (crd "kinda.rocks" "dbusers" [["v1beta1" true]])]}
+        advertised (str "databases      db     kinda.rocks/v1alpha1   true    Database\n"
+                        "dbinstances    dbin   kinda.rocks/v1alpha1   false   DbInstance\n"
+                        "dbusers               kinda.rocks/v1beta1    true    DbUser\n")
+        findings (detectives/detect-version-drift
+                  {"customresourcedefinitions" crds
+                   "api-resources" (apiversions/parse-api-resources advertised)})]
+    (testing "only the drifted resources are flagged, the agreeing one is not"
+      (is (= #{"kinda.rocks/databases" "kinda.rocks/dbinstances"}
+             (set (map :component findings)))))
+    (testing "the summary names both the advertised and the served version"
+      (is (every? #(re-find #"v1alpha1.*v1beta1" (:summary %)) findings)))
+    (testing "a cluster-scoped resource drifts the same way as a namespaced one"
+      (is (some #(= "kinda.rocks/dbinstances" (:component %)) findings)))))
