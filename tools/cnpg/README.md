@@ -35,6 +35,16 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
   quiet while the cluster itself is unhealthy, and its hint distinguishes
   `password authentication failed` (the pooler) from `connect failed` (the
   backend being unreachable, which a restart will not fix).
+- **Pooler login detective** - a pooler whose backend rejects the login it
+  makes for each client is healthy in every field of the resource API: the pods
+  are ready and the Pooler phase is active while no client reaches the database.
+  The fault exists only in the log, so this one brings its own collector reading
+  the `pgbouncer` container's tail for every pooler pod, and shares the pooler
+  console's classification of it. A rejection that is the newest thing in its
+  window is critical and names the leg it sits on, server or client; one left
+  behind in the window is historical and reported as a warning. A pod whose log
+  could not be read is called unread rather than healthy. An unreachable backend
+  alone is left to the cluster detectives, which name it once.
 - **WAL retention detective** - a cluster with no `max_slot_wal_keep_size`, or
   with it set to `-1`, puts no floor under replication slot retention: one
   standby that stops reading retains WAL until the volume is full, which stops

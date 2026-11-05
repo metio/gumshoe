@@ -35,6 +35,8 @@
                    [gumshoe.cnpg-retention-test]
                    [gumshoe.cnpg-storage-test]
                    [gumshoe.cnpg-recoverability-test]
+                   [gumshoe.cnpg-pooler-logs-test]
+                   [gumshoe.cnpg.pooler-logs-test]
                    [gumshoe.db-operator-test]
                    [gumshoe.stageset-test]
                    [gumshoe.tools.jaas-test]
@@ -118,6 +120,8 @@
                                                          'gumshoe.cnpg-retention-test
                                                          'gumshoe.cnpg-storage-test
                                                          'gumshoe.cnpg-recoverability-test
+                                                         'gumshoe.cnpg-pooler-logs-test
+                                                         'gumshoe.cnpg.pooler-logs-test
                                                          'gumshoe.db-operator-test
                                                          'gumshoe.stageset-test
                                                          'gumshoe.tools.jaas-test

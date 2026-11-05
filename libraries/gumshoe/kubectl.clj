@@ -320,6 +320,18 @@
   [context node]
   (get-raw context (format "/api/v1/nodes/%s/proxy/stats/summary" node)))
 
+(defn container-logs
+  "The tail of one container's log as {:read? bool :log string}. A log that
+   could not be read is not an empty log, and the caller must be able to tell
+   them apart, so the exit code is reported rather than swallowed."
+  [context namespace pod container lines]
+  (let [result (shell/execute "kubectl" (str "--context=" context)
+                              (str "--namespace=" namespace) request-timeout
+                              "logs" pod (str "--container=" container)
+                              (str "--tail=" lines))]
+    {:read? (zero? (:exit result))
+     :log (str (:out result))}))
+
 (defn get-selected
   [context type selector]
   (parse (shell/stdout-of "kubectl" (str "--context=" context) request-timeout
