@@ -27,6 +27,23 @@
   [{:keys [server-login]}]
   (if (pos? (or server-login 0)) "server" "client"))
 
+(defn- leg-hint
+  [leg]
+  (if (= "server" leg)
+    (str "the pooler holds the role's SCRAM verifier from the moment each client "
+         "logged in, and a verifier re-derived on the server - the same password "
+         "applied again is enough, since every apply picks a fresh salt - leaves "
+         "the pooler authenticating with the old one. Transaction-mode poolers "
+         "reconnect inside a live client session and so meet it; session-mode "
+         "poolers hold one backend for the session and do not. Compare "
+         "`md5(rolpassword)` from `pg_authid` across a few minutes to see whether "
+         "something is re-applying the password, and check what manages the role "
+         "before restarting the pooler, which only clears the cache until the next "
+         "re-derivation")
+    (str "clients that reach this pooler are not getting a backend; the "
+         "pooler console book reads the admin console and says which leg "
+         "rejected the login and what that leg licenses")))
+
 (defn detect-rejected-logins
   "Pooler pods whose log shows logins being rejected, and pods whose log could
    not be read."
@@ -52,9 +69,7 @@
                            (:authentication verdict)
                            (if (= 1 (:authentication verdict)) "" "s")
                            (leg-of verdict))
-          :hint (str "clients that reach this pooler are not getting a backend; the "
-                     "pooler console book reads the admin console and says which leg "
-                     "rejected the login and what that leg licenses")}))
+          :hint (leg-hint (leg-of verdict))}))
      (for [row rows
            :when (not (:read? row))]
        {:severity :warning

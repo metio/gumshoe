@@ -29,6 +29,24 @@
   (is (empty? (pooler-logs-detective/detect-rejected-logins
                (evidence (row "db-rw-transaction-1" (str/join "\n" [health-check health-check])))))))
 
+(deftest a-server-leg-hint-names-the-re-derived-verifier-test
+  (let [finding (first (pooler-logs-detective/detect-rejected-logins
+                        (evidence (row "db-rw-transaction-1"
+                                       (str/join "\n" [(stamped "2026-11-04T20:59:00Z" health-check)
+                                                       (stamped "2026-11-04T20:59:30Z" server-login-failure)])))))]
+    (is (re-find #"SCRAM verifier" (:hint finding)))
+    (is (re-find #"fresh salt" (:hint finding)))
+    (is (re-find #"md5\(rolpassword\)" (:hint finding)))
+    (is (re-find #"until the next" (:hint finding)))))
+
+(deftest a-client-leg-hint-points-at-the-admin-console-test
+  (let [finding (first (pooler-logs-detective/detect-rejected-logins
+                        (evidence (row "db-rw-transaction-1"
+                                       (str/join "\n" [(stamped "2026-11-04T20:59:00Z" health-check)
+                                                       (stamped "2026-11-04T20:59:30Z" client-login-failure)])))))]
+    (is (re-find #"pooler console book" (:hint finding)))
+    (is (not (re-find #"SCRAM verifier" (:hint finding))))))
+
 (deftest a-current-server-leg-rejection-is-critical-and-names-the-leg-test
   (let [findings (pooler-logs-detective/detect-rejected-logins
                   (evidence (row "db-rw-transaction-1"

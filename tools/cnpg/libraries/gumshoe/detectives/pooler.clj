@@ -5,13 +5,17 @@
   "Detectives for CloudNativePG Poolers: a pooler left behind by an instance
    rebuild, a rollout that never finished, and pooler pods with no resources.
 
-   A Pooler's PgBouncer pods hold credential state that the operator does not
-   refresh when it replaces the cluster's instances. A pooler older than the
-   instances it fronts has been seen to fail every backend login with `password
-   authentication failed` while the same credential works against the cluster
-   directly, which a restart of the pooler clears.
+   A Pooler's PgBouncer pods cache each role's SCRAM verifier from the moment a
+   client logged in, and nothing refreshes that cache. Any verifier re-derived
+   on the server afterwards leaves the pooler authenticating with the old one,
+   so the next backend login fails with `password authentication failed` while
+   the same credential works against the cluster directly. An instance
+   replacement is one way to reach that state; a password re-applied by whatever
+   manages the role is another, and needs no new instances, so a pooler older
+   than its instances is a symptom of one cause rather than the condition
+   itself. The log detective covers the cases this structural check cannot see.
 
-   Pod age alone does not prove that, so the finding reports the structural fact
+   Pod age alone does not prove it, so the finding reports the structural fact
    and names the two signatures that tell the causes apart: `password
    authentication failed` is this, while `connect failed` is the backend being
    unreachable and has nothing to do with the pooler. An unhealthy cluster is
@@ -103,9 +107,10 @@
        :summary (format "%d of its pods predate every instance of cluster %s"
                         (count stale) cluster)
        :hint (str "read the pooler log before acting: `password authentication failed` "
-                  "is a pooler the rebuild left behind, cleared by `"
+                  "is a cached verifier the pooler never refreshed, cleared by `"
                   (roll-command pooler)
-                  "`; `connect failed` is the backend being unreachable")})))
+                  "` until the next re-derivation; `connect failed` is the backend "
+                  "being unreachable")})))
 
 (defn detect-unfinished-rollouts
   "Ready pooler pods from more than one generation: a rollout whose old pods
