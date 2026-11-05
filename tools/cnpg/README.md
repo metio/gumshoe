@@ -95,6 +95,19 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
   reports a healthy primary gets no candidate: a primary is not in recovery and
   so ranks below every standby that has a receive position, which would read as
   a promotion worth making.
+  `runbooks/verifier_churn.clj` answers what no scan can: whether something is
+  re-deriving the stored password verifiers of a cluster's login roles. A pooler
+  caches a role's SCRAM verifier when a client logs in and nothing refreshes it,
+  so a verifier re-derived on the server breaks the pooler's next backend login
+  - and re-applying the same password is enough, because PostgreSQL picks a
+  fresh salt each time. A verifier carries no timestamp and the server records
+  no author, so the only evidence is the same roles read twice with a wait
+  between them; the book reads `md5(rolpassword)` from the primary, waits out a
+  reconcile interval (420s by default, longer than the common 300s), reads again
+  and names the roles whose verifier moved. One moved verifier is enough to
+  report churn, since the fault needs one re-derivation per pooled session
+  rather than a majority of roles. A quiet window is reported as quiet for that
+  window only: a trigger slower than the wait would not show in it.
 
 ```clojure
 ;; bb.edn
