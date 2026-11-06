@@ -44,6 +44,7 @@
                    [gumshoe.tools.jaas-test]
                    [gumshoe.monitoring-test]
                    [gumshoe.calico-test]
+                   [gumshoe.flows-test]
                    [gumshoe.discovery-test]
                    [gumshoe.dns-test]
                    [gumshoe.etcd-test]
@@ -131,6 +132,7 @@
                                                          'gumshoe.tools.jaas-test
                                                          'gumshoe.monitoring-test
                                                          'gumshoe.calico-test
+                                                         'gumshoe.flows-test
                                                          'gumshoe.discovery-test
                                                          'gumshoe.dns-test
                                                          'gumshoe.etcd-test
