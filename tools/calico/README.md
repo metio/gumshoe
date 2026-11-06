@@ -11,7 +11,49 @@ as managed by the tigera-operator.
 - **Detectives** - join the `:platform` scan scope (tigera components that are not
   Available, Degraded, or Progressing), so they also run in the cluster-wide scan.
 - **Capability** - `:calico`, detected from the tigera-operator Installation CRD.
-- **Book** - `runbooks/scan.clj`.
+- **Books** - `runbooks/scan.clj` for the operator's components, and
+  `runbooks/flows.clj` for flow logs.
+
+## Flow logs
+
+`runbooks/flows.clj` reads Calico flow logs from Whisker's backend over HTTPS -
+no cluster access, no port-forward, no mTLS to goldmane. Whisker's nginx proxies
+`/whisker-backend/` to the backend, so the book needs only the Whisker URL and
+the credentials guarding it:
+
+```shell
+bb flows --whisker https://whisker.example.org --secret infra/whisker --window 1800
+```
+
+The URL may live in `env.edn` under `[:whisker :url]` instead. Credentials come
+from the password store: the password of the entry, and the htpasswd user from a
+`login`, `user` or `username` field beside it, because that user is usually a
+generated string. `--user` covers an entry that carries none.
+
+On a busy cluster the backend cannot buffer a window: it reads goldmane over
+gRPC under a 4 MiB receive limit, and a single minute of flows can exceed that,
+which surfaces as a 500. The book then reads the watch stream the browser UI
+uses for a bounded time instead, so the same window still produces evidence.
+
+It answers which policy decided a path rather than whether the path works. The
+detectives:
+
+| Detective | Finds |
+|---|---|
+| `calico-flows-api` | whether the API answered, and why not when it did not |
+| `calico-denied-flows` | denials grouped by source namespace, destination namespace and port, with the deciding policy |
+| `calico-staged-disagreement` | flows a staged policy would decide differently - run this before enforcing a staged default-deny |
+
+One denied path reports once, however many flows it produced, and the hint adds
+the two refinements that change what to look at:
+
+- **no rule matched** - denied at the end of a tier rather than by a rule. A
+  pod-to-Service rule naming the Service's port is the common case: Calico
+  matches egress after kube-proxy's DNAT, so the packet carries the backend's
+  target port and the rule never fires.
+- **surfaces as a client timeout** - packets left and none came back, so the
+  caller reports a timeout rather than a refusal, which reads as a routing or
+  DNS fault and is neither.
 
 ```clojure
 ;; bb.edn
