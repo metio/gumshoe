@@ -19,6 +19,9 @@
           :secret {:desc "Password-store path holding the Whisker credentials (password plus a login field)"
                    :alias :k
                    :coerce :string}
+          :user {:desc "Whisker basic-auth user, when the secret does not carry a login field"
+                 :alias :u
+                 :coerce :string}
           :window {:desc "Window to read, in seconds"
                    :alias :t
                    :default 3600
@@ -27,13 +30,14 @@
 
 (defn- credentials
   "The Whisker user and password from the password store. The htpasswd user is
-   usually a generated string, so it is read from a named field beside the
-   password rather than typed."
+   usually a generated string, so it comes from a named field beside the password
+   (`login`, else `user`, else `username`) rather than being typed; --user
+   overrides it for a secret that carries none."
   [opts url]
   (when-let [secret (or (:secret opts) (secrets/find-path url))]
-    {:user (or (secrets/field-in (secrets/password secret) "login")
-               (secrets/field-in (secrets/password secret) "user"))
-     :password (secrets/first-line (secrets/password secret))}))
+    {:user (or (:user opts)
+               (some #(secrets/field secret %) ["login" "user" "username"]))
+     :password (secrets/password secret)}))
 
 (defn- investigate
   [opts _ctx]
