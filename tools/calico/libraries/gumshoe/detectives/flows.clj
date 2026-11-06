@@ -50,9 +50,10 @@
         :summary (format "the Whisker flow API answered %s" status)
         :hint (case status
                 401 "basic auth rejected - check the whisker credentials in the password store"
-                500 (str "the backend lists the whole window in one gRPC call and decodes it "
-                         "with a 4 MiB limit, so a busy cluster exceeds it - retry with a "
-                         "shorter --window. backend body: "
+                500 (str "the backend could neither list nor stream the window - it reads "
+                         "goldmane over gRPC under a 4 MiB receive limit, so a busy cluster "
+                         "exceeds it however short the window; check the whisker-backend log "
+                         "for ResourceExhausted. backend body: "
                          (clip body))
                 (clip body))}]
       :else [])))

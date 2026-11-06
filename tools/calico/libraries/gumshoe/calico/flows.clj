@@ -7,9 +7,12 @@
    gRPC - so a flow log is reachable over HTTPS with the credentials guarding
    Whisker itself, without cluster access.
 
-   The browser UI streams (`?watch=true`); an investigation wants a bounded
-   window, so this asks for one and tolerates every envelope the backend might
-   answer with: a JSON array, {items: [...]}, or newline-delimited objects."
+   Two ways to ask. The bounded list returns one window in a single response,
+   which is what an investigation wants; on a busy cluster the backend's own
+   gRPC call to goldmane exceeds its 4 MiB receive limit and it answers 500, so
+   the watch stream the browser UI uses is read instead, for a bounded time.
+   Either way the envelope varies - a JSON array, {items: [...]}, or
+   newline-delimited objects - and all are tolerated."
   (:require [cheshire.core :as json]
             [clojure.string :as str]
             [gumshoe.http :as http])
@@ -29,6 +32,12 @@
   [base-url window-seconds]
   (str (str/replace (str base-url) #"/+$" "")
        "/whisker-backend/flows?startTimeGte=-" (max 1 (long window-seconds))))
+
+(defn watch-url
+  "Pure: the streaming form of the same query. The backend sends the window's
+   backlog and then continues, so the window still bounds what arrives."
+  [base-url window-seconds]
+  (str (flows-url base-url window-seconds) "&watch=true"))
 
 (defn parse-body
   "Pure: the flow objects in a response body, whatever envelope carries them -
@@ -88,15 +97,13 @@
      :pending-action (:action pending)
      :pending-policy (policy-ref pending)}))
 
-(defn collect-evidence!
-  "Fetches one window of flows. Returns {:url :window :reachable :status :flows},
-   never throws - an unreachable API is evidence a detective reports, not an
-   exception the book has to handle."
+(defn- list-evidence!
+  "One buffered window. Returns the response map plus :flows and :mode."
   [{:keys [url user password window]}]
-  (let [window (or window 3600)
-        target (flows-url url window)
+  (let [target (flows-url url window)
         response (http/fetch target (basic-auth-header user password))]
     {:url target
+     :mode :list
      :window window
      :reachable (:reachable response)
      :status (:status response)
@@ -105,3 +112,40 @@
      :flows (if (http/ok? response)
               (mapv normalise (parse-body (:body response) (:json response)))
               [])}))
+
+(defn- stream-evidence!
+  "The same window read from the watch stream for at most deadline-ms. A stream
+   that delivers nothing is reported as reachable with no flows, which the
+   detectives read as a clean window rather than a fault."
+  [{:keys [url user password window deadline-ms]}]
+  (let [target (watch-url url window)
+        response (http/fetch-lines! target
+                                    {:headers (basic-auth-header user password)
+                                     :deadline-ms (or deadline-ms
+                                                      (* 1000 (min 20 (max 5 window))))})
+        lines (:lines response)]
+    {:url target
+     :mode :watch
+     :window window
+     :reachable (:reachable response)
+     :status (:status response)
+     :error (:error response)
+     :body (:body response)
+     :flows (if (http/ok? response)
+              (mapv normalise (parse-body (str/join "\n" lines) nil))
+              [])}))
+
+(defn collect-evidence!
+  "Fetches one window of flows, buffered where that works and streamed where the
+   backend refuses to buffer it. Returns {:url :mode :window :reachable :status
+   :flows}, never throws - an unreachable API is evidence a detective reports,
+   not an exception the book has to handle."
+  [opts]
+  (let [opts (update opts :window #(or % 3600))
+        listed (list-evidence! opts)]
+    (if (or (http/ok? listed) (not= 500 (:status listed)))
+      listed
+      (let [streamed (stream-evidence! opts)]
+        (if (http/ok? streamed)
+          streamed
+          (assoc listed :fallback-error (or (:error streamed) (:status streamed))))))))
