@@ -30,6 +30,11 @@ from the password store: the password of the entry, and the htpasswd user from a
 `login`, `user` or `username` field beside it, because that user is usually a
 generated string. `--user` covers an entry that carries none.
 
+On a busy cluster the backend cannot buffer a window: it reads goldmane over
+gRPC under a 4 MiB receive limit, and a single minute of flows can exceed that,
+which surfaces as a 500. The book then reads the watch stream the browser UI
+uses for a bounded time instead, so the same window still produces evidence.
+
 It answers which policy decided a path rather than whether the path works. The
 detectives:
 
