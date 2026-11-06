@@ -26,8 +26,9 @@ bb flows --whisker https://whisker.example.org --secret infra/whisker --window 1
 ```
 
 The URL may live in `env.edn` under `[:whisker :url]` instead. Credentials come
-from the password store: the password on the first line, the htpasswd user in a
-`login:` field beside it, because that user is usually a generated string.
+from the password store: the password of the entry, and the htpasswd user from a
+`login`, `user` or `username` field beside it, because that user is usually a
+generated string. `--user` covers an entry that carries none.
 
 It answers which policy decided a path rather than whether the path works. The
 detectives:
