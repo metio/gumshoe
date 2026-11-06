@@ -33,6 +33,8 @@
     :prompt "Matrix server_name to investigate, e.g. example.org (where .well-known lives)"}
    {:key :matrix-host :flag :host :env-path [:matrix :host]
     :prompt "Matrix delegated homeserver host to investigate, e.g. synapse.example.org"}
+   {:key :whisker-url :flag :whisker :env-path [:whisker :url]
+    :prompt "Whisker base URL for Calico flow logs, e.g. https://whisker.example.org"}
    {:key :loki-namespace :flag :namespace :env-path [:loki :namespace]
     :prompt "Namespace the Loki microservices run in"}
    {:key :restic-repository :flag :repository :env-path [:restic :repository]
