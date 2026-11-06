@@ -110,6 +110,14 @@
     (is (= 1 (count findings)))
     (is (re-find #"whisker credentials" (:hint (first findings))))))
 
+(deftest server-error-points-at-the-window-test
+  (let [findings (detectives/detect-api-unreachable {:url "https://whisker.example.org/whisker-backend/flows"
+                                                     :reachable true :status 500
+                                                     :body "{\"error\":\"Internal Server Error\"}"})]
+    (is (= 1 (count findings)))
+    (is (re-find #"shorter --window" (:hint (first findings))))
+    (is (re-find #"Internal Server Error" (:hint (first findings))))))
+
 (deftest unreachable-api-is-critical-test
   (let [findings (detectives/detect-api-unreachable {:url "https://whisker.example.org"
                                                      :reachable false :error "connection refused"})]

@@ -34,6 +34,8 @@
   [row]
   (and (pos? (or (:packets-out row) 0)) (zero? (or (:packets-in row) 0))))
 
+(defn- clip [body] (some-> body str (subs 0 (min 200 (count (str body))))))
+
 (defn detect-api-unreachable
   [evidence]
   (let [{:keys [reachable status error url body]} evidence]
@@ -46,9 +48,13 @@
       [{:severity :critical
         :component (str url)
         :summary (format "the Whisker flow API answered %s" status)
-        :hint (if (= 401 status)
-                "basic auth rejected - check the whisker credentials in the password store"
-                (some-> body str (subs 0 (min 200 (count (str body))))))}]
+        :hint (case status
+                401 "basic auth rejected - check the whisker credentials in the password store"
+                500 (str "the backend lists the whole window in one gRPC call and decodes it "
+                         "with a 4 MiB limit, so a busy cluster exceeds it - retry with a "
+                         "shorter --window. backend body: "
+                         (clip body))
+                (clip body))}]
       :else [])))
 
 (defn detect-denied-flows
