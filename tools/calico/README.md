@@ -35,14 +35,20 @@ detectives:
 
 | Detective | Finds |
 |---|---|
+| `calico-flows-api` | whether the API answered, and why not when it did not |
 | `calico-denied-flows` | denials grouped by source namespace, destination namespace and port, with the deciding policy |
 | `calico-staged-disagreement` | flows a staged policy would decide differently - run this before enforcing a staged default-deny |
-| `calico-silent-denies` | denials with packets out and none back, which reach the client as a timeout rather than a refusal |
-| `calico-end-of-tier-denies` | denials where no rule matched at all, the signature of a rule written against the wrong port or selector |
 
-A pod-to-Service rule naming the Service's port is the common case for the last
-one: Calico matches egress after kube-proxy's DNAT, so the packet carries the
-backend's target port and the rule never fires.
+One denied path reports once, however many flows it produced, and the hint adds
+the two refinements that change what to look at:
+
+- **no rule matched** - denied at the end of a tier rather than by a rule. A
+  pod-to-Service rule naming the Service's port is the common case: Calico
+  matches egress after kube-proxy's DNAT, so the packet carries the backend's
+  target port and the rule never fires.
+- **surfaces as a client timeout** - packets left and none came back, so the
+  caller reports a timeout rather than a refusal, which reads as a routing or
+  DNS fault and is neither.
 
 ```clojure
 ;; bb.edn

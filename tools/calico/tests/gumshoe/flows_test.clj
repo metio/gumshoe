@@ -67,19 +67,26 @@
 
 (deftest denied-flows-group-by-path-test
   (let [evidence {:flows (mapv flows/normalise [cert-manager-deny cert-manager-deny])}
-        findings (detectives/detect-denied-flows evidence)]
+        findings (detectives/detect-denied-flows evidence)
+        finding (first findings)]
     (is (= 1 (count findings)) "two flows on one path report once")
-    (is (= "cert-manager -> tigera-gateway:10080" (:component (first findings))))
-    (is (= #{"2 denied flow(s) over the window"} (summaries findings)))))
+    (is (= "cert-manager -> tigera-gateway:10080" (:component finding)))
+    (is (= "2 denied flows over the window" (:summary finding)))
+    (testing "the hint carries the deciding policy and both refinements"
+      (is (re-find #"CalicoNetworkPolicy cert-manager/deny-all" (:hint finding)))
+      (is (re-find #"no rule matched - denied at the end of tier default" (:hint finding)))
+      (is (re-find #"surfaces as a client timeout \(182 packets out" (:hint finding))))))
 
-(deftest end-of-tier-deny-is-reported-as-no-rule-matched-test
-  (let [findings (detectives/detect-end-of-tier-denies {:flows [(flows/normalise cert-manager-deny)]})]
-    (is (= #{"no rule matched - denied at the end of tier default"} (summaries findings)))))
+(deftest one-denied-flow-reads-singular-test
+  (let [findings (detectives/detect-denied-flows {:flows [(flows/normalise cert-manager-deny)]})]
+    (is (= #{"1 denied flow over the window"} (summaries findings)))))
 
-(deftest silent-deny-is-flagged-as-a-timeout-test
-  (let [findings (detectives/detect-silent-denies {:flows [(flows/normalise cert-manager-deny)]})]
-    (is (= 1 (count findings)))
-    (is (= :warning (:severity (first findings))))))
+(deftest a-host-network-source-is-named-host-test
+  (let [row (flows/normalise (assoc cert-manager-deny :source_namespace nil
+                                    :source_name "worker-1.example.org"))
+        findings (detectives/detect-denied-flows {:flows [row]})]
+    (is (= "host -> tigera-gateway:10080" (:component (first findings))))
+    (is (re-find #"host/worker-1.example.org" (:hint (first findings))))))
 
 (deftest staged-disagreement-is-critical-when-staging-would-deny-test
   (let [findings (detectives/detect-staged-disagreement {:flows [(flows/normalise staged-would-deny)]})]
