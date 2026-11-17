@@ -4,5 +4,13 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "github>metio/renovate-config"
+  ],
+  "packageRules": [
+    {
+      "description": "The casebook example pins gumshoe itself. The pin only needs to stay roughly current for people copying the template, so bump it weekly instead of after every release.",
+      "matchFileNames": ["casebook-example/bb.edn"],
+      "matchPackageNames": ["io.github.metio/gumshoe"],
+      "schedule": ["before 6am on monday"]
+    }
   ]
 }

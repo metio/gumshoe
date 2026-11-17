@@ -32,8 +32,10 @@ jobs:
           persist-credentials: false
       - id: gate
         uses: metio/ci/needs-release@d1d58ce5b2b4dbac322bedd78203810def514bcc # 2026.11.15184511
+        # The example's gumshoe pin is excluded: Renovate bumps it to each new
+        # release, and counting that bump would cut another release forever.
         with:
-          paths: libraries runbooks playbooks firebooks tools examples casebook-example bb.edn deps.edn gumshoe detect run investigate README.md
+          paths: libraries runbooks playbooks firebooks tools examples casebook-example bb.edn deps.edn gumshoe detect run investigate README.md :(exclude)casebook-example/bb.edn
       - uses: metio/ci/breto@d1d58ce5b2b4dbac322bedd78203810def514bcc # 2026.11.15184511
         if: steps.gate.outputs.needed == 'true'
         with:
