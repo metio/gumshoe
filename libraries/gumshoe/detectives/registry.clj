@@ -26,6 +26,7 @@
             [gumshoe.detectives.pod-creation :as pod-creation]
             [gumshoe.detectives.pod-startup :as pod-startup]
             [gumshoe.detectives.pods :as pods]
+            [gumshoe.detectives.posture :as posture]
             [gumshoe.detectives.quotas :as quotas]
             [gumshoe.detectives.rbac :as rbac]
             [gumshoe.detectives.references :as references]
@@ -54,11 +55,19 @@
           []
           (apply concat (vals @registry))))
 
+(def opt-in-scopes
+  "Scopes a whole-cluster scan leaves out. Posture findings describe choices
+   that may be deliberate, so they run only when asked for."
+  #{:posture})
+
 (defn for-scope
-  "The detectives in a scope; :all spans every scope. Resolved when a book runs,
-   so plugin-registered detectives are included."
+  "The detectives in a scope; :all spans every scope but the opt-in ones.
+   Resolved when a book runs, so plugin-registered detectives are included."
   [scope]
-  (if (= scope :all) (all) (vec (get @registry scope []))))
+  (if (= scope :all)
+    (let [opt-in (set (map :name (mapcat #(get @registry %) opt-in-scopes)))]
+      (vec (remove #(opt-in (:name %)) (all))))
+    (vec (get @registry scope []))))
 
 ;; --- evidence collectors ----------------------------------------------------
 
@@ -105,6 +114,8 @@
 ;; The covered types are computed when a scan collects, so a tool package a
 ;; casebook registers keeps its own types.
 (register-collector! "custom-resources" (fn [context _key] (kubectl/custom-resources context (covered-types))))
+(register-collector! "deprecated-api-requests"
+                     (fn [context _key] (some-> (kubectl/raw-text context "/metrics") posture/parse-deprecated-requests)))
 ;; TLS Secrets are read with their certificate only, never their private key.
 (register-collector! "tls-secrets" (fn [context _key] (kubectl/tls-secrets context)))
 (register! :workloads (concat controllers/detectives pods/detectives pod-creation/detectives pod-startup/detectives
@@ -115,6 +126,7 @@
 (register! :security (concat rbac/detectives references/security-detectives pod-security/detectives
                              network/detectives))
 (register! :mail mail/detectives)
+(register! :posture posture/detectives)
 ;; the fabric detectives read evidence collected over ssh, so they contribute
 ;; nothing to a kubectl-only scan and simply stay silent there.
 (register! :fabric evpn/detectives)

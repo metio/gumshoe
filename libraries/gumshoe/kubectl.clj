@@ -318,6 +318,25 @@
   (parse (shell/stdout-of "kubectl" (str "--context=" context) request-timeout
                           "get" type "--all-namespaces" "--output=json")))
 
+(defn label-selector-matches?
+  "Whether a metav1.LabelSelector selects labels. An empty selector selects
+   everything and a nil one nothing, as the API defines them."
+  [selector labels]
+  (boolean
+   (when (map? selector)
+     ;; label keys parse to keywords on both sides, prefix and all, so they
+     ;; compare as they are
+     (and (every? (fn [[k v]] (= v (get labels k))) (:matchLabels selector))
+            (every? (fn [{:keys [key operator values]}]
+                      (let [present (get labels (keyword key))]
+                        (case operator
+                          "In" (contains? (set values) present)
+                          "NotIn" (not (contains? (set values) present))
+                          "Exists" (some? present)
+                          "DoesNotExist" (nil? present)
+                          false)))
+                    (:matchExpressions selector))))))
+
 (defn status-types
   "The plural.group of every CRD that serves a version with a status
    subresource, minus the covered ones. A CRD without status has no
@@ -383,6 +402,14 @@
   [context path]
   (parse (shell/stdout-of "kubectl" (str "--context=" context) request-timeout
                           "get" "--raw" path)))
+
+(defn raw-text
+  "Reads a raw API path as text, or nil when the call fails - the apiserver's
+   /metrics among them, which is not JSON."
+  [context path]
+  (let [{:keys [exit out]} (shell/execute "kubectl" (str "--context=" context) request-timeout
+                                          "get" "--raw" path)]
+    (when (zero? exit) out)))
 
 (defn node-stats-summary
   "One node's kubelet stats summary, which reports per-pod volume consumption.

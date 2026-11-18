@@ -207,6 +207,7 @@ bb runbooks/detectives/observability.clj  # Prometheus, Alertmanager, Thanos
 bb runbooks/detectives/events.clj         # Warning events, last hour
 bb runbooks/detectives/rbac.clj           # admins, wildcards, secret readers
 bb runbooks/detectives/security.clj       # RBAC + pod security + NetPol
+bb runbooks/detectives/posture.clj        # probes, image tags, replicas, PDBs, deprecated APIs
 bb runbooks/detectives/dns.clj            # nameservers, SOA replication
 bb runbooks/detectives/mail.clj           # MX/SPF/DKIM/DMARC/rDNS + TLS
 bb runbooks/detectives/fabric.clj         # EVPN-VXLAN MAC ownership, over ssh
@@ -248,7 +249,9 @@ failing that, node) has a finding at least as severe carries that object as its
 keep it with the `parent` field. Where the API records when a problem began - a
 condition's transition, a deletion, a creation - the finding carries it as
 `since`, and the text report shows how long it has held (`for 40m`, `for 5h`,
-`since 2026-11-02`).
+`since 2026-11-02`). The posture book's findings are left out of the
+whole-cluster scan: they describe risks that may be deliberate choices, so
+they run only when asked for.
 
 Covered so far: the control plane
 (apiserver/scheduler/controller-manager/etcd static pods), nodes, pods

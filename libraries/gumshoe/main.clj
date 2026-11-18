@@ -117,6 +117,8 @@
     :book "runbooks/detectives/platform.clj"}
    {:label "🔐 Security - RBAC, pod security, network policies"
     :book "runbooks/detectives/security.clj"}
+   {:label "🧭 Posture - probes, image tags, replicas, disruption budgets, deprecated APIs"
+    :book "runbooks/detectives/posture.clj"}
    {:label "🌐 DNS - nameservers, replication, dual stack"
     :book "runbooks/detectives/dns.clj"}
    {:label "🕸️  Fabric - EVPN-VXLAN MAC ownership across the hypervisors"

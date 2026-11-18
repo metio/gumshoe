@@ -23,6 +23,7 @@
                    [gumshoe.spec-test]
                    [gumshoe.conformance-test]
                    [gumshoe.detectives-test]
+                   [gumshoe.posture-test]
                    [gumshoe.onset-test]
                    [gumshoe.correlation-test]
                    [gumshoe.custom-resources-test]
@@ -128,6 +129,7 @@
                                                          'gumshoe.spec-test
                                                          'gumshoe.conformance-test
                                                          'gumshoe.detectives-test
+                                                         'gumshoe.posture-test
                                                          'gumshoe.onset-test
                                                          'gumshoe.correlation-test
                                                          'gumshoe.custom-resources-test
