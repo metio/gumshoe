@@ -11,7 +11,11 @@ about Flux, in one place, registered through a single `plugin/provide!` in
 
 - **Detectives** - fills the `:gitops` scan scope: HelmReleases, Kustomizations
   and sources that fail to reconcile or are suspended, plus three findings a
-  condition check alone does not reach.
+  condition check alone does not reach. An object that is still reconciling
+  (reason `Progressing`, `Reconciling` True, or a generation not yet observed)
+  is given ten minutes before it is reported as a warning; one waiting for a
+  dependency is info, because the dependency is reported on its own; a
+  `Stalled` object is critical.
   - **parked releases.** Flux defaults install and upgrade to `retries: 0`, so a
     spent release is left failed until its spec or chart changes. Its
     `status.conditions` then keeps describing a cause that may have cleared long

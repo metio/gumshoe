@@ -66,22 +66,81 @@
        (and (not (retry-on-failure? release :upgrade))
             (> (failures release :upgradeFailures) (retries release :upgrade))))))
 
+(def ^:private settle-minutes
+  "How long an object may stay not Ready while it is still reconciling before
+   that stops looking like progress."
+  10)
+
+(defn- named-condition
+  [resource type]
+  (first (filter #(= type (:type %)) (-> resource :status :conditions))))
+
+(defn in-progress?
+  "Whether the Ready condition describes work under way rather than a result.
+   ProgressingWithRetry is a failure being retried, so it does not count; a
+   generation the controller has not observed yet means Ready describes an
+   older spec."
+  [resource]
+  (let [ready (ready-condition resource)
+        reconciling (named-condition resource "Reconciling")
+        generation (-> resource :metadata :generation)
+        observed (-> resource :status :observedGeneration)]
+    (boolean
+     (or (= "Progressing" (:reason ready))
+         (and (= "True" (:status reconciling)) (not= "ProgressingWithRetry" (:reason reconciling)))
+         (and (number? generation) (number? observed) (< observed generation))))))
+
+(defn- minutes-since
+  [now timestamp]
+  (when (and now timestamp)
+    (.toMinutes (java.time.Duration/between (java.time.Instant/parse timestamp) now))))
+
+(defn- not-ready-finding
+  [resource kind now]
+  (let [ready (ready-condition resource)
+        stalled (named-condition resource "Stalled")
+        base {:component (kubectl/namespace-name-of resource) :hint (:message ready)}
+        age (minutes-since now (:lastTransitionTime ready))]
+    (cond
+      (= "True" (:status stalled))
+      (assoc base :severity :critical
+             :summary (format "%s is stalled (%s)" kind (or (:reason stalled) (:reason ready) "unknown"))
+             :hint (or (:message stalled) (:message ready)))
+
+      (= "DependencyNotReady" (:reason ready))
+      (assoc base :severity :info
+             :summary (format "%s waits for a dependency" kind)
+             :hint (str (or (:message ready) "a dependency is not Ready")
+                        " - the dependency is reported on its own"))
+
+      (and (in-progress? resource) age (< age settle-minutes))
+      nil
+
+      (in-progress? resource)
+      (assoc base :severity :warning
+             :summary (if age
+                        (format "%s has been reconciling for %d minutes" kind age)
+                        (format "%s is reconciling" kind)))
+
+      :else
+      (assoc base :severity :critical
+             :summary (format "%s is not Ready (%s)" kind (or (:reason ready) "unknown"))))))
+
 (defn flux-findings
-  [resources kind]
-  (concat
-   (for [resource resources
-         :let [ready (ready-condition resource)]
-         :when (= "False" (:status ready))]
-     {:severity :critical
-      :component (kubectl/namespace-name-of resource)
-      :summary (format "%s is not Ready (%s)" kind (or (:reason ready) "unknown"))
-      :hint (:message ready)})
-   (for [resource resources
-         :when (true? (-> resource :spec :suspend))]
-     {:severity :info
-      :component (kubectl/namespace-name-of resource)
-      :summary (format "%s is suspended" kind)
-      :hint "resume it once the reason for the suspension is resolved"})))
+  ([resources kind] (flux-findings resources kind nil))
+  ([resources kind now]
+   (concat
+    (for [resource resources
+          :when (= "False" (:status (ready-condition resource)))
+          :let [finding (not-ready-finding resource kind now)]
+          :when finding]
+      finding)
+    (for [resource resources
+          :when (true? (-> resource :spec :suspend))]
+      {:severity :info
+       :component (kubectl/namespace-name-of resource)
+       :summary (format "%s is suspended" kind)
+       :hint "resume it once the reason for the suspension is resolved"}))))
 
 (defn detect-helmrelease-problems
   [evidence]
@@ -89,7 +148,7 @@
         stuck (filter parked? releases)]
     (concat
      ;; a parked release is reported here instead, with the remedy
-     (flux-findings (remove parked? releases) "HelmRelease")
+     (flux-findings (remove parked? releases) "HelmRelease" (:now evidence))
      (for [release stuck
            :let [ready (ready-condition release)]]
        {:severity :critical
@@ -111,10 +170,6 @@
      :summary "delivery is annotated to skip reconciliation"
      :hint "it will not change whatever it already applied; remove the reconcile annotation once the migration or gate it belongs to is finished"}))
 
-(defn- condition
-  [resource type]
-  (first (filter #(= type (:type %)) (-> resource :status :conditions))))
-
 (defn detect-drifted-releases
   "A release whose live objects no longer match what it applied. `Ready` stays
    True -- the Helm operation did succeed -- so nothing else reports this. With
@@ -123,7 +178,7 @@
    upgrade's patch either, so it persists indefinitely."
   [evidence]
   (for [release (kubectl/items-of (get evidence helmrelease-type))
-        :let [drifted (condition release "Drifted")
+        :let [drifted (named-condition release "Drifted")
               mode (-> release :spec :driftDetection :mode)]
         :when (= "True" (:status drifted))]
     {:severity (if (= "enabled" mode) :warning :critical)
@@ -174,19 +229,19 @@
 
 (defn detect-kustomization-problems
   [evidence]
-  (flux-findings (kubectl/items-of (get evidence kustomization-type)) "Kustomization"))
+  (flux-findings (kubectl/items-of (get evidence kustomization-type)) "Kustomization" (:now evidence)))
 
 (defn detect-gitrepository-problems
   [evidence]
-  (flux-findings (kubectl/items-of (get evidence gitrepository-type)) "GitRepository"))
+  (flux-findings (kubectl/items-of (get evidence gitrepository-type)) "GitRepository" (:now evidence)))
 
 (defn detect-ocirepository-problems
   [evidence]
-  (flux-findings (kubectl/items-of (get evidence ocirepository-type)) "OCIRepository"))
+  (flux-findings (kubectl/items-of (get evidence ocirepository-type)) "OCIRepository" (:now evidence)))
 
 (defn detect-helmchart-problems
   [evidence]
-  (flux-findings (kubectl/items-of (get evidence helmchart-type)) "HelmChart"))
+  (flux-findings (kubectl/items-of (get evidence helmchart-type)) "HelmChart" (:now evidence)))
 
 (def detectives
   [{:name "helmreleases"

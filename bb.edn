@@ -39,6 +39,7 @@
                    [gumshoe.evpn-test]
                    [gumshoe.expectations-test]
                    [gumshoe.tools.flux-test]
+                   [gumshoe.tools.flux-progress-test]
                    [gumshoe.certificates-test]
                    [gumshoe.gateway-test]
                    [gumshoe.cnpg-test]
@@ -140,6 +141,7 @@
                                                          'gumshoe.evpn-test
                                                          'gumshoe.expectations-test
                                                          'gumshoe.tools.flux-test
+                                                         'gumshoe.tools.flux-progress-test
                                                          'gumshoe.certificates-test
                                                          'gumshoe.gateway-test
                                                          'gumshoe.cnpg-test
