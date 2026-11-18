@@ -49,6 +49,19 @@
   (first (filter-list resource-list #(or (= namespace-name (namespace-name-of %))
                                          (= namespace-name (name-of %))))))
 
+(defn workload-of
+  "The workload that owns a pod, as \"Kind/name\". A Deployment's pods are owned
+   by a ReplicaSet named after the Deployment plus the pod-template-hash, so the
+   hash is stripped to count every revision of one Deployment as one workload."
+  [pod]
+  (let [owner (first (filter :controller (-> pod :metadata :ownerReferences)))
+        hash (get-in pod [:metadata :labels :pod-template-hash])]
+    (cond
+      (nil? owner) (str "Pod/" (name-of pod))
+      (and (= "ReplicaSet" (:kind owner)) hash (str/ends-with? (:name owner) (str "-" hash)))
+      (str "Deployment/" (subs (:name owner) 0 (- (count (:name owner)) (inc (count hash)))))
+      :else (str (:kind owner) "/" (:name owner)))))
+
 (defn split-namespace-name
   [namespace-name]
   (let [[namespace name] (str/split namespace-name #"/" 2)]

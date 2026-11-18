@@ -2,25 +2,84 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.detectives.pods
-  "Detectives for workload health: crash loops, image pull errors, OOM kills,
-   excessive restarts, pods stuck in Pending or Failed."
+  "Detectives for workload health: restart loops, image pull errors, OOM
+   kills, pods stuck in Pending or Failed."
   (:require [clojure.string]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.scheduling :as scheduling]))
 
+;; CrashLoopBackOff is judged with the restart loops below, by how much of
+;; its workload loops; these block a container outright.
 (def ^:private bad-waiting-reasons
-  {"CrashLoopBackOff" :critical
-   "ImagePullBackOff" :critical
+  {"ImagePullBackOff" :critical
    "ErrImagePull" :critical
    "CreateContainerConfigError" :critical
    "InvalidImageName" :critical})
 
-(def ^:private restart-threshold 5)
+(def ^:private loop-min-restarts 3)
+(def ^:private loop-recent-minutes 30)
+(def ^:private loop-fast-run-minutes 10)
+(def ^:private settled-minutes 5)
+
+(defn- instant [s] (some-> s java.time.Instant/parse))
+
+(defn- minutes-between
+  [^java.time.Instant from ^java.time.Instant to]
+  (/ (.toSeconds (java.time.Duration/between from to)) 60.0))
+
+(defn- crash-loop-back-off?
+  [status]
+  (= "CrashLoopBackOff" (-> status :state :waiting :reason)))
+
+(defn- looping?
+  "Whether a container is in a restart loop now, as opposed to having restarted
+   at some point in its life: it restarted at least 3 times, the last run ended
+   within 30 minutes after lasting under 10, and it has not run 5 minutes
+   since. The kubelet's CrashLoopBackOff is a loop by its own account."
+  [status now]
+  (or (crash-loop-back-off? status)
+      (let [last (-> status :lastState :terminated)
+            finished (instant (:finishedAt last))
+            started (instant (:startedAt last))
+            running (instant (-> status :state :running :startedAt))]
+        (boolean
+         (and now finished
+              (<= loop-min-restarts (or (:restartCount status) 0))
+              (< (minutes-between finished now) loop-recent-minutes)
+              (or (nil? started) (< (minutes-between started finished) loop-fast-run-minutes))
+              (not (and running (<= settled-minutes (minutes-between running now)))))))))
+
+(defn- live?
+  [pod]
+  (not (contains? #{"Succeeded" "Failed"} (-> pod :status :phase))))
+
+(defn- owner-key
+  [pod]
+  [(kubectl/namespace-of pod) (kubectl/workload-of pod)])
+
+(defn- outage-owners
+  "The workloads where at least half of the live pods loop: there the loop is
+   an outage, while one looping replica among healthy ones is degradation."
+  [pods now]
+  (set (for [[owner members] (group-by owner-key (filter live? pods))
+             :let [loops (count (filter (fn [pod] (some #(looping? % now) (-> pod :status :containerStatuses)))
+                                        members))]
+             :when (<= 1/2 (/ loops (count members)))]
+         owner)))
+
+(defn- last-exit
+  [status]
+  (when-let [last (-> status :lastState :terminated)]
+    (format "last exit code %s (%s)" (:exitCode last) (or (:reason last) "no reason"))))
 
 (defn- container-findings
-  [pod]
+  [pod now outage?]
   (let [component (kubectl/namespace-name-of pod)
-        statuses (-> pod :status :containerStatuses)]
+        statuses (-> pod :status :containerStatuses)
+        loop-severity (if outage? :critical :warning)
+        loop-hint (fn [status & more]
+                    (clojure.string/join " - " (remove nil? (concat more [(last-exit status)
+                                                                          (format "kubectl logs --previous -c %s" (:name status))]))))]
     (concat
      (for [status statuses
            :let [reason (-> status :state :waiting :reason)
@@ -30,6 +89,12 @@
         :component component
         :summary (format "container %s is waiting: %s" (:name status) reason)
         :hint (-> status :state :waiting :message)})
+     (for [status statuses
+           :when (crash-loop-back-off? status)]
+       {:severity loop-severity
+        :component component
+        :summary (format "container %s is waiting: CrashLoopBackOff" (:name status))
+        :hint (loop-hint status (-> status :state :waiting :message))})
      (for [status statuses
            ;; A container restarted after an OOM kill records it in lastState; a
            ;; one-shot container (restartPolicy Never) is left terminated in its
@@ -41,10 +106,11 @@
         :summary (format "container %s was OOMKilled" (:name status))
         :hint "compare the memory limit with actual usage"})
      (for [status statuses
-           :when (< restart-threshold (or (:restartCount status) 0))]
-       {:severity :warning
+           :when (and (not (crash-loop-back-off? status)) (looping? status now))]
+       {:severity loop-severity
         :component component
-        :summary (format "container %s restarted %d times" (:name status) (:restartCount status))}))))
+        :summary (format "container %s keeps restarting (%d restarts)" (:name status) (:restartCount status))
+        :hint (loop-hint status)}))))
 
 (defn- scheduled-condition
   [pod]
@@ -96,9 +162,11 @@
 
 (defn detect-unhealthy-pods
   [evidence]
-  (let [pods (kubectl/items-of (get evidence "pods"))]
+  (let [pods (kubectl/items-of (get evidence "pods"))
+        now (:now evidence)
+        outages (outage-owners pods now)]
     (concat
-     (mapcat container-findings pods)
+     (mapcat #(container-findings % now (contains? outages (owner-key %))) pods)
      (for [pod pods
            :when (= "Failed" (-> pod :status :phase))]
        {:severity :warning
@@ -125,7 +193,7 @@
 
 (def detectives
   [{:name "pods"
-    :description "Unhealthy pods: crash loops, image pull errors, OOM kills, restarts, Pending/Failed"
+    :description "Unhealthy pods: restart loops, image pull errors, OOM kills, Pending/Failed"
     :requires ["pods"]
     :detect detect-unhealthy-pods}
    {:name "stuck-pods"

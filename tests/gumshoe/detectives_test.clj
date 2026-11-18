@@ -41,9 +41,8 @@
                                                                  :restartCount 0
                                                                  :state {:running {}}}]}}]}}
         findings (pods/detect-unhealthy-pods evidence)]
-    (testing "reports crash loops, restarts, pending pods, and a one-shot OOM kill but not healthy ones"
+    (testing "reports crash loops, pending pods, and a one-shot OOM kill but not healthy ones"
       (is (= #{"container web is waiting: CrashLoopBackOff"
-               "container web restarted 42 times"
                "container worker was OOMKilled"
                "pod is in phase Failed (unknown reason)"
                "pod is stuck in Pending"}
