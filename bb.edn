@@ -23,6 +23,9 @@
                    [gumshoe.spec-test]
                    [gumshoe.conformance-test]
                    [gumshoe.detectives-test]
+                   [gumshoe.detective-edge-cases-test]
+                   [gumshoe.healthy-cluster-test]
+                   [gumshoe.detective-properties-test]
                    [gumshoe.workload-conditions-test]
                    [gumshoe.references-test]
                    [gumshoe.finalizers-test]
@@ -119,6 +122,9 @@
                                                          'gumshoe.spec-test
                                                          'gumshoe.conformance-test
                                                          'gumshoe.detectives-test
+                                                         'gumshoe.detective-edge-cases-test
+                                                         'gumshoe.healthy-cluster-test
+                                                         'gumshoe.detective-properties-test
                                                          'gumshoe.workload-conditions-test
                                                          'gumshoe.references-test
                                                          'gumshoe.finalizers-test
