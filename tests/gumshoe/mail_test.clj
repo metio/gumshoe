@@ -197,3 +197,10 @@
             (str (:name service) " is STARTTLS but declares no protocol")))))
   (testing "the classic seven mail ports are all covered"
     (is (= #{25 587 465 110 995 143 993} (set (map :port mail/services))))))
+
+(deftest a-scan-without-mail-evidence-reports-nothing
+  (doseq [detective detectives/detectives]
+    (is (empty? ((:detect detective) {:now (java.time.Instant/now)})) (:name detective)))
+  (testing "with a domain, a missing record is still reported"
+    (let [mx (first (filter #(= "mail-mx" (:name %)) detectives/detectives))]
+      (is (= ["domain has no MX records"] (map :summary ((:detect mx) {"domain" "example.org"})))))))

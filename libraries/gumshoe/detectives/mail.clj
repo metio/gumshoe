@@ -171,28 +171,38 @@
                        :hint "renew before it lapses"}]
                      :else []))))))))
 
+(defn- about
+  "Runs a detective only when the evidence names its subject. The mail
+   evidence comes from the mail book; a scan of the whole registry collects
+   none, and judging the records of no domain would report every record as
+   missing."
+  [subject detect]
+  (fn [evidence]
+    (when (get evidence subject)
+      (detect evidence))))
+
 (def detectives
   [{:name "mail-mx"
     :description "MX records: mail can be received at all"
     :requires ["mx" "domain"]
-    :detect detect-mx-problems}
+    :detect (about "domain" detect-mx-problems)}
    {:name "mail-spf"
     :description "SPF record present, unique, and not dangerously permissive"
     :requires ["spf" "domain"]
-    :detect detect-spf-problems}
+    :detect (about "domain" detect-spf-problems)}
    {:name "mail-dmarc"
     :description "DMARC policy published and enforcing"
     :requires ["dmarc" "domain"]
-    :detect detect-dmarc-problems}
+    :detect (about "domain" detect-dmarc-problems)}
    {:name "mail-dkim"
     :description "DKIM keys published for the configured selectors"
     :requires ["dkim" "domain"]
-    :detect detect-dkim-problems}
+    :detect (about "domain" detect-dkim-problems)}
    {:name "mail-rdns"
     :description "Forward-confirmed reverse DNS for the mail host"
     :requires ["ptr" "host"]
-    :detect detect-reverse-dns}
+    :detect (about "host" detect-reverse-dns)}
    {:name "mail-services"
     :description "SMTP/POP3/IMAP ports reachable, STARTTLS offered, certificates valid"
     :requires ["probes" "host"]
-    :detect detect-service-problems}])
+    :detect (about "host" detect-service-problems)}])
