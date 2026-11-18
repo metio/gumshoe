@@ -12,4 +12,4 @@
   :scope :all
   :prerequisites {:installed-tools ["kubectl"]
                   :cluster-capabilities []
-                  :kubectl-can-get ["nodes" "pods" "persistentvolumeclaims" "deployments" "statefulsets" "daemonsets" "jobs" "resourcequotas" "clusterroles" "clusterrolebindings" "rolebindings" "serviceaccounts" "networkpolicies"]}})
+                  :kubectl-can-get ["nodes" "pods" "persistentvolumeclaims" "deployments" "statefulsets" "daemonsets" "jobs" "services" "resourcequotas" "clusterroles" "clusterrolebindings" "rolebindings" "serviceaccounts" "networkpolicies"]}})

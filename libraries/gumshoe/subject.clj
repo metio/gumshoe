@@ -486,6 +486,8 @@
    "daemonsets" "DaemonSet"
    "jobs" "Job"
    "hpas" "HorizontalPodAutoscaler"
+   "services" "Service"
+   "load-balancers" "Service"
    "httproutes" "HTTPRoute"
    "loki-health" "Deployment"})
 
