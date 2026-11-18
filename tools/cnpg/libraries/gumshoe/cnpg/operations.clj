@@ -81,6 +81,18 @@
      ;; a bare number names the instance as the cnpg plugin does: <cluster>-<n>
      :instance (if (re-matches #"\d+" instance) (str cluster "-" instance) instance)}))
 
+(defn fence-change
+  "The annotate argument that fences (:fence) or lifts the fence on (:unfence)
+   instance, or nil when the cluster's fenced set cannot be read or the change
+   cannot be expressed. The runbooks build their plan before the precondition
+   refuses, so this never throws."
+  [mode cluster instance]
+  (when-let [names (fenced cluster)]
+    (when-let [changed (case mode
+                         :fence (with-fence names instance)
+                         :unfence (without-fence names instance))]
+      (annotation-arg changed))))
+
 ;; --- switchover ------------------------------------------------------------------
 
 (defn switchover-refusal

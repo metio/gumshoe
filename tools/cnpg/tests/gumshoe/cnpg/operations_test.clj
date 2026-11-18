@@ -103,3 +103,13 @@
   (is (= [] (operations/fence-picks {:items [(cluster :fenced "[\"*\"]")]})) "everything is fenced")
   (is (= ["db/pg pg-2" "db/pg pg-3"] (operations/unfence-picks {:items [(cluster :fenced "[\"pg-3\",\"pg-2\"]") (cluster :name "x")]})))
   (is (= [] (operations/unfence-picks {:items [(cluster :fenced "broken")]})) "an unreadable annotation offers nothing"))
+
+(deftest a-fence-change-is-nil-instead-of-throwing
+  (is (= "cnpg.io/fencedInstances=[\"pg-2\"]" (operations/fence-change :fence (cluster) "pg-2")))
+  (is (= "cnpg.io/fencedInstances=[\"*\"]" (operations/fence-change :fence (cluster :fenced "[\"pg-2\"]") "*")))
+  (is (= "cnpg.io/fencedInstances-" (operations/fence-change :unfence (cluster :fenced "[\"pg-2\"]") "pg-2")))
+  (is (nil? (operations/fence-change :unfence (cluster :fenced "[\"*\"]") "pg-2")) "one instance out of *")
+  (is (nil? (operations/fence-change :fence (cluster :fenced "broken") "pg-2")) "an unreadable annotation is never overwritten")
+  (is (nil? (operations/fence-change :unfence (cluster :fenced "broken") "pg-2")))
+  (is (= "cnpg.io/fencedInstances=[\"pg-2\"]" (operations/fence-change :fence nil "pg-2"))
+      "a vanished cluster still yields a plan; the precondition refuses it"))

@@ -35,10 +35,10 @@
                     (nil? why)))
   :announce (fn [{:keys [pick]}] (format "Fence %s in %s/%s" (:instance pick) (:namespace pick) (:cluster pick)))
   :effect (fn [{:keys [context pick]}]
-            (let [cluster (fetch context pick)]
+            (if-let [change (operations/fence-change :fence (fetch context pick) (:instance pick))]
               (effect/plan (effect/kubectl context "--namespace" (:namespace pick) "annotate" cnpg/cluster-type
-                                           (:cluster pick) "--overwrite"
-                                           (operations/annotation-arg (operations/with-fence (operations/fenced cluster) (:instance pick)))))))
+                                           (:cluster pick) "--overwrite" change))
+              (effect/plan (effect/note "nothing can be written - the precondition says why"))))
   :verify (fn [{:keys [context pick]}]
             [{:description (format "%s is fenced" (:instance pick))
               :timeout 60 :interval 5
