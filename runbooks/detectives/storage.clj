@@ -11,4 +11,4 @@
   :detectives storage/detectives
   :prerequisites {:installed-tools ["kubectl"]
                   :cluster-capabilities []
-                  :kubectl-can-get ["persistentvolumeclaims" "pods"]}})
+                  :kubectl-can-get ["persistentvolumeclaims" "pods" "events"]}})

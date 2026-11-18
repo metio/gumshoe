@@ -23,6 +23,7 @@
                    [gumshoe.spec-test]
                    [gumshoe.conformance-test]
                    [gumshoe.detectives-test]
+                   [gumshoe.storage-conditions-test]
                    [gumshoe.detective-edge-cases-test]
                    [gumshoe.healthy-cluster-test]
                    [gumshoe.detective-properties-test]
@@ -122,6 +123,7 @@
                                                          'gumshoe.spec-test
                                                          'gumshoe.conformance-test
                                                          'gumshoe.detectives-test
+                                                         'gumshoe.storage-conditions-test
                                                          'gumshoe.detective-edge-cases-test
                                                          'gumshoe.healthy-cluster-test
                                                          'gumshoe.detective-properties-test
