@@ -29,6 +29,7 @@
             [gumshoe.detectives.rbac :as rbac]
             [gumshoe.detectives.services :as services]
             [gumshoe.detectives.storage :as storage]
+            [gumshoe.detectives.terminating :as terminating]
             [gumshoe.detectives.workloads :as controllers]
             [gumshoe.kubectl :as kubectl]))
 
@@ -91,7 +92,7 @@
 ;; [context key]; the key is fixed here, so it is ignored.
 (register-collector! "api-resources" (fn [context _key] (apiversions/advertised-versions context)))
 (register! :workloads (concat controllers/detectives pods/detectives pod-creation/detectives pod-startup/detectives
-                              services/detectives storage/detectives
+                              services/detectives storage/detectives terminating/detectives
                               disruption/detectives quotas/detectives capacity/detectives))
 (register! :signals events/detectives)
 (register! :security (concat rbac/detectives pod-security/detectives network/detectives))
