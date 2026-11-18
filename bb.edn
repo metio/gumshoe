@@ -47,6 +47,7 @@
                    [gumshoe.certificates-test]
                    [gumshoe.gateway-test]
                    [gumshoe.cnpg-test]
+                   [gumshoe.cnpg-health-test]
                    [gumshoe.pooler-test]
                    gumshoe.pooler-console-test
                    [gumshoe.cnpg-volumes-test]
@@ -153,6 +154,7 @@
                                                          'gumshoe.certificates-test
                                                          'gumshoe.gateway-test
                                                          'gumshoe.cnpg-test
+                                                         'gumshoe.cnpg-health-test
                                                          'gumshoe.pooler-test
                                                          'gumshoe.pooler-console-test
                                                          'gumshoe.cnpg-volumes-test

@@ -8,8 +8,11 @@ SPDX-License-Identifier: 0BSD
 The CloudNativePG tool package for [gumshoe](../../README.md).
 
 - **Detectives** - join the `:databases` scan scope (clusters not in a healthy
-  phase, too few ready instances, failing WAL archiving, failed/suspended
-  backups), so they also run in the cluster-wide scan.
+  phase - critical when the phase waits for manual action - too few ready
+  instances, failing WAL archiving, certificates within a week of expiry,
+  primary role labels that disagree with the designated primary,
+  failed/suspended backups and scheduled backups that stopped running), so they
+  also run in the cluster-wide scan.
 - **Volume detective** - PVC usage is absent from the resource API, where
   `status.capacity` reports the size requested rather than the size in use, so
   this one brings its own evidence collector reading kubelet's

@@ -13,7 +13,9 @@
    Nor is a crashlooping instance visible there. An instance whose postgres
    never starts leaves the pod restarting indefinitely while the cluster reports
    a storage phase and a ready count that look survivable."
-  (:require [gumshoe.cnpg.instances :as inst]
+  (:require [clojure.string :as str]
+            [gumshoe.cnpg.instances :as inst]
+            [gumshoe.cron :as cron]
             [gumshoe.kubectl :as kubectl]))
 
 (def cluster-type "clusters.postgresql.cnpg.io")
@@ -123,17 +125,31 @@
                   "read the pod log for the reason; an instance with no room for WALs "
                   "refuses to start at all, so the count climbs without the cluster recovering")})))
 
+(def ^:private blocked-phases
+  "Phases the operator does not leave on its own: each waits for someone to
+   change the cluster, its definition or its environment."
+  #{"Waiting for user action"
+    "Cluster is unrecoverable and needs manual intervention"
+    "Invalid cluster definition"
+    "Unable to create required cluster objects"
+    "Cluster cannot proceed to reconciliation due to an unknown plugin being required"
+    "Cluster cannot proceed to reconciliation due to an error while interacting with plugins"
+    "Cluster has incomplete or invalid image catalog"
+    "Cluster cannot execute instance online upgrade due to missing architecture binary"})
+
 (defn detect-cnpg-problems
   [evidence]
   (let [clusters (kubectl/items-of (get evidence cluster-type))]
     (concat
      (for [cluster clusters
-           :let [phase (-> cluster :status :phase)]
+           :let [phase (-> cluster :status :phase)
+                 blocked? (contains? blocked-phases phase)]
            :when (and phase (not= healthy-phase phase))]
-       {:severity :warning
+       {:severity (if blocked? :critical :warning)
         :component (kubectl/namespace-name-of cluster)
         :summary (format "cluster phase: %s" phase)
-        :hint (-> cluster :status :phaseReason)})
+        :hint (not-empty (str/join " - " (remove str/blank? [(-> cluster :status :phaseReason)
+                                                             (when blocked? "the operator waits for a change and will not recover on its own")])))})
      (for [cluster clusters
            :let [instances (-> cluster :spec :instances)
                  ready (-> cluster :status :readyInstances)]
@@ -144,10 +160,126 @@
      (for [cluster clusters
            :let [archiving (condition cluster "ContinuousArchiving")]
            :when (= "False" (:status archiving))]
-       {:severity :warning
+       {:severity :critical
         :component (kubectl/namespace-name-of cluster)
         :summary "continuous WAL archiving is failing"
-        :hint (:message archiving)}))))
+        :hint (str/join " - " (remove str/blank? [(:message archiving)
+                                                  "no new recovery point is written, and WAL files pile up on the primary's volume until archiving works again"]))}))))
+
+;; --- certificates ---------------------------------------------------------------
+
+(def ^:private certificate-warning-days 7)
+
+(def ^:private go-time
+  (-> (java.time.format.DateTimeFormatterBuilder.)
+      (.appendPattern "yyyy-MM-dd HH:mm:ss")
+      (.appendFraction java.time.temporal.ChronoField/NANO_OF_SECOND 0 9 true)
+      (.appendPattern " Z")
+      (.toFormatter)))
+
+(defn parse-expiration
+  "An expiration as the operator records it. RFC 3339 is read, and so is Go's
+   time.Time String form (\"2026-03-01 10:22:33 +0000 UTC\", possibly with
+   fractional seconds and a monotonic clock suffix); anything else is nil."
+  [value]
+  (let [value (str/trim (str value))]
+    (or (try (java.time.Instant/parse value) (catch Exception _ nil))
+        (try (.toInstant (java.time.OffsetDateTime/parse value)) (catch Exception _ nil))
+        (when-let [[_ stamp] (re-find #"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)? [+-]\d{4})" value)]
+          (try (.toInstant (java.time.OffsetDateTime/parse stamp go-time)) (catch Exception _ nil))))))
+
+(defn detect-certificate-expiry
+  "Certificates of a cluster that expired or expire within a week. The
+   operator renews the certificates it issues itself before that, so one this
+   close to expiry is either user-provided or not being renewed."
+  [evidence]
+  (let [now ^java.time.Instant (:now evidence)]
+    (for [cluster (kubectl/items-of (get evidence cluster-type))
+          [key expiration] (sort-by key (-> cluster :status :certificates :expirations))
+          :let [secret (if (keyword? key) (subs (str key) 1) (str key))
+                at (parse-expiration expiration)
+                days (when (and at now) (.toDays (java.time.Duration/between now at)))]
+          :when (and days (or (.isBefore ^java.time.Instant at now) (< days certificate-warning-days)))]
+      {:severity (if (.isBefore ^java.time.Instant at now) :critical :warning)
+       :component (kubectl/namespace-name-of cluster)
+       :summary (if (.isBefore ^java.time.Instant at now)
+                  (format "certificate in Secret %s expired %s" secret at)
+                  (format "certificate in Secret %s expires in %d days" secret days))
+       :hint "the operator renews the certificates it issues before this point - a user-provided certificate must be replaced by whoever issues it"
+       :since (when (.isBefore ^java.time.Instant at now) (str at))})))
+
+;; --- primary role labels --------------------------------------------------------
+
+(def ^:private role-labels [:role :cnpg.io/instanceRole])
+
+(defn- labelled-primary?
+  [pod]
+  (some #(= "primary" (get-in pod [:metadata :labels %])) role-labels))
+
+(def ^:private moving-phases #{"Switchover in progress" "Failing over" "Setting up primary"})
+
+(defn detect-primary-label-mismatch
+  "Instance pods whose primary role label disagrees with the cluster's
+   designated primary. Services that select the primary by its role label
+   then reach no pod, or a replica that refuses writes. A switchover or
+   failover relabels pods on its way, so a cluster in one is left alone."
+  [evidence]
+  (let [pods (group-by (juxt kubectl/namespace-of inst/cluster-of)
+                       (filter inst/instance-pod? (kubectl/items-of (get evidence "pods"))))]
+    (for [cluster (kubectl/items-of (get evidence cluster-type))
+          :let [primary (-> cluster :status :currentPrimary)
+                instances (get pods [(kubectl/namespace-of cluster) (kubectl/name-of cluster)])
+                labelled (set (map kubectl/name-of (filter labelled-primary? instances)))]
+          :when (and primary (seq instances)
+                     (= primary (-> cluster :status :targetPrimary))
+                     (not (contains? moving-phases (-> cluster :status :phase))))
+          finding [(when (and (some #(= primary (kubectl/name-of %)) instances) (not (labelled primary)))
+                     {:severity :critical
+                      :component (kubectl/namespace-name-of cluster)
+                      :summary (format "the designated primary %s does not carry the primary role label" primary)
+                      :hint "Services that select the primary by role reach no pod, so clients cannot write - the instance manager sets the label; check its log"})
+                   (when-let [others (seq (sort (disj labelled primary)))]
+                     {:severity :critical
+                      :component (kubectl/namespace-name-of cluster)
+                      :summary (format "%s carr%s the primary role label but %s is the designated primary"
+                                       (str/join ", " others) (if (next others) "y" "ies") primary)
+                      :hint "Services that select the primary by role also reach a pod that is not the primary, and writes sent there fail"})]
+          :when finding]
+      finding)))
+
+;; --- scheduled backups ----------------------------------------------------------
+
+(defn schedule-interval
+  "The longest gap between two runs of a ScheduledBackup schedule. Its six
+   fields start with seconds; the remaining five read like a CronJob's, and
+   dropping the seconds only rounds the gap up."
+  [schedule]
+  (let [fields (str/split (str/trim (str schedule)) #"\s+")]
+    (cron/interval (if (= 6 (count fields)) (str/join " " (rest fields)) schedule))))
+
+(defn detect-overdue-scheduled-backups
+  "ScheduledBackups that should have run by now: more than twice their
+   interval, and at least two hours, since the last run (or since creation,
+   when it never ran)."
+  [evidence]
+  (let [now ^java.time.Instant (:now evidence)]
+    (for [scheduled (kubectl/items-of (get evidence scheduled-backup-type))
+          :when (not (true? (-> scheduled :spec :suspend)))
+          :let [interval (schedule-interval (-> scheduled :spec :schedule))
+                last-run (instant (-> scheduled :status :lastScheduleTime))
+                reference (or last-run (instant (-> scheduled :metadata :creationTimestamp)))
+                allowed (when interval (let [twice (.multipliedBy ^java.time.Duration interval 2)]
+                                         (if (neg? (.compareTo twice (java.time.Duration/ofHours 2)))
+                                           (java.time.Duration/ofHours 2) twice)))]
+          :when (and now reference allowed (.isBefore ^java.time.Instant (.plus ^java.time.Instant reference ^java.time.Duration allowed) now))]
+      {:severity :warning
+       :component (kubectl/namespace-name-of scheduled)
+       :summary (if last-run
+                  (format "scheduled backup has not run since %s" last-run)
+                  "scheduled backup has never run")
+       :hint (format "schedule %s - check the operator log and the ScheduledBackup's events; the cluster's backups stop with it"
+                     (-> scheduled :spec :schedule))
+       :since (str reference)})))
 
 (defn detect-backup-problems
   [evidence]
@@ -178,6 +310,18 @@
     :description "Postgres instance pods stuck in CrashLoopBackOff"
     :requires [cluster-type "pods"]
     :detect detect-crashlooping-instances}
+   {:name "cnpg-certificates"
+    :description "CloudNativePG certificates that expired or expire within a week"
+    :requires [cluster-type]
+    :detect detect-certificate-expiry}
+   {:name "cnpg-primary-labels"
+    :description "Instance pods whose primary role label disagrees with the designated primary"
+    :requires [cluster-type "pods"]
+    :detect detect-primary-label-mismatch}
+   {:name "cnpg-scheduled-backups"
+    :description "CloudNativePG ScheduledBackups that stopped running"
+    :requires [scheduled-backup-type]
+    :detect detect-overdue-scheduled-backups}
    {:name "cnpg-backups"
     :description "CloudNativePG backups that failed or are suspended"
     :requires [backup-type scheduled-backup-type]
