@@ -131,3 +131,81 @@
 (defn scale-args
   [{:keys [type namespace name]} replicas]
   [(str "--namespace=" namespace) "scale" (str (str/replace type #"s$" "") "/" name) (str "--replicas=" replicas)])
+
+;; --- rollback ------------------------------------------------------------------
+
+(def ^:private revision-annotation :deployment.kubernetes.io/revision)
+
+(defn- revision-of
+  [object]
+  (some-> object :metadata :annotations revision-annotation str parse-long))
+
+(defn- images-of
+  [template]
+  (mapv :image (-> template :spec :containers)))
+
+(defn revisions
+  "The revisions of a Deployment, newest first, read from the ReplicaSets it
+   owns: {:revision :replicaset :images}."
+  [deployment replicasets]
+  (->> (kubectl/items-of replicasets)
+       (filter (fn [rs]
+                 (and (= (kubectl/namespace-of rs) (kubectl/namespace-of deployment))
+                      (some #(and (= "Deployment" (:kind %))
+                                  (if-let [uid (-> deployment :metadata :uid)]
+                                    (= uid (:uid %))
+                                    (= (kubectl/name-of deployment) (:name %))))
+                            (-> rs :metadata :ownerReferences)))))
+       (keep (fn [rs] (when-let [revision (revision-of rs)]
+                        {:revision revision :replicaset (kubectl/name-of rs) :images (images-of (-> rs :spec :template))})))
+       (sort-by (comp - :revision))
+       vec))
+
+(defn current-revision
+  [deployment]
+  (revision-of deployment))
+
+(defn rollback-target
+  "The revision a rollback goes to: to-revision when given, else the newest
+   one older than the current revision."
+  [deployment replicasets to-revision]
+  (let [current (current-revision deployment)
+        all (revisions deployment replicasets)]
+    (if to-revision
+      (first (filter #(= to-revision (:revision %)) all))
+      (first (filter #(and current (< (:revision %) current)) all)))))
+
+(defn rollback-refusal
+  [deployment replicasets to-revision]
+  (let [current (when deployment (current-revision deployment))]
+    (cond
+      (nil? deployment) "the Deployment no longer exists"
+      (true? (-> deployment :spec :paused)) "the Deployment is paused - resume it first"
+      (and to-revision (= to-revision current)) (format "revision %d is the current one" to-revision)
+      (nil? (rollback-target deployment replicasets to-revision))
+      (if to-revision
+        (format "revision %d is not among the Deployment's ReplicaSets" to-revision)
+        "the Deployment has no earlier revision to go back to")
+      :else nil)))
+
+(defn rollback-items
+  [deployment replicasets to-revision]
+  (let [target (rollback-target deployment replicasets to-revision)]
+    [(format "roll Deployment %s back from revision %s (%s) to revision %d (%s)"
+             (kubectl/namespace-name-of deployment)
+             (or (current-revision deployment) "?")
+             (str/join ", " (images-of (-> deployment :spec :template)))
+             (:revision target)
+             (str/join ", " (:images target)))
+     "the rollback becomes a new revision; the Deployment's source (Git, a chart) still holds the newer one and will reapply it"]))
+
+(defn rolled-back?
+  "Whether the Deployment runs the target revision's images and has rolled out."
+  [deployment target]
+  (boolean (and deployment target
+                (= (:images target) (images-of (-> deployment :spec :template)))
+                (rolled-out? "Deployment" deployment))))
+
+(defn rollback-args
+  [{:keys [namespace name]} revision]
+  [(str "--namespace=" namespace) "rollout" "undo" (str "deployment/" name) (str "--to-revision=" revision)])

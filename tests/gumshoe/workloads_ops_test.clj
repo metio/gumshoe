@@ -123,3 +123,60 @@
 (deftest the-scale-command
   (is (= ["--namespace=shop" "scale" "deployment/web" "--replicas=0"]
          (workloads/scale-args {:type "deployments" :namespace "shop" :name "web"} 0))))
+
+;; --- rollback ------------------------------------------------------------------
+
+(defn- rs [name revision image & {:keys [owner uid] :or {owner "web" uid "uid-web"}}]
+  {:metadata {:namespace "shop" :name name :annotations {:deployment.kubernetes.io/revision (str revision)}
+              :ownerReferences [{:kind "Deployment" :name owner :uid uid}]}
+   :spec {:template {:spec {:containers [{:name "app" :image image}]}}}})
+
+(defn- web [revision image & {:keys [paused]}]
+  (-> (deployment)
+      (assoc-in [:metadata :uid] "uid-web")
+      (assoc-in [:metadata :annotations] {:deployment.kubernetes.io/revision (str revision)})
+      (assoc-in [:spec :template :spec :containers] [{:name "app" :image image}])
+      (cond-> paused (assoc-in [:spec :paused] true))))
+
+(def ^:private history
+  {:items [(rs "web-a" 5 "web:1.0") (rs "web-c" 7 "web:1.2") (rs "web-b" 6 "web:1.1")
+           (rs "other-x" 9 "other:1" :owner "other" :uid "uid-other")
+           (rs "web-old" 4 "web:0.9" :uid "uid-of-a-deleted-web")]})
+
+(deftest revisions-come-from-owned-replicasets-newest-first
+  (is (= [{:revision 7 :replicaset "web-c" :images ["web:1.2"]}
+          {:revision 6 :replicaset "web-b" :images ["web:1.1"]}
+          {:revision 5 :replicaset "web-a" :images ["web:1.0"]}]
+         (workloads/revisions (web 7 "web:1.2") history)))
+  (testing "without a uid the owner name decides"
+    (is (= 4 (count (workloads/revisions (update (web 7 "web:1.2") :metadata dissoc :uid) history))))))
+
+(deftest the-rollback-target
+  (is (= 6 (:revision (workloads/rollback-target (web 7 "web:1.2") history nil))) "the previous revision")
+  (is (= 5 (:revision (workloads/rollback-target (web 7 "web:1.2") history 5))))
+  (is (nil? (workloads/rollback-target (web 7 "web:1.2") history 3)))
+  (is (nil? (workloads/rollback-target (web 5 "web:1.0") history nil)) "the oldest has nothing before it"))
+
+(deftest rollback-refusals
+  (is (nil? (workloads/rollback-refusal (web 7 "web:1.2") history nil)))
+  (is (= "the Deployment no longer exists" (workloads/rollback-refusal nil history nil)))
+  (is (re-find #"paused" (workloads/rollback-refusal (web 7 "web:1.2" :paused true) history nil)))
+  (is (= "revision 7 is the current one" (workloads/rollback-refusal (web 7 "web:1.2") history 7)))
+  (is (= "revision 3 is not among the Deployment's ReplicaSets" (workloads/rollback-refusal (web 7 "web:1.2") history 3)))
+  (is (= "the Deployment has no earlier revision to go back to" (workloads/rollback-refusal (web 5 "web:1.0") history nil))))
+
+(deftest the-rollback-confirmation-names-both-revisions
+  (is (= ["roll Deployment shop/web back from revision 7 (web:1.2) to revision 6 (web:1.1)"
+          "the rollback becomes a new revision; the Deployment's source (Git, a chart) still holds the newer one and will reapply it"]
+         (workloads/rollback-items (web 7 "web:1.2") history nil))))
+
+(deftest rolled-back-reads-images-and-rollout
+  (let [target {:revision 6 :images ["web:1.1"]}]
+    (is (workloads/rolled-back? (web 8 "web:1.1") target))
+    (is (not (workloads/rolled-back? (web 7 "web:1.2") target)))
+    (is (not (workloads/rolled-back? (assoc-in (web 8 "web:1.1") [:status :updatedReplicas] 1) target)))
+    (is (not (workloads/rolled-back? nil target)))))
+
+(deftest the-rollback-command
+  (is (= ["--namespace=shop" "rollout" "undo" "deployment/web" "--to-revision=6"]
+         (workloads/rollback-args {:namespace "shop" :name "web"} 6))))
