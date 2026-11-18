@@ -318,6 +318,27 @@
   (parse (shell/stdout-of "kubectl" (str "--context=" context) request-timeout
                           "get" type "--all-namespaces" "--output=json")))
 
+(defn status-types
+  "The plural.group of every CRD that serves a version with a status
+   subresource, minus the covered ones. A CRD without status has no
+   conditions to read."
+  [crds covered]
+  (vec (sort (distinct (for [crd (items-of crds)
+                             :let [type (name-of crd)]
+                             :when (and type (not (contains? covered type)))
+                             :when (some #(and (:served %) (contains? (:subresources %) :status))
+                                         (-> crd :spec :versions))]
+                         type)))))
+
+(defn custom-resources
+  "Every object of the status-carrying CRDs not in covered, or nil when the
+   CRDs cannot be listed. Each type is read on its own, so one type the
+   caller may not list leaves the others readable."
+  [context covered]
+  (when-let [crds (get-all context "customresourcedefinitions")]
+    (vec (mapcat #(or (:items %) [])
+                 (pmap #(get-all context %) (status-types crds covered))))))
+
 (defn secret-names
   "The namespace/name of every Secret, or nil when they cannot be listed. Only
    the names are kept: a detective that checks a reference to a Secret needs

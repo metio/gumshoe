@@ -46,7 +46,7 @@
   #{"services" "load-balancers" "pod-creation" "pod-startup" "pods" "stuck-pods" "stuck-terminating"
     "ingress-references" "tls-secrets" "template-references" "storageclass-references" "role-references"
     "webhook-references" "deployments" "statefulsets" "rollouts" "daemonsets" "jobs" "cronjobs"
-    "hpas" "hpa-failures" "pdbs"})
+    "hpas" "hpa-failures" "pdbs" "api-services" "crd-health" "custom-resource-conditions"})
 
 (deftest an-empty-cluster-is-clean
   (let [by-name (into {} (map (juxt :name identity)) (registry/all))]

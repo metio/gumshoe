@@ -12,6 +12,7 @@
             [gumshoe.detectives.capacity :as capacity]
             [gumshoe.detectives.controlplane :as controlplane]
             [gumshoe.detectives.csi :as csi]
+            [gumshoe.detectives.custom-resources :as custom-resources]
             [gumshoe.detectives.disruption :as disruption]
             [gumshoe.detectives.events :as events]
             [gumshoe.detectives.evpn :as evpn]
@@ -88,13 +89,22 @@
 
 (register! :platform (concat controlplane/detectives nodes/detectives csi/detectives expectations/detectives
                              ipfamily/detectives apiversions-detectives/detectives
-                             namespaces/detectives references/platform-detectives))
+                             namespaces/detectives references/platform-detectives custom-resources/detectives))
 ;; the api-version-drift detective reads `kubectl api-resources` (not a get), so
 ;; it registers that collector for every scan it joins. The collector takes
 ;; [context key]; the key is fixed here, so it is ignored.
 (register-collector! "api-resources" (fn [context _key] (apiversions/advertised-versions context)))
 ;; Secrets are read by name only, so no detective holds what they contain.
 (register-collector! "secret-names" (fn [context _key] (kubectl/secret-names context)))
+(defn covered-types
+  "The plural.group types some registered detective reads already, so the
+   generic condition fallback leaves them to it."
+  []
+  (into #{} (filter #(re-find #"\." %)) (mapcat :requires (all))))
+
+;; The covered types are computed when a scan collects, so a tool package a
+;; casebook registers keeps its own types.
+(register-collector! "custom-resources" (fn [context _key] (kubectl/custom-resources context (covered-types))))
 ;; TLS Secrets are read with their certificate only, never their private key.
 (register-collector! "tls-secrets" (fn [context _key] (kubectl/tls-secrets context)))
 (register! :workloads (concat controllers/detectives pods/detectives pod-creation/detectives pod-startup/detectives

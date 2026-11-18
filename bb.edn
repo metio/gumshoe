@@ -23,6 +23,7 @@
                    [gumshoe.spec-test]
                    [gumshoe.conformance-test]
                    [gumshoe.detectives-test]
+                   [gumshoe.custom-resources-test]
                    [gumshoe.tls-secrets-test]
                    [gumshoe.storage-conditions-test]
                    [gumshoe.detective-edge-cases-test]
@@ -125,6 +126,7 @@
                                                          'gumshoe.spec-test
                                                          'gumshoe.conformance-test
                                                          'gumshoe.detectives-test
+                                                         'gumshoe.custom-resources-test
                                                          'gumshoe.tls-secrets-test
                                                          'gumshoe.storage-conditions-test
                                                          'gumshoe.detective-edge-cases-test
