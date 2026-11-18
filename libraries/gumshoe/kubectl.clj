@@ -329,6 +329,32 @@
     (when (zero? exit)
       (vec (remove str/blank? (str/split-lines (str out)))))))
 
+(defn parse-tls-listing
+  "Reads the tab-separated lines of tls-secrets into maps."
+  [text]
+  (vec (for [line (str/split-lines (str text))
+             :let [[namespace name certificate-name crt] (str/split line #"\t" -1)]
+             :when (and (seq namespace) (seq name))]
+         {:namespace namespace :name name
+          :certificate-name (not-empty certificate-name)
+          :crt (not-empty crt)})))
+
+(defn tls-secrets
+  "Every Secret of type kubernetes.io/tls with its certificate and the
+   cert-manager Certificate that manages it, or nil when they cannot be
+   listed. The jsonpath selects tls.crt only, so the private key never
+   reaches gumshoe."
+  [context]
+  (let [{:keys [exit out]} (shell/execute "kubectl" (str "--context=" context) request-timeout
+                                          "get" "secrets" "--all-namespaces"
+                                          "--field-selector=type=kubernetes.io/tls"
+                                          (str "--output=jsonpath={range .items[*]}"
+                                               "{.metadata.namespace}{\"\\t\"}{.metadata.name}{\"\\t\"}"
+                                               "{.metadata.annotations.cert-manager\\.io/certificate-name}{\"\\t\"}"
+                                               "{.data.tls\\.crt}{\"\\n\"}{end}"))]
+    (when (zero? exit)
+      (parse-tls-listing out))))
+
 (defn get-raw
   "Reads a raw API path, parsed as JSON. Needed for data the resource API does
    not carry - kubelet's per-node stats among it. A failed call parses to nil,

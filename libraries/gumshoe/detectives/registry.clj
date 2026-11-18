@@ -31,6 +31,7 @@
             [gumshoe.detectives.services :as services]
             [gumshoe.detectives.storage :as storage]
             [gumshoe.detectives.terminating :as terminating]
+            [gumshoe.detectives.tls-secrets :as tls-secrets]
             [gumshoe.detectives.workloads :as controllers]
             [gumshoe.kubectl :as kubectl]))
 
@@ -94,9 +95,11 @@
 (register-collector! "api-resources" (fn [context _key] (apiversions/advertised-versions context)))
 ;; Secrets are read by name only, so no detective holds what they contain.
 (register-collector! "secret-names" (fn [context _key] (kubectl/secret-names context)))
+;; TLS Secrets are read with their certificate only, never their private key.
+(register-collector! "tls-secrets" (fn [context _key] (kubectl/tls-secrets context)))
 (register! :workloads (concat controllers/detectives pods/detectives pod-creation/detectives pod-startup/detectives
                               services/detectives storage/detectives terminating/detectives
-                              references/detectives
+                              references/detectives tls-secrets/detectives
                               disruption/detectives quotas/detectives capacity/detectives))
 (register! :signals events/detectives)
 (register! :security (concat rbac/detectives references/security-detectives pod-security/detectives

@@ -44,7 +44,7 @@
   "The detectives that judge Kubernetes objects only, so an empty cluster
    gives them nothing to report."
   #{"services" "load-balancers" "pod-creation" "pod-startup" "pods" "stuck-pods" "stuck-terminating"
-    "ingress-references" "template-references" "storageclass-references" "role-references"
+    "ingress-references" "tls-secrets" "template-references" "storageclass-references" "role-references"
     "webhook-references" "deployments" "statefulsets" "rollouts" "daemonsets" "jobs" "cronjobs"
     "hpas" "hpa-failures" "pdbs"})
 
