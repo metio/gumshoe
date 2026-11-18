@@ -242,7 +242,10 @@ Diagnostics go to stderr and results go to stdout, so `--output json | jq
 '.summary'` and `> report.txt` stay clean. Evidence is collected in parallel
 and shared by all detectives of an investigation. A detective whose resource
 types are not installed on the cluster simply reports nothing, so composed
-investigations degrade gracefully.
+investigations degrade gracefully. A finding about a pod whose workload (or,
+failing that, node) has a finding at least as severe carries that object as its
+`parent`; the text report lists it under the parent's finding, and json and edn
+keep it with the `parent` field.
 
 Covered so far: the control plane
 (apiserver/scheduler/controller-manager/etcd static pods), nodes, pods

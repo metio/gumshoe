@@ -23,6 +23,7 @@
   (:require [cheshire.core :as json]
             [clojure.string :as str]
             [gumshoe.config :as config]
+            [gumshoe.correlation :as correlation]
             [gumshoe.detectives.registry :as registry]
             [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.investigation :as investigation]
@@ -65,9 +66,11 @@
   "Applies every detective to already-collected evidence. A detective that
    throws on unexpected data does not take down the whole investigation: it
    yields one finding reporting its own failure, so every other detective's
-   results still reach the operator."
+   results still reach the operator. A pod finding that follows from a
+   finding about its workload or node carries that one as :parent."
   [detectives evidence]
-  (vec (mapcat (fn [{:keys [name detect]}]
+  (correlation/correlate
+   (mapcat (fn [{:keys [name detect]}]
                  (try
                    ;; detectives are lazy for-comprehensions - realize them HERE,
                    ;; inside the try, or a throw during realization would escape
@@ -78,7 +81,8 @@
                        :component name
                        :summary "detective failed to run - investigate its input"
                        :hint (ex-message e)}])))
-               detectives)))
+           detectives)
+   evidence))
 
 (defn collect-evidence!
   "Fetches every resource type required by the given detectives exactly once,
@@ -143,6 +147,7 @@
                 :summary summary
                 :count (count fs)
                 :components (mapv :component fs)
+                :subjects (vec (distinct (keep subject/from-finding fs)))
                 :hint (:hint (first fs))}))))
 
 (def ^:private sample-size
@@ -150,14 +155,26 @@
    recognise the pattern without scrolling past it."
   4)
 
+(defn folded-line
+  "The line naming the findings that follow from an entry's objects, or nil
+   when none do: their count and each distinct summary with its count."
+  [subjects children]
+  (let [folded (mapcat #(get children (subject/display %)) subjects)]
+    (when (seq folded)
+      (format "follows from it: %d finding%s - %s"
+              (count folded) (if (= 1 (count folded)) "" "s")
+              (str/join ", " (for [[summary fs] (sort-by (comp - count val) (group-by :summary folded))]
+                               (if (> (count fs) 1) (format "%s ×%d" summary (count fs)) summary)))))))
+
 (defn- print-area!
   "Prints one area: a header naming the detective and its finding count, then
-   each rolled-up entry with a sample of the components it affects."
-  [detective findings]
+   each rolled-up entry with a sample of the components it affects and the
+   findings folded under it."
+  [detective findings children]
   (let [n (count findings)]
     (println (str "  " (stdout/bold detective)
                   (format " (%d finding%s)" n (if (= 1 n) "" "s")))))
-  (doseq [{:keys [severity summary components hint] total :count} (roll-up findings)]
+  (doseq [{:keys [severity summary components subjects hint] total :count} (roll-up findings)]
     (println (str "    " (severity-tag severity) " " summary
                   (when (> total 1) (stdout/bold (format "  ×%d" total)))))
     (let [shown (take sample-size components)
@@ -165,7 +182,9 @@
       (println (str "        " (str/join ", " shown)
                     (when (pos? more) (format " (+%d more)" more)))))
     (when hint
-      (println (str "        hint: " hint)))))
+      (println (str "        hint: " hint)))
+    (when-let [line (folded-line subjects children)]
+      (println (str "        " line)))))
 
 (defn- print-clean!
   "Names the detectives that came back clean, so a run with problems still shows
@@ -195,13 +214,17 @@
       (stdout/ok (format "no issues found - %d check%s passed"
                          (count detectives) (if (= 1 (count detectives)) "" "s"))))
     (do
-      (doseq [[detective fs] (areas findings)]
-        (print-area! detective fs))
+      (let [children (correlation/children findings)]
+        (doseq [[detective fs] (areas (remove :parent findings))]
+          (print-area! detective fs children)))
       (stdout/print-section-marker)
-      (let [counts (summary-of findings)]
+      (let [counts (summary-of findings)
+            folded (count (filter :parent findings))]
         (println (str (stdout/red (str (:critical counts) " critical")) ", "
                       (stdout/yellow (str (:warning counts) " warning")) ", "
-                      (stdout/blue (str (:info counts) " info")))))
+                      (stdout/blue (str (:info counts) " info"))
+                      (when (pos? folded)
+                        (format " (%d shown under the finding they follow from)" folded)))))
       (print-clean! detectives findings)))
   (healthy? findings))
 
