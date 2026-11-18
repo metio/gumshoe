@@ -79,6 +79,11 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
   faults it shows: a rejected credential, or an unreachable backend. A log tail
   spans whatever it spans, so the verdict says whether its failures are current
   or left behind by something already over.
+  `runbooks/switchover.clj` promotes a healthy, unfenced replica with the
+  `kubectl cnpg` plugin and waits until it is the primary; `runbooks/fence.clj`
+  and `runbooks/unfence.clj` edit the `cnpg.io/fencedInstances` annotation,
+  where `*` stands for every instance. Each refuses a pick that is unsafe at
+  the moment it runs.
   `runbooks/cnpg_console.clj` reads every instance of one cluster - WAL
   positions, recovery state, replication slots - for the question no detective
   answers: when a cluster has no working primary, which instance should become
