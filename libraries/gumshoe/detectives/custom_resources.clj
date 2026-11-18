@@ -7,7 +7,8 @@
    operators follow the Kubernetes condition conventions, so a False Ready (or
    one of its common siblings) is worth reading even without knowing what the
    object does."
-  (:require [gumshoe.kubectl :as kubectl]))
+  (:require [gumshoe.kubectl :as kubectl]
+            [gumshoe.onset :as onset]))
 
 (def ^:private settle-minutes 10)
 
@@ -36,12 +37,14 @@
         :let [available (get (conditions-by-type service) "Available")
               {:keys [namespace name]} (-> service :spec :service)]
         :when (= "False" (:status available))]
-    {:severity :critical
-     :component (kubectl/name-of service)
+    (onset/since
+     {:severity :critical
+      :component (kubectl/name-of service)
      :summary (format "APIService is unavailable (%s)" (or (:reason available) "unknown"))
      :hint (format "%s - every request for %s/%s fails, and namespace deletion and API discovery stall on it; check the Service %s/%s and the pods behind it"
                    (or (:message available) "no message")
-                   (-> service :spec :group) (-> service :spec :version) namespace name)}))
+                   (-> service :spec :group) (-> service :spec :version) namespace name)}
+     (:lastTransitionTime available))))
 
 (defn detect-crd-health
   [evidence]
@@ -77,12 +80,14 @@
                (not (-> resource :metadata :deletionTimestamp))
                (not (and age (< age settle-minutes)))
                (not (and (in-progress? resource failing) age (< age (* 3 settle-minutes)))))
-      {:severity :warning
-       :component (kubectl/namespace-name-of resource)
-       :summary (format "%s is not %s (%s)" (or (:kind resource) "custom resource") (:type failing)
-                        (or (:reason failing) "unknown"))
-       :hint (format "%s - %s" (or (:message failing) "no message")
-                     (or (:apiVersion resource) "unknown API version"))})))
+      (onset/since
+       {:severity :warning
+        :component (kubectl/namespace-name-of resource)
+        :summary (format "%s is not %s (%s)" (or (:kind resource) "custom resource") (:type failing)
+                         (or (:reason failing) "unknown"))
+        :hint (format "%s - %s" (or (:message failing) "no message")
+                      (or (:apiVersion resource) "unknown API version"))}
+       (:lastTransitionTime failing)))))
 
 (defn detect-custom-resource-conditions
   [evidence]

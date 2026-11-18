@@ -9,6 +9,7 @@
    reads cert-manager's own view of the renewal."
   (:require [clojure.string :as str]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.onset :as onset]
             [gumshoe.tls :as tls]))
 
 (def gateway-type "gateways.gateway.networking.k8s.io")
@@ -56,9 +57,11 @@
                             :hint (str served " - clients get a handshake error or the controller's default certificate"))
 
                      (.isBefore ^java.time.Instant (:not-after certificate) now)
-                     (assoc base :severity :critical
-                            :summary (format "TLS certificate expired %s" (:not-after certificate))
-                            :hint (str served " - " (:subject certificate) "; replace the certificate"))
+                     (onset/since
+                      (assoc base :severity :critical
+                             :summary (format "TLS certificate expired %s" (:not-after certificate))
+                             :hint (str served " - " (:subject certificate) "; replace the certificate"))
+                      (:not-after certificate))
 
                      (.isAfter ^java.time.Instant (:not-before certificate) now)
                      (assoc base :severity :critical

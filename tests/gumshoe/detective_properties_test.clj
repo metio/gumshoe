@@ -18,6 +18,8 @@
        (string? (:summary finding)) (seq (:summary finding))
        (some? (:component finding))
        (or (nil? (:hint finding)) (string? (:hint finding)))
+       (or (nil? (:since finding))
+           (and (string? (:since finding)) (java.time.Instant/parse (:since finding))))
        (or (nil? (:subject finding))
            (and (string? (-> finding :subject :kind)) (string? (-> finding :subject :name))))))
 

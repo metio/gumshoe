@@ -12,6 +12,7 @@
             [gumshoe.effect :as effect]
             [gumshoe.investigation :as investigation]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.onset :as onset]
             [gumshoe.plugin :as plugin]
             [gumshoe.subject :as subject]))
 
@@ -99,7 +100,8 @@
   [resource kind now]
   (let [ready (ready-condition resource)
         stalled (named-condition resource "Stalled")
-        base {:component (kubectl/namespace-name-of resource) :hint (:message ready)}
+        base (onset/since {:component (kubectl/namespace-name-of resource) :hint (:message ready)}
+                          (:lastTransitionTime ready))
         age (minutes-since now (:lastTransitionTime ready))]
     (cond
       (= "True" (:status stalled))

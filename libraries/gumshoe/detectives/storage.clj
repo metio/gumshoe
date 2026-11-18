@@ -5,7 +5,8 @@
   "Detectives for storage: claims without a volume, claims that lost theirs,
    resizes and modifications that failed, and claims nobody uses."
   (:require [clojure.string :as str]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.onset :as onset]))
 
 (def ^:private pending-grace-minutes 5)
 
@@ -54,11 +55,13 @@
        :hint "it binds once a pod that mounts it is scheduled - nothing is wrong unless that pod should exist"}
 
       :else
-      {:severity :critical
-       :component component
-       :summary "PersistentVolumeClaim is Pending"
-       :hint (or (some->> (latest-provisioning-failure events claim) (str "the provisioner reports: "))
-                 "no volume was bound - check the storage class and the provisioner")})))
+      (onset/since
+       {:severity :critical
+        :component component
+        :summary "PersistentVolumeClaim is Pending"
+        :hint (or (some->> (latest-provisioning-failure events claim) (str "the provisioner reports: "))
+                  "no volume was bound - check the storage class and the provisioner")}
+       (-> claim :metadata :creationTimestamp)))))
 
 (def ^:private failure-conditions
   {"ControllerResizeError" "the volume could not be expanded by the storage backend"
@@ -70,13 +73,15 @@
   (let [component (kubectl/namespace-name-of claim)
         active (filter #(= "True" (:status %)) (-> claim :status :conditions))]
     (concat
-     (for [{:keys [type message]} active
+     (for [{:keys [type message lastTransitionTime]} active
            :let [explain (failure-conditions type)]
            :when explain]
-       {:severity :warning
-        :component component
-        :summary (format "PersistentVolumeClaim %s: %s" type explain)
-        :hint (str/join " - " (remove str/blank? [(str message) "the volume keeps working at its current size or class"]))})
+       (onset/since
+        {:severity :warning
+         :component component
+         :summary (format "PersistentVolumeClaim %s: %s" type explain)
+         :hint (str/join " - " (remove str/blank? [(str message) "the volume keeps working at its current size or class"]))}
+        lastTransitionTime))
      (for [[resource status] (-> claim :status :allocatedResourceStatuses)
            :when (contains? #{"ControllerResizeInfeasible" "NodeResizeInfeasible"} status)]
        {:severity :warning

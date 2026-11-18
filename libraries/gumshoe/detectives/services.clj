@@ -8,7 +8,8 @@
    that never received an address."
   (:require [clojure.set :as set]
             [clojure.string :as str]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.onset :as onset]))
 
 (defn selects?
   "Whether a selector matches a label map. An empty selector selects nothing,
@@ -158,10 +159,12 @@
                      (empty? (-> service :status :loadBalancer :ingress))
                      created
                      (.isBefore (java.time.Instant/parse created) cutoff))]
-      {:severity :warning
-       :component (kubectl/namespace-name-of service)
-       :summary (format "LoadBalancer Service has no address after %d minutes" load-balancer-grace-minutes)
-       :hint "no load-balancer controller picked it up - check the cloud controller or MetalLB/kube-vip and the Service's events"})))
+      (onset/since
+       {:severity :warning
+        :component (kubectl/namespace-name-of service)
+        :summary (format "LoadBalancer Service has no address after %d minutes" load-balancer-grace-minutes)
+        :hint "no load-balancer controller picked it up - check the cloud controller or MetalLB/kube-vip and the Service's events"}
+       created))))
 
 (def detectives
   [{:name "services"

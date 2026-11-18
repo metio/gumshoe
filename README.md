@@ -245,7 +245,10 @@ types are not installed on the cluster simply reports nothing, so composed
 investigations degrade gracefully. A finding about a pod whose workload (or,
 failing that, node) has a finding at least as severe carries that object as its
 `parent`; the text report lists it under the parent's finding, and json and edn
-keep it with the `parent` field.
+keep it with the `parent` field. Where the API records when a problem began - a
+condition's transition, a deletion, a creation - the finding carries it as
+`since`, and the text report shows how long it has held (`for 40m`, `for 5h`,
+`since 2026-11-02`).
 
 Covered so far: the control plane
 (apiserver/scheduler/controller-manager/etcd static pods), nodes, pods

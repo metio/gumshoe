@@ -6,6 +6,7 @@
    kills, pods stuck in Pending or Failed."
   (:require [clojure.string]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.onset :as onset]
             [gumshoe.scheduling :as scheduling]))
 
 ;; CrashLoopBackOff is judged with the restart loops below, by how much of
@@ -143,22 +144,26 @@
                         (.isBefore ^java.time.Instant since
                                    (.minus ^java.time.Instant now
                                            (java.time.Duration/ofMinutes unschedulable-critical-minutes))))]
-        {:severity (if stuck? :critical :warning)
-         :component component
-         :summary (if-let [top (first causes)]
-                    (format "pod is unschedulable: %d node(s) %s" (:nodes top) (:explain top))
-                    "pod is unschedulable")
-         :hint (if (seq causes) (scheduling/describe causes) (:message condition))})
+        (onset/since
+         {:severity (if stuck? :critical :warning)
+          :component component
+          :summary (if-let [top (first causes)]
+                     (format "pod is unschedulable: %d node(s) %s" (:nodes top) (:explain top))
+                     "pod is unschedulable")
+          :hint (if (seq causes) (scheduling/describe causes) (:message condition))}
+         since))
 
       ;; a pod bound to a node waits for its kubelet; pod-startup reads why
       (-> pod :spec :nodeName)
       nil
 
       :else
-      {:severity :warning
-       :component component
-       :summary "pod is stuck in Pending"
-       :hint (:message condition)})))
+      (onset/since
+       {:severity :warning
+        :component component
+        :summary "pod is stuck in Pending"
+        :hint (:message condition)}
+       (or since (-> pod :metadata :creationTimestamp))))))
 
 (defn eviction-cause
   "Why the kubelet evicted a pod, read from the eviction message."

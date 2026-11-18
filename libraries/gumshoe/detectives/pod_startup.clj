@@ -9,7 +9,8 @@
    is reported too, because the cause then sits in the node's kubelet or
    runtime."
   (:require [clojure.string :as str]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.onset :as onset]))
 
 (def ^:private recent-window (java.time.Duration/ofHours 1))
 (def ^:private stall-minutes 10)
@@ -92,19 +93,23 @@
                 node (-> pod :spec :nodeName)]
           finding (if (seq causes)
                     (for [[[_ severity summary advice] event] (sort-by (comp first first) causes)]
-                      {:severity (if (and (= :warning severity) (older-than? now since critical-minutes))
+                      (onset/since
+                       {:severity (if (and (= :warning severity) (older-than? now since critical-minutes))
                                    :critical severity)
                        :component component
                        :summary summary
                        :hint (format "on node %s - %s - %s" node advice
-                                     (str/replace (str (:message event)) #"\s+" " "))})
+                                     (str/replace (str (:message event)) #"\s+" " "))}
+                       since))
                     (when (older-than? now since stall-minutes)
-                      [{:severity (if (older-than? now since critical-minutes) :critical :warning)
+                      [(onset/since
+                        {:severity (if (older-than? now since critical-minutes) :critical :warning)
                         :component component
                         :summary (format "pod is bound to node %s but has not started for over %d minutes"
                                          node (if (older-than? now since critical-minutes) critical-minutes stall-minutes))
                         :hint (str "no event names the cause - check the kubelet and container runtime on "
-                                   node " (crictl pods, journalctl -u kubelet)")}]))]
+                                   node " (crictl pods, journalctl -u kubelet)")}
+                        since)]))]
       finding)))
 
 (def detectives

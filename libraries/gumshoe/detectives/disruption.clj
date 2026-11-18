@@ -5,7 +5,8 @@
   "Detectives for disruption and scaling limits: PodDisruptionBudgets that
    block drains and HorizontalPodAutoscalers pegged at their maximum."
   (:require [clojure.string :as str]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.onset :as onset]))
 
 (defn detect-blocking-pdbs
   [evidence]
@@ -50,16 +51,20 @@
               active (get conditions "ScalingActive")
               component (kubectl/namespace-name-of hpa)]
         finding [(when (= "False" (:status able))
-                   {:severity :critical
-                    :component component
-                    :summary (format "HorizontalPodAutoscaler cannot scale its target (%s)" (:reason able))
-                    :hint (str (:message able) " - the target's scale subresource cannot be read or written")})
+                   (onset/since
+                    {:severity :critical
+                     :component component
+                     :summary (format "HorizontalPodAutoscaler cannot scale its target (%s)" (:reason able))
+                     :hint (str (:message able) " - the target's scale subresource cannot be read or written")}
+                    (:lastTransitionTime able)))
                  ;; ScalingDisabled is the HPA standing down for a target scaled to 0 by hand
                  (when (and (= "False" (:status active)) (not= "ScalingDisabled" (:reason active)))
-                   {:severity :critical
-                    :component component
-                    :summary (format "HorizontalPodAutoscaler cannot read its metrics (%s)" (:reason active))
-                    :hint (str/join " - " (remove nil? [(metrics-cause active) (:message active)]))})]
+                   (onset/since
+                    {:severity :critical
+                     :component component
+                     :summary (format "HorizontalPodAutoscaler cannot read its metrics (%s)" (:reason active))
+                     :hint (str/join " - " (remove nil? [(metrics-cause active) (:message active)]))}
+                    (:lastTransitionTime active)))]
         :when finding]
     finding))
 

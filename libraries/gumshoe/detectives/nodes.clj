@@ -4,7 +4,8 @@
 (ns gumshoe.detectives.nodes
   "Detectives for node health: readiness, every node-problem condition, cordoned
    nodes."
-  (:require [gumshoe.kubectl :as kubectl]))
+  (:require [gumshoe.kubectl :as kubectl]
+            [gumshoe.onset :as onset]))
 
 (defn- condition
   [node type]
@@ -17,10 +18,12 @@
      (for [node nodes
            :let [ready (condition node "Ready")]
            :when (not= "True" (:status ready))]
-       {:severity :critical
-        :component (kubectl/name-of node)
-        :summary (format "node is not Ready (status %s)" (or (:status ready) "unknown"))
-        :hint (:message ready)})
+       (onset/since
+        {:severity :critical
+         :component (kubectl/name-of node)
+         :summary (format "node is not Ready (status %s)" (or (:status ready) "unknown"))
+         :hint (:message ready)}
+        (:lastTransitionTime ready)))
      ;; Every non-Ready node condition follows the same convention: status True
      ;; means the problem is present. Reading them generically catches the built-in
      ;; pressures and NetworkUnavailable, plus every node-problem-detector
@@ -31,10 +34,12 @@
            :let [type (:type condition)]
            :when (not= "Ready" type)
            :when (= "True" (:status condition))]
-       {:severity :warning
-        :component (kubectl/name-of node)
-        :summary (format "%s is active" type)
-        :hint (:message condition)})
+       (onset/since
+        {:severity :warning
+         :component (kubectl/name-of node)
+         :summary (format "%s is active" type)
+         :hint (:message condition)}
+        (:lastTransitionTime condition)))
      (for [node nodes
            :when (true? (-> node :spec :unschedulable))]
        {:severity :info

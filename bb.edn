@@ -23,6 +23,7 @@
                    [gumshoe.spec-test]
                    [gumshoe.conformance-test]
                    [gumshoe.detectives-test]
+                   [gumshoe.onset-test]
                    [gumshoe.correlation-test]
                    [gumshoe.custom-resources-test]
                    [gumshoe.tls-secrets-test]
@@ -127,6 +128,7 @@
                                                          'gumshoe.spec-test
                                                          'gumshoe.conformance-test
                                                          'gumshoe.detectives-test
+                                                         'gumshoe.onset-test
                                                          'gumshoe.correlation-test
                                                          'gumshoe.custom-resources-test
                                                          'gumshoe.tls-secrets-test

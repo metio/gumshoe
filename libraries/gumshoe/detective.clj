@@ -28,6 +28,7 @@
             [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.investigation :as investigation]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.onset :as onset]
             [gumshoe.report :as report]
             [gumshoe.summary :as summary]
             [gumshoe.progress :as progress]
@@ -148,6 +149,7 @@
                 :count (count fs)
                 :components (mapv :component fs)
                 :subjects (vec (distinct (keep subject/from-finding fs)))
+                :since (onset/earliest fs)
                 :hint (:hint (first fs))}))))
 
 (def ^:private sample-size
@@ -170,13 +172,14 @@
   "Prints one area: a header naming the detective and its finding count, then
    each rolled-up entry with a sample of the components it affects and the
    findings folded under it."
-  [detective findings children]
+  [detective findings children now]
   (let [n (count findings)]
     (println (str "  " (stdout/bold detective)
                   (format " (%d finding%s)" n (if (= 1 n) "" "s")))))
-  (doseq [{:keys [severity summary components subjects hint] total :count} (roll-up findings)]
+  (doseq [{:keys [severity summary components subjects since hint] total :count} (roll-up findings)]
     (println (str "    " (severity-tag severity) " " summary
-                  (when (> total 1) (stdout/bold (format "  ×%d" total)))))
+                  (when (> total 1) (stdout/bold (format "  ×%d" total)))
+                  (when-let [held (onset/label since now)] (str "  " held))))
     (let [shown (take sample-size components)
           more (- total (count shown))]
       (println (str "        " (str/join ", " shown)
@@ -216,7 +219,7 @@
     (do
       (let [children (correlation/children findings)]
         (doseq [[detective fs] (areas (remove :parent findings))]
-          (print-area! detective fs children)))
+          (print-area! detective fs children (java.time.Instant/now))))
       (stdout/print-section-marker)
       (let [counts (summary-of findings)
             folded (count (filter :parent findings))]

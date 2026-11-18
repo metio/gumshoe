@@ -6,7 +6,8 @@
    pods are not all up, rollouts past their deadline, jobs that failed and
    CronJobs that stopped running."
   (:require [gumshoe.cron :as cron]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.onset :as onset]))
 
 (defn- replica-findings
   [resources kind]
@@ -35,12 +36,14 @@
   (for [deployment (kubectl/items-of (get evidence "deployments"))
         :let [progressing (condition deployment "Progressing")]
         :when (and (= "False" (:status progressing)) (= "ProgressDeadlineExceeded" (:reason progressing)))]
-    {:severity :critical
-     :component (kubectl/namespace-name-of deployment)
-     :summary (format "Deployment rollout is stuck: no progress within %ss"
-                      (or (-> deployment :spec :progressDeadlineSeconds) 600))
-     :hint (str (:message progressing)
-                " - the new pods never became ready; the pods, pod-creation and pod-startup detectives say why")}))
+    (onset/since
+     {:severity :critical
+      :component (kubectl/namespace-name-of deployment)
+      :summary (format "Deployment rollout is stuck: no progress within %ss"
+                       (or (-> deployment :spec :progressDeadlineSeconds) 600))
+      :hint (str (:message progressing)
+                 " - the new pods never became ready; the pods, pod-creation and pod-startup detectives say why")}
+     (:lastTransitionTime progressing))))
 
 (defn detect-daemonset-problems
   [evidence]
@@ -102,10 +105,12 @@
         :let [failed (first (filter #(and (= "Failed" (:type %)) (= "True" (:status %)))
                                     (-> job :status :conditions)))]
         :when failed]
-    {:severity :warning
-     :component (kubectl/namespace-name-of job)
-     :summary (format "Job failed (%s)" (or (:reason failed) "unknown reason"))
-     :hint (:message failed)}))
+    (onset/since
+     {:severity :warning
+      :component (kubectl/namespace-name-of job)
+      :summary (format "Job failed (%s)" (or (:reason failed) "unknown reason"))
+      :hint (:message failed)}
+     (:lastTransitionTime failed))))
 
 (def detectives
   [{:name "deployments"

@@ -9,6 +9,7 @@
   (:require [clojure.string :as str]
             [gumshoe.finalizers :as finalizers]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.onset :as onset]
             [gumshoe.subject :as subject]))
 
 (def types
@@ -60,12 +61,14 @@
                 waiting (-> object :metadata :finalizers)
                 minutes (when deletion (.toMinutes (java.time.Duration/between deletion now)))]
           :when (and deletion (seq waiting) (<= stuck-minutes minutes))]
-      {:severity (if (<= critical-minutes minutes) :critical :warning)
-       :component (object-name object)
-       :summary (format "%s is stuck terminating for %d minutes, waiting on %s"
-                        kind minutes (str/join ", " waiting))
-       :hint (finalizer-hint type object pods)
-       :subject (subject/subject kind (kubectl/namespace-of object) (kubectl/name-of object))})))
+      (onset/since
+       {:severity (if (<= critical-minutes minutes) :critical :warning)
+        :component (object-name object)
+        :summary (format "%s is stuck terminating for %d minutes, waiting on %s"
+                         kind minutes (str/join ", " waiting))
+        :hint (finalizer-hint type object pods)
+        :subject (subject/subject kind (kubectl/namespace-of object) (kubectl/name-of object))}
+       deletion))))
 
 (def detectives
   [{:name "stuck-terminating"
