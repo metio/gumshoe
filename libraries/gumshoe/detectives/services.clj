@@ -10,7 +10,7 @@
             [clojure.string :as str]
             [gumshoe.kubectl :as kubectl]))
 
-(defn- selects?
+(defn selects?
   "Whether a selector matches a label map. An empty selector selects nothing,
    because a Service without one has its endpoints managed by hand."
   [selector labels]
@@ -25,7 +25,7 @@
   [pod]
   (some? (-> pod :metadata :deletionTimestamp)))
 
-(defn- ready?
+(defn ready?
   [pod]
   (some #(and (= "Ready" (:type %)) (= "True" (:status %)))
         (-> pod :status :conditions)))

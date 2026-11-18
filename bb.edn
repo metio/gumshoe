@@ -23,6 +23,7 @@
                    [gumshoe.spec-test]
                    [gumshoe.conformance-test]
                    [gumshoe.detectives-test]
+                   [gumshoe.pod-creation-test]
                    [gumshoe.services-test]
                    [gumshoe.scheduling-test]
                    [gumshoe.evpn-test]
@@ -113,6 +114,7 @@
                                                          'gumshoe.spec-test
                                                          'gumshoe.conformance-test
                                                          'gumshoe.detectives-test
+                                                         'gumshoe.pod-creation-test
                                                          'gumshoe.services-test
                                                          'gumshoe.scheduling-test
                                                          'gumshoe.evpn-test
