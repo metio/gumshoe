@@ -77,7 +77,7 @@
 (deftest a-cause-with-no-action-keeps-the-scheduler-wording
   (let [line (scheduling/describe (scheduling/causes "0/1 nodes are available: 1 node(s) had a brand new problem."))]
     (is (str/starts-with? line "1 node(s) "))
-    (is (str/ends-with? line "had a brand new problem"))
+    (is (= "1 node(s) had a brand new problem" line))
     (is (not (str/includes? line " - ")) "no action is invented")))
 
 ;; --- pod creation -------------------------------------------------------------

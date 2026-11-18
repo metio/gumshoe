@@ -72,7 +72,8 @@
                 (let [match (if (string? match) [match] match)]
                   {:cause (:cause class) :explain (explain match) :action (action match)})))
             classes)
-      {:cause :other :explain text :action nil}))
+      ;; the count already says node(s), so the scheduler's own prefix goes
+      {:cause :other :explain (str/replace text #"^node\(s\)\s+" "") :action nil}))
 
 (defn- verdict
   "The node verdicts of a message: the part after 'nodes are available:' up to

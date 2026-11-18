@@ -82,3 +82,9 @@
   (let [[finding] (pods/detect-unhealthy-pods
                    {:now now "pods" {:items [(pending {:type "PodScheduled" :status "True"})]}})]
     (is (= "pod is stuck in Pending" (:summary finding)))))
+
+(deftest an-unknown-cause-keeps-its-text-without-the-node-prefix
+  (is (= [{:cause :other :explain "had a brand new problem" :action nil :nodes 2}]
+         (scheduling/causes "0/2 nodes are available: 2 node(s) had a brand new problem.")))
+  (is (= "were struck by lightning"
+         (:explain (first (scheduling/causes "0/1 nodes are available: 1 were struck by lightning."))))))
