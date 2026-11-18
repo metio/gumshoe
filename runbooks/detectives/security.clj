@@ -12,4 +12,4 @@
   :scope :security
   :prerequisites {:installed-tools ["kubectl"]
                   :cluster-capabilities []
-                  :kubectl-can-get ["clusterroles" "clusterrolebindings" "rolebindings" "serviceaccounts" "pods" "networkpolicies"]}})
+                  :kubectl-can-get ["clusterroles" "clusterrolebindings" "rolebindings" "roles" "serviceaccounts" "pods" "networkpolicies"]}})

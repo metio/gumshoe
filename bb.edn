@@ -23,6 +23,7 @@
                    [gumshoe.spec-test]
                    [gumshoe.conformance-test]
                    [gumshoe.detectives-test]
+                   [gumshoe.references-test]
                    [gumshoe.finalizers-test]
                    [gumshoe.restart-loop-test]
                    [gumshoe.pod-startup-test]
@@ -117,6 +118,7 @@
                                                          'gumshoe.spec-test
                                                          'gumshoe.conformance-test
                                                          'gumshoe.detectives-test
+                                                         'gumshoe.references-test
                                                          'gumshoe.finalizers-test
                                                          'gumshoe.restart-loop-test
                                                          'gumshoe.pod-startup-test

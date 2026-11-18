@@ -318,6 +318,17 @@
   (parse (shell/stdout-of "kubectl" (str "--context=" context) request-timeout
                           "get" type "--all-namespaces" "--output=json")))
 
+(defn secret-names
+  "The namespace/name of every Secret, or nil when they cannot be listed. Only
+   the names are kept: a detective that checks a reference to a Secret needs
+   to know it exists, never what it holds."
+  [context]
+  (let [{:keys [exit out]} (shell/execute "kubectl" (str "--context=" context) request-timeout
+                                          "get" "secrets" "--all-namespaces"
+                                          "--output=jsonpath={range .items[*]}{.metadata.namespace}/{.metadata.name}{\"\\n\"}{end}")]
+    (when (zero? exit)
+      (vec (remove str/blank? (str/split-lines (str out)))))))
+
 (defn get-raw
   "Reads a raw API path, parsed as JSON. Needed for data the resource API does
    not carry - kubelet's per-node stats among it. A failed call parses to nil,

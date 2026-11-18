@@ -27,6 +27,7 @@
             [gumshoe.detectives.pods :as pods]
             [gumshoe.detectives.quotas :as quotas]
             [gumshoe.detectives.rbac :as rbac]
+            [gumshoe.detectives.references :as references]
             [gumshoe.detectives.services :as services]
             [gumshoe.detectives.storage :as storage]
             [gumshoe.detectives.terminating :as terminating]
@@ -86,16 +87,20 @@
 
 (register! :platform (concat controlplane/detectives nodes/detectives csi/detectives expectations/detectives
                              ipfamily/detectives apiversions-detectives/detectives
-                             namespaces/detectives))
+                             namespaces/detectives references/platform-detectives))
 ;; the api-version-drift detective reads `kubectl api-resources` (not a get), so
 ;; it registers that collector for every scan it joins. The collector takes
 ;; [context key]; the key is fixed here, so it is ignored.
 (register-collector! "api-resources" (fn [context _key] (apiversions/advertised-versions context)))
+;; Secrets are read by name only, so no detective holds what they contain.
+(register-collector! "secret-names" (fn [context _key] (kubectl/secret-names context)))
 (register! :workloads (concat controllers/detectives pods/detectives pod-creation/detectives pod-startup/detectives
                               services/detectives storage/detectives terminating/detectives
+                              references/detectives
                               disruption/detectives quotas/detectives capacity/detectives))
 (register! :signals events/detectives)
-(register! :security (concat rbac/detectives pod-security/detectives network/detectives))
+(register! :security (concat rbac/detectives references/security-detectives pod-security/detectives
+                             network/detectives))
 (register! :mail mail/detectives)
 ;; the fabric detectives read evidence collected over ssh, so they contribute
 ;; nothing to a kubectl-only scan and simply stay silent there.

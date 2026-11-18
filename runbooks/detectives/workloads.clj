@@ -8,8 +8,8 @@
 
 (detective/book
  {:description "Investigates workload health: controllers, jobs, pods, Services, and their storage"
-  :when-to-run "Reach for this when apps are crashing, stuck, or missing replicas - it finds crash loops, pending pods, failed jobs, controllers that cannot create pods, pods that never start, objects stuck terminating, Services without working backends, and unused storage."
+  :when-to-run "Reach for this when apps are crashing, stuck, or missing replicas - it finds crash loops, pending pods, failed jobs, controllers that cannot create pods, pods that never start, objects stuck terminating, references to missing objects, Services without working backends, and unused storage."
   :scope :workloads
   :prerequisites {:installed-tools ["kubectl"]
                   :cluster-capabilities []
-                  :kubectl-can-get ["deployments" "statefulsets" "daemonsets" "jobs" "pods" "services" "replicasets" "events" "persistentvolumeclaims" "cronjobs" "ingresses" "configmaps"]}})
+                  :kubectl-can-get ["deployments" "statefulsets" "daemonsets" "jobs" "pods" "services" "replicasets" "events" "persistentvolumeclaims" "cronjobs" "ingresses" "configmaps" "serviceaccounts"]}})
