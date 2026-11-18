@@ -160,6 +160,30 @@
        :summary "pod is stuck in Pending"
        :hint (:message condition)})))
 
+(defn eviction-cause
+  "Why the kubelet evicted a pod, read from the eviction message."
+  [message]
+  (let [message (str message)]
+    (if-let [[_ resource] (re-find #"low on resource: ([\w./-]+?)\.?(?:\s|$)" message)]
+      (format "node ran low on %s" resource)
+      (if-let [[_ condition] (re-find #"had condition: \[([^\]]+)\]" message)]
+        (format "node reported %s" condition)
+        (if (re-find #"(?i)ephemeral (?:local )?storage|EmptyDir volume" message)
+          "pod exceeded its ephemeral storage limit"
+          "kubelet eviction")))))
+
+(defn- eviction-finding
+  "An evicted pod a controller owns has been replaced already; the finding
+   explains the eviction. A bare pod is gone for good."
+  [pod]
+  (let [owned? (some :controller (-> pod :metadata :ownerReferences))
+        message (-> pod :status :message)]
+    {:severity (if owned? :info :warning)
+     :component (kubectl/namespace-name-of pod)
+     :summary (format "pod was evicted: %s" (eviction-cause message))
+     :hint (str "on node " (or (-> pod :spec :nodeName) "unknown") " - " message
+                (when-not owned? " - no controller recreates this pod"))}))
+
 (defn detect-unhealthy-pods
   [evidence]
   (let [pods (kubectl/items-of (get evidence "pods"))
@@ -168,10 +192,13 @@
     (concat
      (mapcat #(container-findings % now (contains? outages (owner-key %))) pods)
      (for [pod pods
-           :when (= "Failed" (-> pod :status :phase))]
+           :when (and (= "Failed" (-> pod :status :phase)) (not= "Evicted" (-> pod :status :reason)))]
        {:severity :warning
         :component (kubectl/namespace-name-of pod)
         :summary (format "pod is in phase Failed (%s)" (or (-> pod :status :reason) "unknown reason"))})
+     (for [pod pods
+           :when (and (= "Failed" (-> pod :status :phase)) (= "Evicted" (-> pod :status :reason)))]
+       (eviction-finding pod))
      (keep #(pending-finding % (:now evidence))
            (filter #(= "Pending" (-> % :status :phase)) pods)))))
 
