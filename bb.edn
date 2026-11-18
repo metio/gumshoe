@@ -24,6 +24,7 @@
                    [gumshoe.conformance-test]
                    [gumshoe.detectives-test]
                    [gumshoe.services-test]
+                   [gumshoe.scheduling-test]
                    [gumshoe.evpn-test]
                    [gumshoe.expectations-test]
                    [gumshoe.tools.flux-test]
@@ -113,6 +114,7 @@
                                                          'gumshoe.conformance-test
                                                          'gumshoe.detectives-test
                                                          'gumshoe.services-test
+                                                         'gumshoe.scheduling-test
                                                          'gumshoe.evpn-test
                                                          'gumshoe.expectations-test
                                                          'gumshoe.tools.flux-test

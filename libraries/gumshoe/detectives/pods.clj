@@ -4,7 +4,9 @@
 (ns gumshoe.detectives.pods
   "Detectives for workload health: crash loops, image pull errors, OOM kills,
    excessive restarts, pods stuck in Pending or Failed."
-  (:require [gumshoe.kubectl :as kubectl]))
+  (:require [clojure.string]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.scheduling :as scheduling]))
 
 (def ^:private bad-waiting-reasons
   {"CrashLoopBackOff" :critical
@@ -44,12 +46,48 @@
         :component component
         :summary (format "container %s restarted %d times" (:name status) (:restartCount status))}))))
 
-(defn- scheduling-hint
+(defn- scheduled-condition
   [pod]
   (->> (-> pod :status :conditions)
        (filter #(= "PodScheduled" (:type %)))
-       first
-       :message))
+       first))
+
+(def ^:private unschedulable-critical-minutes 10)
+
+(defn- pending-finding
+  "What a Pending pod waits for. A pod the scheduler rejected gets the causes
+   from the scheduler's message, and turns critical once it has waited 10
+   minutes; a pod held by scheduling gates waits on purpose."
+  [pod now]
+  (let [component (kubectl/namespace-name-of pod)
+        condition (scheduled-condition pod)
+        since (some-> (:lastTransitionTime condition) java.time.Instant/parse)]
+    (cond
+      (seq (-> pod :spec :schedulingGates))
+      {:severity :info
+       :component component
+       :summary (format "pod is held by scheduling gates: %s"
+                        (clojure.string/join ", " (map :name (-> pod :spec :schedulingGates))))
+       :hint "a controller removes the gates when the pod may be scheduled"}
+
+      (and (= "False" (:status condition)) (= "Unschedulable" (:reason condition)))
+      (let [causes (scheduling/causes (:message condition))
+            stuck? (and since now
+                        (.isBefore ^java.time.Instant since
+                                   (.minus ^java.time.Instant now
+                                           (java.time.Duration/ofMinutes unschedulable-critical-minutes))))]
+        {:severity (if stuck? :critical :warning)
+         :component component
+         :summary (if-let [top (first causes)]
+                    (format "pod is unschedulable: %d node(s) %s" (:nodes top) (:explain top))
+                    "pod is unschedulable")
+         :hint (if (seq causes) (scheduling/describe causes) (:message condition))})
+
+      :else
+      {:severity :warning
+       :component component
+       :summary "pod is stuck in Pending"
+       :hint (:message condition)})))
 
 (defn detect-unhealthy-pods
   [evidence]
@@ -63,10 +101,7 @@
         :summary (format "pod is in phase Failed (%s)" (or (-> pod :status :reason) "unknown reason"))})
      (for [pod pods
            :when (= "Pending" (-> pod :status :phase))]
-       {:severity :warning
-        :component (kubectl/namespace-name-of pod)
-        :summary "pod is stuck in Pending"
-        :hint (scheduling-hint pod)}))))
+       (pending-finding pod (:now evidence))))))
 
 (def ^:private stuck-terminating-minutes 10)
 
