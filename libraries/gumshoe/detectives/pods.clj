@@ -57,7 +57,8 @@
 (defn- pending-finding
   "What a Pending pod waits for. A pod the scheduler rejected gets the causes
    from the scheduler's message, and turns critical once it has waited 10
-   minutes; a pod held by scheduling gates waits on purpose."
+   minutes; a pod held by scheduling gates waits on purpose. A pod already
+   bound to a node is left to the pod-startup detective."
   [pod now]
   (let [component (kubectl/namespace-name-of pod)
         condition (scheduled-condition pod)
@@ -83,6 +84,10 @@
                     "pod is unschedulable")
          :hint (if (seq causes) (scheduling/describe causes) (:message condition))})
 
+      ;; a pod bound to a node waits for its kubelet; pod-startup reads why
+      (-> pod :spec :nodeName)
+      nil
+
       :else
       {:severity :warning
        :component component
@@ -99,9 +104,8 @@
        {:severity :warning
         :component (kubectl/namespace-name-of pod)
         :summary (format "pod is in phase Failed (%s)" (or (-> pod :status :reason) "unknown reason"))})
-     (for [pod pods
-           :when (= "Pending" (-> pod :status :phase))]
-       (pending-finding pod (:now evidence))))))
+     (keep #(pending-finding % (:now evidence))
+           (filter #(= "Pending" (-> % :status :phase)) pods)))))
 
 (def ^:private stuck-terminating-minutes 10)
 

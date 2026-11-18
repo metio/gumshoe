@@ -479,6 +479,7 @@
    is only offered where it lands on a real object."
   {"pods" "Pod"
    "stuck-pods" "Pod"
+   "pod-startup" "Pod"
    "nodes" "Node"
    "storage" "PersistentVolumeClaim"
    "deployments" "Deployment"

@@ -23,6 +23,7 @@
             [gumshoe.detectives.namespaces :as namespaces]
             [gumshoe.detectives.pod-security :as pod-security]
             [gumshoe.detectives.pod-creation :as pod-creation]
+            [gumshoe.detectives.pod-startup :as pod-startup]
             [gumshoe.detectives.pods :as pods]
             [gumshoe.detectives.quotas :as quotas]
             [gumshoe.detectives.rbac :as rbac]
@@ -89,7 +90,8 @@
 ;; it registers that collector for every scan it joins. The collector takes
 ;; [context key]; the key is fixed here, so it is ignored.
 (register-collector! "api-resources" (fn [context _key] (apiversions/advertised-versions context)))
-(register! :workloads (concat controllers/detectives pods/detectives pod-creation/detectives services/detectives storage/detectives
+(register! :workloads (concat controllers/detectives pods/detectives pod-creation/detectives pod-startup/detectives
+                              services/detectives storage/detectives
                               disruption/detectives quotas/detectives capacity/detectives))
 (register! :signals events/detectives)
 (register! :security (concat rbac/detectives pod-security/detectives network/detectives))
