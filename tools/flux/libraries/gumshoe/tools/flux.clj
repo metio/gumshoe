@@ -298,6 +298,57 @@
                    (str "reconcile.fluxcd.io/resetAt=" timestamp)
                    (str "reconcile.fluxcd.io/requestedAt=" timestamp))))
 
+;; --- suspend / resume --------------------------------------------------------------
+
+(def suspendable
+  "The Flux kinds the suspend and resume books act on, by kind."
+  {"HelmRelease" helmrelease-type
+   "Kustomization" kustomization-type
+   "GitRepository" gitrepository-type
+   "OCIRepository" ocirepository-type})
+
+(defn parse-delivery-pick
+  "\"<Kind> <namespace>/<name>\" of a suspendable kind as {:kind :type
+   :namespace :name}, or nil."
+  [value]
+  (when-let [[_ kind namespace name] (re-matches #"\s*(\w+)\s+([^/\s]+)/(\S+)\s*" (str value))]
+    (when-let [type (suspendable kind)]
+      {:kind kind :type type :namespace namespace :name name})))
+
+(defn delivery-picks
+  "Every object of the suspendable kinds whose suspension differs from wanted."
+  [lists-by-kind wanted]
+  (vec (for [[kind list] (sort-by key lists-by-kind)
+             resource (sort-by kubectl/namespace-name-of (kubectl/items-of list))
+             :when (not= wanted (true? (-> resource :spec :suspend)))]
+         (str kind " " (kubectl/namespace-name-of resource)))))
+
+(defn suspend-refusal
+  [resource wanted]
+  (cond
+    (nil? resource) "the object no longer exists"
+    (= wanted (true? (-> resource :spec :suspend))) (if wanted "it is suspended already" "it is not suspended")
+    :else nil))
+
+(defn suspend-items
+  [kind resource wanted]
+  (let [target (format "%s %s" kind (kubectl/namespace-name-of resource))]
+    (if wanted
+      [(format "suspend %s - Flux stops reconciling it, and what it applied stays as it is" target)
+       "changes pushed to its source are not applied until it is resumed"]
+      [(format "resume %s and request a reconcile - changes pushed to its source meanwhile are applied now" target)])))
+
+(defn suspend-effect
+  "Sets spec.suspend; a resume also asks for a reconcile at timestamp, so the
+   object catches up at once instead of at its next interval."
+  [context {:keys [type namespace name]} wanted timestamp]
+  (effect/plan
+   (effect/kubectl context "-n" namespace "patch" type name "--type=merge"
+                   (str "--patch={\"spec\":{\"suspend\":" wanted "}}"))
+   (when-not wanted
+     (effect/kubectl context "-n" namespace "annotate" type name "--overwrite"
+                     (str "reconcile.fluxcd.io/requestedAt=" timestamp)))))
+
 (defn externalartifact-edges
   "The RFC-0012 back-pointer: spec.sourceRef names the object that produced this
    artifact - a renderer, a builder, anything that publishes one. The reference is

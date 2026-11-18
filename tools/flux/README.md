@@ -35,8 +35,11 @@ about Flux, in one place, registered through a single `plugin/provide!` in
   probe offered when the CLI is installed.
 - **Books** - `runbooks/gitops.clj` (the gitops scan), `runbooks/flux/reconcile.clj`,
   `runbooks/flux/reset.clj` (clears a parked release's failure counters — the
-  counters are what `reconcile` alone leaves in place) and `runbooks/flux/drift.clj`
-  (diffs the stored manifest against live, field by field).
+  counters are what `reconcile` alone leaves in place), `runbooks/flux/drift.clj`
+  (diffs the stored manifest against live, field by field), and
+  `runbooks/flux/suspend.clj` / `runbooks/flux/resume.clj` (set `spec.suspend` on a
+  HelmRelease, Kustomization, GitRepository or OCIRepository; resuming also
+  requests a reconcile).
 
 ## Use
 
