@@ -83,3 +83,51 @@
 (defn restart-args
   [{:keys [type namespace name]}]
   [(str "--namespace=" namespace) "rollout" "restart" (str (str/replace type #"s$" "") "/" name)])
+
+;; --- scale ---------------------------------------------------------------------
+
+(def scalable-kinds #{"Deployment" "StatefulSet"})
+
+(defn managing-hpa
+  "The HorizontalPodAutoscaler that targets the workload, or nil."
+  [hpas kind workload]
+  (first (filter #(and (= (kubectl/namespace-of %) (kubectl/namespace-of workload))
+                       (= kind (-> % :spec :scaleTargetRef :kind))
+                       (= (kubectl/name-of workload) (-> % :spec :scaleTargetRef :name)))
+                 (kubectl/items-of hpas))))
+
+(defn scale-refusal
+  "Why scaling the workload to replicas would be wrong or pointless, or nil."
+  [kind workload hpas replicas]
+  (let [hpa (when workload (managing-hpa hpas kind workload))]
+    (cond
+      (not (and (integer? replicas) (<= 0 replicas))) "--replicas must be a count of zero or more"
+      (not (scalable-kinds kind)) (format "a %s is not scaled by a replica count" kind)
+      (nil? workload) "the workload no longer exists"
+      hpa (format "HorizontalPodAutoscaler %s manages its replicas (%d to %d) and would undo this - change the HPA instead"
+                  (kubectl/name-of hpa) (or (-> hpa :spec :minReplicas) 1) (or (-> hpa :spec :maxReplicas) 0))
+      (= replicas (desired-replicas kind workload)) (format "it runs %d replica(s) already" replicas)
+      :else nil)))
+
+(defn scale-items
+  "The confirmation lines for a scale: the change, and what scaling a
+   StatefulSet down leaves behind."
+  [kind workload replicas]
+  (let [from (desired-replicas kind workload)]
+    (cond-> [(format "scale %s %s from %d to %d replica(s)" kind (kubectl/namespace-name-of workload) from replicas)]
+      (zero? replicas) (conj "no pod serves it afterwards")
+      (and (= "StatefulSet" kind) (< replicas from))
+      (conj (format "the pods with the highest ordinals go first; their PersistentVolumeClaims stay")))))
+
+(defn scaled?
+  "Whether the workload runs exactly replicas pods and all of them are ready."
+  [workload wanted]
+  (let [status (:status workload)]
+    (boolean (and workload
+                  (>= (or (:observedGeneration status) 0) (or (-> workload :metadata :generation) 0))
+                  (= wanted (or (:replicas status) 0))
+                  (= wanted (or (:readyReplicas status) 0))))))
+
+(defn scale-args
+  [{:keys [type namespace name]} replicas]
+  [(str "--namespace=" namespace) "scale" (str (str/replace type #"s$" "") "/" name) (str "--replicas=" replicas)])

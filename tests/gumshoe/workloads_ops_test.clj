@@ -78,3 +78,48 @@
          (workloads/restart-args {:type "deployments" :namespace "shop" :name "web"})))
   (is (= ["--namespace=db" "rollout" "restart" "statefulset/pg"]
          (workloads/restart-args {:type "statefulsets" :namespace "db" :name "pg"}))))
+
+;; --- scale ---------------------------------------------------------------------
+
+(defn- hpa [kind name & {:keys [min max namespace] :or {min 2 max 6 namespace "shop"}}]
+  {:metadata {:namespace namespace :name (str name "-hpa")}
+   :spec {:scaleTargetRef {:kind kind :name name} :minReplicas min :maxReplicas max}})
+
+(deftest the-managing-hpa
+  (is (= "web-hpa" (get-in (workloads/managing-hpa {:items [(hpa "Deployment" "web")]} "Deployment" (deployment)) [:metadata :name])))
+  (is (nil? (workloads/managing-hpa {:items [(hpa "StatefulSet" "web")]} "Deployment" (deployment))) "another kind")
+  (is (nil? (workloads/managing-hpa {:items [(hpa "Deployment" "web" :namespace "other")]} "Deployment" (deployment))) "another namespace")
+  (is (nil? (workloads/managing-hpa nil "Deployment" (deployment)))))
+
+(deftest scale-refusals
+  (is (nil? (workloads/scale-refusal "Deployment" (deployment) nil 5)))
+  (is (nil? (workloads/scale-refusal "Deployment" (deployment) nil 0)) "zero is a count")
+  (doseq [bad [nil -1 2.5 "3"]]
+    (is (re-find #"--replicas must be" (workloads/scale-refusal "Deployment" (deployment) nil bad)) (pr-str bad)))
+  (is (re-find #"not scaled by a replica count" (workloads/scale-refusal "DaemonSet" {:spec {}} nil 2)))
+  (is (= "the workload no longer exists" (workloads/scale-refusal "Deployment" nil nil 2)))
+  (is (= "HorizontalPodAutoscaler web-hpa manages its replicas (2 to 6) and would undo this - change the HPA instead"
+         (workloads/scale-refusal "Deployment" (deployment) {:items [(hpa "Deployment" "web")]} 5)))
+  (is (= "it runs 3 replica(s) already" (workloads/scale-refusal "Deployment" (deployment) nil 3))))
+
+(deftest the-confirmation-names-the-change
+  (is (= ["scale Deployment shop/web from 3 to 5 replica(s)"] (workloads/scale-items "Deployment" (deployment) 5)))
+  (is (= ["scale Deployment shop/web from 3 to 0 replica(s)" "no pod serves it afterwards"]
+         (workloads/scale-items "Deployment" (deployment) 0)))
+  (is (= ["scale StatefulSet shop/web from 3 to 1 replica(s)"
+          "the pods with the highest ordinals go first; their PersistentVolumeClaims stay"]
+         (workloads/scale-items "StatefulSet" (deployment) 1))))
+
+(deftest scaled-compares-the-wanted-count
+  (let [at (fn [replicas ready & {:keys [observed] :or {observed 2}}]
+             {:metadata {:generation 2} :status {:observedGeneration observed :replicas replicas :readyReplicas ready}})]
+    (is (workloads/scaled? (at 5 5) 5))
+    (is (not (workloads/scaled? (at 3 3) 5)) "the old count is not the wanted one")
+    (is (not (workloads/scaled? (at 5 4) 5)))
+    (is (not (workloads/scaled? (at 5 5 :observed 1) 5)) "the new spec is not observed yet")
+    (is (workloads/scaled? {:metadata {:generation 2} :status {:observedGeneration 2}} 0) "zero reports no counts")
+    (is (not (workloads/scaled? nil 0)))))
+
+(deftest the-scale-command
+  (is (= ["--namespace=shop" "scale" "deployment/web" "--replicas=0"]
+         (workloads/scale-args {:type "deployments" :namespace "shop" :name "web"} 0))))
