@@ -209,3 +209,33 @@
 (defn rollback-args
   [{:keys [namespace name]} revision]
   [(str "--namespace=" namespace) "rollout" "undo" (str "deployment/" name) (str "--to-revision=" revision)])
+
+;; --- cronjob suspend / resume ----------------------------------------------------
+
+(defn suspended?
+  [cronjob]
+  (true? (-> cronjob :spec :suspend)))
+
+(defn suspend-refusal
+  "Why setting the CronJob's suspend to wanted would change nothing, or nil."
+  [cronjob wanted]
+  (cond
+    (nil? cronjob) "the CronJob no longer exists"
+    (= wanted (suspended? cronjob)) (if wanted "it is suspended already" "it is not suspended")
+    :else nil))
+
+(defn suspend-items
+  [cronjob wanted]
+  (let [active (count (-> cronjob :status :active))
+        target (kubectl/namespace-name-of cronjob)]
+    (if wanted
+      (cond-> [(format "suspend CronJob %s - no new Job starts until it is resumed" target)]
+        (pos? active) (conj (format "%d Job(s) it started keep running" active)))
+      (cond-> [(format "resume CronJob %s on its schedule %s" target (-> cronjob :spec :schedule))]
+        (nil? (-> cronjob :spec :startingDeadlineSeconds))
+        (conj "without startingDeadlineSeconds, a run missed while it was suspended starts at once")))))
+
+(defn suspend-args
+  [namespace name wanted]
+  [(str "--namespace=" namespace) "patch" "cronjob" name "--type=merge"
+   (str "--patch={\"spec\":{\"suspend\":" wanted "}}")])

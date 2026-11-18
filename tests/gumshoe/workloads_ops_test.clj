@@ -180,3 +180,37 @@
 (deftest the-rollback-command
   (is (= ["--namespace=shop" "rollout" "undo" "deployment/web" "--to-revision=6"]
          (workloads/rollback-args {:namespace "shop" :name "web"} 6))))
+
+;; --- cronjob suspend / resume ----------------------------------------------------
+
+(defn- cronjob [& {:keys [suspend active deadline]}]
+  {:metadata {:namespace "batch" :name "backup"}
+   :spec (cond-> {:schedule "0 3 * * *"} (some? suspend) (assoc :suspend suspend) deadline (assoc :startingDeadlineSeconds deadline))
+   :status (cond-> {} active (assoc :active (vec (repeat active {:kind "Job"}))))})
+
+(deftest suspended-reads-only-true
+  (is (workloads/suspended? (cronjob :suspend true)))
+  (is (not (workloads/suspended? (cronjob :suspend false))))
+  (is (not (workloads/suspended? (cronjob))) "unset is running"))
+
+(deftest suspend-refusals
+  (is (nil? (workloads/suspend-refusal (cronjob) true)))
+  (is (nil? (workloads/suspend-refusal (cronjob :suspend true) false)))
+  (is (= "it is suspended already" (workloads/suspend-refusal (cronjob :suspend true) true)))
+  (is (= "it is not suspended" (workloads/suspend-refusal (cronjob) false)))
+  (is (= "the CronJob no longer exists" (workloads/suspend-refusal nil true))))
+
+(deftest suspend-and-resume-say-what-follows
+  (is (= ["suspend CronJob batch/backup - no new Job starts until it is resumed"] (workloads/suspend-items (cronjob) true)))
+  (is (= ["suspend CronJob batch/backup - no new Job starts until it is resumed" "2 Job(s) it started keep running"]
+         (workloads/suspend-items (cronjob :active 2) true)))
+  (is (= ["resume CronJob batch/backup on its schedule 0 3 * * *"
+          "without startingDeadlineSeconds, a run missed while it was suspended starts at once"]
+         (workloads/suspend-items (cronjob :suspend true) false)))
+  (is (= ["resume CronJob batch/backup on its schedule 0 3 * * *"]
+         (workloads/suspend-items (cronjob :suspend true :deadline 300) false))))
+
+(deftest the-suspend-patch
+  (is (= ["--namespace=batch" "patch" "cronjob" "backup" "--type=merge" "--patch={\"spec\":{\"suspend\":true}}"]
+         (workloads/suspend-args "batch" "backup" true)))
+  (is (= "--patch={\"spec\":{\"suspend\":false}}" (last (workloads/suspend-args "batch" "backup" false)))))
