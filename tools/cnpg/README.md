@@ -116,6 +116,25 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
   report churn, since the fault needs one re-derivation per pooled session
   rather than a majority of roles. A quiet window is reported as quiet for that
   window only: a trigger slower than the wait would not show in it.
+- **Action books** - each takes `--cluster <namespace>/<cluster>` (or
+  `--scheduled-backup <namespace>/<name>`), confirms what follows, refuses when
+  the operator would not act on it, and waits for the operator to finish:
+  - `runbooks/backup.clj` creates an on-demand `Backup` with the first method
+    the cluster configures (`barmanObjectStore`, a WAL-archiving plugin, or
+    `volumeSnapshot`; `--method` picks another) and waits for it to complete,
+    surfacing a failed Backup's error while it waits;
+  - `runbooks/restart.clj` stamps `kubectl.kubernetes.io/restartedAt`, which the
+    operator compares against every instance pod, and waits until each pod
+    carries the stamp and the cluster is healthy - the primary restarts in
+    place or by switchover, as `primaryUpdateMethod` says;
+  - `runbooks/reload.clj` stamps `cnpg.io/reloadedAt`, which triggers a
+    reconcile that rolls out changed configuration;
+  - `runbooks/hibernate.clj` and `runbooks/rehydrate.clj` set
+    `cnpg.io/hibernation` to `on` or `off` and wait for the operator's
+    `cnpg.io/hibernation` condition, or for a healthy cluster after rehydrating;
+  - `runbooks/suspend_scheduled_backup.clj` and
+    `runbooks/resume_scheduled_backup.clj` set a ScheduledBackup's
+    `spec.suspend`.
 
 ```clojure
 ;; bb.edn

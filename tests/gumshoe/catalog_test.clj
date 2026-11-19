@@ -3,12 +3,21 @@
 
 (ns gumshoe.catalog-test
   (:require [clojure.test :refer [deftest is testing]]
+            [edamame.core]
             [gumshoe.catalog :as catalog]))
 
 (deftest short-name-test
   (testing "strips the leading root and the .clj suffix"
     (is (= "kubernetes/nodes/cordon" (catalog/short-name "runbooks/kubernetes/nodes/cordon.clj")))
     (is (= "ceph/upgrade" (catalog/short-name "playbooks/ceph/upgrade.clj")))))
+
+(deftest descriptions-are-read-from-literals
+  (let [read #(catalog/description-of (edamame.core/parse-string-all %))]
+    (is (= "Cordons a node" (read "(ns x) (mutation/book {:description \"Cordons a node\" :effect f})")))
+    (is (= "Restarts a cluster" (read "(mutation/book (merge books/restart {:description \"Restarts a cluster\"}))")))
+    (is (= "the last wins" (read "(mutation/book (merge {:description \"first\"} spec {:description \"the last wins\"}))")))
+    (is (nil? (read "(mutation/book books/restart)")) "a bare spec carries nothing readable")
+    (is (nil? (read "(mutation/book {:description (format \"%s\" x)})")))))
 
 (deftest books-discovery-test
   (let [books (catalog/books)]

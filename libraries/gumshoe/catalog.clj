@@ -25,14 +25,24 @@
                             {:fn true :regex true :deref true :quote true
                              :auto-resolve (fn [alias] (if (= :current alias) 'current alias))}))
 
-(defn- description-of
+(defn- literal-description
+  "The :description of a config written as a map literal, or as (merge spec
+   {:description ...}) - a book that composes a shared spec and declares its own
+   description, where the last literal that names one wins as merge would."
+  [config]
+  (cond
+    (map? config) (:description config)
+    (and (seq? config) (= 'merge (first config)))
+    (last (keep #(when (map? %) (:description %)) (rest config)))
+    :else nil))
+
+(defn description-of
   "A book's declared :description when it is a plain string literal, else nil. A
    description assembled at runtime (a (format ...) call) can not be read
    statically, so such a book simply falls back to its path."
   [forms]
   (some #(when (and (seq? %) (harness-calls (first %)))
-           (let [config (second %)
-                 desc (when (map? config) (:description config))]
+           (let [desc (literal-description (second %))]
              (when (string? desc) desc)))
         forms))
 
