@@ -1,0 +1,9 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The Karpenter tool package. A casebook depends on it by subpath:
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/karpenter"}}}
+;; and lists gumshoe.tools.karpenter under env.edn :plugins to join the :platform
+;; scope and teach the wizard the :karpenter capability.
+{:paths ["libraries" "runbooks"]
+ :deps {io.github.metio/gumshoe-core {:local/root "../.."}}}
