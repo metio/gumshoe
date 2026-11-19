@@ -2,7 +2,8 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.stdout-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string]
+            [clojure.test :refer [deftest is testing]]
             [gumshoe.stdout :as stdout]))
 
 (deftest data-table-test
@@ -82,3 +83,48 @@
           "matching must be on a path boundary, not a raw string prefix"))
     (testing "a path outside home is unchanged"
       (is (= "/etc/hosts" (stdout/shorten-path "/etc/hosts"))))))
+
+(deftest choose-width-test
+  (testing "captured output keeps the fixed width, whatever COLUMNS says"
+    (is (= 80 (stdout/choose-width {:live? false :columns "200" :stty "200"})))
+    (is (= 80 (stdout/choose-width {}))))
+  (testing "a live terminal uses COLUMNS, else stty"
+    (is (= 100 (stdout/choose-width {:live? true :columns "100" :stty "90"})))
+    (is (= 90 (stdout/choose-width {:live? true :columns "" :stty "90"})))
+    (is (= 90 (stdout/choose-width {:live? true :columns "wide" :stty " 90 "}))))
+  (testing "a live terminal whose size cannot be read gets the fixed width"
+    (is (= 80 (stdout/choose-width {:live? true}))))
+  (testing "a live width is clamped"
+    (is (= 120 (stdout/choose-width {:live? true :columns "300"})))
+    (is (= 60 (stdout/choose-width {:live? true :columns "20"}))))
+  (testing "an explicit override wins everywhere, clamped too"
+    (is (= 100 (stdout/choose-width {:override "100" :live? false})))
+    (is (= 70 (stdout/choose-width {:override "70" :live? true :columns "110"})))
+    (is (= 120 (stdout/choose-width {:override "500"})))
+    (is (= 80 (stdout/choose-width {:override "auto"})) "an unreadable override is ignored")))
+
+(defn- stderr-of [f]
+  (let [err (java.io.StringWriter.)]
+    (binding [*err* err] (f))
+    (str err)))
+
+(deftest rules-fill-the-width-test
+  (doseq [w [60 80 117]]
+    (binding [stdout/*width* w]
+      (is (= w (count (clojure.string/trimr (stderr-of stdout/print-section-marker)))) (str "marker at " w))
+      (is (= w (#'stdout/visible-width (clojure.string/trimr (stderr-of #(stdout/print-section "Findings"))))) (str "section at " w))
+      (is (every? #(<= (#'stdout/visible-width %) w)
+                  (clojure.string/split-lines (stderr-of #(stdout/print-section (apply str (repeat 200 "x"))))))
+          "a long title is elided within the width"))))
+
+(deftest hanging-test
+  (testing "unwrapped when there is no width"
+    (is (= "        hint: a b c" (stdout/hanging "        " "hint: " "a b c" nil))))
+  (testing "wrapped under the text"
+    (let [text "the management cluster cannot reach the workload cluster's API server, so nothing is reconciled"
+          lines (clojure.string/split-lines (stdout/hanging "        " "hint: " text 60))]
+      (is (< 1 (count lines)))
+      (is (clojure.string/starts-with? (first lines) "        hint: the management"))
+      (is (every? #(clojure.string/starts-with? % "              ") (rest lines)) "continuations sit under the text")
+      (is (every? #(<= (count %) 60) lines))
+      (is (= text (clojure.string/join " " (map clojure.string/trim (cons (subs (first lines) 14) (rest lines))))) "no word is lost"))))

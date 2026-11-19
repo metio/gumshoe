@@ -192,6 +192,11 @@ Every book behaves the same way:
   they work in scripts and cron.
 - Diagnostics go to stderr, results go to stdout - piping and redirecting always
   stays clean.
+- On a live terminal, section rules and banners fill the terminal's width
+  (clamped to 60-120 columns) and finding hints wrap under their text. Piped,
+  redirected or recorded output keeps a fixed 80 columns and one line per hint,
+  so transcripts stay comparable. `GUMSHOE_WIDTH=<columns>` sets the width
+  everywhere.
 
 ## Detectives
 

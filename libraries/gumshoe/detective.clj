@@ -185,7 +185,7 @@
       (println (str "        " (str/join ", " shown)
                     (when (pos? more) (format " (+%d more)" more)))))
     (when hint
-      (println (str "        hint: " hint)))
+      (println (stdout/hanging "        " "hint: " hint (stdout/results-wrap-width))))
     (when-let [line (folded-line subjects children)]
       (println (str "        " line)))))
 

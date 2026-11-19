@@ -17,7 +17,12 @@
 (def ^:private escape-bold "\u001b[1m")
 (def ^:private escape-reset "\u001b[0m")
 
-(def ^:private width 80)
+(def fixed-width
+  "The width of output that is captured: piped, redirected or recorded output
+   is compared and shared, so it must not depend on the terminal it came from."
+  80)
+
+(def ^:private width-range [60 120])
 
 (defn- fd-target
   "What file descriptor fd is pointing at, via /proc, or nil where there is no
@@ -37,6 +42,74 @@
   (let [target (fd-target fd)]
     (or (nil? target)
         (str/starts-with? target "/dev/"))))
+
+(defn- parse-width
+  [value]
+  (some-> value str str/trim not-empty (#(re-matches #"\d+" %)) parse-long))
+
+(defn choose-width
+  "The output width from what is known about the destination: an explicit
+   override wins wherever output goes; a live terminal uses COLUMNS, else the
+   size stty reports; anything else - and a terminal whose size cannot be read
+   - gets the fixed width. A live width is clamped, so a very wide terminal
+   does not stretch a rule across the screen and a narrow one keeps titles
+   readable. Without /proc the destination of a stream is unknown, so there
+   output keeps the fixed width unless the override is set."
+  [{:keys [override live? columns stty]}]
+  (let [[low high] width-range
+        clamp #(max low (min high %))]
+    (if-let [explicit (parse-width override)]
+      (clamp explicit)
+      (if-let [live (when live? (or (parse-width columns) (parse-width stty)))]
+        (clamp live)
+        fixed-width))))
+
+(defn- stty-columns
+  "The terminal's columns as stty reports them, read from /dev/tty, or nil."
+  []
+  (try
+    (let [process (-> (ProcessBuilder. ["stty" "size"])
+                      (.redirectInput (java.io.File. "/dev/tty"))
+                      (.redirectError java.lang.ProcessBuilder$Redirect/DISCARD)
+                      (.start))
+          out (slurp (.getInputStream process))]
+      (when (.waitFor process 2 java.util.concurrent.TimeUnit/SECONDS)
+        (second (str/split (str/trim out) #"\s+"))))
+    (catch Exception _ nil)))
+
+(defn- detect-width
+  [fd]
+  (let [live? (and (fd-target fd) (terminal? fd))]
+    (choose-width {:override (System/getenv "GUMSHOE_WIDTH")
+                   :live? live?
+                   :columns (when live? (System/getenv "COLUMNS"))
+                   :stty (when live? (stty-columns))})))
+
+(def ^:private diagnostics-width
+  ;; stderr carries the rules and banners; detected once, on first use
+  (delay (detect-width 2)))
+
+(def ^:private results-width
+  ;; stdout carries the findings; nil unless it is a live terminal (or an
+  ;; override is set), so captured results keep one line per hint
+  (delay (when (or (parse-width (System/getenv "GUMSHOE_WIDTH"))
+                   (and (fd-target 1) (terminal? 1)))
+           (detect-width 1))))
+
+(def ^:dynamic *width*
+  "The diagnostics width, when bound; tests and callers that render for a
+   known destination bind it."
+  nil)
+
+(defn width
+  "The width rules, banners and wrapped prose on stderr fill."
+  []
+  (or *width* @diagnostics-width))
+
+(defn results-wrap-width
+  "The width to wrap results on stdout at, or nil to leave them unwrapped."
+  []
+  (or *width* @results-width))
 
 (def ^:private colors?
   ;; Decided once at load: FORCE_COLOR forces on (for `| less -R`), NO_COLOR
@@ -97,7 +170,7 @@
    whitespace so long prose reflows cleanly instead of at the terminal's ragged
    edge. A word longer than the line is left whole rather than split; existing
    newlines are kept as paragraph breaks."
-  ([text] (wrap text width))
+  ([text] (wrap text (width)))
   ([text at]
    (str/join
     "\n"
@@ -110,6 +183,17 @@
                          (conj lines word))))
                    [])
            (str/join "\n"))))))
+
+(defn hanging
+  "text after a label, wrapped to at columns with every further line indented
+   under the text, or the plain line when at is nil."
+  [indent label text at]
+  (let [lead (str indent label)]
+    (if-not at
+      (str lead text)
+      (let [pad (apply str (repeat (visible-width lead) \space))
+            [first-line & more] (str/split-lines (wrap text (max 20 (- at (visible-width lead)))))]
+        (str/join "\n" (cons (str lead first-line) (map #(str pad %) more)))))))
 
 (defn shorten-path
   "Replaces the home-directory prefix of a path with ~, so a long absolute path
@@ -168,13 +252,14 @@
 
 (defn print-section-marker
   []
-  (err-println (apply str (repeat width (theme/token :rule)))))
+  (err-println (apply str (repeat (width) (theme/token :rule)))))
 
 (defn print-section
   "A titled horizontal rule: ── Title ─────────. A title too long for the frame is
    elided in the middle, so the rule always closes within the width."
   [title]
-  (let [title (elide (- width 6) title)
+  (let [width (width)
+        title (elide (- width 6) title)
         rule (theme/token :rule)
         visible (visible-width title)
         padding (apply str (repeat (max 0 (- width 4 visible)) rule))]
@@ -183,7 +268,7 @@
 (defn print-banner
   "A full-width banner that is hard to miss."
   [color-fn text]
-  (let [line (apply str (repeat width (theme/token :rule)))]
+  (let [line (apply str (repeat (width) (theme/token :rule)))]
     (err-println (color-fn line))
     (err-println (color-fn (str "  " text)))
     (err-println (color-fn line))))
