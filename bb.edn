@@ -53,6 +53,7 @@
                    [gumshoe.tools.flux-suspend-test]
                    [gumshoe.tools.flux-progress-test]
                    [gumshoe.certificates-test]
+                   [gumshoe.certificate-renewal-test]
                    [gumshoe.gateway-test]
                    [gumshoe.cnpg-test]
                    [gumshoe.cnpg-health-test]
@@ -167,6 +168,7 @@
                                                          'gumshoe.tools.flux-suspend-test
                                                          'gumshoe.tools.flux-progress-test
                                                          'gumshoe.certificates-test
+                                                         'gumshoe.certificate-renewal-test
                                                          'gumshoe.gateway-test
                                                          'gumshoe.cnpg-test
                                                          'gumshoe.cnpg-health-test
