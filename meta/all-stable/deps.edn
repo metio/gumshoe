@@ -23,4 +23,5 @@
         io.github.metio/gumshoe-thanos {:local/root "../../tools/thanos"}
         io.github.metio/gumshoe-loki {:local/root "../../tools/loki"}
         io.github.metio/gumshoe-db-operator {:local/root "../../tools/db-operator"}
-        io.github.metio/gumshoe-external-dns {:local/root "../../tools/external-dns"}}}
+        io.github.metio/gumshoe-external-dns {:local/root "../../tools/external-dns"}
+        io.github.metio/gumshoe-velero {:local/root "../../tools/velero"}}}

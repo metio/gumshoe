@@ -133,6 +133,8 @@
     :book "tools/upload/runbooks/scan.clj"}
    {:label "🐘 Databases - CloudNativePG and db-operator"
     :book "runbooks/detectives/databases.clj"}
+   {:label "💾 Backups - Velero storage, schedules, backups and restores"
+    :book "tools/velero/runbooks/scan.clj"}
    {:label "🔒 TLS - cert-manager certificates and ACME orders"
     :book "tools/certmanager/runbooks/scan.clj"}
    {:label "🔁 GitOps - flux sources and reconciliations"

@@ -15,4 +15,5 @@
         io.github.metio/gumshoe-jaas        {:local/root "../../tools/jaas"}
         io.github.metio/gumshoe-prometheus  {:local/root "../../tools/prometheus"}
         io.github.metio/gumshoe-calico      {:local/root "../../tools/calico"}
-        io.github.metio/gumshoe-db-operator {:local/root "../../tools/db-operator"}}}
+        io.github.metio/gumshoe-db-operator {:local/root "../../tools/db-operator"}
+        io.github.metio/gumshoe-velero      {:local/root "../../tools/velero"}}}

@@ -1,0 +1,9 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The Velero tool package. A casebook depends on it by subpath:
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/velero"}}}
+;; and lists gumshoe.tools.velero under env.edn :plugins to fill the :backups scope
+;; and teach the wizard the :velero capability.
+{:paths ["libraries" "runbooks"]
+ :deps {io.github.metio/gumshoe-core {:local/root "../.."}}}
