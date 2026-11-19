@@ -147,6 +147,8 @@
     :book "tools/flux/runbooks/gitops.clj"}
    {:label "🐙 Argo CD - Applications, syncs and ApplicationSets"
     :book "tools/argocd/runbooks/scan.clj"}
+   {:label "🐤 Canaries - Flagger progressive delivery"
+    :book "tools/flagger/runbooks/scan.clj"}
    {:label "🎬 Delivery - StageSet staged rollouts"
     :book "tools/stageset/runbooks/scan.clj"}
    {:label "📐 Rendering - JaaS Jsonnet snippets and the artifacts they publish"

@@ -224,6 +224,7 @@ Reach for the focused scan when you know which system is in trouble:
 bb tools/flux/runbooks/gitops.clj         # flux sources + reconciliation
 bb tools/argocd/runbooks/scan.clj         # Argo CD Applications, syncs, ApplicationSets
 bb tools/stageset/runbooks/scan.clj       # StageSet staged rollouts
+bb tools/flagger/runbooks/scan.clj        # Flagger Canaries
 bb tools/jaas/runbooks/scan.clj           # JaaS snippets + published artifacts
 bb tools/certmanager/runbooks/scan.clj    # certificates, sour ACME orders
 bb tools/gateway/runbooks/scan.clj        # Gateways, listeners, HTTPRoutes

@@ -28,4 +28,5 @@
         io.github.metio/gumshoe-argocd {:local/root "../../tools/argocd"}
         io.github.metio/gumshoe-karpenter {:local/root "../../tools/karpenter"}
         io.github.metio/gumshoe-strimzi {:local/root "../../tools/strimzi"}
-        io.github.metio/gumshoe-kueue {:local/root "../../tools/kueue"}}}
+        io.github.metio/gumshoe-kueue {:local/root "../../tools/kueue"}
+        io.github.metio/gumshoe-flagger {:local/root "../../tools/flagger"}}}
