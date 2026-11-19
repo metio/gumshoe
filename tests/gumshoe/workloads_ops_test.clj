@@ -181,6 +181,50 @@
   (is (= ["--namespace=shop" "rollout" "undo" "deployment/web" "--to-revision=6"]
          (workloads/rollback-args {:namespace "shop" :name "web"} 6))))
 
+;; --- deployment pause / resume ---------------------------------------------------
+
+(deftest paused-reads-only-true
+  (is (workloads/paused? (deployment :paused true)))
+  (is (not (workloads/paused? (deployment))))
+  (is (not (workloads/paused? (assoc-in (deployment) [:spec :paused] false)))))
+
+(deftest pause-refusals
+  (is (nil? (workloads/pause-refusal (deployment) true)))
+  (is (nil? (workloads/pause-refusal (deployment :paused true) false)))
+  (is (= "it is paused already" (workloads/pause-refusal (deployment :paused true) true)))
+  (is (= "it is not paused" (workloads/pause-refusal (deployment) false)))
+  (is (= "the Deployment no longer exists" (workloads/pause-refusal nil true)))
+  (is (= "the Deployment no longer exists" (workloads/pause-refusal nil false))))
+
+(deftest pausing-says-what-follows
+  (is (= ["pause Deployment shop/web - changes to its pod template are kept but not rolled out until it is resumed"
+          "rollout restart and rollback refuse a paused Deployment"]
+         (workloads/pause-items (deployment) nil true)))
+  (testing "a rollout in progress stops where it is"
+    (is (= "its rollout in progress stops where it is (1 of 3 pods updated), old and new pods side by side"
+           (second (workloads/pause-items (deployment :updated 1) nil true)))))
+  (testing "an autoscaler keeps scaling"
+    (is (some #{"HorizontalPodAutoscaler web keeps scaling it - pausing stops rollouts, not scaling"}
+              (workloads/pause-items (deployment) "web" true))))
+  (testing "resuming"
+    (is (= ["resume Deployment shop/web - every pod template change made while it was paused rolls out now"]
+           (workloads/pause-items (deployment :paused true) "web" false)))))
+
+(deftest the-pause-commands
+  (is (= ["--namespace=shop" "rollout" "pause" "deployment/web"] (workloads/pause-args {:namespace "shop" :name "web"} true)))
+  (is (= ["--namespace=shop" "rollout" "resume" "deployment/web"] (workloads/pause-args {:namespace "shop" :name "web"} false))))
+
+(deftest pause-applied-checks-the-controller
+  (testing "paused, once observed"
+    (is (workloads/pause-applied? (deployment :paused true) true))
+    (is (not (workloads/pause-applied? (deployment :paused true :generation 3 :observed 2) true)) "not yet observed")
+    (is (not (workloads/pause-applied? (deployment) true))))
+  (testing "resumed, once rolled out"
+    (is (workloads/pause-applied? (deployment) false))
+    (is (not (workloads/pause-applied? (deployment :updated 1) false)) "still rolling out")
+    (is (not (workloads/pause-applied? (deployment :paused true) false))))
+  (is (not (workloads/pause-applied? nil true))))
+
 ;; --- cronjob suspend / resume ----------------------------------------------------
 
 (defn- cronjob [& {:keys [suspend active deadline]}]

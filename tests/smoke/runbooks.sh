@@ -87,6 +87,33 @@ expect "rollback restored the earlier image" "${image}" "$(jp deployment/web '{.
 book yes runbooks/kubernetes/workloads/rollback.clj --pick "Deployment ${ns}/web" --to-revision 99
 expect "rollback refuses an unknown revision" 1 $?
 
+# --- Deployment pause / resume --------------------------------------------------------
+book yes runbooks/kubernetes/workloads/pause.clj --pick "Deployment ${ns}/web"
+expect "pause exits 0" 0 $?
+expect "pause set spec.paused" true "$(jp deployment/web '{.spec.paused}')"
+
+kubectl -n "${ns}" set image deployment/web "busybox=${older}" > /dev/null
+sleep 5
+# Pods of the earlier rollback may still be terminating, so the ReplicaSets
+# tell: a paused Deployment scales up no ReplicaSet of the new template.
+expect "a paused Deployment rolls out no pod of the new template" "0" \
+  "$(kubectl -n "${ns}" get replicasets -l app=web \
+      -o "jsonpath={range .items[?(@.spec.template.spec.containers[0].image==\"${older}\")]}{.spec.replicas}{end}")"
+
+book yes runbooks/kubernetes/workloads/restart.clj --pick "Deployment ${ns}/web"
+expect "restart refuses a paused Deployment" 1 $?
+
+book yes runbooks/kubernetes/workloads/pause.clj --pick "Deployment ${ns}/web"
+expect "pausing again is refused" 1 $?
+
+book yes runbooks/kubernetes/workloads/resume.clj --pick "Deployment ${ns}/web"
+expect "resume exits 0" 0 $?
+expect "resume cleared spec.paused" "" "$(jp deployment/web '{.spec.paused}')"
+expect "resume rolled out the change made while paused to all 3 replicas" "${older} 3" \
+  "$(jp deployment/web '{.spec.template.spec.containers[0].image} {.status.updatedReplicas}')"
+kubectl -n "${ns}" set image deployment/web "busybox=${image}" > /dev/null
+kubectl -n "${ns}" rollout status deployment/web --timeout=300s > /dev/null
+
 # --- CronJob suspend / resume ---------------------------------------------------------
 book yes runbooks/kubernetes/cronjobs/suspend.clj --namespace "${ns}" --job nightly
 expect "suspend exits 0" 0 $?

@@ -210,6 +210,49 @@
   [{:keys [namespace name]} revision]
   [(str "--namespace=" namespace) "rollout" "undo" (str "deployment/" name) (str "--to-revision=" revision)])
 
+;; --- deployment pause / resume ---------------------------------------------------
+
+(defn paused?
+  [deployment]
+  (true? (-> deployment :spec :paused)))
+
+(defn pause-refusal
+  "Why setting the Deployment's paused to wanted would change nothing, or nil."
+  [deployment wanted]
+  (cond
+    (nil? deployment) "the Deployment no longer exists"
+    (= wanted (paused? deployment)) (if wanted "it is paused already" "it is not paused")
+    :else nil))
+
+(defn- rollout-progress
+  [deployment]
+  (format "%d of %d pods" (or (-> deployment :status :updatedReplicas) 0) (desired-replicas "Deployment" deployment)))
+
+(defn pause-items
+  [deployment hpa wanted]
+  (let [target (kubectl/namespace-name-of deployment)]
+    (if wanted
+      (cond-> [(format "pause Deployment %s - changes to its pod template are kept but not rolled out until it is resumed" target)]
+        (not (rolled-out? "Deployment" deployment))
+        (conj (format "its rollout in progress stops where it is (%s updated), old and new pods side by side" (rollout-progress deployment)))
+        hpa (conj (format "HorizontalPodAutoscaler %s keeps scaling it - pausing stops rollouts, not scaling" hpa))
+        true (conj "rollout restart and rollback refuse a paused Deployment"))
+      [(format "resume Deployment %s - every pod template change made while it was paused rolls out now" target)])))
+
+(defn pause-args
+  [{:keys [namespace name]} wanted]
+  [(str "--namespace=" namespace) "rollout" (if wanted "pause" "resume") (str "deployment/" name)])
+
+(defn pause-applied?
+  "Whether the Deployment reached the wanted pause state: paused once the
+   controller observed it, resumed once it also rolled out."
+  [deployment wanted]
+  (boolean (and deployment
+                (= wanted (paused? deployment))
+                (if wanted
+                  (>= (or (-> deployment :status :observedGeneration) 0) (or (-> deployment :metadata :generation) 0))
+                  (rolled-out? "Deployment" deployment)))))
+
 ;; --- cronjob suspend / resume ----------------------------------------------------
 
 (defn suspended?
