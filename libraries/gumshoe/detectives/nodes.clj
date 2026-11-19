@@ -3,8 +3,9 @@
 
 (ns gumshoe.detectives.nodes
   "Detectives for node health: readiness, every node-problem condition, cordoned
-   nodes."
-  (:require [gumshoe.kubectl :as kubectl]
+   nodes, removals that stall, and kubelets on different minor versions."
+  (:require [clojure.string :as str]
+            [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
 (defn- condition
@@ -47,8 +48,79 @@
         :summary "node is cordoned (unschedulable)"
         :hint "uncordon with runbooks/kubernetes/nodes/uncordon.clj when the work on it is done"}))))
 
+;; --- removals that stall ------------------------------------------------------------
+
+(def ^:private removal-warning-minutes 10)
+(def ^:private removal-critical-minutes 30)
+
+(defn- taint
+  [node key]
+  (first (filter #(= key (:key %)) (-> node :spec :taints))))
+
+(defn removal
+  "Who is removing the node and since when, or nil. The cluster autoscaler's
+   taint carries the unix second it started as its value; Karpenter's taint
+   carries no time, so its removal is timed from the node's deletion, as is a
+   plain delete held up by finalizers."
+  [node]
+  (let [deleted (some-> node :metadata :deletionTimestamp java.time.Instant/parse)
+        autoscaler (taint node "ToBeDeletedByClusterAutoscaler")
+        karpenter (or (taint node "karpenter.sh/disrupted") (taint node "karpenter.sh/disruption"))]
+    (cond
+      autoscaler {:by "the cluster autoscaler"
+                  :since (or (some-> (:value autoscaler) str parse-long java.time.Instant/ofEpochSecond) deleted)}
+      karpenter {:by "Karpenter" :since deleted}
+      deleted {:by "a delete" :since deleted}
+      :else nil)))
+
+(defn detect-stalled-removals
+  [evidence]
+  (let [now ^java.time.Instant (:now evidence)]
+    (for [node (kubectl/items-of (get evidence "nodes"))
+          :let [{:keys [by since]} (removal node)]
+          :when (and by since now)
+          :let [minutes (.toMinutes (java.time.Duration/between ^java.time.Instant since now))]
+          :when (>= minutes removal-warning-minutes)]
+      (onset/since
+       {:severity (if (>= minutes removal-critical-minutes) :critical :warning)
+        :component (kubectl/name-of node)
+        :summary (format "node removal by %s has not finished after %d minutes" by minutes)
+        :hint (str (when-let [finalizers (seq (-> node :metadata :finalizers))]
+                     (str "finalizers " (str/join ", " finalizers) " hold the node; "))
+                   "a pod that cannot be evicted (a PodDisruptionBudget at zero, a pod without a controller) or a finalizer usually blocks it - check the remover's logs and the pods still on the node")}
+       since))))
+
+;; --- kubelet versions -------------------------------------------------------------------
+
+(defn kubelet-minor
+  "The major.minor of a node's kubelet, e.g. \"1.31\", or nil."
+  [node]
+  (some->> node :status :nodeInfo :kubeletVersion (re-find #"^v?(\d+)\.(\d+)") rest (str/join ".")))
+
+(defn detect-kubelet-skew
+  [evidence]
+  (let [by-minor (group-by kubelet-minor (kubectl/items-of (get evidence "nodes")))
+        minors (sort-by #(mapv parse-long (str/split % #"\.")) (remove nil? (keys by-minor)))]
+    (when (< 1 (count minors))
+      (let [spread (- (parse-long (second (str/split (last minors) #"\.")))
+                      (parse-long (second (str/split (first minors) #"\."))))]
+        [{:severity (if (< 1 spread) :warning :info)
+          :component "nodes"
+          :summary (format "nodes run kubelet %s"
+                           (str/join ", " (for [minor minors] (format "%s (%d)" minor (count (by-minor minor))))))
+          :hint (str (when (< 1 spread) "more than one minor apart - ")
+                     "an upgrade that has not reached every node; finish it, since each kubelet may only trail the API server by a limited number of minors")}]))))
+
 (def detectives
   [{:name "nodes"
     :description "Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
     :requires ["nodes"]
-    :detect detect-node-problems}])
+    :detect detect-node-problems}
+   {:name "node-removals"
+    :description "Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
+    :requires ["nodes"]
+    :detect detect-stalled-removals}
+   {:name "kubelet-skew"
+    :description "Nodes running different kubelet minor versions"
+    :requires ["nodes"]
+    :detect detect-kubelet-skew}])
