@@ -21,8 +21,12 @@
   "Retries check until it returns truthy or timeout (seconds) elapses.
    Exceptions inside check count as not-yet-verified. A malformed post-check is
    refused. Returns the verdict - true when verified, true-with-a-warning when
-   a :soft? check times out, false when a hard check times out."
-  [{:keys [description check timeout interval soft? watch] :or {timeout 60 interval 5}}]
+   a :soft? check times out, false when a hard check times out.
+
+   :abort (fn [] -> reason or nil) names a state the check can no longer reach
+   from, such as an operation that failed: the wait ends at once with the
+   reason, a :soft? check included, instead of running out its timeout."
+  [{:keys [description check timeout interval soft? watch abort] :or {timeout 60 interval 5}}]
   (if-not (and (string? description) (fn? check))
     (do (stdout/error "refusing a malformed post-check: it needs a :description string and a :check function")
         false)
@@ -36,6 +40,10 @@
         (try (boolean (check)) (catch Exception _ false))
         (do (stdout/ok (str "verified: " description))
             true)
+
+        (when abort (try (abort) (catch Exception _ nil)))
+        (do (stdout/error (format "NOT verified: %s - %s" description (abort)))
+            false)
 
         (>= elapsed timeout)
         (if soft?

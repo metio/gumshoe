@@ -122,7 +122,7 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
   - `runbooks/backup.clj` creates an on-demand `Backup` with the first method
     the cluster configures (`barmanObjectStore`, a WAL-archiving plugin, or
     `volumeSnapshot`; `--method` picks another) and waits for it to complete,
-    surfacing a failed Backup's error while it waits;
+    ending the wait with the error when the Backup fails;
   - `runbooks/restart.clj` stamps `kubectl.kubernetes.io/restartedAt`, which the
     operator compares against every instance pod, and waits until each pod
     carries the stamp and the cluster is healthy - the primary restarts in

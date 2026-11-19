@@ -65,6 +65,30 @@
         (is (not (clojure.string/includes? out "while waiting — pre-existing warning"))
             "the pre-existing backlog is not surfaced as a during-wait signal")))))
 
+(deftest abort-ends-the-wait-test
+  (testing "an abort reason fails the check at once, a soft one included"
+    (let [checks (atom 0)
+          started (System/currentTimeMillis)]
+      (is (not (verify/eventually {:description "doomed" :timeout 30 :interval 1 :soft? true
+                                   :check #(do (swap! checks inc) false)
+                                   :abort (constantly "the operation failed")})))
+      (is (= 1 @checks))
+      (is (< (- (System/currentTimeMillis) started) 5000) "it did not wait out the timeout")))
+  (testing "the reason is printed"
+    (let [err (java.io.StringWriter.)]
+      (binding [*err* err]
+        (verify/eventually {:description "doomed" :timeout 0 :check (constantly false) :abort (constantly "the Backup failed: no space")}))
+      (is (clojure.string/includes? (str err) "the Backup failed: no space"))))
+  (testing "a check that holds wins over an abort"
+    (is (verify/eventually {:description "done" :timeout 0 :check (constantly true) :abort (constantly "late failure")})))
+  (testing "no reason, or a throwing abort, keeps waiting"
+    (let [attempts (atom 0)]
+      (is (verify/eventually {:description "eventually" :timeout 10 :interval 0
+                              :check #(<= 3 (swap! attempts inc))
+                              :abort #(when (> @attempts 5) "never reached")})))
+    (is (verify/eventually {:description "throwing abort" :timeout 0 :soft? true
+                            :check (constantly false) :abort #(throw (ex-info "boom" {}))}))))
+
 (deftest all-test
   (testing "every check must hold"
     (is (verify/all [{:description "a" :timeout 0 :check (constantly true)}

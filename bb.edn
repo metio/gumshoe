@@ -26,6 +26,7 @@
                    [gumshoe.conformance-test]
                    [gumshoe.detectives-test]
                    [gumshoe.helm-releases-test]
+                   [gumshoe.helm-rollback-test]
                    [gumshoe.upgrade-readiness-test]
                    [gumshoe.cause-folding-test]
                    [gumshoe.released-volumes-test]
@@ -136,6 +137,7 @@
                    [gumshoe.external-dns-test]
                    [gumshoe.velero-test]
                    [gumshoe.argocd-test]
+                   [gumshoe.argocd-actions-test]
                    [gumshoe.karpenter-test]
                    [gumshoe.strimzi-test]
                    [gumshoe.kueue-test]
@@ -159,6 +161,7 @@
                                                          'gumshoe.conformance-test
                                                          'gumshoe.detectives-test
                                                          'gumshoe.helm-releases-test
+                                                         'gumshoe.helm-rollback-test
                                                          'gumshoe.upgrade-readiness-test
                                                          'gumshoe.cause-folding-test
                                                          'gumshoe.released-volumes-test
@@ -269,6 +272,7 @@
                                                          'gumshoe.external-dns-test
                                                          'gumshoe.velero-test
                                                          'gumshoe.argocd-test
+                                                         'gumshoe.argocd-actions-test
                                                          'gumshoe.karpenter-test
                                                          'gumshoe.strimzi-test
                                                          'gumshoe.kueue-test

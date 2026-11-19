@@ -187,7 +187,7 @@
   (= "completed" (-> backup :status :phase)))
 
 (defn backup-signals
-  "What the wait surfaces: a failed Backup's error."
+  "Why the wait can end: a failed Backup's error."
   [backup]
   (when (= "failed" (-> backup :status :phase))
     [(str "the Backup failed: " (or (-> backup :status :error) "no error recorded"))]))

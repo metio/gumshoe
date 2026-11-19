@@ -142,7 +142,7 @@
              (let [current #(fetch context cnpg/backup-type {:namespace (:namespace pick) :name backup-name})]
                [{:description (format "Backup %s/%s completed" (:namespace pick) backup-name)
                  :timeout 3600 :interval 15
-                 :watch #(actions/backup-signals (current))
+                 :abort #(first (actions/backup-signals (current)))
                  :check #(actions/backup-completed? (current))}]))})
 
 (defn scheduled-backup-suspension
