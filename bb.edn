@@ -25,6 +25,7 @@
                    [gumshoe.spec-test]
                    [gumshoe.conformance-test]
                    [gumshoe.detectives-test]
+                   [gumshoe.hardening-test]
                    [gumshoe.isolated-services-test]
                    [gumshoe.effect-plugin-test]
                    [gumshoe.mutation-pin-test]
@@ -140,6 +141,7 @@
                                                          'gumshoe.spec-test
                                                          'gumshoe.conformance-test
                                                          'gumshoe.detectives-test
+                                                         'gumshoe.hardening-test
                                                          'gumshoe.isolated-services-test
                                                          'gumshoe.effect-plugin-test
                                                          'gumshoe.mutation-pin-test

@@ -39,7 +39,7 @@
                                        :spec {:hostNetwork false}}]}})))))
 
 (deftest hostpath-test
-  (is (= #{"pod mounts hostPath: /var/run/docker.sock"}
+  (is (= #{"pod mounts the node's container runtime or root: /var/run/docker.sock"}
          (summaries (pod-security/detect-hostpath-volumes
                      {"pods" {:items [{:metadata {:namespace "ci" :name "docker-user"}
                                        :spec {:volumes [{:name "sock"

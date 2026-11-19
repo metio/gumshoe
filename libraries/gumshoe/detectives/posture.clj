@@ -7,6 +7,7 @@
    their own scope, left out of whole-cluster health scans, because every
    finding here is a choice someone may have made on purpose."
   (:require [clojure.string :as str]
+            [gumshoe.detectives.pod-security :as pod-security]
             [gumshoe.kubectl :as kubectl]))
 
 (def ^:private replicated-types
@@ -102,6 +103,69 @@
        :summary (format "%s with %d replicas has no PodDisruptionBudget" kind (replicas workload))
        :hint "a node drain may evict all of its pods at once - add a PodDisruptionBudget with maxUnavailable: 1"})))
 
+;; --- container hardening ---------------------------------------------------------
+
+(defn- hardening-specs
+  "The pod specs the hardening checks judge: every workload outside the
+   platform namespaces, whose components need these powers."
+  [evidence]
+  (remove (fn [[_ workload _]] (contains? pod-security/platform-namespaces (kubectl/namespace-of workload)))
+          (pod-specs evidence)))
+
+(defn- containers-of
+  [spec]
+  (concat (:initContainers spec) (:containers spec)))
+
+(defn may-run-as-root?
+  "Whether nothing keeps the container from running as root: neither
+   runAsNonRoot nor a non-zero runAsUser, on the container or inherited from
+   the pod. The image's USER is not visible here, so this is a may."
+  [pod-spec container]
+  (let [effective (fn [k] (let [own (get-in container [:securityContext k])]
+                            (if (some? own) own (get-in pod-spec [:securityContext k]))))]
+    (not (or (true? (effective :runAsNonRoot))
+             (pos? (or (effective :runAsUser) 0))))))
+
+(defn detect-root-containers
+  [evidence]
+  (for [[kind workload spec] (hardening-specs evidence)
+        :let [names (map :name (filter #(may-run-as-root? spec %) (containers-of spec)))]
+        :when (seq names)]
+    {:severity :info
+     :component (kubectl/namespace-name-of workload)
+     :summary (format "%s containers may run as root: %s" kind (str/join ", " names))
+     :hint "a process escaping the container is root on the node's kernel - set runAsNonRoot: true (and runAsUser if the image has no USER)"}))
+
+(defn detect-writable-root-filesystems
+  [evidence]
+  (for [[kind workload spec] (hardening-specs evidence)
+        :let [names (map :name (remove #(true? (get-in % [:securityContext :readOnlyRootFilesystem])) (containers-of spec)))]
+        :when (seq names)]
+    {:severity :info
+     :component (kubectl/namespace-name-of workload)
+     :summary (format "%s containers keep a writable root filesystem: %s" kind (str/join ", " names))
+     :hint "an attacker can drop tools into it - set readOnlyRootFilesystem: true and mount an emptyDir where the process writes"}))
+
+(defn- automount?
+  "Whether the pod mounts its ServiceAccount's token: the pod's setting wins,
+   then the ServiceAccount's, and the default is to mount."
+  [spec account]
+  (let [own (:automountServiceAccountToken spec)]
+    (if (some? own) own (not (false? (:automountServiceAccountToken account))))))
+
+(defn detect-default-account-tokens
+  [evidence]
+  (let [accounts (into {} (for [account (kubectl/items-of (get evidence "serviceaccounts"))]
+                            [[(kubectl/namespace-of account) (kubectl/name-of account)] account]))]
+    (for [[kind workload spec] (hardening-specs evidence)
+          :let [name (or (not-empty (:serviceAccountName spec)) "default")]
+          :when (and (= "default" name)
+                     (automount? spec (get accounts [(kubectl/namespace-of workload) name])))]
+      {:severity :info
+       :component (kubectl/namespace-name-of workload)
+       :summary (format "%s mounts the default ServiceAccount's token" kind)
+       :hint "a workload on the default account rarely talks to the API, yet anyone inside it can - set automountServiceAccountToken: false on the pod or the account"})))
+
 ;; --- deprecated APIs ------------------------------------------------------------
 
 (defn parse-deprecated-requests
@@ -159,6 +223,18 @@
     :description "Replicated Deployments and StatefulSets no PodDisruptionBudget covers"
     :requires ["deployments" "statefulsets" "poddisruptionbudgets"]
     :detect detect-unprotected-workloads}
+   {:name "root-containers"
+    :description "Workloads whose containers may run as root"
+    :requires ["deployments" "statefulsets" "daemonsets" "cronjobs"]
+    :detect detect-root-containers}
+   {:name "writable-root-filesystems"
+    :description "Workloads whose containers keep a writable root filesystem"
+    :requires ["deployments" "statefulsets" "daemonsets" "cronjobs"]
+    :detect detect-writable-root-filesystems}
+   {:name "default-account-tokens"
+    :description "Workloads that mount the default ServiceAccount's token"
+    :requires ["deployments" "statefulsets" "daemonsets" "cronjobs" "serviceaccounts"]
+    :detect detect-default-account-tokens}
    {:name "deprecated-api-requests"
     :description "Deprecated APIs that clients still request"
     :requires ["deprecated-api-requests"]

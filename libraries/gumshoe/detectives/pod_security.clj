@@ -47,15 +47,34 @@
      :summary (format "pod shares host namespaces: %s" (str/join ", " shared))
      :hint "host namespaces bypass pod isolation and NetworkPolicies"}))
 
+(def ^:private node-takeover-paths
+  "hostPaths that hand the pod the node: the container runtime's socket (and
+   the directories that hold it), and the node's root."
+  #{"/" "/var/run" "/run"
+    "/var/run/docker.sock" "/run/docker.sock"
+    "/var/run/containerd" "/run/containerd" "/var/run/containerd/containerd.sock" "/run/containerd/containerd.sock"
+    "/var/run/crio" "/run/crio" "/var/run/crio/crio.sock" "/run/crio/crio.sock"
+    "/var/run/cri-dockerd.sock" "/run/cri-dockerd.sock"})
+
+(defn node-takeover-path?
+  [path]
+  (contains? node-takeover-paths (let [trimmed (str/replace (str path) #"/+$" "")] (if (= "" trimmed) "/" trimmed))))
+
 (defn detect-hostpath-volumes
   [evidence]
   (for [pod (workload-pods evidence)
-        :let [paths (keep #(-> % :hostPath :path) (-> pod :spec :volumes))]
+        :let [paths (keep #(-> % :hostPath :path) (-> pod :spec :volumes))
+              takeover (filter node-takeover-path? paths)]
         :when (seq paths)]
-    {:severity :warning
-     :component (kubectl/namespace-name-of pod)
-     :summary (format "pod mounts hostPath: %s" (str/join ", " paths))
-     :hint "a writable hostPath can own the node - prefer volumes or read-only mounts"}))
+    (if (seq takeover)
+      {:severity :critical
+       :component (kubectl/namespace-name-of pod)
+       :summary (format "pod mounts the node's container runtime or root: %s" (str/join ", " takeover))
+       :hint "with the runtime socket or the node's root a pod starts any container it likes on the node - remove the mount unless this is a node agent"}
+      {:severity :warning
+       :component (kubectl/namespace-name-of pod)
+       :summary (format "pod mounts hostPath: %s" (str/join ", " paths))
+       :hint "a writable hostPath can own the node - prefer volumes or read-only mounts"})))
 
 (def ^:private dangerous-capabilities
   #{"SYS_ADMIN" "NET_ADMIN" "SYS_PTRACE" "SYS_MODULE" "BPF"})
