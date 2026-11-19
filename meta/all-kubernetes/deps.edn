@@ -22,4 +22,5 @@
         io.github.metio/gumshoe-strimzi     {:local/root "../../tools/strimzi"}
         io.github.metio/gumshoe-kueue       {:local/root "../../tools/kueue"}
         io.github.metio/gumshoe-flagger     {:local/root "../../tools/flagger"}
-        io.github.metio/gumshoe-cluster-api {:local/root "../../tools/cluster-api"}}}
+        io.github.metio/gumshoe-cluster-api {:local/root "../../tools/cluster-api"}
+        io.github.metio/gumshoe-crossplane  {:local/root "../../tools/crossplane"}}}
