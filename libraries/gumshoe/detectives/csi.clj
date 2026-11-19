@@ -2,11 +2,12 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.detectives.csi
-  "Detectives for the CSI layer backed by ceph-csi: attachments that fail,
-   volumes whose data is orphaned on the ceph cluster, and nodes where the
-   ceph drivers are not registered."
+  "Detectives for the CSI layer: attachments that fail, PersistentVolumes that
+   failed or were released, and nodes where the ceph-csi drivers are not
+   registered."
   (:require [clojure.string :as str]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.onset :as onset]))
 
 (defn- ceph-driver?
   [driver-name]
@@ -23,22 +24,58 @@
      :summary (format "volume is not attached to node %s" (-> attachment :spec :nodeName))
      :hint error}))
 
+(def ^:private delete-grace-minutes
+  "How long a Released volume with the Delete policy may wait for its
+   provisioner before the deletion counts as stalled."
+  60)
+
+(defn- released-minutes
+  [volume now]
+  (when-let [since (some-> volume :status :lastPhaseTransitionTime java.time.Instant/parse)]
+    (when now (.toMinutes (java.time.Duration/between since ^java.time.Instant now)))))
+
+(defn released-finding
+  "A Released volume's finding. With the Delete policy the provisioner should
+   remove it, so one that stays Released past the grace has a deletion that
+   failed; with Retain (the default for volumes created by hand) the data is
+   kept on purpose until someone decides."
+  [volume now]
+  (let [policy (or (-> volume :spec :persistentVolumeReclaimPolicy) "Retain")
+        minutes (released-minutes volume now)
+        since (-> volume :status :lastPhaseTransitionTime)
+        base {:component (kubectl/name-of volume)}]
+    (case policy
+      "Delete"
+      (when (or (nil? minutes) (>= minutes delete-grace-minutes))
+        (onset/since
+         (assoc base :severity :warning
+                :summary (if minutes
+                           (format "PersistentVolume with reclaim policy Delete stayed Released for %d minutes - deleting it failed" minutes)
+                           "PersistentVolume with reclaim policy Delete stayed Released - deleting it failed")
+                :hint (str (when-let [message (not-empty (-> volume :status :message))] (str message " - "))
+                           "the provisioner could not delete the backing volume; its events and logs say why, and runbooks/kubernetes/volumes/delete_released.clj removes the object once the backend is clean"))
+         since))
+
+      (onset/since
+       (assoc base :severity :info
+              :summary "PersistentVolume is Released - its claim is gone but the data still exists"
+              :hint (format "reclaim policy %s keeps the data until someone decides - delete it with runbooks/kubernetes/volumes/delete_released.clj once nobody needs it, or bind a new claim to it" policy))
+       since))))
+
 (defn detect-volume-problems
   [evidence]
   (let [volumes (kubectl/items-of (get evidence "persistentvolumes"))]
     (concat
      (for [volume volumes
            :when (= "Failed" (-> volume :status :phase))]
-       {:severity :critical
-        :component (kubectl/name-of volume)
-        :summary "PersistentVolume is Failed"
-        :hint (-> volume :status :message)})
-     (for [volume volumes
-           :when (= "Released" (-> volume :status :phase))]
-       {:severity :info
-        :component (kubectl/name-of volume)
-        :summary "PersistentVolume is Released - its claim is gone but the data still exists"
-        :hint "reclaim or delete it, otherwise the ceph cluster keeps the image around forever"}))))
+       (onset/since
+        {:severity :critical
+         :component (kubectl/name-of volume)
+         :summary "PersistentVolume is Failed"
+         :hint (-> volume :status :message)}
+        (-> volume :status :lastPhaseTransitionTime)))
+     (keep #(released-finding % (:now evidence))
+           (filter #(= "Released" (-> % :status :phase)) volumes)))))
 
 (defn expected-plugin-node?
   "Whether the ceph-csi nodeplugin is expected to run on a node. The nodeplugin

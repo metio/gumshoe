@@ -25,6 +25,7 @@
                    [gumshoe.spec-test]
                    [gumshoe.conformance-test]
                    [gumshoe.detectives-test]
+                   [gumshoe.released-volumes-test]
                    [gumshoe.node-lifecycle-test]
                    [gumshoe.reliability-posture-test]
                    [gumshoe.configmap-secrets-test]
@@ -144,6 +145,7 @@
                                                          'gumshoe.spec-test
                                                          'gumshoe.conformance-test
                                                          'gumshoe.detectives-test
+                                                         'gumshoe.released-volumes-test
                                                          'gumshoe.node-lifecycle-test
                                                          'gumshoe.reliability-posture-test
                                                          'gumshoe.configmap-secrets-test
