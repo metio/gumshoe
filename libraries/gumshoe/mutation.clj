@@ -29,7 +29,8 @@
       :verify   (fn [ctx] -> seq of post-check maps)   ; optional
       :derive   (fn [ctx] -> map)   ; optional, values merged into ctx once so a
                                     ; per-run value is shared by :effect and :verify
-      :items    (fn [ctx] -> seq)}  ; optional, overrides the confirmation items
+      :items    (fn [ctx] -> seq)   ; optional, overrides the confirmation items
+      :pin      (fn [ctx] -> {:type :name :namespace? :facts?})}  ; optional, see below
 
    The :precondition, :announce, :effect, :verify, :derive and :items callbacks
    each receive one context map, so a book destructures exactly what it needs:
@@ -38,13 +39,71 @@
    Three entry points, same spec: `book` is a standalone runbook; `run!` selects
    the subject and runs it, returning a boolean; `run-on!` runs against a subject
    already chosen, so a playbook picks once and drives many steps without
-   re-prompting."
+   re-prompting.
+
+   :pin names the object the change acts on. Its fingerprint is taken when the
+   confirmation is shown and taken again right before the effect; when the
+   object was replaced (another uid) or its spec changed (another generation),
+   the change is refused, because the operator confirmed an object that no
+   longer exists in that form. Status and metadata updates leave the
+   generation alone, so a controller reporting progress does not trip it. An
+   object without a generation is compared by resourceVersion. A change that
+   rests on something outside the spec - an annotation, a status field - names
+   it with :facts (fn [object] -> value), which must be equal too."
   (:require [gumshoe.flow :as flow]
             [gumshoe.select :as select]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.announce :as announce]
             [gumshoe.runbook :as runbook]
             [gumshoe.stdout :as stdout]))
+
+;; --- the confirmed object --------------------------------------------------------
+
+(defn fingerprint
+  "What identifies the object the operator confirmed: its uid, its generation
+   or, for a type without one, its resourceVersion, and the value of facts
+   when given."
+  ([object] (fingerprint object nil))
+  ([object facts]
+   (when object
+     (let [{:keys [uid generation resourceVersion]} (:metadata object)]
+       (cond-> (if generation
+                 {:uid uid :generation generation}
+                 {:uid uid :resource-version resourceVersion})
+         facts (assoc :facts (facts object)))))))
+
+(defn drift
+  "Why the object no longer is the one confirmed, or nil."
+  [before after]
+  (cond
+    (nil? before) nil
+    (nil? after) "it was deleted after the confirmation"
+    (not= (:uid before) (:uid after)) "it was deleted and created again after the confirmation"
+    (and (:generation before) (not= (:generation before) (:generation after)))
+    (format "its spec changed after the confirmation (generation %s, now %s)" (:generation before) (:generation after))
+    (and (:resource-version before) (not= (:resource-version before) (:resource-version after)))
+    "it changed after the confirmation"
+    (not= (:facts before) (:facts after))
+    (format "what the change rests on moved after the confirmation (%s, now %s)" (pr-str (:facts before)) (pr-str (:facts after)))
+    :else nil))
+
+(defn fetch-pinned
+  [context {:keys [type namespace name]}]
+  (if namespace
+    (kubectl/get-namespaced-resource context namespace type name)
+    (kubectl/get-cluster-resource context type name)))
+
+(defn pinned-precondition
+  "The book's precondition followed by the drift check. fetch is
+   (fn [ref] -> object); before is the fingerprint taken at confirmation."
+  [precondition ref before fetch]
+  (if-not ref
+    precondition
+    (fn []
+      (and (if precondition (precondition) true)
+           (let [why (drift before (fingerprint (fetch ref) (:facts ref)))]
+             (when why (println (str "refusing: " why)))
+             (nil? why))))))
 
 (defn run-on!
   "Runs a mutation spec against an ALREADY-CHOSEN `target`, skipping the spec's own
@@ -62,13 +121,16 @@
         base {:context context :cluster cluster :target target
               :opts opts :announcement-data announcement-data}
         ctx (merge base (when derive (derive base)))
+        ref (when-let [pin (:pin spec)] (pin ctx))
+        before (when ref (fingerprint (fetch-pinned context ref) (:facts ref)))
         items-fn (:items spec)]
     (flow/change!
      {:confirmation {:action (:action confirm)
                      :target cluster
                      :items (if items-fn (items-fn ctx) (select/items (:mode select) target))
                      :destructive? (:destructive? confirm)}
-      :precondition (when precondition #(precondition ctx))
+      :precondition (pinned-precondition (when precondition #(precondition ctx))
+                                         ref before #(fetch-pinned context %))
       :announce! (when announce
                    #(announce/announce! cluster announcement-data (announce ctx)))
       :effect (effect ctx)

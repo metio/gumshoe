@@ -23,6 +23,7 @@
                    [gumshoe.spec-test]
                    [gumshoe.conformance-test]
                    [gumshoe.detectives-test]
+                   [gumshoe.mutation-pin-test]
                    [gumshoe.deletion-test]
                    [gumshoe.workloads-ops-test]
                    [gumshoe.posture-test]
@@ -134,6 +135,7 @@
                                                          'gumshoe.spec-test
                                                          'gumshoe.conformance-test
                                                          'gumshoe.detectives-test
+                                                         'gumshoe.mutation-pin-test
                                                          'gumshoe.deletion-test
                                                          'gumshoe.workloads-ops-test
                                                          'gumshoe.posture-test

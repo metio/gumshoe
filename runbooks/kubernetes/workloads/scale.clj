@@ -47,6 +47,7 @@
            (if (and pick before (integer? replicas))
              (workloads/scale-items (:kind pick) before replicas)
              ["scale a workload"]))
+  :pin :pick
   :precondition (fn [{:keys [context pick replicas]}]
                   (let [why (refusal context pick replicas)]
                     (when why (println (str "refusing: " why)))

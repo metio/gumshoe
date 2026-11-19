@@ -33,6 +33,7 @@
                :timestamp (str (.truncatedTo (java.time.Instant/now) java.time.temporal.ChronoUnit/SECONDS))}))
   :items (fn [{:keys [pick resource target]}]
            (if resource (flux/suspend-items (:kind pick) resource false) [(str "resume " target)]))
+  :pin :pick
   :precondition (fn [{:keys [context pick]}]
                   (let [why (if pick
                               (flux/suspend-refusal (fetch context pick) false)

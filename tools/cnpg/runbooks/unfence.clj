@@ -27,6 +27,9 @@
   :confirm {:action "lift the fence - the operator takes the instance back into service"
             :destructive? true}
   :derive (fn [{:keys [target]}] {:pick (operations/parse-pick target)})
+  :pin (fn [{:keys [pick]}]
+         (when pick {:type cnpg/cluster-type :namespace (:namespace pick) :name (:cluster pick)
+                     :facts operations/fenced}))
   :precondition (fn [{:keys [context pick]}]
                   (let [why (if pick
                               (operations/unfence-refusal (fetch context pick) (:instance pick))

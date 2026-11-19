@@ -34,6 +34,7 @@
   :derive (fn [{:keys [context target]}] {:cronjob (fetch context target)})
   :items (fn [{:keys [cronjob target]}]
            (if cronjob (workloads/suspend-items cronjob true) [(str "suspend " target)]))
+  :pin (fn [{:keys [target]}] (assoc (kubectl/split-namespace-name target) :type "cronjobs"))
   :precondition (fn [{:keys [context target]}]
                   (let [why (workloads/suspend-refusal (fetch context target) true)]
                     (when why (println (str "refusing: " why)))

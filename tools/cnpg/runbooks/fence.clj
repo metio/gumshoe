@@ -27,6 +27,9 @@
   :confirm {:action "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes"
             :destructive? true}
   :derive (fn [{:keys [target]}] {:pick (operations/parse-pick target)})
+  :pin (fn [{:keys [pick]}]
+         (when pick {:type cnpg/cluster-type :namespace (:namespace pick) :name (:cluster pick)
+                     :facts operations/fenced}))
   :precondition (fn [{:keys [context pick]}]
                   (let [why (if pick
                               (operations/fence-refusal (fetch context pick) (:instance pick))

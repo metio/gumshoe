@@ -50,6 +50,7 @@
            (if target-revision
              (workloads/rollback-items deployment replicasets to)
              [(format "roll %s back" target)]))
+  :pin :pick
   :precondition (fn [{:keys [context pick to]}]
                   (let [why (if pick
                               (workloads/rollback-refusal (fetch context pick) (replicasets context pick) to)

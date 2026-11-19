@@ -45,6 +45,7 @@
                  :dependents (deletion/dependents pick (evidence context pick))})))
   :items (fn [{:keys [target dry-run dependents]}]
            (if dry-run (deletion/deletion-items target dry-run dependents) [(str "delete " target)]))
+  :pin :pick
   :precondition (fn [{:keys [context pick dry-run]}]
                   (let [why (cond
                               (nil? pick) (str "the pick is not \"<type> <namespace>/<name>\" of " (str/join ", " deletion/types))

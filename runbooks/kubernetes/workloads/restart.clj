@@ -30,6 +30,7 @@
   :confirm {:action (str "restart every pod of the workload, one batch at a time as its update strategy allows - "
                          "a workload with a single replica is unavailable while its pod restarts")}
   :derive (fn [{:keys [target]}] {:pick (workloads/parse-pick target)})
+  :pin :pick
   :precondition (fn [{:keys [context pick]}]
                   (let [why (if pick
                               (workloads/restart-refusal (:kind pick) (fetch context pick))

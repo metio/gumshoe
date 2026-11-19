@@ -28,6 +28,9 @@
                          "of the -rw Service lose their connections and must reconnect")
             :destructive? true}
   :derive (fn [{:keys [target]}] {:pick (operations/parse-pick target)})
+  :pin (fn [{:keys [pick]}]
+         (when pick {:type cnpg/cluster-type :namespace (:namespace pick) :name (:cluster pick)
+                     :facts #(select-keys (:status %) [:currentPrimary :targetPrimary])}))
   :precondition (fn [{:keys [context pick]}]
                   (let [why (if pick
                               (operations/switchover-refusal (fetch context pick) (:instance pick))
