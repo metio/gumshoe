@@ -103,6 +103,72 @@
        :summary (format "%s with %d replicas has no PodDisruptionBudget" kind (replicas workload))
        :hint "a node drain may evict all of its pods at once - add a PodDisruptionBudget with maxUnavailable: 1"})))
 
+;; --- rollout capacity -------------------------------------------------------------
+
+(defn- resolve-int-or-percent
+  "A rolling-update bound as a pod count: an integer as is, a percentage of
+   replicas rounded up for maxSurge and down for maxUnavailable, as the
+   Deployment controller does."
+  [value replicas round-up?]
+  (cond
+    (integer? value) value
+    (and (string? value) (re-matches #"\d+%" value))
+    (let [exact (/ (* replicas (parse-long (subs value 0 (dec (count value))))) 100)]
+      (long (if round-up? (Math/ceil exact) (Math/floor exact))))
+    :else nil))
+
+(defn rolling-update-bounds
+  "{:surge :unavailable} for a Deployment's rolling update, defaults 25%
+   each, or nil for the Recreate strategy."
+  [deployment]
+  (let [strategy (-> deployment :spec :strategy)
+        n (replicas deployment)]
+    (when (not= "Recreate" (:type strategy))
+      (let [{:keys [maxSurge maxUnavailable]} (:rollingUpdate strategy)
+            surge (resolve-int-or-percent (if (some? maxSurge) maxSurge "25%") n true)
+            unavailable (resolve-int-or-percent (if (some? maxUnavailable) maxUnavailable "25%") n false)]
+        ;; the controller lets one pod go when both resolve to zero
+        {:surge surge :unavailable (if (and (= 0 surge) (= 0 unavailable)) 1 unavailable)}))))
+
+(defn detect-rollouts-without-capacity
+  [evidence]
+  (for [deployment (kubectl/items-of (get evidence "deployments"))
+        :let [n (replicas deployment)
+              {:keys [surge unavailable]} (rolling-update-bounds deployment)]
+        :when (and (pos? n) surge unavailable (= 0 surge) (>= unavailable n))]
+    {:severity :warning
+     :component (kubectl/namespace-name-of deployment)
+     :summary (format "Deployment's rolling update may take all %d pod(s) down at once (maxSurge 0, maxUnavailable %d)" n unavailable)
+     :hint "no new pod starts before old ones stop - allow a surge or lower maxUnavailable below the replica count"}))
+
+;; --- replicas on one node ------------------------------------------------------------
+
+(defn- ready-pod?
+  [pod]
+  (and (= "Running" (-> pod :status :phase))
+       (nil? (-> pod :metadata :deletionTimestamp))
+       (some #(and (= "Ready" (:type %)) (= "True" (:status %))) (-> pod :status :conditions))))
+
+(defn- schedulable-nodes
+  [nodes]
+  (remove #(true? (-> % :spec :unschedulable)) (kubectl/items-of nodes)))
+
+(defn detect-replicas-on-one-node
+  [evidence]
+  (when (< 1 (count (schedulable-nodes (get evidence "nodes"))))
+    (let [wanted (set (for [{:keys [kind workload]} (templates evidence replicated-types)
+                            :when (< 1 (replicas workload))]
+                        [(kubectl/namespace-of workload) (str kind "/" (kubectl/name-of workload))]))]
+      (for [[[namespace workload] pods] (sort-by key (group-by (juxt kubectl/namespace-of kubectl/workload-of)
+                                                               (filter ready-pod? (kubectl/items-of (get evidence "pods")))))
+            :when (contains? wanted [namespace workload])
+            :let [nodes (distinct (map #(-> % :spec :nodeName) pods))]
+            :when (and (< 1 (count pods)) (= 1 (count nodes)))]
+        {:severity :warning
+         :component (str namespace "/" (subs workload (inc (str/index-of workload "/"))))
+         :summary (format "%s runs all %d ready replicas on node %s" (first (str/split workload #"/")) (count pods) (first nodes))
+         :hint "one node failure or drain takes every replica down - add a topologySpreadConstraint or podAntiAffinity on kubernetes.io/hostname"}))))
+
 ;; --- container hardening ---------------------------------------------------------
 
 (defn- hardening-specs
@@ -165,6 +231,46 @@
        :component (kubectl/namespace-name-of workload)
        :summary (format "%s mounts the default ServiceAccount's token" kind)
        :hint "a workload on the default account rarely talks to the API, yet anyone inside it can - set automountServiceAccountToken: false on the pod or the account"})))
+
+;; --- requests and limits -------------------------------------------------------------
+
+(defn- limit-range-defaults
+  "The resources a namespace's LimitRanges give containers by default, as
+   #{[namespace :requests :cpu] ...}. A LimitRange's default limit also
+   becomes the request when no default request is set."
+  [limitranges]
+  (set (for [range (kubectl/items-of limitranges)
+             limit (-> range :spec :limits)
+             :when (= "Container" (:type limit))
+             [kind source] [[:requests (merge (:default limit) (:defaultRequest limit))] [:limits (:default limit)]]
+             resource (keys source)]
+         [(kubectl/namespace-of range) kind resource])))
+
+(defn missing-resources
+  "What a container leaves unset: CPU and memory requests, and the memory
+   limit. A CPU limit is left out on purpose - throttling a container that
+   could use idle CPU is a choice, not a gap."
+  [container namespace defaults]
+  (let [has? (fn [kind resource] (or (some? (get-in container [:resources kind resource]))
+                                     (contains? defaults [namespace kind resource])))]
+    (cond-> []
+      (not (has? :requests :cpu)) (conj "cpu request")
+      (not (has? :requests :memory)) (conj "memory request")
+      (not (has? :limits :memory)) (conj "memory limit"))))
+
+(defn detect-missing-resources
+  [evidence]
+  (let [defaults (limit-range-defaults (get evidence "limitranges"))]
+    (for [[kind workload spec] (hardening-specs evidence)
+          :let [gaps (for [container (containers-of spec)
+                           :let [missing (missing-resources container (kubectl/namespace-of workload) defaults)]
+                           :when (seq missing)]
+                       (format "%s (%s)" (:name container) (str/join ", " missing)))]
+          :when (seq gaps)]
+      {:severity :info
+       :component (kubectl/namespace-name-of workload)
+       :summary (format "%s containers lack resource settings: %s" kind (str/join "; " gaps))
+       :hint "without requests the scheduler packs pods blind and they are evicted first; without a memory limit one leak can starve the node"})))
 
 ;; --- secrets in ConfigMaps -------------------------------------------------------
 
@@ -270,6 +376,18 @@
     :description "Replicated Deployments and StatefulSets no PodDisruptionBudget covers"
     :requires ["deployments" "statefulsets" "poddisruptionbudgets"]
     :detect detect-unprotected-workloads}
+   {:name "rollouts-without-capacity"
+    :description "Deployments whose rolling update may take every pod down at once"
+    :requires ["deployments"]
+    :detect detect-rollouts-without-capacity}
+   {:name "replicas-on-one-node"
+    :description "Replicated workloads whose ready pods all run on one node of several"
+    :requires ["deployments" "statefulsets" "pods" "nodes"]
+    :detect detect-replicas-on-one-node}
+   {:name "missing-resources"
+    :description "Containers without CPU or memory requests or a memory limit"
+    :requires ["deployments" "statefulsets" "daemonsets" "cronjobs" "limitranges"]
+    :detect detect-missing-resources}
    {:name "root-containers"
     :description "Workloads whose containers may run as root"
     :requires ["deployments" "statefulsets" "daemonsets" "cronjobs"]

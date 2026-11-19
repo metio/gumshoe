@@ -25,6 +25,7 @@
                    [gumshoe.spec-test]
                    [gumshoe.conformance-test]
                    [gumshoe.detectives-test]
+                   [gumshoe.reliability-posture-test]
                    [gumshoe.configmap-secrets-test]
                    [gumshoe.hardening-test]
                    [gumshoe.isolated-services-test]
@@ -142,6 +143,7 @@
                                                          'gumshoe.spec-test
                                                          'gumshoe.conformance-test
                                                          'gumshoe.detectives-test
+                                                         'gumshoe.reliability-posture-test
                                                          'gumshoe.configmap-secrets-test
                                                          'gumshoe.hardening-test
                                                          'gumshoe.isolated-services-test
