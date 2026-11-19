@@ -1,0 +1,9 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The Strimzi tool package. A casebook depends on it by subpath:
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/strimzi"}}}
+;; and lists gumshoe.tools.strimzi under env.edn :plugins to fill the :messaging
+;; scope and teach the wizard the :strimzi capability.
+{:paths ["libraries" "runbooks"]
+ :deps {io.github.metio/gumshoe-core {:local/root "../.."}}}
