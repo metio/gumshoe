@@ -137,6 +137,8 @@
     :book "tools/karpenter/runbooks/scan.clj"}
    {:label "📨 Messaging - Strimzi Kafka clusters, connectors, topics and users"
     :book "tools/strimzi/runbooks/scan.clj"}
+   {:label "🧮 Batch - Kueue queues and Workloads"
+    :book "tools/kueue/runbooks/scan.clj"}
    {:label "💾 Backups - Velero storage, schedules, backups and restores"
     :book "tools/velero/runbooks/scan.clj"}
    {:label "🔒 TLS - cert-manager certificates and ACME orders"

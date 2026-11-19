@@ -230,6 +230,7 @@ bb tools/gateway/runbooks/scan.clj        # Gateways, listeners, HTTPRoutes
 bb tools/external-dns/runbooks/scan.clj   # declared hostnames resolve
 bb tools/karpenter/runbooks/scan.clj      # Karpenter NodePools, NodeClaims
 bb tools/strimzi/runbooks/scan.clj        # Strimzi Kafka, Connect, connectors, topics
+bb tools/kueue/runbooks/scan.clj          # Kueue queues, Workloads
 bb tools/velero/runbooks/scan.clj         # Velero storage, schedules, backups, restores
 bb tools/calico/runbooks/scan.clj         # tigera-operator components
 bb tools/cnpg/runbooks/scan.clj           # CloudNativePG clusters, WAL archiving
