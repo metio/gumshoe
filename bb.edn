@@ -6,6 +6,8 @@
  {gumshoe {:doc "The guided front door - menu, lead shortcut, or fuzzy book search"
            :requires ([gumshoe.main :as main])
            :task (System/exit (main/front-door *command-line-args*))}
+  smoke-runbooks {:doc "Runs the remediation runbooks against the current kind cluster"
+                  :task (shell "tests/smoke/runbooks.sh")}
   test {:doc "Runs all unit tests"
         :extra-paths ["tests" "examples" "tools/flux/tests" "tools/ceph/tests" "tools/certmanager/tests" "tools/gateway/tests" "tools/cnpg/tests" "tools/stageset/tests" "tools/jaas/tests" "tools/prometheus/tests" "tools/calico/tests" "tools/opennebula/tests" "tools/upload/tests" "tools/matrix/tests" "tools/restic/tests" "tools/thanos/tests" "tools/loki/tests" "tools/db-operator/tests" "tools/external-dns/tests"]
         :requires ([clojure.test :as test]

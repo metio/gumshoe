@@ -494,6 +494,16 @@ option aliases.
 bb test
 ```
 
+The remediation runbooks also have a smoke test that runs them against a kind
+cluster and checks what each leaves behind: the change when it was confirmed,
+nothing when it was refused or declined. It refuses any context that is not a
+kind cluster.
+
+```shell
+kind create cluster --name gumshoe
+bb smoke-runbooks
+```
+
 ## How books are written
 
 Most books are *data*, not code. There are three declarative forms, all held to
