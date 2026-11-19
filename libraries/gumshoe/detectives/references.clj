@@ -74,7 +74,7 @@
                        :component component
                        :summary (format "IngressClass %s does not exist" class)
                        :hint "no ingress controller picks this Ingress up"}]))]
-      (assoc finding :subject (subject/subject "Ingress" namespace (kubectl/name-of ingress))))))
+      (assoc finding :subject (subject/subject "Ingress" namespace (kubectl/name-of ingress)) :cause true))))
 
 ;; --- pod templates ------------------------------------------------------------
 
@@ -150,7 +150,9 @@
     (for [[type kind path] template-types
           workload (kubectl/items-of (get evidence type))
           finding (template-findings kind workload (get-in workload path) context)]
-      (assoc finding :subject (subject/subject kind (kubectl/namespace-of workload) (kubectl/name-of workload))))))
+      (assoc finding
+             :subject (subject/subject kind (kubectl/namespace-of workload) (kubectl/name-of workload))
+             :cause true))))
 
 ;; --- storage ------------------------------------------------------------------
 
@@ -163,6 +165,8 @@
             :when (and (seq class) (not (contains? classes class)))]
         {:severity (if (= "Pending" (-> claim :status :phase)) :critical :info)
          :component (kubectl/namespace-name-of claim)
+         :subject (subject/subject "PersistentVolumeClaim" (kubectl/namespace-of claim) (kubectl/name-of claim))
+         :cause true
          :summary (format "PersistentVolumeClaim uses StorageClass %s, which does not exist" class)
          :hint (if (= "Pending" (-> claim :status :phase))
                  "no provisioner will create its volume - point it at an existing StorageClass"
@@ -207,6 +211,27 @@
                  "failurePolicy Fail - every request the webhook matches is refused; restore the Service or delete the configuration"
                  "failurePolicy Ignore - requests pass unchecked while the Service is missing")}))))
 
+;; --- autoscaler targets -----------------------------------------------------------------
+
+(def ^:private scalable-targets
+  {"Deployment" "deployments" "StatefulSet" "statefulsets"})
+
+(defn detect-hpa-target-references
+  [evidence]
+  (for [hpa (kubectl/items-of (get evidence "horizontalpodautoscalers"))
+        :let [{:keys [kind name]} (-> hpa :spec :scaleTargetRef)
+              type (scalable-targets kind)]
+        :when (and type name (get evidence type))
+        :let [namespace (kubectl/namespace-of hpa)]
+        :when (not-any? #(and (= namespace (kubectl/namespace-of %)) (= name (kubectl/name-of %)))
+                        (kubectl/items-of (get evidence type)))]
+    {:severity :critical
+     :component (kubectl/namespace-name-of hpa)
+     :subject (subject/subject "HorizontalPodAutoscaler" namespace (kubectl/name-of hpa))
+     :cause true
+     :summary (format "HorizontalPodAutoscaler targets %s %s, which does not exist" kind name)
+     :hint "nothing is scaled - fix scaleTargetRef or delete the autoscaler"}))
+
 (def detectives
   [{:name "ingress-references"
     :description "Ingresses pointing at missing Services, ports, TLS Secrets or IngressClasses"
@@ -220,7 +245,11 @@
    {:name "storageclass-references"
     :description "PersistentVolumeClaims using a StorageClass that does not exist"
     :requires ["persistentvolumeclaims" "storageclasses"]
-    :detect detect-storage-class-references}])
+    :detect detect-storage-class-references}
+   {:name "hpa-target-references"
+    :description "HorizontalPodAutoscalers whose scale target does not exist"
+    :requires ["horizontalpodautoscalers" "deployments" "statefulsets"]
+    :detect detect-hpa-target-references}])
 
 (def security-detectives
   [{:name "role-references"

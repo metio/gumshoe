@@ -4,9 +4,11 @@
 (ns gumshoe.detectives.events
   "Detective for cluster signals: Warning events from the last hour, grouped
    so a flapping component shows up once with a count instead of a hundred
-   times."
+   times. Each finding names the object the events are about, so a symptom
+   folds under the finding that explains it."
   (:require [clojure.string :as str]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.subject :as subject]))
 
 (def ^:private recent-window (java.time.Duration/ofHours 1))
 
@@ -34,13 +36,15 @@
   (let [now (:now evidence)
         warnings (filter #(and (= "Warning" (:type %)) (recent? now %))
                          (kubectl/items-of (get evidence "events")))
-        grouped (group-by (juxt component-of :reason) warnings)]
-    (for [[[component reason] events] grouped
-          :let [total (reduce + (map #(or (:count %) 1) events))]]
-      {:severity :warning
-       :component component
-       :summary (format "%s seen %dx in the last hour" reason total)
-       :hint (truncate (:message (last events)) 120)})))
+        grouped (group-by (juxt #(-> % :involvedObject :kind) component-of :reason) warnings)]
+    (for [[[kind component reason] events] grouped
+          :let [total (reduce + (map #(or (:count %) 1) events))
+                object (:involvedObject (last events))]]
+      (cond-> {:severity :warning
+               :component component
+               :summary (format "%s seen %dx in the last hour" reason total)
+               :hint (truncate (:message (last events)) 120)}
+        (and kind (:name object)) (assoc :subject (subject/subject kind (:namespace object) (:name object)))))))
 
 (def detectives
   [{:name "events"

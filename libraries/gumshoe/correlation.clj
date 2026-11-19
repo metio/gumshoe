@@ -7,7 +7,12 @@
    pods that do not start; read side by side they look like several problems
    when they are one. A pod finding gets a :parent naming its workload, or
    failing that its node, when that object has a finding at least as severe -
-   so folding a child under its parent never hides a worse severity."
+   so folding a child under its parent never hides a worse severity.
+
+   A finding marked :cause (a reference to an object that does not exist,
+   say) explains the other findings about its own object: a claim that is
+   Pending because its StorageClass is missing, an autoscaler that cannot
+   scale a target that is gone. Those fold under it by the same severity rule."
   (:require [clojure.string :as str]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.subject :as subject]))
@@ -34,6 +39,19 @@
   [pod]
   (some->> pod :spec :nodeName (subject/subject "Node")))
 
+(defn- worst-cause-by-subject
+  [findings]
+  (worst-by-subject (filter :cause findings)))
+
+(defn cause-of
+  "The subject whose cause finding explains this finding, or nil. A cause is
+   never folded under another cause."
+  [finding causes]
+  (when-not (:cause finding)
+    (when-let [s (subject/from-finding finding)]
+      (when (<= (get causes s 4) (severity-rank (:severity finding) 3))
+        s))))
+
 (defn parent-of
   "The subject a pod finding follows from, or nil."
   [finding pods worst]
@@ -51,9 +69,10 @@
   [findings evidence]
   (let [pods (into {} (map (juxt (juxt kubectl/namespace-of kubectl/name-of) identity))
                    (kubectl/items-of (get evidence "pods")))
-        worst (worst-by-subject findings)]
+        worst (worst-by-subject findings)
+        causes (worst-cause-by-subject findings)]
     (mapv (fn [finding]
-            (if-let [parent (parent-of finding pods worst)]
+            (if-let [parent (or (parent-of finding pods worst) (cause-of finding causes))]
               (assoc finding :parent (subject/display parent))
               finding))
           findings)))
