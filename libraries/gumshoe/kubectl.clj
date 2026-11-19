@@ -369,6 +369,37 @@
     (when (zero? exit)
       (vec (remove str/blank? (str/split-lines (str out)))))))
 
+(defn parse-helm-listing
+  "Reads the tab-separated lines of helm-releases into maps, one per release
+   revision."
+  [text]
+  (vec (for [line (str/split-lines (str text))
+             :let [[namespace release status version modified created created-at] (str/split line #"\t" -1)]
+             :when (and (seq namespace) (seq release) (seq status))]
+         {:namespace namespace :release release :status status
+          :version (some-> version not-empty parse-long)
+          :modified-at (some-> modified not-empty parse-long)
+          :created-at (some-> created not-empty parse-long)
+          :creation-timestamp (not-empty created-at)})))
+
+(defn helm-releases
+  "Every revision Helm stores as a Secret, read from its labels, or nil when
+   they cannot be listed. The jsonpath selects metadata only, so the release
+   payload (rendered manifests and values, which may hold credentials) never
+   reaches gumshoe."
+  [context]
+  (let [{:keys [exit out]} (shell/execute "kubectl" (str "--context=" context) request-timeout
+                                          "get" "secrets" "--all-namespaces"
+                                          "--selector=owner=helm"
+                                          "--field-selector=type=helm.sh/release.v1"
+                                          (str "--output=jsonpath={range .items[*]}"
+                                               "{.metadata.namespace}{\"\\t\"}{.metadata.labels.name}{\"\\t\"}"
+                                               "{.metadata.labels.status}{\"\\t\"}{.metadata.labels.version}{\"\\t\"}"
+                                               "{.metadata.labels.modifiedAt}{\"\\t\"}{.metadata.labels.createdAt}{\"\\t\"}"
+                                               "{.metadata.creationTimestamp}{\"\\n\"}{end}"))]
+    (when (zero? exit)
+      (parse-helm-listing out))))
+
 (defn parse-tls-listing
   "Reads the tab-separated lines of tls-secrets into maps."
   [text]

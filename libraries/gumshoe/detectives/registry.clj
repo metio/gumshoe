@@ -17,6 +17,7 @@
             [gumshoe.detectives.events :as events]
             [gumshoe.detectives.evpn :as evpn]
             [gumshoe.detectives.expectations :as expectations]
+            [gumshoe.detectives.helm :as helm]
             [gumshoe.detectives.ipfamily :as ipfamily]
             [gumshoe.detectives.mail :as mail]
             [gumshoe.detectives.network :as network]
@@ -118,7 +119,9 @@
                      (fn [context _key] (some-> (kubectl/raw-text context "/metrics") posture/parse-deprecated-requests)))
 ;; TLS Secrets are read with their certificate only, never their private key.
 (register-collector! "tls-secrets" (fn [context _key] (kubectl/tls-secrets context)))
-(register! :workloads (concat controllers/detectives pods/detectives pod-creation/detectives pod-startup/detectives
+;; Helm releases are read from their Secrets' labels, never the release payload.
+(register-collector! "helm-releases" (fn [context _key] (kubectl/helm-releases context)))
+(register! :workloads (concat controllers/detectives helm/detectives pods/detectives pod-creation/detectives pod-startup/detectives
                               services/detectives storage/detectives terminating/detectives
                               references/detectives tls-secrets/detectives
                               disruption/detectives quotas/detectives capacity/detectives))
