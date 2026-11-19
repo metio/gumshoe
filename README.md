@@ -202,6 +202,7 @@ it. They compose from single domain to full cluster:
 bb runbooks/detectives/cluster.clj        # everything
 bb runbooks/detectives/workloads.clj      # controllers, jobs, pods, Services, storage
 bb runbooks/detectives/platform.clj       # nodes + calico
+bb runbooks/detectives/upgrade.clj        # before a minor upgrade
 bb runbooks/detectives/databases.clj      # CloudNativePG + db-operator
 bb runbooks/detectives/observability.clj  # Prometheus, Alertmanager, Thanos
 bb runbooks/detectives/events.clj         # Warning events, last hour

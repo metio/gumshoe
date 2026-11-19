@@ -115,6 +115,8 @@
     :book "runbooks/detectives/workloads.clj"}
    {:label "🧱 Platform - nodes, calico network, CSI storage layer"
     :book "runbooks/detectives/platform.clj"}
+   {:label "⏫ Upgrade readiness - removed APIs, webhooks, version skew, drain blockers"
+    :book "runbooks/detectives/upgrade.clj"}
    {:label "🔐 Security - RBAC, pod security, network policies"
     :book "runbooks/detectives/security.clj"}
    {:label "🧭 Posture - probes, image tags, replicas, disruption budgets, deprecated APIs"

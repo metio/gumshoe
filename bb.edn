@@ -26,6 +26,7 @@
                    [gumshoe.conformance-test]
                    [gumshoe.detectives-test]
                    [gumshoe.helm-releases-test]
+                   [gumshoe.upgrade-readiness-test]
                    [gumshoe.cause-folding-test]
                    [gumshoe.released-volumes-test]
                    [gumshoe.node-lifecycle-test]
@@ -156,6 +157,7 @@
                                                          'gumshoe.conformance-test
                                                          'gumshoe.detectives-test
                                                          'gumshoe.helm-releases-test
+                                                         'gumshoe.upgrade-readiness-test
                                                          'gumshoe.cause-folding-test
                                                          'gumshoe.released-volumes-test
                                                          'gumshoe.node-lifecycle-test

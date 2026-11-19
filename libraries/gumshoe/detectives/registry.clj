@@ -7,7 +7,8 @@
    detectives to a scope (or a brand new scope) with `register!`, and because a
    detective book resolves its scope when it runs (after plugins load), those
    plugin detectives join the scan with no change to the core."
-  (:require [gumshoe.apiversions :as apiversions]
+  (:require [cheshire.core :as cheshire]
+            [gumshoe.apiversions :as apiversions]
             [gumshoe.detectives.apiversions :as apiversions-detectives]
             [gumshoe.detectives.capacity :as capacity]
             [gumshoe.detectives.controlplane :as controlplane]
@@ -35,6 +36,7 @@
             [gumshoe.detectives.storage :as storage]
             [gumshoe.detectives.terminating :as terminating]
             [gumshoe.detectives.tls-secrets :as tls-secrets]
+            [gumshoe.detectives.upgrade :as upgrade]
             [gumshoe.detectives.workloads :as controllers]
             [gumshoe.kubectl :as kubectl]))
 
@@ -129,6 +131,21 @@
 (register! :security (concat rbac/detectives references/security-detectives pod-security/detectives
                              network/detectives))
 (register! :mail mail/detectives)
+;; The API server's /version document, for the skew checks.
+(register-collector! "server-version"
+                     (fn [context _key] (some-> (kubectl/raw-text context "/version") (cheshire/parse-string true))))
+(register! :platform upgrade/detectives)
+;; The :upgrade scope gathers what decides whether the next upgrade goes
+;; through: what the new version removes, what an upgrade recreates and drains,
+;; and which nodes it would leave outside the skew policy.
+(def upgrade-checks
+  #{"deprecated-api-requests" "deprecated-stored-versions" "version-drift" "api-services" "crd-health"
+    "webhook-references" "webhook-backends" "kubelet-skew" "kubelet-apiserver-skew" "pdbs" "node-removals"
+    "control-plane"})
+(register! :upgrade (filter #(upgrade-checks (:name %))
+                            (concat posture/detectives apiversions-detectives/detectives custom-resources/detectives
+                                    references/platform-detectives upgrade/detectives nodes/detectives
+                                    disruption/detectives controlplane/detectives)))
 (register! :posture posture/detectives)
 ;; the fabric detectives read evidence collected over ssh, so they contribute
 ;; nothing to a kubectl-only scan and simply stay silent there.
