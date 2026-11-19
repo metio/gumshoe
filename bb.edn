@@ -121,6 +121,7 @@
                    [gumshoe.postgres-test]
                    [gumshoe.progress-test]
                    [gumshoe.prometheus-test]
+                   [gumshoe.rightsizing-test]
                    [gumshoe.rbac-test]
                    [gumshoe.report-test]
                    [gumshoe.runbook-test]
@@ -253,6 +254,7 @@
                                                          'gumshoe.postgres-test
                                                          'gumshoe.progress-test
                                                          'gumshoe.prometheus-test
+                                                         'gumshoe.rightsizing-test
                                                          'gumshoe.rbac-test
                                                          'gumshoe.report-test
                                                          'gumshoe.secrets-test
