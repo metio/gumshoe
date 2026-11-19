@@ -166,6 +166,53 @@
        :summary (format "%s mounts the default ServiceAccount's token" kind)
        :hint "a workload on the default account rarely talks to the API, yet anyone inside it can - set automountServiceAccountToken: false on the pod or the account"})))
 
+;; --- secrets in ConfigMaps -------------------------------------------------------
+
+(def ^:private secret-key
+  #"(?i)(passw(or)?d|passwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential)")
+
+(defn- placeholder?
+  "Values a secret-sounding key holds when it is configuration, not a secret:
+   booleans, numbers and durations, references, paths, and empty strings."
+  [value]
+  (let [v (str/trim (str value))]
+    (or (str/blank? v)
+        (re-matches #"(?i)true|false|yes|no|on|off|none|null|changeme|<.*>|\*+" v)
+        (re-matches #"\d+(\.\d+)?\s*(ms|s|m|h|d|w)?" v)
+        (re-matches #"\$\{?[\w.-]+\}?|\{\{.*\}\}" v)
+        (str/starts-with? v "/")
+        (str/starts-with? v "file:"))))
+
+(defn secret-reasons
+  "Why a ConfigMap entry looks like a credential, or nil. Only the reason is
+   ever reported - never the value."
+  [key value]
+  (let [v (str value)]
+    (cond
+      (re-find #"-----BEGIN [A-Z ]*PRIVATE KEY-----" v) "a private key"
+      (re-find #"\bAKIA[0-9A-Z]{16}\b" v) "an AWS access key"
+      (re-find #"[a-zA-Z][a-zA-Z0-9+.-]*://[^/\s:@]+:[^/\s@]+@" v) "a URL with a password"
+      (and (re-find secret-key (name key)) (not (placeholder? v))) "a secret-sounding key with a value"
+      :else nil)))
+
+(def ^:private exempt-configmaps
+  "ConfigMaps the control plane publishes: certificates and public settings."
+  #{"kube-root-ca.crt" "extension-apiserver-authentication" "cluster-info"})
+
+(defn detect-configmap-secrets
+  [evidence]
+  (for [configmap (kubectl/items-of (get evidence "configmaps"))
+        :when (not (contains? pod-security/platform-namespaces (kubectl/namespace-of configmap)))
+        :when (not (contains? exempt-configmaps (kubectl/name-of configmap)))
+        :let [hits (sort-by first (keep (fn [[k v]] (when-let [why (secret-reasons k v)] [(name k) why]))
+                                        (:data configmap)))]
+        :when (seq hits)]
+    {:severity :warning
+     :component (kubectl/namespace-name-of configmap)
+     :summary (format "ConfigMap may hold credentials in %s" (str/join ", " (map first hits)))
+     :hint (str (str/join "; " (for [[k why] hits] (str k ": " why)))
+                " - anyone who can read ConfigMaps reads these; move them to a Secret and rotate them")}))
+
 ;; --- deprecated APIs ------------------------------------------------------------
 
 (defn parse-deprecated-requests
@@ -235,6 +282,10 @@
     :description "Workloads that mount the default ServiceAccount's token"
     :requires ["deployments" "statefulsets" "daemonsets" "cronjobs" "serviceaccounts"]
     :detect detect-default-account-tokens}
+   {:name "configmap-secrets"
+    :description "ConfigMaps whose entries look like credentials"
+    :requires ["configmaps"]
+    :detect detect-configmap-secrets}
    {:name "deprecated-api-requests"
     :description "Deprecated APIs that clients still request"
     :requires ["deprecated-api-requests"]
