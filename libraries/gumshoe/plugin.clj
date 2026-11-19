@@ -27,12 +27,26 @@
             [gumshoe.ui :as ui]
             [gumshoe.watch :as watch]))
 
+(defn tag-capabilities
+  "The manifest's detectives, each carrying the capabilities the same manifest
+   detects as :capabilities, unless it names its own. A tool package declares
+   its detectives and the capability they inspect side by side, so that pairing
+   is what ties a check to a cluster service; nothing has to be annotated by
+   hand. A manifest without capabilities leaves its detectives as they are."
+  [{:keys [detectives capabilities]}]
+  (let [caps (vec (sort (keys capabilities)))]
+    (into {}
+          (for [[scope ds] detectives]
+            [scope (if (seq caps)
+                     (mapv #(if (contains? % :capabilities) % (assoc % :capabilities caps)) ds)
+                     (vec ds))]))))
+
 (defn provide!
   "Registers everything a plugin contributes, from one manifest map. Every key is
    optional:
 
      :announcers    {:irc      (fn [announcer system data message] …)}  ; a change target
-     :detectives    {:workloads [detective …]}                          ; join a scan scope
+     :detectives    {:workloads [detective …]}                          ; join a scan scope, tagged with :capabilities
      :collectors    {\"cnpg-volume-stats\" (fn [context key] …)}           ; how a custom evidence key is read
      :capabilities  {:ceph     (fn [] boolean)}                         ; detect a cluster capability
      :tools         {\"amtool\" {:version-command […] :min-version \"…\"  ; a tool profile
@@ -55,11 +69,12 @@
                                         :perform  (fn [args] …)}}
 
    Order within the map does not matter; registrations are independent."
-  [{:keys [announcers detectives collectors capabilities tools summary-providers themes
+  [{:keys [announcers collectors capabilities tools summary-providers themes
            pre-hooks post-hooks secrets prerequisites probes kinds fetched-edges
-           resize-watchers resize-preflights ui facts report-formats effect-types]}]
+           resize-watchers resize-preflights ui facts report-formats effect-types]
+    :as manifest}]
   (doseq [[type f] announcers] (announce/register-announcer! type f))
-  (doseq [[scope ds] detectives] (detectives/register! scope ds))
+  (doseq [[scope ds] (tag-capabilities manifest)] (detectives/register! scope ds))
   (doseq [[key collect] collectors] (detectives/register-collector! key collect))
   (doseq [[cap f] capabilities] (capabilities/register-detector! cap f))
   (doseq [[binary profile] tools] (command/register-tool! binary profile))

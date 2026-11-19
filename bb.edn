@@ -27,6 +27,7 @@
                    [gumshoe.detectives-test]
                    [gumshoe.helm-releases-test]
                    [gumshoe.helm-rollback-test]
+                   [gumshoe.detective-capabilities-test]
                    [gumshoe.upgrade-readiness-test]
                    [gumshoe.cause-folding-test]
                    [gumshoe.released-volumes-test]
@@ -162,6 +163,7 @@
                                                          'gumshoe.detectives-test
                                                          'gumshoe.helm-releases-test
                                                          'gumshoe.helm-rollback-test
+                                                         'gumshoe.detective-capabilities-test
                                                          'gumshoe.upgrade-readiness-test
                                                          'gumshoe.cause-folding-test
                                                          'gumshoe.released-volumes-test

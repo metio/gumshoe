@@ -192,6 +192,11 @@ Every book behaves the same way:
   they work in scripts and cron.
 - Diagnostics go to stderr, results go to stdout - piping and redirecting always
   stays clean.
+- A check whose evidence all came back empty-handed - a CRD the cluster does
+  not serve, a read RBAC refuses - is reported as having read nothing, grouped
+  by the capability of the tool package it comes from, instead of being
+  counted as clean (`▸ 2 checks read nothing on this cluster - argocd (…)`).
+  The `json` and `edn` outputs mark it `:unread` in `:checked`.
 - On a live terminal, section rules and banners fill the terminal's width
   (clamped to 60-120 columns) and finding hints wrap under their text. Piped,
   redirected or recorded output keeps a fixed 80 columns and one line per hint,

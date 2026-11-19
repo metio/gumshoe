@@ -85,6 +85,36 @@
            detectives)
    evidence))
 
+(defn unread?
+  "Whether a detective read nothing: it requires evidence and every key of it
+   came back nil. A resource type the cluster does not serve, a read RBAC
+   refuses and a failed read all look the same here, so the detective's silence
+   says nothing about health. An empty list is a read, so a served type with no
+   objects does not count."
+  [{:keys [requires]} evidence]
+  (boolean (and (seq requires) (every? #(nil? (get evidence %)) requires))))
+
+(defn mark-unread
+  "The detectives, each that read nothing carrying :unread true, so a report
+   can tell a check that passed from one that had nothing to look at."
+  [detectives evidence]
+  (mapv #(cond-> % (unread? % evidence) (assoc :unread true)) detectives))
+
+(defn unread-line
+  "The line naming the checks that read nothing, grouped by the capability
+   their tool package inspects, or nil when every check read something."
+  [detectives]
+  (let [unread (filter :unread detectives)]
+    (when (seq unread)
+      (format "%d check%s read nothing on this cluster - %s; what they read is not served, not readable, or not gathered by this scan"
+              (count unread) (if (= 1 (count unread)) "" "s")
+              (str/join ", "
+                        (for [[caps ds] (sort-by (fn [[caps _]] [(empty? caps) (str caps)])
+                                                 (group-by #(vec (:capabilities %)) unread))]
+                          (format "%s (%s)"
+                                  (if (seq caps) (str/join "/" (map name caps)) "other")
+                                  (str/join ", " (map :name ds)))))))))
+
 (defn collect-evidence!
   "Fetches every resource type required by the given detectives exactly once,
    all types in parallel. A type the cluster does not know (missing CRD)
@@ -194,12 +224,15 @@
    the breadth of what was ruled out."
   [detectives findings]
   (let [noisy (set (map :detective findings))
-        clean (remove #(noisy (:name %)) detectives)]
+        quiet (remove #(noisy (:name %)) detectives)
+        clean (remove :unread quiet)]
     (when (seq clean)
       (println (str (stdout/green "✓")
                     (format " %d other check%s came back clean: "
                             (count clean) (if (= 1 (count clean)) "" "s"))
-                    (str/join ", " (map :name clean)))))))
+                    (str/join ", " (map :name clean)))))
+    (when-let [line (unread-line quiet)]
+      (println (str (theme/token :bullet) " " line)))))
 
 (defn print-report!
   "Tells the story of the investigation: findings grouped by area with the most
@@ -211,11 +244,13 @@
   (stdout/print-section "🔬 Findings")
   (if (empty? findings)
     (do
-      (doseq [{:keys [description]} detectives]
+      (doseq [{:keys [description]} (remove :unread detectives)]
         (println (str "  " (stdout/green "✓") " " description)))
       (stdout/print-section-marker)
-      (stdout/ok (format "no issues found - %d check%s passed"
-                         (count detectives) (if (= 1 (count detectives)) "" "s"))))
+      (let [passed (count (remove :unread detectives))]
+        (stdout/ok (format "no issues found - %d check%s passed" passed (if (= 1 passed) "" "s"))))
+      (when-let [line (unread-line detectives)]
+        (println (str (theme/token :bullet) " " line))))
     (do
       (let [children (correlation/children findings)]
         (doseq [[detective fs] (areas (remove :parent findings))]
@@ -234,9 +269,10 @@
 (defn- checked
   "The compact record of what ran, for machine-readable output: every
    detective's name and what it looks for, so a clean json/edn report still
-   proves its coverage."
+   proves its coverage, with the capabilities it inspects and whether it read
+   nothing."
   [detectives]
-  (mapv #(select-keys % [:name :description]) detectives))
+  (mapv #(select-keys % [:name :description :capabilities :unread]) detectives))
 
 (defn report!
   "Renders findings in the requested format (text, json, edn) to stdout, always
@@ -345,10 +381,9 @@
   ([context detectives]
    (investigate! context detectives {}))
   ([context detectives opts]
-   (report-and-offer! context
-                      detectives
-                      (run-detectives detectives (collect-evidence! context detectives))
-                      (:output opts "text"))))
+   (let [evidence (collect-evidence! context detectives)
+         detectives (mark-unread detectives evidence)]
+     (report-and-offer! context detectives (run-detectives detectives evidence) (:output opts "text")))))
 
 (defn no-detectives-message
   "Why a book found nothing to run. A scan with no detectives examines no
@@ -384,7 +419,7 @@
     :prerequisites prerequisites
     :announce? false
     :action (fn [opts _ctx]
-              (let [resolved (or detectives (registry/for-scope scope))]
+              (let [resolved (registry/with-capabilities (or detectives (registry/for-scope scope)))]
                 (if (empty? resolved)
                   (do (stdout/error (no-detectives-message scope)) false)
                   (do (when-to-run! when-to-run)

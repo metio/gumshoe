@@ -72,6 +72,17 @@
       (vec (remove #(opt-in (:name %)) (all))))
     (vec (get @registry scope []))))
 
+(defn with-capabilities
+  "detectives, each taking the :capabilities its registered namesake carries
+   when it names none itself. A book that lists a package's detectives directly
+   holds the untagged vector; the registry holds the tagged one."
+  [detectives]
+  (let [by-name (into {} (keep #(when (:capabilities %) [(:name %) (:capabilities %)])) (all))]
+    (mapv #(if-let [caps (and (not (contains? % :capabilities)) (by-name (:name %)))]
+             (assoc % :capabilities caps)
+             %)
+          detectives)))
+
 ;; --- evidence collectors ----------------------------------------------------
 
 (defn- get-all-collector
