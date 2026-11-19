@@ -36,8 +36,8 @@
          {:confirmation {:action "attach a netshoot debug container to a running pod"
                          :target cluster
                          :items [target]}
-          :effect (effect/plan (effect/kubectl context "netshoot" "debug" name
-                                               "--namespace" namespace))})))))
+          :effect (effect/plan (effect/kubectl-plugin context "netshoot" "debug" name
+                                                      "--namespace" namespace))})))))
 
 (runbook/execute!
  {:description "Starts an interactive netshoot debug session next to a running pod"

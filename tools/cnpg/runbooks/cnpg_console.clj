@@ -98,7 +98,7 @@
   (effect/plan
    (effect/note (format "promoting %s discards any WAL the other instances received beyond it"
                         instance))
-   (effect/kubectl context "cnpg" "promote" (str "--namespace=" namespace) cluster instance)))
+   (effect/kubectl-plugin context "cnpg" "promote" (str "--namespace=" namespace) cluster instance)))
 
 (defn- promote!
   [context namespace cluster instance proposal]

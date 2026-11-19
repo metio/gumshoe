@@ -33,7 +33,7 @@
        {:confirmation {:action "start a privileged netshoot debug pod on a node"
                        :target cluster
                        :items [node]}
-        :effect (effect/plan (effect/kubectl context "netshoot" "debug" (str "node/" node)))}))))
+        :effect (effect/plan (effect/kubectl-plugin context "netshoot" "debug" (str "node/" node)))}))))
 
 (runbook/execute!
  {:description "Starts an interactive netshoot debug session on a node"

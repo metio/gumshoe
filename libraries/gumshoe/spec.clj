@@ -36,7 +36,7 @@
 (def effect-ops
   "Every operation the effect interpreter knows. A plan carrying any other op
    would fail at run time, so the set is the contract."
-  #{:kubectl :kubectl-stdin :ssh :cmd :note})
+  #{:kubectl :kubectl-plugin :kubectl-stdin :ssh :cmd :note})
 
 (s/def ::effect (s/and vector? (s/cat :op effect-ops :args (s/* any?))))
 (s/def ::plan (s/and sequential? (s/coll-of ::effect)))

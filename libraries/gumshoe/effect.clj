@@ -23,6 +23,19 @@
   [context & args]
   (into [:kubectl context] (vec args)))
 
+(defn kubectl-plugin
+  "A kubectl plugin command, e.g. (kubectl-plugin ctx \"cnpg\" \"promote\" ...).
+   kubectl refuses any flag before a plugin's name and hands everything after
+   it to the plugin, so the context goes last and the plugin must accept
+   --context itself."
+  [context plugin & args]
+  (into [:kubectl-plugin context plugin] (vec args)))
+
+(defn kubectl-plugin-args
+  "The kubectl arguments a :kubectl-plugin effect runs."
+  [context plugin args]
+  (into [plugin] (concat args [(str "--context=" context)])))
+
 (defn kubectl-stdin
   "A kubectl command fed a string on stdin (apply/replace from a manifest)."
   [context stdin & args]
@@ -76,6 +89,8 @@
   (case op
     :kubectl (str "kubectl " (str/join " " (rest args)))
     :kubectl-stdin (str "kubectl " (str/join " " (drop 2 args)) " (with stdin)")
+    :kubectl-plugin (let [[context plugin & pargs] args]
+                      (str "kubectl " (str/join " " (kubectl-plugin-args context plugin pargs))))
     ;; Render the same user@host target perform! connects to, so a --dry-run
     ;; preview an operator copies runs as the same identity, not their default.
     :ssh (let [[connection & command] args]
@@ -95,6 +110,8 @@
   (case op
     :kubectl (let [[context & kargs] args]
                (zero? (apply shell/run-with-output "kubectl" (str "--context=" context) kargs)))
+    :kubectl-plugin (let [[context plugin & pargs] args]
+                      (zero? (apply shell/run-with-output "kubectl" (kubectl-plugin-args context plugin pargs))))
     :kubectl-stdin (let [[context stdin & kargs] args
                          result (apply shell/execute-with-stdin stdin
                                        "kubectl" (str "--context=" context) kargs)]
