@@ -133,6 +133,11 @@
   [(str "--namespace=" namespace) "scale" (str (str/replace type #"s$" "") "/" name) (str "--replicas=" replicas)])
 
 ;; --- rollback ------------------------------------------------------------------
+;; A Deployment keeps its revisions in the ReplicaSets it owns, numbered by an
+;; annotation that follows the Deployment's own. A StatefulSet or DaemonSet keeps
+;; them in ControllerRevisions, whose data holds the pod template; a rollback
+;; renumbers the revision it restores to the highest, so the current revision is
+;; always the highest one.
 
 (def ^:private revision-annotation :deployment.kubernetes.io/revision)
 
@@ -144,71 +149,95 @@
   [template]
   (mapv :image (-> template :spec :containers)))
 
+(def history-types
+  "Where each kind keeps its revisions."
+  {"Deployment" "replicasets" "StatefulSet" "controllerrevisions" "DaemonSet" "controllerrevisions"})
+
+(defn- owned-by?
+  [kind workload object]
+  (and (= (kubectl/namespace-of object) (kubectl/namespace-of workload))
+       (some #(and (= kind (:kind %))
+                   (if-let [uid (-> workload :metadata :uid)]
+                     (= uid (:uid %))
+                     (= (kubectl/name-of workload) (:name %))))
+             (-> object :metadata :ownerReferences))))
+
 (defn revisions
-  "The revisions of a Deployment, newest first, read from the ReplicaSets it
-   owns: {:revision :replicaset :images}."
-  [deployment replicasets]
-  (->> (kubectl/items-of replicasets)
-       (filter (fn [rs]
-                 (and (= (kubectl/namespace-of rs) (kubectl/namespace-of deployment))
-                      (some #(and (= "Deployment" (:kind %))
-                                  (if-let [uid (-> deployment :metadata :uid)]
-                                    (= uid (:uid %))
-                                    (= (kubectl/name-of deployment) (:name %))))
-                            (-> rs :metadata :ownerReferences)))))
-       (keep (fn [rs] (when-let [revision (revision-of rs)]
-                        {:revision revision :replicaset (kubectl/name-of rs) :images (images-of (-> rs :spec :template))})))
+  "The revisions of a workload, newest first, read from its history (the
+   ReplicaSets of a Deployment, the ControllerRevisions of a StatefulSet or
+   DaemonSet): {:revision :source :images}."
+  [kind workload history]
+  (->> (kubectl/items-of history)
+       (filter #(owned-by? kind workload %))
+       (keep (fn [object]
+               (let [[revision template] (if (= "Deployment" kind)
+                                           [(revision-of object) (-> object :spec :template)]
+                                           [(:revision object) (-> object :data :spec :template)])]
+                 (when revision
+                   {:revision revision :source (kubectl/name-of object) :images (images-of template)}))))
        (sort-by (comp - :revision))
        vec))
 
 (defn current-revision
-  [deployment]
-  (revision-of deployment))
+  [kind workload history]
+  (if (= "Deployment" kind)
+    (revision-of workload)
+    (:revision (first (revisions kind workload history)))))
 
 (defn rollback-target
   "The revision a rollback goes to: to-revision when given, else the newest
    one older than the current revision."
-  [deployment replicasets to-revision]
-  (let [current (current-revision deployment)
-        all (revisions deployment replicasets)]
+  [kind workload history to-revision]
+  (let [current (current-revision kind workload history)
+        all (revisions kind workload history)]
     (if to-revision
       (first (filter #(= to-revision (:revision %)) all))
       (first (filter #(and current (< (:revision %) current)) all)))))
 
 (defn rollback-refusal
-  [deployment replicasets to-revision]
-  (let [current (when deployment (current-revision deployment))]
+  [kind workload history to-revision]
+  (let [current (when workload (current-revision kind workload history))
+        strategy (-> workload :spec :updateStrategy)
+        partition (or (-> strategy :rollingUpdate :partition) 0)]
     (cond
-      (nil? deployment) "the Deployment no longer exists"
-      (true? (-> deployment :spec :paused)) "the Deployment is paused - resume it first"
+      (nil? workload) (format "the %s no longer exists" kind)
+      (true? (-> workload :spec :paused)) "the Deployment is paused - resume it first"
+      (= "OnDelete" (:type strategy))
+      (format "the %s updates OnDelete, so a rollback replaces no pod until each is deleted by hand" kind)
+      (pos? partition)
+      (format "the StatefulSet's rollingUpdate.partition is %d, so pods below it stay on their revision and the rollback never completes" partition)
       (and to-revision (= to-revision current)) (format "revision %d is the current one" to-revision)
-      (nil? (rollback-target deployment replicasets to-revision))
+      (nil? (rollback-target kind workload history to-revision))
       (if to-revision
-        (format "revision %d is not among the Deployment's ReplicaSets" to-revision)
-        "the Deployment has no earlier revision to go back to")
+        (format "revision %d is not among the %s's %s" to-revision kind
+                (if (= "Deployment" kind) "ReplicaSets" "ControllerRevisions"))
+        (format "the %s has no earlier revision to go back to" kind))
       :else nil)))
 
 (defn rollback-items
-  [deployment replicasets to-revision]
-  (let [target (rollback-target deployment replicasets to-revision)]
-    [(format "roll Deployment %s back from revision %s (%s) to revision %d (%s)"
-             (kubectl/namespace-name-of deployment)
-             (or (current-revision deployment) "?")
-             (str/join ", " (images-of (-> deployment :spec :template)))
-             (:revision target)
-             (str/join ", " (:images target)))
-     "the rollback becomes a new revision; the Deployment's source (Git, a chart) still holds the newer one and will reapply it"]))
+  [kind workload history to-revision]
+  (let [target (rollback-target kind workload history to-revision)]
+    (cond-> [(format "roll %s %s back from revision %s (%s) to revision %d (%s)"
+                     kind (kubectl/namespace-name-of workload)
+                     (or (current-revision kind workload history) "?")
+                     (str/join ", " (images-of (-> workload :spec :template)))
+                     (:revision target)
+                     (str/join ", " (:images target)))]
+      (= "StatefulSet" kind)
+      (conj "a StatefulSet replaces its pods one at a time from the highest ordinal, and restores only the pod template - volumes keep what the newer revision wrote")
+      true
+      (conj (format "the rollback becomes a new revision; the %s's source (Git, a chart) still holds the newer one and will reapply it" kind)))))
 
 (defn rolled-back?
-  "Whether the Deployment runs the target revision's images and has rolled out."
-  [deployment target]
-  (boolean (and deployment target
-                (= (:images target) (images-of (-> deployment :spec :template)))
-                (rolled-out? "Deployment" deployment))))
+  "Whether the workload runs the target revision's images and has rolled out."
+  [kind workload target]
+  (boolean (and workload target
+                (= (:images target) (images-of (-> workload :spec :template)))
+                (rolled-out? kind workload))))
 
 (defn rollback-args
-  [{:keys [namespace name]} revision]
-  [(str "--namespace=" namespace) "rollout" "undo" (str "deployment/" name) (str "--to-revision=" revision)])
+  [{:keys [type namespace name]} revision]
+  [(str "--namespace=" namespace) "rollout" "undo" (str (str/replace type #"s$" "") "/" name) (str "--to-revision=" revision)])
 
 ;; --- deployment pause / resume ---------------------------------------------------
 

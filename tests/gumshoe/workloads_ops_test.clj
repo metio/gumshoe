@@ -144,42 +144,127 @@
            (rs "web-old" 4 "web:0.9" :uid "uid-of-a-deleted-web")]})
 
 (deftest revisions-come-from-owned-replicasets-newest-first
-  (is (= [{:revision 7 :replicaset "web-c" :images ["web:1.2"]}
-          {:revision 6 :replicaset "web-b" :images ["web:1.1"]}
-          {:revision 5 :replicaset "web-a" :images ["web:1.0"]}]
-         (workloads/revisions (web 7 "web:1.2") history)))
+  (is (= [{:revision 7 :source "web-c" :images ["web:1.2"]}
+          {:revision 6 :source "web-b" :images ["web:1.1"]}
+          {:revision 5 :source "web-a" :images ["web:1.0"]}]
+         (workloads/revisions "Deployment" (web 7 "web:1.2") history)))
   (testing "without a uid the owner name decides"
-    (is (= 4 (count (workloads/revisions (update (web 7 "web:1.2") :metadata dissoc :uid) history))))))
+    (is (= 4 (count (workloads/revisions "Deployment" (update (web 7 "web:1.2") :metadata dissoc :uid) history))))))
 
 (deftest the-rollback-target
-  (is (= 6 (:revision (workloads/rollback-target (web 7 "web:1.2") history nil))) "the previous revision")
-  (is (= 5 (:revision (workloads/rollback-target (web 7 "web:1.2") history 5))))
-  (is (nil? (workloads/rollback-target (web 7 "web:1.2") history 3)))
-  (is (nil? (workloads/rollback-target (web 5 "web:1.0") history nil)) "the oldest has nothing before it"))
+  (is (= 6 (:revision (workloads/rollback-target "Deployment" (web 7 "web:1.2") history nil))) "the previous revision")
+  (is (= 5 (:revision (workloads/rollback-target "Deployment" (web 7 "web:1.2") history 5))))
+  (is (nil? (workloads/rollback-target "Deployment" (web 7 "web:1.2") history 3)))
+  (is (nil? (workloads/rollback-target "Deployment" (web 5 "web:1.0") history nil)) "the oldest has nothing before it"))
 
 (deftest rollback-refusals
-  (is (nil? (workloads/rollback-refusal (web 7 "web:1.2") history nil)))
-  (is (= "the Deployment no longer exists" (workloads/rollback-refusal nil history nil)))
-  (is (re-find #"paused" (workloads/rollback-refusal (web 7 "web:1.2" :paused true) history nil)))
-  (is (= "revision 7 is the current one" (workloads/rollback-refusal (web 7 "web:1.2") history 7)))
-  (is (= "revision 3 is not among the Deployment's ReplicaSets" (workloads/rollback-refusal (web 7 "web:1.2") history 3)))
-  (is (= "the Deployment has no earlier revision to go back to" (workloads/rollback-refusal (web 5 "web:1.0") history nil))))
+  (is (nil? (workloads/rollback-refusal "Deployment" (web 7 "web:1.2") history nil)))
+  (is (= "the Deployment no longer exists" (workloads/rollback-refusal "Deployment" nil history nil)))
+  (is (re-find #"paused" (workloads/rollback-refusal "Deployment" (web 7 "web:1.2" :paused true) history nil)))
+  (is (= "revision 7 is the current one" (workloads/rollback-refusal "Deployment" (web 7 "web:1.2") history 7)))
+  (is (= "revision 3 is not among the Deployment's ReplicaSets" (workloads/rollback-refusal "Deployment" (web 7 "web:1.2") history 3)))
+  (is (= "the Deployment has no earlier revision to go back to" (workloads/rollback-refusal "Deployment" (web 5 "web:1.0") history nil))))
 
 (deftest the-rollback-confirmation-names-both-revisions
   (is (= ["roll Deployment shop/web back from revision 7 (web:1.2) to revision 6 (web:1.1)"
           "the rollback becomes a new revision; the Deployment's source (Git, a chart) still holds the newer one and will reapply it"]
-         (workloads/rollback-items (web 7 "web:1.2") history nil))))
+         (workloads/rollback-items "Deployment" (web 7 "web:1.2") history nil))))
 
 (deftest rolled-back-reads-images-and-rollout
   (let [target {:revision 6 :images ["web:1.1"]}]
-    (is (workloads/rolled-back? (web 8 "web:1.1") target))
-    (is (not (workloads/rolled-back? (web 7 "web:1.2") target)))
-    (is (not (workloads/rolled-back? (assoc-in (web 8 "web:1.1") [:status :updatedReplicas] 1) target)))
-    (is (not (workloads/rolled-back? nil target)))))
+    (is (workloads/rolled-back? "Deployment" (web 8 "web:1.1") target))
+    (is (not (workloads/rolled-back? "Deployment" (web 7 "web:1.2") target)))
+    (is (not (workloads/rolled-back? "Deployment" (assoc-in (web 8 "web:1.1") [:status :updatedReplicas] 1) target)))
+    (is (not (workloads/rolled-back? "Deployment" nil target)))))
 
 (deftest the-rollback-command
   (is (= ["--namespace=shop" "rollout" "undo" "deployment/web" "--to-revision=6"]
-         (workloads/rollback-args {:namespace "shop" :name "web"} 6))))
+         (workloads/rollback-args {:type "deployments" :namespace "shop" :name "web"} 6)))
+  (is (= ["--namespace=db" "rollout" "undo" "statefulset/pg" "--to-revision=2"]
+         (workloads/rollback-args {:type "statefulsets" :namespace "db" :name "pg"} 2)))
+  (is (= ["--namespace=kube-system" "rollout" "undo" "daemonset/agent" "--to-revision=1"]
+         (workloads/rollback-args {:type "daemonsets" :namespace "kube-system" :name "agent"} 1))))
+
+;; ControllerRevisions as the API server returns them: the revision is a field,
+;; the template sits under data.spec, and the restored one is renumbered highest.
+(defn- revision [owner-kind owner name number image & {:keys [uid] :or {uid "uid-pg"}}]
+  {:metadata {:namespace "db" :name name :ownerReferences [{:kind owner-kind :name owner :uid uid :controller true}]}
+   :revision number
+   :data {:spec {:template {:spec {:containers [{:name "c" :image image}]}}}}})
+
+(defn- pg [image & {:keys [strategy partition updated] :or {updated 3}}]
+  {:metadata {:namespace "db" :name "pg" :uid "uid-pg" :generation 4}
+   :spec (cond-> {:replicas 3 :template {:spec {:containers [{:name "c" :image image}]}}}
+           strategy (assoc-in [:updateStrategy :type] strategy)
+           partition (assoc :updateStrategy {:type "RollingUpdate" :rollingUpdate {:partition partition}}))
+   :status {:observedGeneration 4 :updatedReplicas updated :readyReplicas 3
+            :currentRevision "pg-c" :updateRevision "pg-c"}})
+
+(def ^:private pg-history
+  {:items [(revision "StatefulSet" "pg" "pg-a" 1 "pg:16.1") (revision "StatefulSet" "pg" "pg-c" 3 "pg:16.3")
+           (revision "StatefulSet" "pg" "pg-b" 2 "pg:16.2")
+           (revision "DaemonSet" "pg" "pg-ds" 9 "agent:1" :uid "uid-other")
+           (revision "StatefulSet" "pg" "pg-gone" 8 "pg:15" :uid "uid-of-a-deleted-pg")]})
+
+(deftest statefulset-revisions-come-from-controllerrevisions
+  (is (= [{:revision 3 :source "pg-c" :images ["pg:16.3"]}
+          {:revision 2 :source "pg-b" :images ["pg:16.2"]}
+          {:revision 1 :source "pg-a" :images ["pg:16.1"]}]
+         (workloads/revisions "StatefulSet" (pg "pg:16.3") pg-history))
+      "only its own kind and uid")
+  (is (= 3 (workloads/current-revision "StatefulSet" (pg "pg:16.3") pg-history)) "the highest is the current one")
+  (is (nil? (workloads/current-revision "StatefulSet" (pg "pg:16.3") {:items []}))))
+
+(deftest statefulset-rollback-targets-and-refusals
+  (is (= {:revision 2 :source "pg-b" :images ["pg:16.2"]} (workloads/rollback-target "StatefulSet" (pg "pg:16.3") pg-history nil)))
+  (is (= 1 (:revision (workloads/rollback-target "StatefulSet" (pg "pg:16.3") pg-history 1))))
+  (is (nil? (workloads/rollback-refusal "StatefulSet" (pg "pg:16.3") pg-history nil)))
+  (is (= "the StatefulSet no longer exists" (workloads/rollback-refusal "StatefulSet" nil pg-history nil)))
+  (is (= "revision 3 is the current one" (workloads/rollback-refusal "StatefulSet" (pg "pg:16.3") pg-history 3)))
+  (is (= "revision 5 is not among the StatefulSet's ControllerRevisions" (workloads/rollback-refusal "StatefulSet" (pg "pg:16.3") pg-history 5)))
+  (is (= "the StatefulSet has no earlier revision to go back to"
+         (workloads/rollback-refusal "StatefulSet" (pg "pg:16.1") {:items [(revision "StatefulSet" "pg" "pg-a" 1 "pg:16.1")]} nil)))
+  (is (= "the StatefulSet updates OnDelete, so a rollback replaces no pod until each is deleted by hand"
+         (workloads/rollback-refusal "StatefulSet" (pg "pg:16.3" :strategy "OnDelete") pg-history nil)))
+  (is (= "the StatefulSet's rollingUpdate.partition is 2, so pods below it stay on their revision and the rollback never completes"
+         (workloads/rollback-refusal "StatefulSet" (pg "pg:16.3" :partition 2) pg-history nil)))
+  (is (nil? (workloads/rollback-refusal "StatefulSet" (pg "pg:16.3" :partition 0) pg-history nil)) "partition 0 updates every pod"))
+
+(deftest statefulset-rollback-confirmation
+  (is (= ["roll StatefulSet db/pg back from revision 3 (pg:16.3) to revision 2 (pg:16.2)"
+          "a StatefulSet replaces its pods one at a time from the highest ordinal, and restores only the pod template - volumes keep what the newer revision wrote"
+          "the rollback becomes a new revision; the StatefulSet's source (Git, a chart) still holds the newer one and will reapply it"]
+         (workloads/rollback-items "StatefulSet" (pg "pg:16.3") pg-history nil))))
+
+(deftest statefulset-rolled-back
+  (let [target {:revision 2 :images ["pg:16.2"]}]
+    (is (workloads/rolled-back? "StatefulSet" (pg "pg:16.2") target))
+    (is (not (workloads/rolled-back? "StatefulSet" (pg "pg:16.2" :updated 1) target)) "still replacing pods")
+    (is (not (workloads/rolled-back? "StatefulSet" (pg "pg:16.3") target)))))
+
+(def ^:private agent-history
+  {:items [(revision "DaemonSet" "agent" "agent-a" 1 "agent:1" :uid "uid-agent")
+           (revision "DaemonSet" "agent" "agent-b" 2 "agent:2" :uid "uid-agent")]})
+
+(defn- agent-ds [image & {:keys [updated strategy] :or {updated 2}}]
+  {:metadata {:namespace "db" :name "agent" :uid "uid-agent" :generation 2}
+   :spec (cond-> {:template {:spec {:containers [{:name "c" :image image}]}}}
+           strategy (assoc-in [:updateStrategy :type] strategy))
+   :status {:observedGeneration 2 :desiredNumberScheduled 2 :updatedNumberScheduled updated :numberAvailable 2}})
+
+(deftest daemonset-rollback
+  (is (= 1 (:revision (workloads/rollback-target "DaemonSet" (agent-ds "agent:2") agent-history nil))))
+  (is (nil? (workloads/rollback-refusal "DaemonSet" (agent-ds "agent:2") agent-history nil)))
+  (is (= "the DaemonSet updates OnDelete, so a rollback replaces no pod until each is deleted by hand"
+         (workloads/rollback-refusal "DaemonSet" (agent-ds "agent:2" :strategy "OnDelete") agent-history nil)))
+  (is (= ["roll DaemonSet db/agent back from revision 2 (agent:2) to revision 1 (agent:1)"
+          "the rollback becomes a new revision; the DaemonSet's source (Git, a chart) still holds the newer one and will reapply it"]
+         (workloads/rollback-items "DaemonSet" (agent-ds "agent:2") agent-history nil)))
+  (is (workloads/rolled-back? "DaemonSet" (agent-ds "agent:1") {:revision 1 :images ["agent:1"]}))
+  (is (not (workloads/rolled-back? "DaemonSet" (agent-ds "agent:1" :updated 1) {:revision 1 :images ["agent:1"]}))))
+
+(deftest every-kind-has-a-history
+  (is (= (set (map second workloads/types)) (set (keys workloads/history-types)))))
 
 ;; --- deployment pause / resume ---------------------------------------------------
 

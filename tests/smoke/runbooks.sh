@@ -49,6 +49,22 @@ kubectl -n "${ns}" create deployment scaled --image="${image}" --replicas=1 -- s
 kubectl -n "${ns}" autoscale deployment scaled --min=1 --max=3 --cpu=80 > /dev/null 2>&1 \
   || kubectl -n "${ns}" autoscale deployment scaled --min=1 --max=3 --cpu-percent=80 > /dev/null
 kubectl -n "${ns}" create cronjob nightly --image="${image}" --schedule="0 3 * * *" -- true > /dev/null
+for kind in StatefulSet DaemonSet; do
+  name="$(echo "${kind}" | tr '[:upper:]' '[:lower:]')"
+  kubectl -n "${ns}" apply -f - > /dev/null <<FIXTURE
+apiVersion: apps/v1
+kind: ${kind}
+metadata: {name: ${name}}
+spec:
+  $([ "${kind}" = StatefulSet ] && echo "serviceName: statefulset")
+  selector: {matchLabels: {app: ${name}}}
+  template:
+    metadata: {labels: {app: ${name}}}
+    spec:
+      terminationGracePeriodSeconds: 1
+      containers: [{name: busybox, image: "${image}", command: [sleep, "3600"]}]
+FIXTURE
+done
 kubectl -n "${ns}" create configmap settings --from-literal=a=b > /dev/null
 kubectl -n "${ns}" create configmap kept --from-literal=a=b > /dev/null
 kubectl -n "${ns}" rollout status deployment/web --timeout=300s > /dev/null || fail "fixture web did not roll out"
@@ -86,6 +102,20 @@ expect "rollback restored the earlier image" "${image}" "$(jp deployment/web '{.
 
 book yes runbooks/kubernetes/workloads/rollback.clj --pick "Deployment ${ns}/web" --to-revision 99
 expect "rollback refuses an unknown revision" 1 $?
+
+# --- StatefulSet and DaemonSet rollback ----------------------------------------------
+for kind in StatefulSet DaemonSet; do
+  name="$(echo "${kind}" | tr '[:upper:]' '[:lower:]')"
+  kubectl -n "${ns}" rollout status "${name}/${name}" --timeout=300s > /dev/null || fail "fixture ${name} did not roll out"
+  kubectl -n "${ns}" set image "${name}/${name}" "busybox=${older}" > /dev/null
+  kubectl -n "${ns}" rollout status "${name}/${name}" --timeout=300s > /dev/null
+  expect "fixture: ${name} runs the older image" "${older}" "$(jp "${name}/${name}" '{.spec.template.spec.containers[0].image}')"
+  book yes runbooks/kubernetes/workloads/rollback.clj --pick "${kind} ${ns}/${name}"
+  expect "${kind} rollback exits 0" 0 $?
+  expect "${kind} rollback restored the earlier image" "${image}" "$(jp "${name}/${name}" '{.spec.template.spec.containers[0].image}')"
+  book yes runbooks/kubernetes/workloads/rollback.clj --pick "${kind} ${ns}/${name}" --to-revision 99
+  expect "${kind} rollback refuses an unknown revision" 1 $?
+done
 
 # --- Deployment pause / resume --------------------------------------------------------
 book yes runbooks/kubernetes/workloads/pause.clj --pick "Deployment ${ns}/web"

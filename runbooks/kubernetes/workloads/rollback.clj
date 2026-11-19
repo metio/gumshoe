@@ -2,59 +2,56 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns runbooks.kubernetes.workloads.rollback
-  "Rolls a Deployment back to its previous revision, or to a named one."
+  "Rolls a Deployment, StatefulSet or DaemonSet back to its previous revision,
+   or to a named one."
   (:require [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
             [gumshoe.workloads :as workloads]))
 
 (defn- fetch
-  [context {:keys [namespace name]}]
-  (kubectl/get-namespaced-resource context namespace "deployments" name))
+  [context {:keys [type namespace name]}]
+  (kubectl/get-namespaced-resource context namespace type name))
 
-(defn- replicasets
-  [context {:keys [namespace]}]
-  (kubectl/get-namespaced context namespace "replicasets"))
+(defn- history
+  [context {:keys [kind namespace]}]
+  (kubectl/get-namespaced context namespace (workloads/history-types kind)))
 
 (defn- candidates
   [context]
-  (let [rs (kubectl/get-all context "replicasets")]
-    (workloads/picks [["Deployment" (kubectl/get-all context "deployments")]]
-                     (fn [_ deployment] (nil? (workloads/rollback-refusal deployment rs nil))))))
-
-(defn- deployment-pick
-  [target]
-  (let [pick (workloads/parse-pick target)]
-    (when (= "Deployment" (:kind pick)) pick)))
+  (let [histories (into {} (for [type (distinct (vals workloads/history-types))] [type (kubectl/get-all context type)]))]
+    (workloads/picks (for [[type kind] workloads/types] [kind (kubectl/get-all context type)])
+                     (fn [kind workload]
+                       (nil? (workloads/rollback-refusal kind workload (histories (workloads/history-types kind)) nil))))))
 
 (mutation/book
- {:description "Rolls a Deployment back to its previous revision, or to a named one"
-  :options {:pick {:desc "\"Deployment <namespace>/<name>\" - interactive selection when omitted"
+ {:description "Rolls a Deployment, StatefulSet or DaemonSet back to its previous revision, or to a named one"
+  :options {:pick {:desc "\"<Kind> <namespace>/<name>\" - interactive selection when omitted"
                    :alias :p :coerce :string}
             :to-revision {:desc "The revision to go back to - the previous one when omitted" :coerce :long}}
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities []
-                  :kubectl-can-get ["deployments" "replicasets"]
-                  :kubectl-can-patch ["deployments"]}
-  :select {:mode :one :label "Deployment" :flag :pick :candidates candidates}
-  :empty-message "no Deployment has an earlier revision to go back to"
-  :confirm {:action "roll a Deployment back" :destructive? true}
+                  :kubectl-can-get (into (mapv first workloads/types) ["replicasets" "controllerrevisions"])
+                  :kubectl-can-patch (mapv first workloads/types)}
+  :select {:mode :one :label "Workload" :flag :pick :candidates candidates}
+  :empty-message "no workload has an earlier revision to go back to"
+  :confirm {:action "roll a workload back" :destructive? true}
   :derive (fn [{:keys [context target opts]}]
-            (let [pick (deployment-pick target)
-                  deployment (when pick (fetch context pick))
-                  rs (when pick (replicasets context pick))
+            (let [pick (workloads/parse-pick target)
+                  workload (when pick (fetch context pick))
+                  past (when pick (history context pick))
                   to (:to-revision opts)]
-              {:pick pick :deployment deployment :replicasets rs :to to
-               :target-revision (when deployment (workloads/rollback-target deployment rs to))}))
-  :items (fn [{:keys [deployment replicasets to target-revision target]}]
+              {:pick pick :workload workload :history past :to to
+               :target-revision (when workload (workloads/rollback-target (:kind pick) workload past to))}))
+  :items (fn [{:keys [pick workload history to target-revision target]}]
            (if target-revision
-             (workloads/rollback-items deployment replicasets to)
+             (workloads/rollback-items (:kind pick) workload history to)
              [(format "roll %s back" target)]))
   :pin :pick
   :precondition (fn [{:keys [context pick to]}]
                   (let [why (if pick
-                              (workloads/rollback-refusal (fetch context pick) (replicasets context pick) to)
-                              "the pick is not \"Deployment <namespace>/<name>\"")]
+                              (workloads/rollback-refusal (:kind pick) (fetch context pick) (history context pick) to)
+                              "the pick is not \"<Kind> <namespace>/<name>\"")]
                     (when why (println (str "refusing: " why)))
                     (nil? why)))
   :announce (fn [{:keys [target target-revision]}] (format "Roll %s back to revision %s" target (:revision target-revision)))
@@ -65,4 +62,4 @@
   :verify (fn [{:keys [context pick target target-revision]}]
             [{:description (format "%s runs revision %s's images and rolled out" target (:revision target-revision))
               :timeout 600 :interval 10
-              :check (fn [] (workloads/rolled-back? (fetch context pick) target-revision))}])})
+              :check (fn [] (workloads/rolled-back? (:kind pick) (fetch context pick) target-revision))}])})
