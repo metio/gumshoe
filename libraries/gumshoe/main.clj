@@ -133,6 +133,8 @@
     :book "tools/upload/runbooks/scan.clj"}
    {:label "🐘 Databases - CloudNativePG and db-operator"
     :book "runbooks/detectives/databases.clj"}
+   {:label "🏗️  Cluster API - workload Clusters, Machines and health checks"
+    :book "tools/cluster-api/runbooks/scan.clj"}
    {:label "🪂 Karpenter - NodePools and NodeClaims"
     :book "tools/karpenter/runbooks/scan.clj"}
    {:label "📨 Messaging - Strimzi Kafka clusters, connectors, topics and users"
