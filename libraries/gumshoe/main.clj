@@ -139,6 +139,8 @@
     :book "tools/certmanager/runbooks/scan.clj"}
    {:label "🔁 GitOps - flux sources and reconciliations"
     :book "tools/flux/runbooks/gitops.clj"}
+   {:label "🐙 Argo CD - Applications, syncs and ApplicationSets"
+    :book "tools/argocd/runbooks/scan.clj"}
    {:label "🎬 Delivery - StageSet staged rollouts"
     :book "tools/stageset/runbooks/scan.clj"}
    {:label "📐 Rendering - JaaS Jsonnet snippets and the artifacts they publish"
