@@ -21,6 +21,7 @@
             [gumshoe.detectives.events :as events]
             [gumshoe.detectives.evpn :as evpn]
             [gumshoe.detectives.expectations :as expectations]
+            [gumshoe.detectives.gitops :as gitops]
             [gumshoe.detectives.helm :as helm]
             [gumshoe.detectives.ipfamily :as ipfamily]
             [gumshoe.detectives.mail :as mail]
@@ -169,7 +170,7 @@
                             (concat posture/detectives apiversions-detectives/detectives custom-resources/detectives
                                     references/platform-detectives upgrade/detectives nodes/detectives
                                     disruption/detectives controlplane/detectives)))
-(register! :posture (concat posture/detectives template-drift/detectives))
+(register! :posture (concat posture/detectives template-drift/detectives gitops/detectives))
 ;; the fabric detectives read evidence collected over ssh, so they contribute
 ;; nothing to a kubectl-only scan and simply stay silent there.
 (register! :fabric evpn/detectives)

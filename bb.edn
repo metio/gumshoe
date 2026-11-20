@@ -33,6 +33,7 @@
                    [gumshoe.duplicate-env-test]
                    [gumshoe.volume-snapshots-test]
                    [gumshoe.certificate-requests-test]
+                   [gumshoe.gitops-coverage-test]
                    [gumshoe.upgrade-readiness-test]
                    [gumshoe.cause-folding-test]
                    [gumshoe.released-volumes-test]
@@ -175,6 +176,7 @@
                                                          'gumshoe.duplicate-env-test
                                                          'gumshoe.volume-snapshots-test
                                                          'gumshoe.certificate-requests-test
+                                                         'gumshoe.gitops-coverage-test
                                                          'gumshoe.upgrade-readiness-test
                                                          'gumshoe.cause-folding-test
                                                          'gumshoe.released-volumes-test
