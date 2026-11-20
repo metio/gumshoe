@@ -16,6 +16,7 @@
             [gumshoe.detectives.csi :as csi]
             [gumshoe.detectives.custom-resources :as custom-resources]
             [gumshoe.detectives.disruption :as disruption]
+            [gumshoe.detectives.duplicate-env :as duplicate-env]
             [gumshoe.detectives.events :as events]
             [gumshoe.detectives.evpn :as evpn]
             [gumshoe.detectives.expectations :as expectations]
@@ -139,7 +140,7 @@
 (register! :workloads (concat controllers/detectives helm/detectives pods/detectives pod-creation/detectives pod-startup/detectives
                               services/detectives storage/detectives terminating/detectives
                               references/detectives tls-secrets/detectives
-                              disruption/detectives quotas/detectives capacity/detectives))
+                              disruption/detectives quotas/detectives capacity/detectives duplicate-env/detectives))
 (register! :signals events/detectives)
 (register! :security (concat rbac/detectives references/security-detectives pod-security/detectives
                              network/detectives))
