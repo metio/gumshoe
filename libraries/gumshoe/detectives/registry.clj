@@ -10,6 +10,7 @@
   (:require [cheshire.core :as cheshire]
             [gumshoe.apiversions :as apiversions]
             [gumshoe.detectives.apiversions :as apiversions-detectives]
+            [gumshoe.detectives.autoscaler :as autoscaler]
             [gumshoe.detectives.capacity :as capacity]
             [gumshoe.detectives.controlplane :as controlplane]
             [gumshoe.detectives.csi :as csi]
@@ -146,6 +147,11 @@
 (register-collector! "server-version"
                      (fn [context _key] (some-> (kubectl/raw-text context "/version") (cheshire/parse-string true))))
 (register! :platform upgrade/detectives)
+;; The autoscaler's status ConfigMap, read by name; nil when no autoscaler runs.
+(register-collector! "cluster-autoscaler-status"
+                     (fn [context _key]
+                       (kubectl/get-namespaced-resource context "kube-system" "configmaps" "cluster-autoscaler-status")))
+(register! :platform autoscaler/detectives)
 ;; The :upgrade scope gathers what decides whether the next upgrade goes
 ;; through: what the new version removes, what an upgrade recreates and drains,
 ;; and which nodes it would leave outside the skew policy.
