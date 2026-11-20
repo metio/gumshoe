@@ -14,6 +14,7 @@
             [gumshoe.detectives.capacity :as capacity]
             [gumshoe.detectives.controlplane :as controlplane]
             [gumshoe.detectives.csi :as csi]
+            [gumshoe.detectives.csr :as csr]
             [gumshoe.detectives.custom-resources :as custom-resources]
             [gumshoe.detectives.disruption :as disruption]
             [gumshoe.detectives.duplicate-env :as duplicate-env]
@@ -156,6 +157,7 @@
                      (fn [context _key]
                        (kubectl/get-namespaced-resource context "kube-system" "configmaps" "cluster-autoscaler-status")))
 (register! :platform autoscaler/detectives)
+(register! :platform csr/detectives)
 ;; The :upgrade scope gathers what decides whether the next upgrade goes
 ;; through: what the new version removes, what an upgrade recreates and drains,
 ;; and which nodes it would leave outside the skew policy.
