@@ -31,6 +31,7 @@
                    [gumshoe.autoscaler-status-test]
                    [gumshoe.template-drift-test]
                    [gumshoe.duplicate-env-test]
+                   [gumshoe.volume-snapshots-test]
                    [gumshoe.upgrade-readiness-test]
                    [gumshoe.cause-folding-test]
                    [gumshoe.released-volumes-test]
@@ -171,6 +172,7 @@
                                                          'gumshoe.autoscaler-status-test
                                                          'gumshoe.template-drift-test
                                                          'gumshoe.duplicate-env-test
+                                                         'gumshoe.volume-snapshots-test
                                                          'gumshoe.upgrade-readiness-test
                                                          'gumshoe.cause-folding-test
                                                          'gumshoe.released-volumes-test

@@ -35,6 +35,7 @@
             [gumshoe.detectives.rbac :as rbac]
             [gumshoe.detectives.references :as references]
             [gumshoe.detectives.services :as services]
+            [gumshoe.detectives.snapshots :as snapshots]
             [gumshoe.detectives.storage :as storage]
             [gumshoe.detectives.template-drift :as template-drift]
             [gumshoe.detectives.terminating :as terminating]
@@ -140,7 +141,8 @@
 (register! :workloads (concat controllers/detectives helm/detectives pods/detectives pod-creation/detectives pod-startup/detectives
                               services/detectives storage/detectives terminating/detectives
                               references/detectives tls-secrets/detectives
-                              disruption/detectives quotas/detectives capacity/detectives duplicate-env/detectives))
+                              disruption/detectives quotas/detectives capacity/detectives duplicate-env/detectives
+                              snapshots/detectives))
 (register! :signals events/detectives)
 (register! :security (concat rbac/detectives references/security-detectives pod-security/detectives
                              network/detectives))
