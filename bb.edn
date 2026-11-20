@@ -143,6 +143,7 @@
                    [gumshoe.subject-test]
                    [gumshoe.external-dns-test]
                    [gumshoe.velero-test]
+                   [gumshoe.velero.actions-test]
                    [gumshoe.argocd-test]
                    [gumshoe.argocd-actions-test]
                    [gumshoe.karpenter-test]
@@ -286,6 +287,7 @@
                                                          'gumshoe.subject-test
                                                          'gumshoe.external-dns-test
                                                          'gumshoe.velero-test
+                                                         'gumshoe.velero.actions-test
                                                          'gumshoe.argocd-test
                                                          'gumshoe.argocd-actions-test
                                                          'gumshoe.karpenter-test
