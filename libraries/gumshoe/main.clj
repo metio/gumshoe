@@ -139,6 +139,8 @@
     :book "tools/cluster-api/runbooks/scan.clj"}
    {:label "🧩 Crossplane - Providers, Functions and Configurations"
     :book "tools/crossplane/runbooks/scan.clj"}
+   {:label "🚦 Traefik - IngressRoutes and Middlewares whose references do not resolve"
+    :book "tools/traefik/runbooks/scan.clj"}
    {:label "🪂 Karpenter - NodePools and NodeClaims"
     :book "tools/karpenter/runbooks/scan.clj"}
    {:label "📨 Messaging - Strimzi Kafka clusters, connectors, topics and users"
