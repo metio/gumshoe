@@ -218,7 +218,7 @@ bb runbooks/detectives/observability.clj  # Prometheus, Alertmanager, Thanos
 bb runbooks/detectives/events.clj         # Warning events, last hour
 bb runbooks/detectives/rbac.clj           # admins, wildcards, secret readers
 bb runbooks/detectives/security.clj       # RBAC + pod security + NetPol
-bb runbooks/detectives/posture.clj        # probes, image tags, replicas, PDBs, deprecated APIs
+bb runbooks/detectives/posture.clj        # probes, image tags, replicas, PDBs, deprecated APIs, template drift
 bb runbooks/detectives/dns.clj            # nameservers, SOA replication
 bb runbooks/detectives/mail.clj           # MX/SPF/DKIM/DMARC/rDNS + TLS
 bb runbooks/detectives/fabric.clj         # EVPN-VXLAN MAC ownership, over ssh

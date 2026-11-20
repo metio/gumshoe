@@ -169,6 +169,6 @@ apiserver_request_total{code=\"200\"} 5
 
 (deftest posture-runs-only-when-asked-for
   (let [names (set (map :name posture/detectives))]
-    (is (= names (set (map :name (registry/for-scope :posture)))))
+    (is (= (conj names "template-drift") (set (map :name (registry/for-scope :posture)))))
     (is (not-any? names (map :name (registry/for-scope :all))))
     (is (every? (set (map :name (registry/all))) names) "still registered, so every property test covers it")))

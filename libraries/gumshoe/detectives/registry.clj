@@ -35,6 +35,7 @@
             [gumshoe.detectives.references :as references]
             [gumshoe.detectives.services :as services]
             [gumshoe.detectives.storage :as storage]
+            [gumshoe.detectives.template-drift :as template-drift]
             [gumshoe.detectives.terminating :as terminating]
             [gumshoe.detectives.tls-secrets :as tls-secrets]
             [gumshoe.detectives.upgrade :as upgrade]
@@ -163,7 +164,7 @@
                             (concat posture/detectives apiversions-detectives/detectives custom-resources/detectives
                                     references/platform-detectives upgrade/detectives nodes/detectives
                                     disruption/detectives controlplane/detectives)))
-(register! :posture posture/detectives)
+(register! :posture (concat posture/detectives template-drift/detectives))
 ;; the fabric detectives read evidence collected over ssh, so they contribute
 ;; nothing to a kubectl-only scan and simply stay silent there.
 (register! :fabric evpn/detectives)

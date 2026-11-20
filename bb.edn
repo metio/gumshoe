@@ -29,6 +29,7 @@
                    [gumshoe.helm-rollback-test]
                    [gumshoe.detective-capabilities-test]
                    [gumshoe.autoscaler-status-test]
+                   [gumshoe.template-drift-test]
                    [gumshoe.upgrade-readiness-test]
                    [gumshoe.cause-folding-test]
                    [gumshoe.released-volumes-test]
@@ -166,6 +167,7 @@
                                                          'gumshoe.helm-rollback-test
                                                          'gumshoe.detective-capabilities-test
                                                          'gumshoe.autoscaler-status-test
+                                                         'gumshoe.template-drift-test
                                                          'gumshoe.upgrade-readiness-test
                                                          'gumshoe.cause-folding-test
                                                          'gumshoe.released-volumes-test
