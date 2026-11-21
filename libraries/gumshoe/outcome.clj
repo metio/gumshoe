@@ -12,7 +12,8 @@
    function of the record, the book's kind and its result.
 
    Outside a run nothing is bound and recording does nothing, so a library
-   function called from a test or a REPL behaves exactly as before.")
+   function called from a test or a REPL behaves exactly as before."
+  (:require [clojure.string :as str]))
 
 (def ^:dynamic *record*
   "The atom collecting the facts of the current run, or nil outside one."
@@ -32,6 +33,12 @@
    after it, so nothing was attempted."
   [reason]
   (record! assoc :aborted reason))
+
+(defn unmet!
+  "A rehearsed step whose precondition does not hold against the current
+   state; `step` names it."
+  [step]
+  (record! update :unmet (fnil conj []) step))
 
 (defn applied!
   "One effect of a plan ran cleanly."
@@ -54,6 +61,12 @@
   [held?]
   (record! update :verified #(if (false? %) false (boolean held?))))
 
+(defn exit-code
+  "The exit code of a run: 0 only for :ok, and a rehearsal that found an unmet
+   precondition exits 1 so a script sees that the real run would stop."
+  [outcome record]
+  (if (and (= :ok outcome) (empty? (:unmet record))) 0 1))
+
 (defn- changed?
   [{:keys [applied thunk]}]
   (or (pos? applied) (some? thunk)))
@@ -73,8 +86,14 @@
 
    Only a run whose post-checks all ran and held may claim verification."
   [{:keys [dry-run? changes? outcome findings?]} record]
-  (let [{:keys [aborted applied stopped thunk verified]} record]
+  (let [{:keys [aborted applied stopped thunk verified unmet]} record]
     (cond
+      (and dry-run? changes? (seq unmet))
+      {:tone :error
+       :text (str "DRY RUN - nothing was changed; the precondition of "
+                  (str/join ", " unmet)
+                  " does not hold against the current state")}
+
       ;; a read-only book reads and reports under --dry-run too
       (and dry-run? changes?)
       {:tone :neutral :text "DRY RUN - nothing was changed, this was a rehearsal"}

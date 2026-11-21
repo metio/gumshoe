@@ -5,6 +5,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [gumshoe.effect :as effect]
             [gumshoe.flow :as flow]
+            [gumshoe.outcome :as outcome]
             [gumshoe.interact :as interact]))
 
 (def ^:private valid
@@ -61,3 +62,25 @@
                                   :precondition (constantly true)
                                   :execute! (fn [] (reset! ran true) true)})))
         (is (true? @ran) "the work runs when the precondition holds")))))
+
+(deftest dry-run-checks-the-precondition-and-keeps-rehearsing-test
+  (testing "an unmet precondition is reported and recorded, and the rehearsal goes on"
+    (let [record (outcome/fresh)
+          step (fn [action held?]
+                 (flow/change! {:confirmation {:action action :target "prod" :items ["x"]}
+                                :precondition (constantly held?)
+                                :effect [(effect/kubectl "prod" "annotate" "x" action)]}))]
+      (binding [flow/*dry-run* true
+                outcome/*record* record]
+        (is (true? (step "create the replacement" true)))
+        (is (true? (step "purge the old deployment" false))
+            "a later step stays visible, since an earlier step may be what it waits for")
+        (is (true? (step "label the new deployment" true))))
+      (is (= ["purge the old deployment"] (:unmet @record)))
+      (is (= 0 (:applied @record)) "a rehearsal applies nothing")))
+  (testing "a precondition that holds records nothing"
+    (let [record (outcome/fresh)]
+      (binding [flow/*dry-run* true
+                outcome/*record* record]
+        (flow/change! (assoc valid :precondition (constantly true))))
+      (is (nil? (:unmet @record))))))

@@ -64,7 +64,8 @@
                   action, so a change confirmed while the world was safe aborts
                   cleanly if the world drifted while the operator was deciding
                   (e.g. the replacement went NotReady before a drain). Returns
-                  truthy to proceed.
+                  truthy to proceed. It must only read: a dry run calls it too,
+                  to show whether the current state would let the step run.
    :announce!     optional thunk posting to the changelog
    :effect        a plan of effect data (preferred - composes and dry-runs)
    :execute!      a thunk doing the work, truthy on success (legacy)
@@ -80,14 +81,23 @@
     ;; a dry run shows what would happen and changes nothing - no prompt, no
     ;; announcement, no post-check. A legacy thunk cannot be shown safely, so we
     ;; refuse rather than run it.
+    ;;
+    ;; The precondition is a read, so the rehearsal runs it and reports a step
+    ;; the current state would refuse. It keeps going: in a playbook a later
+    ;; step's precondition often depends on an earlier step's effect, which a
+    ;; rehearsal never applies, so stopping here would hide the plans after it.
     *dry-run*
     (do (stdout/print-banner stdout/blue "🔍 DRY RUN - nothing will be changed")
         (stdout/err-println (interact/confirmation-message confirmation))
-        (if effect
-          (effect/dry-run effect)
-          (do (stdout/warn "this book does not support --dry-run yet - it declares an :execute! thunk, not an :effect plan")
-              (stdout/warn "nothing was run")
-              true)))
+        (let [shown (if effect
+                      (effect/dry-run effect)
+                      (do (stdout/warn "this book does not support --dry-run yet - it declares an :execute! thunk, not an :effect plan")
+                          (stdout/warn "nothing was run")
+                          true))]
+          (when (and precondition (not (precondition)))
+            (outcome/unmet! (:action confirmation))
+            (stdout/warn "this step's precondition does not hold against the current state - a real run would abort here unless an earlier step changes that"))
+          shown))
 
     (not (interact/confirm! confirmation))
     false

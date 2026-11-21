@@ -349,4 +349,4 @@
                                     :outcome outcome
                                     :recording-path recording-path
                                     :meta (:announcement-data ctx)})
-            (System/exit (if (= :ok outcome) 0 1))))))))
+            (System/exit (outcome/exit-code outcome @record))))))))

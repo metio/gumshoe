@@ -164,7 +164,11 @@ Every book behaves the same way:
   shows exactly the commands it *would* run (`would run: kubectl cordon
   worker-3`), and touches nothing - no prompt, no announcement. Books whose
   mutation is expressed as an effect plan get this for free; a book that can not
-  be safely dry-run refuses under `--dry-run` rather than risk it.
+  be safely dry-run refuses under `--dry-run` rather than risk it. A dry run
+  still checks each step's precondition against the current state and warns
+  when the real run would refuse that step, then rehearses the steps after it,
+  since an earlier step may be what the warned step waits for. The banner
+  names those steps and the exit code is 1.
 - Changes to a running system are verified twice: first you select or provide
   the item, then the book states exactly what it is about to do and asks for
   approval. Destructive actions get an unmissable red banner and always require
