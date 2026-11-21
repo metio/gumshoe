@@ -151,3 +151,24 @@
      (is (true? (playbook/run-segment! pb 1 "ns-1" {} nil)))
      (is (false? (playbook/run-segment! pb 3 "ns-1" {} nil))))
     (is (= [["orphan" "ns-1"] ["stamp" "ns-1"]] @ran))))
+
+(deftest a-point-of-no-return-asks-again-with-its-own-items
+  (let [ran (atom [])
+        asked (atom [])
+        pb {:select {:mode :one} :confirm {:action "adopt"}
+            :steps [(change "stamp" ran)
+                    (change "precleanup" ran :confirm {:action "precleanup" :separately? true})]}]
+    (is (= ["1/2 stamp" "2/2 precleanup (asks again)"]
+           (drop 1 (:items (playbook/confirmation pb (apply concat (playbook/segments (:steps pb)))
+                                                  {:target "ns-1"})))))
+    (quietly
+     (with-redefs [interact/confirm! (fn [request] (swap! asked conj (:action request)) true)]
+       (is (true? (playbook/run-on! pb "ns-1" {} nil)))))
+    (is (= ["adopt" "precleanup"] @asked))
+    (testing "declining it stops the playbook before its change runs"
+      (let [record (outcome/fresh)]
+        (quietly
+         (with-redefs [interact/confirm! (fn [request] (not= "precleanup" (:action request)))]
+           (binding [outcome/*record* record]
+             (is (false? (playbook/run-on! pb "ns-1" {} nil))))))
+        (is (= 1 (:applied @record)) "only the stamp's effect ran")))))

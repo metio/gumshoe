@@ -22,7 +22,8 @@
                :name-flag :name                 ; :namespaced
                :preview \"kubectl describe node {}\"}  ; :one, optional fzf side pane
       :empty-message \"every node is already cordoned\"   ; when nothing to pick
-      :confirm  {:action \"...\" :destructive? false}
+      :confirm  {:action \"...\" :destructive? false
+                 :separately? false}   ; true: asks again inside a playbook
       :precondition (fn [ctx] -> bool)            ; optional, re-checked after confirm;
                                                   ; reads only, a dry run calls it too
       :announce (fn [ctx] -> changelog message)   ; optional
