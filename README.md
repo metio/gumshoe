@@ -71,9 +71,12 @@ bb runbooks/detectives/cluster.clj    # it tells you if a tool is missing
    happens without your explicit approval, and destructive actions require
    literally typing `yes`. Add `--dry-run` to any change to see the exact
    commands it would run without touching anything.
-5. Watch the last line: every book ends with a green DONE or a red FAILED
-   banner. If it is not green, nothing half-happened silently - read the
-   messages above it.
+5. Watch the last line: every book ends with a banner that says what
+   happened. Green DONE says whether the change was applied and verified,
+   applied without post-checks, or found nothing; yellow marks a dry run, an
+   abort at the confirmation, or a report with findings; red FAILED says how
+   many effects were applied before it stopped and where. Only a green banner
+   that says "verified" promises the post-checks held.
 
 Every book checks its own prerequisites before doing anything: required tools,
 connectivity to the systems it touches, and the permissions of the user running

@@ -11,6 +11,7 @@
             [gumshoe.command :as command]
             [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.shell :as shell]
+            [gumshoe.outcome :as outcome]
             [gumshoe.stdout :as stdout]
             [gumshoe.ui :as ui]))
 
@@ -161,5 +162,6 @@
                    :else (typed-yes?))]
     (record-only! (str "confirm: " (:action request)) (if approved "approved" "aborted"))
     (or approved
-        (do (stdout/error "aborted, nothing was changed")
+        (do (outcome/aborted! "declined at the confirmation")
+            (stdout/error "aborted, nothing was changed")
             false))))

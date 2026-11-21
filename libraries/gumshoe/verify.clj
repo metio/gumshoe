@@ -15,7 +15,8 @@
      each interval, whose new signals (a Warning event, a resizer error) are
      surfaced the moment they appear, so the operator learns something is wrong
      while waiting instead of after."
-  (:require [gumshoe.stdout :as stdout]))
+  (:require [gumshoe.outcome :as outcome]
+            [gumshoe.stdout :as stdout]))
 
 (defn eventually
   "Retries check until it returns truthy or timeout (seconds) elapses.
@@ -67,4 +68,6 @@
   "Runs every post-check in order; all of them must hold (a :soft? check that
    times out still counts as held)."
   [checks]
-  (every? true? (mapv eventually checks)))
+  (let [held? (every? true? (mapv eventually checks))]
+    (outcome/verified! held?)
+    held?))

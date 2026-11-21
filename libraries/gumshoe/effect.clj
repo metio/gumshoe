@@ -11,6 +11,7 @@
    An effect is [:op & args]. A plan is a seq of effects. Constructors below
    keep the data tidy; interpreters at the bottom give it meaning."
   (:require [clojure.string :as str]
+            [gumshoe.outcome :as outcome]
             [gumshoe.shell :as shell]
             [gumshoe.ssh :as ssh]
             [gumshoe.stdout :as stdout]))
@@ -135,8 +136,8 @@
   [plan]
   (reduce (fn [_ effect]
             (if (perform! effect)
-              true
-              (reduced false)))
+              (do (outcome/applied!) true)
+              (do (outcome/stopped! (describe effect)) (reduced false))))
           true
           plan))
 
