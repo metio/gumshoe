@@ -6,21 +6,30 @@
    ./run, ./investigate) are thin wrappers over these, and a casebook that has
    gumshoe as a dependency exposes the same doors through bb.edn :tasks:
 
-     :tasks {gumshoe     {:task (exec 'gumshoe.main/front-door)}
-             detect      {:task (exec 'gumshoe.main/detect)}
-             run         {:task (exec 'gumshoe.main/run)}
-             investigate {:task (exec 'gumshoe.main/investigate)}}
+     :tasks {gumshoe {:requires ([gumshoe.main :as main])
+                      :task (System/exit (main/front-door *command-line-args*))}
+             run     {:requires ([gumshoe.main :as main])
+                      :task (System/exit (main/run *command-line-args*))}}
 
    Every book is named by a book-dir-relative suffix and resolved through the
    catalog, so a door launches the same book whether it lives under the working
    directory (the monorepo) or under ~/.gitlibs (a casebook's dependency). Each
-   function returns an exit code; the caller decides whether to System/exit."
+   function returns an exit code; the caller decides whether to System/exit.
+   A task wired with (exec 'gumshoe.main/run) still receives the raw flags, but
+   babashka drops the returned exit code, so a casebook passes it to System/exit."
   (:require [babashka.cli :as cli]
             [clojure.string :as str]
             [gumshoe.catalog :as catalog]
             [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
+
+(defn- raw-args
+  "The raw command-line arguments. babashka's exec hands a task function the
+   flags it parsed itself as a map, while every door parses them with its own
+   spec, so a map stands for *command-line-args*."
+  [args]
+  (if (map? args) (vec *command-line-args*) args))
 
 (defn- launch
   "Runs a book by its catalog-resolved path, forwarding extra flags."
@@ -60,13 +69,14 @@
   "Follows the thread from a symptom to a cause. All flags pass through to the
    investigate book (--host/--pod/--node/--namespace, or bare to be asked)."
   [args]
-  (apply launch "runbooks/investigate.clj" args))
+  (apply launch "runbooks/investigate.clj" (raw-args args)))
 
 ;; ---------------------------------------------------------------------------
 ;; ./run - fuzzy-launch any single book
 
 (def ^:private run-spec
   {:spec {:dry-run {:desc "Pass --dry-run through to the chosen book" :coerce :boolean}
+          :list {:desc "Print every book as path, tab, description instead of asking" :coerce :boolean}
           :no-color {:desc "Disable colored output (also honors NO_COLOR)" :coerce :boolean}
           :help {:desc "Show this help message" :alias :h :coerce :boolean}}
    :restrict true
@@ -74,6 +84,14 @@
                (stdout/error msg)
                (stdout/err-println "run with --help to see the available flags")
                (System/exit 1))})
+
+(defn catalog-lines
+  "One line per book, its runnable path and its description separated by a tab,
+   so a script or an agent without a terminal can find the book it needs and run
+   it with `bb <path>`. A book without a literal description keeps an empty
+   second column."
+  [books]
+  (map (fn [{:keys [path description]}] (str path "\t" (or description ""))) books))
 
 (defn- passthrough
   [opts]
@@ -87,12 +105,20 @@
    :back so the caller can step up a level."
   ([args] (run args false))
   ([args back?]
-   (let [{:keys [opts args]} (cli/parse-args args run-spec)]
+   (let [{:keys [opts args]} (cli/parse-args (raw-args args) run-spec)]
      (when (:no-color opts) (stdout/disable-colors!))
-     (if (:help opts)
+     (cond
+       (:help opts)
        (do (stdout/err-println (stdout/bold "run - launch any single book by fuzzy search"))
            (stdout/err-println "  [search terms] [--dry-run] [--no-color]")
+           (stdout/err-println "  --list  print every book as path, tab, description")
            0)
+
+       (:list opts)
+       (do (run! println (catalog-lines (catalog/books)))
+           0)
+
+       :else
        (let [books (catalog/books)
              choice (menu-choice "Which book?" (mapv display books) back? (str/join " " args))]
          (cond
@@ -199,7 +225,7 @@
    :back so the caller can step up a level."
   ([args] (detect args false))
   ([args back?]
-   (let [opts (cli/parse-opts args detect-spec)]
+   (let [opts (cli/parse-opts (raw-args args) detect-spec)]
      (when (:no-color opts) (stdout/disable-colors!))
      (if (:help opts)
        (do (stdout/err-println (stdout/bold "detect - start an investigation when something hurts"))
@@ -298,7 +324,7 @@
 (defn front-door
   "The guided menu, a lead shortcut, or a fuzzy book search - the one door."
   [args]
-  (let [{:keys [opts args]} (cli/parse-args args gumshoe-spec)]
+  (let [{:keys [opts args]} (cli/parse-args (raw-args args) gumshoe-spec)]
     (cond
       (:help opts)
       (do (stdout/err-println (stdout/bold "gumshoe - the SRE detective"))

@@ -3,6 +3,7 @@
 
 (ns gumshoe.main-test
   (:require [clojure.test :refer [deftest is testing]]
+            [gumshoe.catalog]
             [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.main :as main]))
 
@@ -49,3 +50,17 @@
                     main/investigate (fn [& _] :done)]
         (is (= :done (guided))
             "Back from the scan submenu loops to the top, where the next pick runs")))))
+
+(deftest catalog-lines-test
+  (testing "each book is its path and description, separated by a tab"
+    (is (= ["/books/runbooks/a.clj\tDoes a"
+            "/books/runbooks/b.clj\t"]
+           (main/catalog-lines [{:path "/books/runbooks/a.clj" :name "a" :description "Does a"}
+                                {:path "/books/runbooks/b.clj" :name "b" :description nil}])))))
+
+(deftest exec-map-reads-raw-arguments-test
+  (testing "a door called by babashka's exec parses *command-line-args*"
+    (binding [*command-line-args* ["--list"]]
+      (with-redefs [gumshoe.catalog/books (fn [] [{:path "/b/runbooks/a.clj" :name "a" :description "A"}])]
+        (is (= "/b/runbooks/a.clj\tA\n"
+               (with-out-str (is (zero? (main/run {:list true}))))))))))

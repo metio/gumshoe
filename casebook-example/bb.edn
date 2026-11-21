@@ -14,6 +14,12 @@
 {:deps {io.github.metio/gumshoe {:git/tag "2026.11.20101451"
                                  :git/sha "85fddc2ce61a2b09af9a04d963c3d264e01414d2"}}
  :paths ["libraries" "runbooks" "playbooks" "firebooks"]
- :tasks {gumshoe  {:doc "The one front door" :task (exec 'gumshoe.main/front-door)}
-         detect   {:doc "Scan for symptoms"  :task (exec 'gumshoe.main/detect)}
-         run      {:doc "Launch a book"       :task (exec 'gumshoe.main/run)}}}
+ :tasks {gumshoe {:doc "The one front door"
+                  :requires ([gumshoe.main :as main])
+                  :task (System/exit (main/front-door *command-line-args*))}
+         detect  {:doc "Scan for symptoms"
+                  :requires ([gumshoe.main :as main])
+                  :task (System/exit (main/detect *command-line-args*))}
+         run     {:doc "Launch a book"
+                  :requires ([gumshoe.main :as main])
+                  :task (System/exit (main/run *command-line-args*))}}}

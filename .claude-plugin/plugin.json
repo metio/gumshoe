@@ -1,0 +1,19 @@
+{
+  "name": "gumshoe",
+  "displayName": "gumshoe",
+  "description": "Teach Claude to investigate and operate clusters with gumshoe — find the right book, run detectives without a terminal, read their JSON findings, and prepare changes as dry runs for a human to confirm.",
+  "author": {
+    "name": "The gumshoe Authors",
+    "url": "https://github.com/metio/gumshoe"
+  },
+  "repository": "https://github.com/metio/gumshoe",
+  "license": "0BSD",
+  "keywords": [
+    "gumshoe",
+    "sre",
+    "kubernetes",
+    "runbooks",
+    "incident-response",
+    "diagnostics"
+  ]
+}
