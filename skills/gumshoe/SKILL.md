@@ -151,7 +151,10 @@ and current list.
 2. Run it with every selecting flag and `--dry-run`. It prints the
    confirmation it would ask and each command it would run (`would run:
    kubectl cordon worker-3`), and changes nothing: no prompt, no announcement,
-   no post-check.
+   no post-check. It still checks each step's precondition. A banner naming
+   steps whose precondition does not hold, with exit code 1, means the real
+   run would stop there, unless an earlier step of the same playbook creates
+   what that step needs.
 3. Show the human the plan and the command without `--dry-run`, written so
    they can run it in their own session, for example
    `! bb runbooks/kubernetes/nodes/cordon.clj --node worker-3`.

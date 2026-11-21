@@ -25,6 +25,14 @@
   (testing "a read-only book still reports what it read"
     (is (= "DONE - no findings" (:text (banner {:dry-run? true :changes? false :outcome :ok}))))))
 
+(deftest a-rehearsal-names-the-steps-whose-precondition-does-not-hold
+  (is (= {:tone :error
+          :text "DRY RUN - nothing was changed; the precondition of purge the old deployment does not hold against the current state"}
+         (banner {:dry-run? true :changes? true :outcome :ok} {:unmet ["purge the old deployment"]})))
+  (is (= 1 (outcome/exit-code :ok {:unmet ["purge"]})))
+  (is (= 0 (outcome/exit-code :ok {:applied 0})))
+  (is (= 1 (outcome/exit-code :failed {}))))
+
 (deftest a-read-only-book-reports-findings-without-claiming-a-failure
   (is (= {:tone :ok :text "DONE - no findings"}
          (banner {:changes? false :outcome :ok})))
