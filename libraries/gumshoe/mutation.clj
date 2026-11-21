@@ -54,6 +54,7 @@
    rests on something outside the spec - an annotation, a status field - names
    it with :facts (fn [object] -> value), which must be equal too."
   (:require [gumshoe.flow :as flow]
+            [gumshoe.prerequisites :as prerequisites]
             [gumshoe.select :as select]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.announce :as announce]
@@ -159,6 +160,37 @@
       :else
       (run-on! spec target opts announcement-data))))
 
+(defn picks
+  "How a select spec chooses its subject, in the words --help shows."
+  [{:keys [mode label flag namespace-flag name-flag]}]
+  (case mode
+    :many (str "one or more of " label (when flag (str " (--" (name flag) ", or interactively)")))
+    :namespaced (str "one " label " by namespace and name"
+                     (when (and namespace-flag name-flag)
+                       (str " (--" (name namespace-flag) " and --" (name name-flag) ", or interactively)")))
+    (str "one " label (when flag (str " (--" (name flag) ", or interactively)")))))
+
+(defn- needs
+  [prerequisites]
+  (when-let [lines (seq (prerequisites/summary prerequisites))]
+    (concat ["" "Needs:"] (map #(str "  " %) lines))))
+
+(defn details
+  "What --help says a mutation book does, generated from its spec."
+  [{:keys [select confirm precondition announce verify pin prerequisites]}]
+  (concat
+   ["What it does:"
+    (str "  picks " (picks select))
+    (str "  asks to confirm: " (:action confirm)
+         (when (:destructive? confirm) " (destructive - type yes)"))]
+   (when (or precondition pin)
+     ["  checks again right before acting that what was confirmed still holds"])
+   (when announce ["  announces the change to the changelog"])
+   [(if verify
+      "  verifies the result before it reports success"
+      "  has no post-check")]
+   (needs prerequisites)))
+
 (defn book
   "Builds and runs a standalone mutating runbook from a declarative spec (see the
    namespace doc). To compose several confirmed steps in one playbook, define each
@@ -168,4 +200,5 @@
    {:description description
     :options (or options {})
     :prerequisites prerequisites
+    :details (details spec)
     :action (fn [opts {:keys [announcement-data]}] (run! spec opts announcement-data))}))

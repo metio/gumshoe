@@ -356,6 +356,10 @@ the playbook into segments: without a terminal it stops at a pause and names
 the `--from-segment` that continues it, and `playbook/run-segment!` takes one
 segment across a batch of subjects.
 
+`--help` of a playbook or a mutation book describes it from its spec: what it
+picks, every step in order with where the confirmation and the pauses fall,
+what it verifies, and the tools and permissions it needs.
+
 `tools/ceph/playbooks/upgrade.clj` upgrades a cephadm-managed ceph cluster: preflight
 (refusing on HEALTH_ERR), local backups of the config/osd/fs/crush/auth dumps
 (it refuses to proceed if any backup is empty - the safety net lives on your

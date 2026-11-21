@@ -172,3 +172,22 @@
            (binding [outcome/*record* record]
              (is (false? (playbook/run-on! pb "ns-1" {} nil))))))
         (is (= 1 (:applied @record)) "only the stamp's effect ran")))))
+
+(deftest help-describes-the-playbook-from-its-steps
+  (let [lines (vec (playbook/details {:select {:mode :one :label "Node" :flag :node}
+                                      :confirm {:action "maintain"}
+                                      :steps [{:title "look" :check identity}
+                                              (assoc nodes/cordon :title "Cordon")
+                                              {:pause "do the work"}
+                                              (assoc nodes/drain :title "Drain")]}))]
+    (is (= ["What it does:"
+            "  picks one Node (--node, or interactively), then:"
+            "  1/3 look - reads and reports"
+            "  - asks once to confirm every step below (destructive - type yes)"
+            "  2/3 Cordon - cordon (mark unschedulable) a node, verified"
+            "  ⏸  do the work - waits for ENTER; --from-segment 2 continues here"
+            "  3/3 Drain - drain a node - every pod on it is evicted and emptyDir data is deleted (destructive), verified"
+            ""
+            "Needs:"]
+           (subvec lines 0 9)))
+    (is (some #{"  kubectl delete: pods"} lines))))

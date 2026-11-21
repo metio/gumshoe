@@ -42,16 +42,21 @@
           :coerce :boolean}})
 
 (defn help-text
-  [description spec]
-  (let [file (System/getProperty "babashka.file")]
-    (str (stdout/bold description)
-         "\n\n"
-         (stdout/yellow "Usage:")
-         "\n  bb " (or file "<runbook>") " [options]"
-         "\n\n"
-         (stdout/yellow "Options:")
-         "\n"
-         (cli/format-opts (merge spec {:order (vec (keys (:spec spec)))})))))
+  ([description spec] (help-text description spec nil))
+  ([description spec details]
+   (let [file (System/getProperty "babashka.file")]
+     (str (stdout/bold description)
+          "\n\n"
+          (when (seq details)
+            (str (str/join "\n" (map #(if (or (str/blank? %) (str/starts-with? % " ")) % (stdout/yellow %))
+                                     details))
+                 "\n\n"))
+          (stdout/yellow "Usage:")
+          "\n  bb " (or file "<runbook>") " [options]"
+          "\n\n"
+          (stdout/yellow "Options:")
+          "\n"
+          (cli/format-opts (merge spec {:order (vec (keys (:spec spec)))}))))))
 
 ;; Each prerequisite is one [label thunk] checklist item. The thunk does the
 ;; (often slow) check and returns {:ok? bool :label "..."} - so the item animates
@@ -256,9 +261,11 @@
    :prerequisites tooling/connection/permission checks to run first
    :announce?     whether the action posts to the changelog (default true)
    :action        (fn [opts ctx]) -> truthy on success
+   :details       optional lines --help shows under the description; an
+                  unindented line is a heading
 
    ctx contains :announcement-data when :announce? is true."
-  [{:keys [description options prerequisites announce? action]
+  [{:keys [description options prerequisites announce? action details]
     :or {options {} prerequisites {} announce? true}}]
   (let [spec {:spec (merge options standard-options)
               :restrict true
@@ -272,7 +279,7 @@
     ;; help is answered before the strict parse, so required options never
     ;; stand between the user and the usage text
     (if (some #{"-h" "--help"} *command-line-args*)
-      (println (help-text description spec))
+      (println (help-text description spec details))
       (let [opts (cli/parse-opts *command-line-args* spec)]
         (when (:no-color opts) (stdout/disable-colors!))
         ;; load the configured plugins - their code is already on the classpath

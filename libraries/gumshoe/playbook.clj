@@ -255,6 +255,40 @@
       :else
       (run-on! playbook target opts announcement-data))))
 
+(defn- step-line
+  [step]
+  (case (kind step)
+    :check (str "  " (::title step) " - reads and reports")
+    :pause (str "  " (::title step)
+                (if (= :continue (:unattended step))
+                  " - waits for ENTER, or goes on without a terminal"
+                  " - waits for ENTER")
+                (when (:verify step) ", then checks the result")
+                "; --from-segment " (::segment step) " continues here")
+    :change (str "  " (::title step)
+                 (when (:title step) (str " - " (label step)))
+                 (when (get-in step [:confirm :destructive?]) " (destructive)")
+                 (when (:verify step) ", verified")
+                 (when (separately? step) ", asks again"))))
+
+(defn details
+  "What --help says a playbook does, generated from its steps."
+  [{:keys [select steps] :as playbook}]
+  (let [steps (numbered steps)
+        [leading later] (split-with #(= :check (kind %)) steps)
+        destructive? (:destructive? (confirmation playbook later {}))
+        needs (prerequisites/summary (all-prerequisites playbook))]
+    (concat
+     ["What it does:"
+      (str "  picks " (mutation/picks select) ", then:")]
+     (map step-line leading)
+     (when (seq later)
+       [(str "  - asks once to confirm every step below"
+             (when destructive? " (destructive - type yes)"))])
+     (map step-line later)
+     (when (seq needs)
+       (concat ["" "Needs:"] (map #(str "  " %) needs))))))
+
 (def ^:private segment-option
   {:from-segment {:desc "Start at this segment: the steps after the pause that opens it, once the operator acted on it"
                   :coerce :long}})
@@ -268,4 +302,5 @@
     :options (cond-> (all-options playbook)
                (some #(= :pause (kind %)) steps) (merge segment-option))
     :prerequisites (all-prerequisites playbook)
+    :details (details playbook)
     :action (fn [opts {:keys [announcement-data]}] (run! playbook opts announcement-data))}))
