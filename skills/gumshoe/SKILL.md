@@ -201,7 +201,11 @@ mostly data:
 - a step a runbook and a playbook share lives in a library, and the runbook
   names its description beside it, `(mutation/book (merge nodes/cordon
   {:description "…"}))`, so `./run --list` reads it without loading the book;
-- a bespoke book calls `runbook/execute!` with its own `:action`.
+- a bespoke book calls `runbook/execute!` with its own `:action`;
+- a cluster read no `gumshoe.kubectl` function wraps goes through
+  `(kubectl/get-json context "namespaces" "--selector=…")`, nil when the read
+  fails, or `get-json-result`, whose `:ok?` tells a failed read from an empty
+  one before a gate trusts an absence.
 
 A plugin calls `gumshoe.plugin/provide!` once with any of the seams:
 announcers, detectives, capabilities, tools, pre- and post-hooks, secrets,
