@@ -44,3 +44,28 @@
     (prerequisites/register-check! :alpha (fn [_ _] [(prerequisites/check "a" (constantly true) {})]))
     (let [labels (map first (prerequisites/items {:zeta 1 :alpha 1} {}))]
       (is (= ["a" "z"] labels)))))
+
+(deftest the-union-of-steps-joins-their-lists-without-duplicates
+  (is (= {:installed-tools ["kubectl" "fzf" "git"]
+          :cluster-capabilities []
+          :kubectl-can-get ["nodes" "pods"]
+          :kubectl-can-patch ["nodes"]}
+         (prerequisites/union {:installed-tools ["kubectl" "fzf"]
+                               :cluster-capabilities []
+                               :kubectl-can-get ["nodes"]}
+                              nil
+                              {:installed-tools ["kubectl" "git"]
+                               :kubectl-can-get ["nodes" "pods"]
+                               :kubectl-can-patch ["nodes"]}))))
+
+(deftest the-union-keeps-the-highest-version-floor-of-a-tool
+  (is (= {:minimum-tool-versions {"kubectl" "1.30.0" "helm" "3.12"}}
+         (prerequisites/union {:minimum-tool-versions {"kubectl" "1.28.2" "helm" "3.12"}}
+                              {:minimum-tool-versions {"kubectl" "1.30.0"}}))))
+
+(deftest the-union-refuses-values-it-can-not-join
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":change-window"
+                        (prerequisites/union {:change-window :weekdays}
+                                             {:change-window :weekends})))
+  (is (= {:change-window :weekdays}
+         (prerequisites/union {:change-window :weekdays} {:change-window :weekdays}))))

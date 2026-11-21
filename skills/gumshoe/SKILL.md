@@ -154,7 +154,9 @@ and current list.
    no post-check. It still checks each step's precondition. A banner naming
    steps whose precondition does not hold, with exit code 1, means the real
    run would stop there, unless an earlier step of the same playbook creates
-   what that step needs.
+   what that step needs. A playbook passes its pauses under `--dry-run`; a
+   real run without a terminal stops at the first pause with a `PAUSED`
+   banner naming the `--from-segment` that continues after the human acted.
 3. Show the human the plan and the command without `--dry-run`, written so
    they can run it in their own session, for example
    `! bb runbooks/kubernetes/nodes/cordon.clj --node worker-3`.
@@ -193,6 +195,12 @@ mostly data:
 - a uniform change is `(mutation/book {:select … :confirm … :effect …
   :verify …})`, whose effect plan (`[[:kubectl "cordon" node]]`) runs,
   dry-runs, or is collected in a test;
+- a playbook is `(playbook/book {:select … :confirm … :steps […]})`, whose
+  steps are mutation specs, checks and pauses; it derives its prerequisites
+  and options from the steps and asks for one confirmation;
+- a step a runbook and a playbook share lives in a library, and the runbook
+  names its description beside it, `(mutation/book (merge nodes/cordon
+  {:description "…"}))`, so `./run --list` reads it without loading the book;
 - a bespoke book calls `runbook/execute!` with its own `:action`.
 
 A plugin calls `gumshoe.plugin/provide!` once with any of the seams:

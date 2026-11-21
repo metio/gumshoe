@@ -14,7 +14,8 @@
    section exactly like the built-ins, and any failure stops the book before it
    touches anything. Custom checks run after the built-in tooling/connectivity/
    permission checks."
-  (:refer-clojure :exclude [check]))
+  (:refer-clojure :exclude [check])
+  (:require [gumshoe.command :as command]))
 
 (defonce ^:private checks (atom {}))
 
@@ -50,3 +51,31 @@
             (when (contains? prerequisites key)
               ((get @checks key) (get prerequisites key) opts)))
           (registered-checks)))
+
+(defn- higher-version
+  [a b]
+  (if (command/version-at-least? a b) a b))
+
+(defn- combine
+  [key a b]
+  (cond
+    (= :minimum-tool-versions key) (merge-with higher-version a b)
+    (= a b) a
+    (and (sequential? a) (sequential? b)) (vec (distinct (concat a b)))
+    (and (map? a) (map? b)) (merge a b)
+    :else (throw (ex-info (format "the steps declare %s differently: %s and %s"
+                                  key (pr-str a) (pr-str b))
+                          {:key key :values [a b]}))))
+
+(defn union
+  "The prerequisites of several steps as one map, so a book that runs them all
+   checks everything it will need before its first step. Lists are joined
+   without duplicates, a tool's version floor is the highest one any step
+   declares, and a key whose values can not be joined throws."
+  [& prerequisites]
+  (reduce (fn [acc m]
+            (reduce-kv (fn [acc k v]
+                         (if (contains? acc k) (update acc k #(combine k % v)) (assoc acc k v)))
+                       acc m))
+          {}
+          (remove nil? prerequisites)))

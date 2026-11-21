@@ -127,6 +127,7 @@
                    [gumshoe.mimirtool-test]
                    [gumshoe.select-test]
                    [gumshoe.mutation-test]
+                   [gumshoe.playbook-test]
                    [gumshoe.prerequisites-test]
                    [gumshoe.postgres-test]
                    [gumshoe.progress-test]
@@ -273,6 +274,7 @@
                                                          'gumshoe.mimirtool-test
                                                          'gumshoe.select-test
                                                          'gumshoe.mutation-test
+                                                         'gumshoe.playbook-test
                                                          'gumshoe.prerequisites-test
                                                          'gumshoe.postgres-test
                                                          'gumshoe.progress-test

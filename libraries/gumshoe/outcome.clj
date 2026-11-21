@@ -40,6 +40,11 @@
   [step]
   (record! update :unmet (fnil conj []) step))
 
+(defn paused!
+  "A playbook stopped at a pause it can not wait at; `how` says how to continue."
+  [how]
+  (record! assoc :paused how))
+
 (defn applied!
   "One effect of a plan ran cleanly."
   []
@@ -86,7 +91,7 @@
 
    Only a run whose post-checks all ran and held may claim verification."
   [{:keys [dry-run? changes? outcome findings?]} record]
-  (let [{:keys [aborted applied stopped thunk verified unmet]} record]
+  (let [{:keys [aborted applied paused stopped thunk verified unmet]} record]
     (cond
       (and dry-run? changes? (seq unmet))
       {:tone :error
@@ -107,6 +112,12 @@
 
       aborted
       {:tone :neutral :text (str "ABORTED - " aborted " - nothing was changed")}
+
+      paused
+      {:tone :neutral
+       :text (str "PAUSED"
+                  (when (changed? record) (str " after " (effects applied)))
+                  " - " paused)}
 
       (not changes?)
       (cond

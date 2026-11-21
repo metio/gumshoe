@@ -1,0 +1,153 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+(ns gumshoe.playbook-test
+  (:require [clojure.test :refer [deftest is testing]]
+            [gumshoe.flow :as flow]
+            [gumshoe.interact :as interact]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.outcome :as outcome]
+            [gumshoe.playbook :as playbook]
+            [gumshoe.steps.nodes :as nodes]))
+
+(defn- change
+  [action ran & {:as extra}]
+  (merge {:select {:mode :one :label "Node"}
+          :confirm {:action action}
+          :effect (fn [{:keys [target]}] (swap! ran conj [action target]) [[:note action]])}
+         extra))
+
+(defn- check
+  [title ran ok?]
+  {:title title :check (fn [_] (swap! ran conj [title]) ok?)})
+
+(defmacro ^:private quietly
+  [& body]
+  `(binding [*err* (java.io.StringWriter.) *out* (java.io.StringWriter.)]
+     (with-redefs-fn {#'gumshoe.playbook/attended? (constantly false)}
+       #(with-redefs [kubectl/current-context (constantly "ctx")
+                      kubectl/current-cluster (constantly "cluster")]
+          ~@body))))
+
+(deftest a-playbook-needs-what-every-step-needs
+  (is (= {:installed-tools ["kubectl" "fzf" "git"]
+          :cluster-capabilities []
+          :kubectl-can-get ["nodes" "pods"]
+          :kubectl-can-patch ["nodes"]
+          :kubectl-can-delete ["pods"]}
+         (playbook/all-prerequisites {:prerequisites {:installed-tools ["git"]}
+                                      :steps [nodes/cordon nodes/drain {:pause "x"} nodes/uncordon]}))))
+
+(deftest a-playbook-reads-every-option-its-steps-read
+  (is (= #{:node :grace-period}
+         (set (keys (playbook/all-options {:steps [nodes/cordon nodes/drain nodes/uncordon]})))))
+  (testing "the playbook's own declaration wins"
+    (is (= "mine" (get-in (playbook/all-options {:options {:node {:desc "mine" :alias :n :coerce :string}}
+                                                 :steps [nodes/cordon]})
+                          [:node :desc]))))
+  (testing "steps that read one option differently can not be composed"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"--node"
+                          (playbook/all-options {:steps [nodes/cordon
+                                                         {:check identity :options {:node {:coerce :long}}}]})))))
+
+(deftest a-step-without-a-kind-is-refused
+  (is (thrown? clojure.lang.ExceptionInfo (playbook/kind {:title "nothing"}))))
+
+(deftest pauses-split-the-steps-into-numbered-segments
+  (let [ran (atom [])
+        segs (playbook/segments [(check "look" ran true) (change "a" ran) {:pause "act"} (change "b" ran)])]
+    (is (= [["1/3 look" "2/3 a"] ["⏸  act" "3/3 b"]]
+           (mapv #(mapv ::playbook/title %) segs)))
+    (is (= [[1 1] [2 2]] (mapv #(mapv ::playbook/segment %) segs)))))
+
+(deftest one-confirmation-lists-every-step-and-is-destructive-when-any-change-is
+  (let [ran (atom [])
+        steps (apply concat (playbook/segments [(change "cordon" ran)
+                                                {:pause "act"}
+                                                (change "drain" ran :confirm {:action "drain" :destructive? true})]))]
+    (is (= {:action "maintain"
+            :target "cluster"
+            :items ["w-1" "1/2 cordon" "⏸  act" "2/2 drain"]
+            :destructive? true}
+           (update (playbook/confirmation {:confirm {:action "maintain"} :select {:mode :one}}
+                                          steps {:cluster "cluster" :target "w-1"})
+                   :items vec)))))
+
+(deftest leading-checks-run-before-the-one-confirmation-and-the-changes-after-it
+  (let [ran (atom [])
+        confirmations (atom 0)
+        pb {:select {:mode :one} :confirm {:action "maintain"}
+            :steps [(check "look" ran true) (change "cordon" ran) (change "drain" ran)]}]
+    (quietly
+     (with-redefs [interact/confirm! (fn [_] (swap! ran conj [:confirm]) (swap! confirmations inc) true)]
+       (is (true? (playbook/run-on! pb "w-1" {} nil)))))
+    (is (= [["look"] [:confirm] ["cordon" "w-1"] ["drain" "w-1"]] @ran))
+    (is (= 1 @confirmations))))
+
+(deftest a-declined-confirmation-runs-no-change
+  (let [ran (atom [])]
+    (quietly
+     (with-redefs [interact/confirm! (constantly false)]
+       (is (false? (playbook/run-on! {:select {:mode :one} :confirm {:action "x"}
+                                      :steps [(change "cordon" ran)]}
+                                     "w-1" {} nil)))))
+    (is (empty? @ran))))
+
+(deftest a-failing-step-stops-the-playbook
+  (let [ran (atom [])]
+    (quietly
+     (with-redefs [interact/confirm! (constantly true)]
+       (is (false? (playbook/run-on! {:select {:mode :one} :confirm {:action "x"}
+                                      :steps [(change "cordon" ran) (check "fails" ran false) (change "drain" ran)]}
+                                     "w-1" {} nil)))))
+    (is (= [["cordon" "w-1"] ["fails"]] @ran))))
+
+(deftest a-pause-without-a-terminal-stops-and-names-the-segment-to-continue-with
+  (let [ran (atom [])
+        record (outcome/fresh)
+        pb {:select {:mode :one} :confirm {:action "x"}
+            :steps [(change "cordon" ran) {:pause "do the maintenance"} (change "uncordon" ran)]}]
+    (quietly
+     (with-redefs [interact/confirm! (constantly true)]
+       (binding [outcome/*record* record]
+         (is (false? (playbook/run-on! pb "w-1" {} nil))))))
+    (is (= [["cordon" "w-1"]] @ran))
+    (is (= "continue with --from-segment 2 once this is done: do the maintenance" (:paused @record)))
+    (testing "the named segment checks the pause's result without waiting, then continues"
+      (let [verified (atom false)
+            pb (assoc-in pb [:steps 1 :verify] (fn [_] [{:description "done" :check #(reset! verified true)}]))]
+        (reset! ran [])
+        (quietly
+         (with-redefs [interact/confirm! (constantly true)]
+           (is (true? (playbook/run-on! pb "w-1" {:from-segment 2} nil)))))
+        (is @verified)
+        (is (= [["uncordon" "w-1"]] @ran))))))
+
+(deftest an-unattended-pause-continues-to-its-verification
+  (let [ran (atom [])]
+    (quietly
+     (with-redefs [interact/confirm! (constantly true)]
+       (is (true? (playbook/run-on! {:select {:mode :one} :confirm {:action "x"}
+                                     :steps [{:pause "push" :unattended :continue
+                                              :verify (fn [_] [{:description "pushed" :check (constantly true)}])}
+                                             (change "drain" ran)]}
+                                    "w-1" {} nil)))))
+    (is (= [["drain" "w-1"]] @ran))))
+
+(deftest a-dry-run-passes-every-pause-and-changes-nothing
+  (let [ran (atom [])]
+    (quietly
+     (binding [flow/*dry-run* true]
+       (is (true? (playbook/run-on! {:select {:mode :one} :confirm {:action "x"}
+                                     :steps [(change "cordon" ran) {:pause "act"} (change "uncordon" ran)]}
+                                    "w-1" {} nil)))))
+    (is (= [["cordon" "w-1"] ["uncordon" "w-1"]] @ran) "the plans are built and shown, not run")))
+
+(deftest one-segment-runs-alone-for-a-driver
+  (let [ran (atom [])
+        pb {:select {:mode :one} :confirm {:action "x"}
+            :steps [(change "orphan" ran) (change "stamp" ran) {:pause "commit"} (change "drain" ran)]}]
+    (quietly
+     (is (true? (playbook/run-segment! pb 1 "ns-1" {} nil)))
+     (is (false? (playbook/run-segment! pb 3 "ns-1" {} nil))))
+    (is (= [["orphan" "ns-1"] ["stamp" "ns-1"]] @ran))))
