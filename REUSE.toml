@@ -10,3 +10,10 @@ path = "sre.json.example"
 precedence = "override"
 SPDX-FileCopyrightText = "The gumshoe Authors"
 SPDX-License-Identifier = "0BSD"
+
+# JSON can not carry a comment header. The Claude Code plugin manifests.
+[[annotations]]
+path = ".claude-plugin/*.json"
+precedence = "override"
+SPDX-FileCopyrightText = "The gumshoe Authors"
+SPDX-License-Identifier = "0BSD"

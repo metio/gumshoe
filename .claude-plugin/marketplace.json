@@ -1,0 +1,23 @@
+{
+  "name": "gumshoe",
+  "owner": {
+    "name": "The gumshoe Authors"
+  },
+  "description": "gumshoe — the SRE detective: books that investigate what is wrong, fix it safely, and announce the change.",
+  "plugins": [
+    {
+      "name": "gumshoe",
+      "source": "./",
+      "description": "Teach Claude to investigate and operate clusters with gumshoe's books.",
+      "license": "0BSD",
+      "keywords": [
+        "gumshoe",
+        "sre",
+        "kubernetes",
+        "runbooks",
+        "incident-response",
+        "diagnostics"
+      ]
+    }
+  ]
+}

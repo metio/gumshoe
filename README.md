@@ -392,9 +392,12 @@ them.
 ;; casebook bb.edn
 {:deps  {io.github.metio/gumshoe {:git/tag "2026.7.5" :git/sha "…"}}
  :paths ["libraries" "runbooks" "playbooks" "firebooks"]
- :tasks {gumshoe {:task (exec 'gumshoe.main/front-door)}
-         detect  {:task (exec 'gumshoe.main/detect)}
-         run     {:task (exec 'gumshoe.main/run)}}}
+ :tasks {gumshoe {:requires ([gumshoe.main :as main])
+                  :task (System/exit (main/front-door *command-line-args*))}
+         detect  {:requires ([gumshoe.main :as main])
+                  :task (System/exit (main/detect *command-line-args*))}
+         run     {:requires ([gumshoe.main :as main])
+                  :task (System/exit (main/run *command-line-args*))}}}
 ```
 
 Run the front doors as tasks - `bb gumshoe`, `bb detect`, `bb run`. Pinning a
@@ -500,6 +503,19 @@ unifying convenience.
 
 [`examples/example/plugin.clj`](examples/example/plugin.clj) is a worked plugin
 that extends *every* seam through one `provide!` call.
+
+## Agents
+
+The repository is a Claude Code plugin. Its skill in
+[`skills/gumshoe/`](skills/gumshoe/SKILL.md) tells an agent what gumshoe
+covers and how to use it without a terminal. The agent lists the books with
+`./run --list`, runs detectives with `--output json`, and prepares a change
+with `--dry-run` for a human to confirm. Install it with:
+
+```text
+/plugin marketplace add metio/gumshoe
+/plugin install gumshoe@gumshoe
+```
 
 ## Tests
 
