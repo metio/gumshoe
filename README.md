@@ -563,7 +563,7 @@ bb smoke-runbooks
 
 ## How books are written
 
-Most books are *data*, not code. There are four declarative forms, all held to
+Most books are *data*, not code. There are five declarative forms, all held to
 the same machine-enforced contract:
 
 - **A detective** is `(detective/book {:description … :detectives …
@@ -579,6 +579,9 @@ the same machine-enforced contract:
 - **A playbook** is `(playbook/book {:select … :confirm … :steps […]})` - the
   steps are mutation specs, checks and pauses, and the prerequisites and
   options come from the steps.
+- **A dispatcher** is `(dispatch/book {:select … :classify … :routes {…}})` -
+  it picks a subject, asks it what it is, and runs the playbook that kind
+  routes to, applying that route's option defaults once the route is known.
 - **A bespoke book** calls `runbook/execute!` directly with its own `:action`,
   for the handful with genuinely custom flow (multi-step orchestration,
   port-forwards, two-step selection). Even these express their change as an

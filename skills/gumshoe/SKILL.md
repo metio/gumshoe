@@ -200,6 +200,9 @@ mostly data:
 - a playbook is `(playbook/book {:select … :confirm … :steps […]})`, whose
   steps are mutation specs, checks and pauses; it derives its prerequisites
   and options from the steps and asks for one confirmation;
+- a dispatcher is `(dispatch/book {:select … :classify (fn [ctx target] key)
+  :routes {key {:playbook …}}})`, one front door that runs the playbook a
+  subject's kind routes to;
 - a step a runbook and a playbook share lives in a library, and the runbook
   names its description beside it, `(mutation/book (merge nodes/cordon
   {:description "…"}))`, so `./run --list` reads it without loading the book;
