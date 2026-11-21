@@ -147,7 +147,9 @@ and current list.
 
 ## Preparing a change
 
-1. Find the book and read `--help`.
+1. Find the book and read `--help`. For a playbook or a mutation book it
+   lists what the book picks, each step in order, where it asks for
+   confirmation and pauses, what it verifies, and what it needs.
 2. Run it with every selecting flag and `--dry-run`. It prints the
    confirmation it would ask and each command it would run (`would run:
    kubectl cordon worker-3`), and changes nothing: no prompt, no announcement,

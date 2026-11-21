@@ -69,3 +69,10 @@
                                              {:change-window :weekends})))
   (is (= {:change-window :weekdays}
          (prerequisites/union {:change-window :weekdays} {:change-window :weekdays}))))
+
+(deftest the-summary-names-what-a-book-needs
+  (is (= ["tools: kubectl, fzf" "kubectl get: nodes" "kubectl at least 1.30" "cluster capabilities: flux"]
+         (prerequisites/summary {:installed-tools ["kubectl" "fzf"]
+                                 :kubectl-can-get ["nodes"]
+                                 :minimum-tool-versions {"kubectl" "1.30"}
+                                 :cluster-capabilities [:flux]}))))

@@ -15,7 +15,8 @@
    touches anything. Custom checks run after the built-in tooling/connectivity/
    permission checks."
   (:refer-clojure :exclude [check])
-  (:require [gumshoe.command :as command]))
+  (:require [clojure.string :as str]
+            [gumshoe.command :as command]))
 
 (defonce ^:private checks (atom {}))
 
@@ -79,3 +80,30 @@
                        acc m))
           {}
           (remove nil? prerequisites)))
+
+(def ^:private summary-rows
+  [[:installed-tools "tools"]
+   [:kubectl-can-get "kubectl get"]
+   [:kubectl-can-create "kubectl create"]
+   [:kubectl-can-patch "kubectl patch"]
+   [:kubectl-can-delete "kubectl delete"]
+   [:kubectl-can-exec "kubectl exec into"]
+   [:access-gopass-secrets "secrets named by"]
+   [:can-ping-using-ipv4 "IPv4 reachability of"]
+   [:can-ping-using-ipv6 "IPv6 reachability of"]])
+
+(defn summary
+  "One line per kind of prerequisite, in the words --help shows them."
+  [prerequisites]
+  (concat
+   (for [[key title] summary-rows
+         :let [values (get prerequisites key)]
+         :when (seq values)]
+     (str title ": " (str/join ", " (map name values))))
+   (for [[tool version] (sort (:minimum-tool-versions prerequisites))]
+     (str tool " at least " version))
+   (when-let [caps (seq (:cluster-capabilities prerequisites))]
+     [(str "cluster capabilities: " (str/join ", " (map name caps)))])
+   (for [key (registered-checks)
+         :when (contains? prerequisites key)]
+     (str "check: " (name key)))))

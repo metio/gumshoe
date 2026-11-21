@@ -43,3 +43,17 @@
                   :effect (fn [_] (reset! ran true) [])}]
         (is (true? (mutation/run! spec {} nil)))
         (is (false? @ran) "no candidates means the effect is never built or run")))))
+
+(deftest help-describes-the-mutation-from-its-spec
+  (is (= ["What it does:"
+          "  picks one Namespace (--namespace, or interactively)"
+          "  asks to confirm: delete it (destructive - type yes)"
+          "  checks again right before acting that what was confirmed still holds"
+          "  has no post-check"
+          ""
+          "Needs:"
+          "  tools: kubectl"]
+         (mutation/details {:select {:mode :one :label "Namespace" :flag :namespace}
+                            :confirm {:action "delete it" :destructive? true}
+                            :precondition (constantly true)
+                            :prerequisites {:installed-tools ["kubectl"]}}))))
