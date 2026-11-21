@@ -20,6 +20,8 @@
          detect  {:doc "Scan for symptoms"
                   :requires ([gumshoe.main :as main])
                   :task (System/exit (main/detect *command-line-args*))}
+         ;; babashka has a built-in `run`; the task replaces it
          run     {:doc "Launch a book"
+                  :override-builtin true
                   :requires ([gumshoe.main :as main])
                   :task (System/exit (main/run *command-line-args*))}}}
