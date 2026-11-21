@@ -42,7 +42,7 @@
 (def ^:private harness-calls
   "The ways a book enters the harness: the raw runbook config, the declarative
    mutation spec, or the detective spec (both build a runbook config internally)."
-  #{'runbook/execute! 'mutation/book 'detective/book 'playbook/book})
+  #{'runbook/execute! 'mutation/book 'detective/book 'playbook/book 'dispatch/book})
 
 (defn- execute-config
   [forms]
@@ -82,9 +82,9 @@
 
 (deftest every-book-runs-through-the-harness
   (doseq [file book-files]
-    (let [entries (count (re-seq #"runbook/execute!|mutation/book|detective/book|playbook/book" (slurp file)))]
+    (let [entries (count (re-seq #"runbook/execute!|mutation/book|detective/book|playbook/book|dispatch/book" (slurp file)))]
       (is (= 1 entries)
-          (str file " must enter the harness exactly once (runbook/execute!, mutation/book, detective/book, or playbook/book)")))))
+          (str file " must enter the harness exactly once (runbook/execute!, mutation/book, detective/book, playbook/book, or dispatch/book)")))))
 
 (defn- shared-spec?
   "A config written as (merge <shared spec> {...}): a book running a step its
@@ -110,7 +110,7 @@
       ;; :detectives or a :scope (a registry scope resolved when the book runs);
       ;; a shared spec carries its own
       (when-not (shared-spec? form)
-        (is (some #(contains? config %) [:action :select :detectives :scope])
+        (is (some #(contains? config %) [:action :select :detectives :scope :routes])
             (str file " needs an :action (runbook), :select (mutation, playbook), or :detectives/:scope (detective)"))))))
 
 (deftest every-option-is-documented-and-aliases-never-collide
