@@ -35,15 +35,30 @@ instead.
 
 ```sh
 ./run --list                 # in a gumshoe clone
-bb run --list                # in a casebook whose bb.edn has the run task
+bb run --list                # in a casebook
 ```
 
 Each line is a book's absolute path, a tab, and its description, for every
 book on the classpath: gumshoe's built-ins, every tool package the project
-depends on, and the casebook's own books. A casebook's `run` task needs the
-`System/exit` wiring of `casebook-example/bb.edn` for the exit code to reach
-the shell. Filter it with `grep`, then read
-the book's options:
+depends on, and the casebook's own books.
+
+`bb run` in a casebook is a task of its `bb.edn`, and babashka's own `run`
+answers when the task is missing. Check `bb tasks` first; a casebook without
+`run` and `detect` needs them, as in `casebook-example/bb.edn`:
+
+```clojure
+:tasks {detect {:requires ([gumshoe.main :as main])
+                :task (System/exit (main/detect *command-line-args*))}
+        run    {:override-builtin true
+                :requires ([gumshoe.main :as main])
+                :task (System/exit (main/run *command-line-args*))}}
+```
+
+`System/exit` carries the book's exit code to the shell, and
+`:override-builtin true` silences babashka's warning that the task replaces
+its built-in `run`.
+
+Filter the list with `grep`, then read the book's options:
 
 ```sh
 ./run --list | grep -i velero
