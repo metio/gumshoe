@@ -31,7 +31,9 @@
    the operator decides with their report on screen. The confirmation lists
    every later step and covers all of them: a change shows what it does and runs
    without asking again, while its precondition and pin are still checked right
-   before it. It is destructive when any change is.
+   before it. A change whose :confirm says :separately? true - a point of no
+   return whose exact items the operator must see - asks again when it is
+   reached. The confirmation is destructive when any change is.
 
    The pauses split the steps into segments. `book` runs them all and waits at
    each pause; --from-segment N starts after the operator acted on the pause
@@ -122,6 +124,10 @@
        (partition-by ::segment)
        (mapv vec)))
 
+(defn- separately?
+  [step]
+  (and (= :change (kind step)) (true? (get-in step [:confirm :separately?]))))
+
 (defn confirmation
   "The one confirmation covering `steps`."
   [{:keys [confirm select]} steps {:keys [cluster target]}]
@@ -131,7 +137,8 @@
                   (map (fn [step]
                          (case (kind step)
                            :pause (::title step)
-                           (str (::number step) " " (label step))))
+                           (str (::number step) " " (label step)
+                                (when (separately? step) " (asks again)"))))
                        steps))
    :destructive? (boolean (or (:destructive? confirm)
                               (some #(and (= :change (kind %)) (get-in % [:confirm :destructive?]))
@@ -174,7 +181,7 @@
   [step {:keys [target opts announcement-data] :as ctx} wait?]
   (stdout/print-section (::title step))
   (case (kind step)
-    :change (mutation/run-on! (assoc step :confirmed? true) target opts announcement-data)
+    :change (mutation/run-on! (assoc step :confirmed? (not (separately? step))) target opts announcement-data)
     :check (boolean ((:check step) ctx))
     :pause (pause! step ctx wait?)))
 
@@ -205,7 +212,8 @@
 
 (defn run-segment!
   "Runs segment `n` (from 1) of the playbook against an already-chosen target.
-   The caller confirmed it, so its changes run without asking again; a pause
+   The caller confirmed it, so its changes run without asking again, except
+   those that ask :separately?; a pause
    opening it checks its :verify without waiting. Returns true when every step
    succeeded."
   [playbook n target opts announcement-data]
