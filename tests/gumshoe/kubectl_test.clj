@@ -193,3 +193,26 @@
   (testing "a failed read is NEVER 'confirmed absent' (the whole point)"
     (with-redefs [shell/execute (fn [& _] {:exit 1 :out ""})]
       (is (false? (kubectl/confirmed-absent? "ctx" "ns" "secrets" (constantly false)))))))
+
+(deftest parse-json-degrades-to-nil-test
+  (is (= {:items []} (kubectl/parse-json "{\"items\":[]}")))
+  (is (nil? (kubectl/parse-json "")))
+  (is (nil? (kubectl/parse-json nil)))
+  (is (nil? (kubectl/parse-json "{\"items\":[{\"meta"))))
+
+(deftest get-json-passes-any-flag-to-kubectl-get-test
+  (let [argv (atom nil)]
+    (with-redefs [shell/stdout-of (fn [& args] (reset! argv (vec args)) "{\"items\":[]}")]
+      (is (= {:items []} (kubectl/get-json "ctx" "namespaces" "--selector=team=web"))))
+    (is (= ["kubectl" "--context=ctx" "--request-timeout=30s" "get" "namespaces" "--selector=team=web" "--output=json"]
+           @argv))))
+
+(deftest get-json-result-tells-a-failed-read-from-an-empty-one-test
+  (with-redefs [shell/execute (fn [& _] {:exit 0 :out "{\"items\":[]}"})]
+    (is (= {:ok? true :doc {:items []}} (kubectl/get-json-result "ctx" "namespaces"))))
+  (testing "kubectl failed"
+    (with-redefs [shell/execute (fn [& _] {:exit 1 :out ""})]
+      (is (false? (:ok? (kubectl/get-json-result "ctx" "namespaces"))))))
+  (testing "kubectl answered with output that does not parse"
+    (with-redefs [shell/execute (fn [& _] {:exit 0 :out "{\"items\":[{"})]
+      (is (= {:ok? false :doc nil} (kubectl/get-json-result "ctx" "namespaces"))))))

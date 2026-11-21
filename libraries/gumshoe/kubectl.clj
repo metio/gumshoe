@@ -194,19 +194,22 @@
 ;; ---------------------------------------------------------------------------
 ;; talking to the cluster
 
-(defn- parse
-  "Parses kubectl JSON output. Empty output (a missing CRD, a failed command)
-   is nil, and truncated or malformed output is nil rather than an exception -
-   so one unreadable resource type degrades to no-evidence instead of
-   crashing a whole investigation."
+(defn parse-json
+  "Parses kubectl JSON output with keyword keys. Empty output (a missing CRD, a
+   failed command) is nil, and truncated or malformed output is nil rather than
+   an exception - so one unreadable resource type degrades to no-evidence
+   instead of crashing a whole investigation. Every read here keeps this
+   contract; a caller that must tell a failed read from an empty one uses a
+   -result read instead."
   [json-string]
   (try
     (cheshire/parse-string json-string true)
     (catch Exception _ nil)))
 
+
 (defn- current-config
   []
-  (parse (shell/stdout-of "kubectl" "config" "view" "--raw" "--output" "json")))
+  (parse-json (shell/stdout-of "kubectl" "config" "view" "--raw" "--output" "json")))
 
 (defn current-context
   []
@@ -313,10 +316,32 @@
 ;; running for as long as it needs.
 (def ^:private request-timeout "--request-timeout=30s")
 
+(defn get-json
+  "Runs `kubectl get` with `args` - a type, names, selectors, a namespace, any
+   flag - and returns the parsed JSON document, or nil when the read failed or
+   its output did not parse (see parse-json). For a read no other function
+   here wraps:
+
+     (get-json context \"namespaces\" \"--selector=team=web\")"
+  [context & args]
+  (parse-json (apply shell/stdout-of "kubectl" (str "--context=" context) request-timeout
+                     "get" (concat args ["--output=json"]))))
+
+(defn get-json-result
+  "Like get-json, but returns {:ok? <the read answered> :doc <the document>}.
+   :ok? is true only when kubectl exited cleanly and its output parsed, so a
+   gate on an absence can require that the read answered before it trusts an
+   empty result: a throttled API or a missing CRD is not ok?, where get-json
+   would have returned the same nil as a failed parse."
+  [context & args]
+  (let [{:keys [exit out]} (apply shell/execute "kubectl" (str "--context=" context) request-timeout
+                                  "get" (concat args ["--output=json"]))
+        doc (parse-json out)]
+    {:ok? (and (zero? exit) (some? doc)) :doc doc}))
+
 (defn get-all
   [context type]
-  (parse (shell/stdout-of "kubectl" (str "--context=" context) request-timeout
-                          "get" type "--all-namespaces" "--output=json")))
+  (get-json context type "--all-namespaces"))
 
 (defn label-selector-matches?
   "Whether a metav1.LabelSelector selects labels. An empty selector selects
@@ -431,7 +456,7 @@
    not carry - kubelet's per-node stats among it. A failed call parses to nil,
    like every other read here."
   [context path]
-  (parse (shell/stdout-of "kubectl" (str "--context=" context) request-timeout
+  (parse-json (shell/stdout-of "kubectl" (str "--context=" context) request-timeout
                           "get" "--raw" path)))
 
 (defn raw-text
@@ -463,30 +488,25 @@
 
 (defn get-selected
   [context type selector]
-  (parse (shell/stdout-of "kubectl" (str "--context=" context) request-timeout
-                          "get" type "--all-namespaces" (str "--selector=" selector) "--output=json")))
+  (get-json context type "--all-namespaces" (str "--selector=" selector)))
 
 (defn get-cluster-resource
   [context type name]
-  (parse (shell/stdout-of "kubectl" (str "--context=" context) request-timeout
-                          "get" type name "--output=json")))
+  (get-json context type name))
 
 (defn get-namespaced-resource
   [context namespace type name]
-  (parse (shell/stdout-of "kubectl" (str "--context=" context) (str "--namespace=" namespace) request-timeout
+  (parse-json (shell/stdout-of "kubectl" (str "--context=" context) (str "--namespace=" namespace) request-timeout
                           "get" type name "--output=json")))
 
 (defn pods-on-node
   [context node]
-  (parse (shell/stdout-of "kubectl" (str "--context=" context) request-timeout
-                          "get" "pods" "--all-namespaces"
-                          (str "--field-selector=spec.nodeName=" node)
-                          "--output=json")))
+  (get-json context "pods" "--all-namespaces" (str "--field-selector=spec.nodeName=" node)))
 
 (defn get-namespaced
   "Every resource of a type within one namespace."
   [context namespace type]
-  (parse (shell/stdout-of "kubectl" (str "--context=" context) (str "--namespace=" namespace) request-timeout
+  (parse-json (shell/stdout-of "kubectl" (str "--context=" context) (str "--namespace=" namespace) request-timeout
                           "get" type "--output=json")))
 
 (defn get-namespaced-result
@@ -497,10 +517,8 @@
    then reads as 'absent' and the gate opens). This keeps the exit status, so a
    caller can require that the read actually answered before trusting an empty."
   [context namespace type]
-  (let [{:keys [exit out]} (shell/execute "kubectl" (str "--context=" context)
-                                          (str "--namespace=" namespace) request-timeout
-                                          "get" type "--output=json")]
-    {:ok? (zero? exit) :items (items-of (parse out))}))
+  (let [{:keys [ok? doc]} (get-json-result context type (str "--namespace=" namespace))]
+    {:ok? ok? :items (items-of doc)}))
 
 (defn confirmed-absent?
   "True ONLY when a namespaced read succeeds AND no item matches `pred` - the
