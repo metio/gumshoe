@@ -83,3 +83,10 @@
 (deftest recording-outside-a-run-does-nothing
   (is (nil? outcome/*record*))
   (is (nil? (outcome/applied!))))
+
+(deftest a-playbook-that-stops-at-a-pause-says-how-to-continue
+  (is (= {:tone :neutral
+          :text "PAUSED after 2 effects - continue with --segment 2 once the maintenance is done"}
+         (banner {:changes? true :outcome :failed}
+                 {:applied 2 :paused "continue with --segment 2 once the maintenance is done"})))
+  (is (= 1 (outcome/exit-code :failed {:paused "x"}))))

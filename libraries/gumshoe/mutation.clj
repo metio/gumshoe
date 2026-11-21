@@ -31,7 +31,8 @@
       :derive   (fn [ctx] -> map)   ; optional, values merged into ctx once so a
                                     ; per-run value is shared by :effect and :verify
       :items    (fn [ctx] -> seq)   ; optional, overrides the confirmation items
-      :pin      (fn [ctx] -> {:type :name :namespace? :facts?})}  ; optional, see below
+      :pin      (fn [ctx] -> {:type :name :namespace? :facts?})  ; optional, see below
+      :confirmed? true}  ; set by a playbook whose confirmation covered this step
 
    The :precondition, :announce, :effect, :verify, :derive and :items callbacks
    each receive one context map, so a book destructures exactly what it needs:
@@ -132,6 +133,7 @@
                      :destructive? (:destructive? confirm)}
       :precondition (pinned-precondition (when precondition #(precondition ctx))
                                          ref before #(fetch-pinned context %))
+      :confirmed? (:confirmed? spec)
       :announce! (when announce
                    #(announce/announce! cluster announcement-data (announce ctx)))
       :effect (effect ctx)

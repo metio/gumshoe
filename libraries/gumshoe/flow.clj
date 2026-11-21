@@ -70,9 +70,12 @@
    :effect        a plan of effect data (preferred - composes and dry-runs)
    :execute!      a thunk doing the work, truthy on success (legacy)
    :post-checks   optional seq of verify/eventually maps proving the result
+   :confirmed?    the operator already approved this change as part of a
+                  larger confirmation (a playbook's), so it is shown and runs
+                  without asking again; the precondition still applies
 
    Returns true only when every step succeeded."
-  [{:keys [confirmation precondition announce! execute! effect post-checks] :as config}]
+  [{:keys [confirmation precondition announce! execute! effect post-checks confirmed?] :as config}]
   (cond
     (not (valid-config? config))
     (do (stdout/error "refusing a malformed change: :confirmation needs a non-blank :action, a :target, and :items, and either an :effect plan or an :execute! function")
@@ -99,7 +102,9 @@
             (stdout/warn "this step's precondition does not hold against the current state - a real run would abort here unless an earlier step changes that"))
           shown))
 
-    (not (interact/confirm! confirmation))
+    (not (if confirmed?
+           (do (stdout/err-println (interact/confirmation-message confirmation)) true)
+           (interact/confirm! confirmation)))
     false
 
     (and precondition (not (precondition)))

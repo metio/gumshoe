@@ -346,6 +346,16 @@ Playbooks chain runbooks and detectives into full procedures.
 and drains the node, waits while you do the maintenance, uncordons, and verifies
 node health with the detectives.
 
+A playbook is `(playbook/book {:select … :confirm … :steps […]})`. Its steps are
+the same mutation specs the runbooks run (`gumshoe.steps.nodes/cordon`), checks
+that read and report, and pauses where the operator acts outside gumshoe. Each
+step declares the prerequisites and options it needs, and the playbook checks
+all of them before its first step. The checks before the first change run
+before the one confirmation, which lists every later step. The pauses split
+the playbook into segments: without a terminal it stops at a pause and names
+the `--from-segment` that continues it, and `playbook/run-segment!` takes one
+segment across a batch of subjects.
+
 `tools/ceph/playbooks/upgrade.clj` upgrades a cephadm-managed ceph cluster: preflight
 (refusing on HEALTH_ERR), local backups of the config/osd/fs/crush/auth dumps
 (it refuses to proceed if any backup is empty - the safety net lives on your
@@ -549,7 +559,7 @@ bb smoke-runbooks
 
 ## How books are written
 
-Most books are *data*, not code. There are three declarative forms, all held to
+Most books are *data*, not code. There are four declarative forms, all held to
 the same machine-enforced contract:
 
 - **A detective** is `(detective/book {:description … :detectives …
@@ -558,7 +568,13 @@ the same machine-enforced contract:
 - **A uniform mutation** is `(mutation/book {:select … :confirm … :effect …
   :verify …})` - it declares what to list and pick, the effect plan to run, and
   the post-checks; the select → confirm → announce → execute → verify → banner
-  flow is provided once and tested once.
+  flow is provided once and tested once. A spec a playbook shares lives in a
+  library, and the runbook names its description beside it:
+  `(mutation/book (merge nodes/cordon {:description "…"}))`, so the catalog
+  reads it without loading the book.
+- **A playbook** is `(playbook/book {:select … :confirm … :steps […]})` - the
+  steps are mutation specs, checks and pauses, and the prerequisites and
+  options come from the steps.
 - **A bespoke book** calls `runbook/execute!` directly with its own `:action`,
   for the handful with genuinely custom flow (multi-step orchestration,
   port-forwards, two-step selection). Even these express their change as an

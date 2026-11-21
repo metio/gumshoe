@@ -42,7 +42,7 @@
 (def ^:private harness-calls
   "The ways a book enters the harness: the raw runbook config, the declarative
    mutation spec, or the detective spec (both build a runbook config internally)."
-  #{'runbook/execute! 'mutation/book 'detective/book})
+  #{'runbook/execute! 'mutation/book 'detective/book 'playbook/book})
 
 (defn- execute-config
   [forms]
@@ -82,20 +82,36 @@
 
 (deftest every-book-runs-through-the-harness
   (doseq [file book-files]
-    (let [entries (count (re-seq #"runbook/execute!|mutation/book|detective/book" (slurp file)))]
+    (let [entries (count (re-seq #"runbook/execute!|mutation/book|detective/book|playbook/book" (slurp file)))]
       (is (= 1 entries)
-          (str file " must enter the harness exactly once (runbook/execute!, mutation/book, or detective/book)")))))
+          (str file " must enter the harness exactly once (runbook/execute!, mutation/book, detective/book, or playbook/book)")))))
+
+(defn- shared-spec?
+  "A config written as (merge <shared spec> {...}): a book running a step its
+   library defines, naming its own :description beside it."
+  [config]
+  (and (seq? config) (= 'merge (first config)) (symbol? (second config))))
+
+(defn- literal-config
+  [config]
+  (cond
+    (map? config) config
+    (and (seq? config) (= 'merge (first config))) (apply merge (filter map? (rest config)))
+    :else nil))
 
 (deftest every-book-describes-itself
   (doseq [file book-files]
-    (let [config (execute-config (forms-of file))]
-      (is (map? config) (str file " must pass a literal config map to the harness"))
+    (let [form (execute-config (forms-of file))
+          config (literal-config form)]
+      (is (map? config) (str file " must pass a literal config map, or (merge <spec> {...}), to the harness"))
       (is (string? (:description config))
           (str file " needs a :description"))
-      ;; a runbook declares :action, a mutation :select, a detective :detectives
-      ;; or a :scope (a registry scope resolved when the book runs)
-      (is (some #(contains? config %) [:action :select :detectives :scope])
-          (str file " needs an :action (runbook), :select (mutation), or :detectives/:scope (detective)")))))
+      ;; a runbook declares :action, a mutation or playbook :select, a detective
+      ;; :detectives or a :scope (a registry scope resolved when the book runs);
+      ;; a shared spec carries its own
+      (when-not (shared-spec? form)
+        (is (some #(contains? config %) [:action :select :detectives :scope])
+            (str file " needs an :action (runbook), :select (mutation, playbook), or :detectives/:scope (detective)"))))))
 
 (deftest every-option-is-documented-and-aliases-never-collide
   (doseq [file book-files]
