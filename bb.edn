@@ -48,6 +48,7 @@
                    [gumshoe.workloads-ops-test]
                    [gumshoe.posture-test]
                    [gumshoe.onset-test]
+                   [gumshoe.outcome-test]
                    [gumshoe.correlation-test]
                    [gumshoe.custom-resources-test]
                    [gumshoe.tls-secrets-test]
@@ -192,6 +193,7 @@
                                                          'gumshoe.workloads-ops-test
                                                          'gumshoe.posture-test
                                                          'gumshoe.onset-test
+                                                         'gumshoe.outcome-test
                                                          'gumshoe.correlation-test
                                                          'gumshoe.custom-resources-test
                                                          'gumshoe.tls-secrets-test

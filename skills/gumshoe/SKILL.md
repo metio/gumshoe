@@ -155,9 +155,11 @@ and current list.
 3. Show the human the plan and the command without `--dry-run`, written so
    they can run it in their own session, for example
    `! bb runbooks/kubernetes/nodes/cordon.clj --node worker-3`.
-4. After they run it, check the outcome with the matching detective. The book
-   itself ends with a green DONE banner only after its post-check verified the
-   intended state.
+4. After they run it, check the outcome with the matching detective. The
+   final banner says what the run did: `DONE - applied and verified` is the
+   only one that promises its post-checks held, `DONE - applied; this book has
+   no post-checks` verified nothing, and a `FAILED after N effects` banner
+   names where it stopped while the effects before it stay applied.
 
 A book whose change cannot be expressed as a plan says under `--dry-run` that
 it does not support a dry run, and runs nothing. Interactive sessions

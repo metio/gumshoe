@@ -16,6 +16,7 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.flow :as flow]
             [gumshoe.hooks :as hooks]
+            [gumshoe.outcome :as outcome]
             [gumshoe.summary :as summary]
             [gumshoe.ping :as ping]
             [gumshoe.plugins :as plugins]
@@ -302,8 +303,10 @@
           ;; an unexpected exception must still land on the red banner with a
           ;; clean message, never a raw stack trace - the exit code stays 1 so
           ;; scripts and ./detect see the failure
-          (let [outcome (try
-                          (binding [flow/*dry-run* (boolean (:dry-run opts))]
+          (let [record (outcome/fresh)
+                outcome (try
+                          (binding [flow/*dry-run* (boolean (:dry-run opts))
+                                    outcome/*record* record]
                             (if (action opts ctx) :ok :failed))
                           ;; Throwable, not Exception: an Error from the action
                           ;; must still land on the red banner and the recording,
@@ -318,9 +321,15 @@
                                                  :outcome outcome
                                                  :meta (:announcement-data ctx)})]
             ;; the final banner leaves no doubt about the outcome, even at 3am
-            (if (= :ok outcome)
-              (stdout/print-banner stdout/green (str (theme/token :ok) " DONE - everything verified"))
-              (stdout/print-banner stdout/red (str (theme/token :error) " FAILED or ABORTED - read the messages above, nothing more was changed")))
+            (let [{:keys [tone text]} (outcome/banner {:dry-run? (boolean (:dry-run opts))
+                                                        :changes? (boolean announce?)
+                                                        :outcome outcome
+                                                        :findings? (summary/captured?)}
+                                                       @record)]
+              (case tone
+                :ok (stdout/print-banner stdout/green (str (theme/token :ok) " " text))
+                :neutral (stdout/print-banner stdout/yellow (str (theme/token :warn) " " text))
+                (stdout/print-banner stdout/red (str (theme/token :error) " " text))))
             ;; run summary: where the record is, how to reproduce, how to dig in together
             (when recording-path
               (stdout/err-println (format "📼 Recording: %s" (stdout/shorten-path recording-path))))

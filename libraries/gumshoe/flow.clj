@@ -19,6 +19,7 @@
   (:require [clojure.string :as str]
             [gumshoe.effect :as effect]
             [gumshoe.interact :as interact]
+            [gumshoe.outcome :as outcome]
             [gumshoe.stdout :as stdout]
             [gumshoe.verify :as verify]))
 
@@ -51,7 +52,9 @@
   [effect execute!]
   (if effect
     (effect/run! effect)
-    (execute!)))
+    (let [ok? (execute!)]
+      (outcome/thunk-ran! ok?)
+      ok?)))
 
 (defn change!
   "Runs a change through confirm -> [precondition] -> announce -> execute -> verify.
@@ -90,7 +93,8 @@
     false
 
     (and precondition (not (precondition)))
-    (do (stdout/error "the change was confirmed but its precondition no longer holds - aborting before any action")
+    (do (outcome/aborted! "the precondition no longer held after the confirmation")
+        (stdout/error "the change was confirmed but its precondition no longer holds - aborting before any action")
         false)
 
     :else

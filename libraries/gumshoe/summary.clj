@@ -34,6 +34,11 @@
   [findings]
   (reset! captured (vec findings)))
 
+(defn captured?
+  "Whether the current run captured findings for its report."
+  []
+  (boolean (seq @captured)))
+
 (defn- summary-of
   [title findings]
   (let [meta {:cluster (try (kubectl/current-cluster) (catch Exception _ nil))
