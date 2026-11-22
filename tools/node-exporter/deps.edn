@@ -1,0 +1,7 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The node-exporter tool package: host facts read from node_exporter through PromQL.
+;;   {:deps {io.github.metio/gumshoe {:git/tag "…" :deps/root "tools/node-exporter"}}}
+{:paths ["libraries" "runbooks"]
+ :deps {io.github.metio/gumshoe-core {:local/root "../.."}}}

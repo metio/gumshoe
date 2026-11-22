@@ -255,6 +255,7 @@ bb tools/external-dns/runbooks/scan.clj   # declared hostnames resolve
 bb tools/cluster-api/runbooks/scan.clj    # Cluster API Clusters, Machines, MHCs
 bb tools/crossplane/runbooks/scan.clj     # Crossplane packages
 bb tools/traefik/runbooks/scan.clj        # Traefik routes and middlewares that do not resolve
+bb tools/node-exporter/runbooks/facts.clj # host facts from node_exporter, declared vs reporting hosts
 bb tools/karpenter/runbooks/scan.clj      # Karpenter NodePools, NodeClaims
 bb tools/strimzi/runbooks/scan.clj        # Strimzi Kafka, Connect, connectors, topics
 bb tools/kueue/runbooks/scan.clj          # Kueue queues, Workloads

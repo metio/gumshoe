@@ -3,6 +3,8 @@
 
 (ns gumshoe.report-test
   (:require [babashka.cli :as cli]
+            [cheshire.core]
+            [clojure.edn]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [gumshoe.detective :as detective]
@@ -41,3 +43,13 @@
     (report/register-format! "noop" (fn [_] nil))
     (is (false? (detective/report! detectives findings "noop")) "a critical finding is unhealthy")
     (is (true? (detective/report! detectives [] "noop")) "no findings is healthy")))
+
+(deftest extra-data-joins-the-machine-formats-test
+  (let [extra {:hosts [{:host "w1" :cores 8}] :findings "must not win"}
+        json-out (cheshire.core/parse-string (with-out-str (detective/report! detectives findings "json" extra)) true)
+        edn-out (clojure.edn/read-string (with-out-str (detective/report! detectives findings "edn" extra)))]
+    (is (= [{:host "w1" :cores 8}] (:hosts json-out) (:hosts edn-out)))
+    (is (= "boom" (-> json-out :findings first :summary)) "the report's own keys win over extra")
+    (is (= findings (:findings edn-out))))
+  (testing "the text report leaves extra out"
+    (is (not (str/includes? (with-out-str (detective/report! detectives [] "text" {:hosts [{:host "w1-extra"}]})) "w1-extra")))))
