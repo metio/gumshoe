@@ -85,14 +85,25 @@
            detectives)
    evidence))
 
+(defn- empty-subjects? [v]
+  (or (nil? v)
+      (and (map? v) (contains? v :items) (empty? (:items v)))
+      (and (coll? v) (not (map? v)) (empty? v))))
+
 (defn unread?
-  "Whether a detective read nothing: it requires evidence and every key of it
-   came back nil. A resource type the cluster does not serve, a read RBAC
+  "Whether a detective read nothing. It requires evidence and every key of it
+   came back nil: a resource type the cluster does not serve, a read RBAC
    refuses and a failed read all look the same here, so the detective's silence
    says nothing about health. An empty list is a read, so a served type with no
-   objects does not count."
-  [{:keys [requires]} evidence]
-  (boolean (and (seq requires) (every? #(nil? (get evidence %)) requires))))
+   objects does not count.
+
+   A detective that judges a chosen set of subjects - the hosts a scope
+   selected, the instances a filter kept - names the evidence keys holding
+   them as :judges. When every one of them is nil or empty, it had nothing to
+   judge, and its silence is no more a pass than a refused read."
+  [{:keys [requires judges]} evidence]
+  (boolean (or (and (seq requires) (every? #(nil? (get evidence %)) requires))
+               (and (seq judges) (every? #(empty-subjects? (get evidence %)) judges)))))
 
 (defn mark-unread
   "The detectives, each that read nothing carrying :unread true, so a report
@@ -274,23 +285,46 @@
   [detectives]
   (mapv #(select-keys % [:name :description :capabilities :unread]) detectives))
 
+(defn nothing-checked?
+  "Whether a run judged nothing: it produced no findings and no detective read
+   anything. Such a run has not passed, it has not run, so a report treats it
+   as a failure rather than a clean result."
+  [detectives findings]
+  (and (empty? findings) (every? :unread detectives)))
+
+(defn nothing-checked-message
+  "Why a run with no findings is still not a pass."
+  [detectives]
+  (if (empty? detectives)
+    "no check ran, so nothing was checked"
+    (format "every check read nothing, so nothing was checked - %s"
+            (str/join ", " (map :name detectives)))))
+
 (defn report!
   "Renders findings in the requested format (text, json, edn) to stdout, always
    alongside the list of detectives that ran. Returns true when nothing critical
-   was found."
+   was found and at least one detective read something; a run that judged
+   nothing reports :nothing-checked and returns false."
   [detectives findings output]
-  (let [data {:findings findings
-              :checked (checked detectives)
-              :summary (summary-of findings)}]
+  (let [blind (nothing-checked? detectives findings)
+        data (cond-> {:findings findings
+                      :checked (checked detectives)
+                      :summary (summary-of findings)}
+               blind (assoc :nothing-checked true))
+        healthy (and (not blind) (healthy? findings))]
     (case output
       "json" (do (println (json/generate-string data {:pretty true}))
-                 (healthy? findings))
+                 healthy)
       "edn" (do (prn data)
-                (healthy? findings))
+                healthy)
       ;; a plugin's format (sarif, junit, …), else the rich terminal report
       (if-let [render (report/format-fn output)]
-        (do (render data) (healthy? findings))
-        (print-report! detectives findings)))))
+        (do (render data) healthy)
+        (if blind
+          (do (stdout/print-section "🔬 Findings")
+              (stdout/error (nothing-checked-message detectives))
+              false)
+          (print-report! detectives findings))))))
 
 (defn when-to-run!
   "Prints a short orientation before an investigation: what this book is for and

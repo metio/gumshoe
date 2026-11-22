@@ -125,3 +125,80 @@
     (is (= {:name "argocd-applications" :description "Applications are healthy" :capabilities ["argocd"] :unread true}
            (last checked)))
     (is (= {:name "nodes" :description "Nodes are Ready"} (first checked)) "no keys added where nothing applies")))
+
+;; --- subjects a detective judges ------------------------------------------------
+
+(def ^:private scoped-evidence
+  {:hosts []
+   :instances nil
+   :load-balancers {"lb-1" "192.0.2.1"}
+   :zones {:items []}
+   :routes ["a.example"]})
+
+(deftest a-detective-judging-an-empty-set-read-nothing
+  (is (detective/unread? {:judges [:hosts]} scoped-evidence) "an empty vector of subjects")
+  (is (detective/unread? {:judges [:instances]} scoped-evidence) "a nil subject key")
+  (is (detective/unread? {:judges [:never-collected]} scoped-evidence) "a subject key never collected")
+  (is (detective/unread? {:judges [:zones]} scoped-evidence) "a list object with no items")
+  (is (detective/unread? {:judges [:hosts :instances]} scoped-evidence) "every subject key empty"))
+
+(deftest a-detective-with-one-subject-set-filled-read-something
+  (is (not (detective/unread? {:judges [:routes]} scoped-evidence)))
+  (is (not (detective/unread? {:judges [:hosts :routes]} scoped-evidence)) "one of two subject keys filled")
+  (is (not (detective/unread? {:judges [:load-balancers]} scoped-evidence)) "a filled map")
+  (is (not (detective/unread? {:judges []} scoped-evidence)) "declaring no subjects judges nothing extra"))
+
+(deftest supporting-evidence-does-not-stand-in-for-subjects
+  (is (detective/unread? {:requires [:load-balancers] :judges [:hosts]} scoped-evidence)
+      "the load balancers were read, but there was no host to check against them"))
+
+(deftest marking-applies-the-subject-rule
+  (is (= [{:name "records" :judges [:hosts] :unread true}
+          {:name "routes" :judges [:routes]}]
+         (detective/mark-unread [{:name "records" :judges [:hosts]} {:name "routes" :judges [:routes]}]
+                                scoped-evidence))))
+
+;; --- a run that judged nothing ---------------------------------------------------
+
+(def ^:private blind
+  [{:name "records" :description "Records match the cell" :unread true}
+   {:name "ttl" :description "TTLs are low enough" :unread true}])
+
+(defn- report-streams [detectives findings output]
+  (let [err (java.io.StringWriter.)
+        result (atom nil)
+        out (with-out-str (binding [*err* err]
+                            (reset! result (detective/report! detectives findings output))))]
+    {:out out :err (str err) :result @result}))
+
+(deftest a-run-where-every-check-read-nothing-is-not-a-pass
+  (doseq [output ["text" "json" "edn"]]
+    (testing output
+      (is (false? (:result (report-streams blind [] output)))))))
+
+(deftest a-run-with-no-detectives-is-not-a-pass
+  (is (false? (:result (report-streams [] [] "text"))))
+  (is (false? (:result (report-streams [] [] "json")))))
+
+(deftest the-text-report-says-nothing-was-checked-instead-of-checks-passed
+  (let [{:keys [out err]} (report-streams blind [] "text")
+        both (str out err)]
+    (is (str/includes? both "every check read nothing, so nothing was checked - records, ttl"))
+    (is (not (str/includes? both "no issues found")))
+    (is (not (str/includes? both "passed")))))
+
+(deftest machine-output-marks-a-run-that-checked-nothing
+  (is (true? (:nothing-checked (json/parse-string (:out (report-streams blind [] "json")) true))))
+  (is (true? (:nothing-checked (read-string (:out (report-streams blind [] "edn"))))))
+  (is (not (contains? (json/parse-string (:out (report-streams scanned [] "json")) true) :nothing-checked))
+      "a run where something read carries no mark"))
+
+(deftest one-check-that-read-keeps-the-run-a-pass
+  (is (true? (:result (report-streams (conj blind {:name "nodes" :description "Nodes are Ready"}) [] "text")))))
+
+(deftest findings-from-unread-checks-still-report-and-judge-health
+  (let [critical [{:severity :critical :detective "records" :component "a.example" :summary "wrong address"}]
+        warning [{:severity :warning :detective "records" :component "a.example" :summary "high TTL"}]]
+    (is (false? (:result (report-streams blind critical "json"))))
+    (is (true? (:result (report-streams blind warning "json"))) "a finding is evidence something was read")
+    (is (not (contains? (json/parse-string (:out (report-streams blind warning "json")) true) :nothing-checked)))))

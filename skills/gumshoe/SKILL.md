@@ -113,8 +113,12 @@ and outcome; the path is printed after the final banner.
 - `since` is when the problem began, where the API records it.
 - `checked` lists every detective that ran. An entry with `unread` read
   nothing, for example because the cluster does not serve that CRD or RBAC
-  refused the read, so an empty finding list from it proves nothing. Say so
-  when you report a clean result.
+  refused the read, or because the scope it judges selected no subjects, so
+  an empty finding list from it proves nothing. Say so when you report a
+  clean result.
+- `nothing-checked: true` means no detective read anything. The book exits 1
+  and the run is not a clean result; report it as unchecked, then look for
+  the scope or capability that left every detective without evidence.
 
 ## What gumshoe covers
 

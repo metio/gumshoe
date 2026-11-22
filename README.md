@@ -203,7 +203,12 @@ Every book behaves the same way:
   not serve, a read RBAC refuses - is reported as having read nothing, grouped
   by the capability of the tool package it comes from, instead of being
   counted as clean (`▸ 2 checks read nothing on this cluster - argocd (…)`).
-  The `json` and `edn` outputs mark it `:unread` in `:checked`.
+  The `json` and `edn` outputs mark it `:unread` in `:checked`. A detective
+  that judges a chosen set of subjects - the hosts a scope selected - names
+  their evidence keys as `:judges`, and reads nothing when they are all empty.
+- A run in which no check read anything has not passed: it prints that
+  nothing was checked, marks the `json` and `edn` output `:nothing-checked`,
+  and exits `1`.
 - On a live terminal, section rules and banners fill the terminal's width
   (clamped to 60-120 columns) and finding hints wrap under their text. Piped,
   redirected or recorded output keeps a fixed 80 columns and one line per hint,
