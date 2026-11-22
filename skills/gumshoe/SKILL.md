@@ -153,7 +153,11 @@ flow logs), cert-manager, Cluster API, CloudNativePG, Crossplane, db-operator,
 external-dns, Flagger, Flux, Gateway API, JaaS, Karpenter, Kueue, Loki,
 Prometheus, StageSet, Strimzi, Thanos, Traefik, and Velero. Outside it they
 cover ceph and OpenNebula over SSH, Matrix homeservers, restic repositories,
-and the nginx/php-fpm upload limit chain of an app. A scope covers a tool only when
+the nginx/php-fpm upload limit chain of an app, and host facts from
+node_exporter: `tools/node-exporter/runbooks/facts.clj` reads every host's
+CPU count, memory, kernel, OS and exporter health through PromQL and compares
+the reporting hosts with a file of declared names (`--declared`), with the
+rows as `hosts` in its JSON report. A scope covers a tool only when
 its plugin namespace is listed under `:plugins` in `env.edn`. The focused
 `scan.clj` works without that.
 
@@ -226,6 +230,13 @@ mostly data:
   names its description beside it, `(mutation/book (merge nodes/cordon
   {:description "…"}))`, so `./run --list` reads it without loading the book;
 - a bespoke book calls `runbook/execute!` with its own `:action`;
+- a PromQL read goes through `gumshoe.promql`: `(promql/endpoint {:url …
+  :flavor :thanos})` (or `:prometheus`, `:mimir` with `:tenant`), then
+  `(promql/query! ep "…")`, which returns `{:ok true :series […]}` or `{:ok
+  false :error …}` and never throws; Thanos is asked to refuse partial
+  answers, so a missing store fails the query instead of shrinking a count;
+- a book that collects rows passes them to the machine formats with
+  `(detective/report! detectives findings output {:hosts rows})`;
 - a cluster read no `gumshoe.kubectl` function wraps goes through
   `(kubectl/get-json context "namespaces" "--selector=…")`, nil when the read
   fails, or `get-json-result`, whose `:ok?` tells a failed read from an empty

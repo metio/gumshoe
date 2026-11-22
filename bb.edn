@@ -1,7 +1,7 @@
 ;; SPDX-FileCopyrightText: The gumshoe Authors
 ;; SPDX-License-Identifier: 0BSD
 
-{:paths ["libraries" "runbooks" "playbooks" "firebooks" "tools/flux/libraries" "tools/flux/runbooks" "tools/ceph/libraries" "tools/ceph/runbooks" "tools/ceph/playbooks" "tools/certmanager/libraries" "tools/certmanager/runbooks" "tools/gateway/libraries" "tools/gateway/runbooks" "tools/cnpg/libraries" "tools/cnpg/runbooks" "tools/stageset/libraries" "tools/stageset/runbooks" "tools/jaas/libraries" "tools/jaas/runbooks" "tools/prometheus/libraries" "tools/prometheus/runbooks" "tools/calico/libraries" "tools/calico/runbooks" "tools/opennebula/libraries" "tools/opennebula/runbooks" "tools/upload/libraries" "tools/upload/runbooks" "tools/matrix/libraries" "tools/matrix/runbooks" "tools/restic/libraries" "tools/restic/runbooks" "tools/thanos/libraries" "tools/thanos/runbooks" "tools/loki/libraries" "tools/loki/runbooks" "tools/db-operator/libraries" "tools/db-operator/runbooks" "tools/external-dns/libraries" "tools/external-dns/runbooks" "tools/velero/libraries" "tools/velero/runbooks" "tools/argocd/libraries" "tools/argocd/runbooks" "tools/karpenter/libraries" "tools/karpenter/runbooks" "tools/strimzi/libraries" "tools/strimzi/runbooks" "tools/kueue/libraries" "tools/kueue/runbooks" "tools/flagger/libraries" "tools/flagger/runbooks" "tools/cluster-api/libraries" "tools/cluster-api/runbooks" "tools/crossplane/libraries" "tools/crossplane/runbooks" "tools/traefik/libraries" "tools/traefik/runbooks"]
+{:paths ["libraries" "runbooks" "playbooks" "firebooks" "tools/flux/libraries" "tools/flux/runbooks" "tools/ceph/libraries" "tools/ceph/runbooks" "tools/ceph/playbooks" "tools/certmanager/libraries" "tools/certmanager/runbooks" "tools/gateway/libraries" "tools/gateway/runbooks" "tools/cnpg/libraries" "tools/cnpg/runbooks" "tools/stageset/libraries" "tools/stageset/runbooks" "tools/jaas/libraries" "tools/jaas/runbooks" "tools/prometheus/libraries" "tools/prometheus/runbooks" "tools/calico/libraries" "tools/calico/runbooks" "tools/opennebula/libraries" "tools/opennebula/runbooks" "tools/upload/libraries" "tools/upload/runbooks" "tools/matrix/libraries" "tools/matrix/runbooks" "tools/restic/libraries" "tools/restic/runbooks" "tools/thanos/libraries" "tools/thanos/runbooks" "tools/loki/libraries" "tools/loki/runbooks" "tools/db-operator/libraries" "tools/db-operator/runbooks" "tools/external-dns/libraries" "tools/external-dns/runbooks" "tools/velero/libraries" "tools/velero/runbooks" "tools/argocd/libraries" "tools/argocd/runbooks" "tools/karpenter/libraries" "tools/karpenter/runbooks" "tools/strimzi/libraries" "tools/strimzi/runbooks" "tools/kueue/libraries" "tools/kueue/runbooks" "tools/flagger/libraries" "tools/flagger/runbooks" "tools/cluster-api/libraries" "tools/cluster-api/runbooks" "tools/crossplane/libraries" "tools/crossplane/runbooks" "tools/traefik/libraries" "tools/traefik/runbooks" "tools/node-exporter/libraries" "tools/node-exporter/runbooks"]
  :tasks
  {gumshoe {:doc "The guided front door - menu, lead shortcut, or fuzzy book search"
            :requires ([gumshoe.main :as main])
@@ -9,7 +9,7 @@
   smoke-runbooks {:doc "Runs the remediation runbooks against the current kind cluster"
                   :task (shell "tests/smoke/runbooks.sh")}
   test {:doc "Runs all unit tests"
-        :extra-paths ["tests" "examples" "tools/flux/tests" "tools/ceph/tests" "tools/certmanager/tests" "tools/gateway/tests" "tools/cnpg/tests" "tools/stageset/tests" "tools/jaas/tests" "tools/prometheus/tests" "tools/calico/tests" "tools/opennebula/tests" "tools/upload/tests" "tools/matrix/tests" "tools/restic/tests" "tools/thanos/tests" "tools/loki/tests" "tools/db-operator/tests" "tools/external-dns/tests" "tools/velero/tests" "tools/argocd/tests" "tools/karpenter/tests" "tools/strimzi/tests" "tools/kueue/tests" "tools/flagger/tests" "tools/cluster-api/tests" "tools/crossplane/tests" "tools/traefik/tests"]
+        :extra-paths ["tests" "examples" "tools/flux/tests" "tools/ceph/tests" "tools/certmanager/tests" "tools/gateway/tests" "tools/cnpg/tests" "tools/stageset/tests" "tools/jaas/tests" "tools/prometheus/tests" "tools/calico/tests" "tools/opennebula/tests" "tools/upload/tests" "tools/matrix/tests" "tools/restic/tests" "tools/thanos/tests" "tools/loki/tests" "tools/db-operator/tests" "tools/external-dns/tests" "tools/velero/tests" "tools/argocd/tests" "tools/karpenter/tests" "tools/strimzi/tests" "tools/kueue/tests" "tools/flagger/tests" "tools/cluster-api/tests" "tools/crossplane/tests" "tools/traefik/tests" "tools/node-exporter/tests"]
         :requires ([clojure.test :as test]
                    [gumshoe.apiserver-test]
                    [gumshoe.apiversions-test]
@@ -156,6 +156,8 @@
                    [gumshoe.cluster-api-test]
                    [gumshoe.crossplane-test]
                    [gumshoe.traefik-test]
+                   [gumshoe.promql-test]
+                   [gumshoe.hosts-test]
                    [gumshoe.utils-test]
                    [gumshoe.verify-test])
         :task (let [{:keys [fail error]} (test/run-tests 'gumshoe.apiserver-test
@@ -303,6 +305,8 @@
                                                          'gumshoe.cluster-api-test
                                                          'gumshoe.crossplane-test
                                                          'gumshoe.traefik-test
+                                                         'gumshoe.promql-test
+                                                         'gumshoe.hosts-test
                                                          'gumshoe.utils-test
                                                          'gumshoe.verify-test)]
                 (when (pos? (+ fail error))

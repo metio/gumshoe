@@ -8,13 +8,10 @@
   (:require [gumshoe.config :as config]
             [gumshoe.http :as http]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.promql :as promql]
             [gumshoe.rightsizing :as rightsizing]
             [gumshoe.runbook :as runbook]
-            [gumshoe.secrets :as secrets]
-            [gumshoe.stdout :as stdout])
-  (:import (java.net URLEncoder)
-           (java.nio.charset StandardCharsets)
-           (java.util Base64)))
+            [gumshoe.stdout :as stdout]))
 
 (def options
   {:prometheus {:desc "The Prometheus base URL (e.g. https://prometheus.example.org); defaults to env.edn :prometheus :url"
@@ -41,19 +38,12 @@
    :cluster-capabilities []
    :kubectl-can-get ["pods"]})
 
-(defn- credential
-  [url field provided]
-  (or provided
-      (when-let [secret (secrets/find-path url)]
-        (if (= :password field) (secrets/password secret) (secrets/field secret "login")))))
-
 (defn- query
-  [url headers promql]
-  (let [response (http/fetch (str url "/api/v1/query?query=" (URLEncoder/encode ^String promql StandardCharsets/UTF_8)) headers)]
-    (when-not (http/ok? response)
-      (throw (ex-info (format "Prometheus did not answer the query: %s"
-                              (or (:error response) (str "HTTP " (:status response) " " (get-in response [:json :error]))))
-                      {})))
+  [ep promql]
+  (let [response (http/fetch (promql/query-url ep promql {}) (:headers ep))
+        parsed (promql/parse response)]
+    (when-not (:ok parsed)
+      (throw (ex-info (str "Prometheus did not answer the query: " (:error parsed)) {})))
     (rightsizing/samples (:json response))))
 
 (def ^:private verdict-labels
@@ -63,13 +53,11 @@
   [{:keys [prometheus namespace window all] :as opts} _ctx]
   (when-not prometheus
     (throw (ex-info "no Prometheus URL - pass --prometheus or set :prometheus :url in env.edn" {})))
-  (let [username (credential prometheus :login (:prometheus-username opts))
-        password (credential prometheus :password (:prometheus-password opts))
-        headers (if (and username password)
-                  {"Authorization" (str "Basic " (.encodeToString (Base64/getEncoder) (.getBytes (str username ":" password) StandardCharsets/UTF_8)))}
-                  {})
-        cpu (query prometheus headers (rightsizing/cpu-query window namespace))
-        memory (query prometheus headers (rightsizing/memory-query window namespace))
+  (let [ep (promql/endpoint (merge {:url prometheus}
+                                   (promql/credentials prometheus {:username (:prometheus-username opts)
+                                                                   :password (:prometheus-password opts)})))
+        cpu (query ep (rightsizing/cpu-query window namespace))
+        memory (query ep (rightsizing/memory-query window namespace))
         pods (if namespace
                (kubectl/get-namespaced (kubectl/current-context) namespace "pods")
                (kubectl/get-all (kubectl/current-context) "pods"))

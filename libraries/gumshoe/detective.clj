@@ -304,27 +304,32 @@
   "Renders findings in the requested format (text, json, edn) to stdout, always
    alongside the list of detectives that ran. Returns true when nothing critical
    was found and at least one detective read something; a run that judged
-   nothing reports :nothing-checked and returns false."
-  [detectives findings output]
-  (let [blind (nothing-checked? detectives findings)
-        data (cond-> {:findings findings
-                      :checked (checked detectives)
-                      :summary (summary-of findings)}
-               blind (assoc :nothing-checked true))
-        healthy (and (not blind) (healthy? findings))]
-    (case output
-      "json" (do (println (json/generate-string data {:pretty true}))
+   nothing reports :nothing-checked and returns false.
+
+   `extra` is a map a book adds to the machine-readable formats, such as the
+   rows it collected; the report's own keys win over it, and the text report
+   leaves it out."
+  ([detectives findings output] (report! detectives findings output nil))
+  ([detectives findings output extra]
+   (let [blind (nothing-checked? detectives findings)
+         data (cond-> (merge extra {:findings findings
+                                    :checked (checked detectives)
+                                    :summary (summary-of findings)})
+                blind (assoc :nothing-checked true))
+         healthy (and (not blind) (healthy? findings))]
+     (case output
+       "json" (do (println (json/generate-string data {:pretty true}))
+                  healthy)
+       "edn" (do (prn data)
                  healthy)
-      "edn" (do (prn data)
-                healthy)
-      ;; a plugin's format (sarif, junit, …), else the rich terminal report
-      (if-let [render (report/format-fn output)]
-        (do (render data) healthy)
-        (if blind
-          (do (stdout/print-section "🔬 Findings")
-              (stdout/error (nothing-checked-message detectives))
-              false)
-          (print-report! detectives findings))))))
+       ;; a plugin's format (sarif, junit, …), else the rich terminal report
+       (if-let [render (report/format-fn output)]
+         (do (render data) healthy)
+         (if blind
+           (do (stdout/print-section "🔬 Findings")
+               (stdout/error (nothing-checked-message detectives))
+               false)
+           (print-report! detectives findings)))))))
 
 (defn when-to-run!
   "Prints a short orientation before an investigation: what this book is for and
