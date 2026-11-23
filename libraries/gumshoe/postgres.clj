@@ -99,13 +99,15 @@
     (zero? (apply shell/run-with-output-env {"PGPASSWORD" (:password connection)} args))))
 
 (defn pg-dump!
-  "Writes a plain-format dump (--clean --if-exists) to file."
+  "Writes a plain-format dump (--clean --if-exists) to file. A dump takes as
+   long as the database needs, so it runs without the probe timeout."
   [connection local-port file]
   (let [args ["pg_dump" "--host" "127.0.0.1" "--port" (str local-port)
               "--username" (:user connection) "--dbname" (:database connection)
               "--clean" "--if-exists" "--format" "plain" "--file" file]]
     (apply stdout/print-command "PGPASSWORD=***" args)
-    (let [result (apply shell/execute-env {"PGPASSWORD" (:password connection)} args)]
+    (let [result (binding [shell/*timeout-ms* nil]
+                   (apply shell/execute-env {"PGPASSWORD" (:password connection)} args))]
       (if (zero? (:exit result))
         true
         (do (stdout/error (format "pg_dump failed:\n%s" (:err result))) false)))))
