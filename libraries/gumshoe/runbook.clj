@@ -276,16 +276,17 @@
                               :validate (stdout/error (format "invalid value for option --%s: %s" (name option) msg))
                               (stdout/error msg))
                             (System/exit 1)))}]
+    (when (some #{"--no-color"} *command-line-args*) (stdout/disable-colors!))
+    ;; load the configured plugins - their code is already on the classpath via
+    ;; deps - before the parse, which validates --output against the formats
+    ;; they register, and before anything in this run reaches for their
+    ;; announcers, detectives and the like
+    (plugins/load!)
     ;; help is answered before the strict parse, so required options never
     ;; stand between the user and the usage text
     (if (some #{"-h" "--help"} *command-line-args*)
       (println (help-text description spec details))
       (let [opts (cli/parse-opts *command-line-args* spec)]
-        (when (:no-color opts) (stdout/disable-colors!))
-        ;; load the configured plugins - their code is already on the classpath
-        ;; via deps - so their announcers/detectives/etc. are registered before
-        ;; anything in this run reaches for them
-        (plugins/load!)
         ;; select the output theme and the interactive backend from env.edn (or a
         ;; plugin's, just loaded) before anything prints or prompts
         (theme/apply!)

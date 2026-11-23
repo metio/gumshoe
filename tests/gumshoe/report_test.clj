@@ -3,6 +3,8 @@
 
 (ns gumshoe.report-test
   (:require [babashka.cli :as cli]
+            [babashka.fs]
+            [babashka.process]
             [cheshire.core]
             [clojure.edn]
             [clojure.string :as str]
@@ -53,3 +55,17 @@
     (is (= findings (:findings edn-out))))
   (testing "the text report leaves extra out"
     (is (not (str/includes? (with-out-str (detective/report! detectives [] "text" {:hosts [{:host "w1-extra"}]})) "w1-extra")))))
+
+(deftest a-plugin-format-from-env-edn-parses-in-a-real-run
+  (let [dir (str (babashka.fs/create-temp-dir {:prefix "gumshoe-plugin-format"}))]
+    (spit (str dir "/probe_fmt_plugin.clj")
+          "(ns probe-fmt-plugin (:require [gumshoe.report :as report])) (report/register-format! \"probe-fmt\" (fn [_] nil))")
+    (spit (str dir "/env.edn") "{:plugins [probe-fmt-plugin]}")
+    (let [script (str "(require '[gumshoe.runbook :as runbook] '[gumshoe.detective :as detective])"
+                      "(binding [*command-line-args* [\"--output\" \"probe-fmt\"]]"
+                      "  (runbook/execute! {:description \"t\" :options detective/output-option :announce? false"
+                      "                     :action (fn [opts _] (println \"ran with\" (:output opts)) true)}))")
+          result @(babashka.process/process {:out :string :err :string :continue true
+                                             :extra-env {"GUMSHOE_ENV" (str dir "/env.edn")}}
+                                            "bb" "-cp" (str (System/getProperty "java.class.path") ":" dir) "-e" script)]
+      (is (clojure.string/includes? (:out result) "ran with probe-fmt") (:err result)))))
