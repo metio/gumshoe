@@ -70,3 +70,9 @@
 (deftest a-backup-in-another-namespace-does-not-count-test
   (let [elsewhere (assoc-in (backup "completed") [:metadata :namespace] "other")]
     (is (seq (findings with-store elsewhere)))))
+
+(deftest volume-snapshot-backups-are-a-destination-test
+  (is (= :recoverable (:state (recoverability/assess (cluster {:backup {:volumeSnapshot {:className "csi-snapshots"}}})
+                                                     [(backup "completed")]))))
+  (is (= :never-completed (:state (recoverability/assess (cluster {:backup {:volumeSnapshot {:className "csi-snapshots"}}})
+                                                         [])))))
