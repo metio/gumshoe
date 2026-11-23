@@ -109,6 +109,15 @@
       (= replicas (desired-replicas kind workload)) (format "it runs %d replica(s) already" replicas)
       :else nil)))
 
+(defn scale-refusal-given
+  "scale-refusal over a {:ok? :items} read of the namespace's
+   HorizontalPodAutoscalers. The gate refuses when an HPA manages the
+   workload, so an unanswered read refuses too rather than reading as none."
+  [kind workload {:keys [ok? items]} replicas]
+  (if ok?
+    (scale-refusal kind workload {:items items} replicas)
+    "could not read the HorizontalPodAutoscalers in its namespace, so whether one manages its replicas is unknown"))
+
 (defn scale-items
   "The confirmation lines for a scale: the change, and what scaling a
    StatefulSet down leaves behind."
