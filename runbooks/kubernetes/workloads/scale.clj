@@ -14,7 +14,7 @@
 
 (defn- hpas
   [context {:keys [namespace]}]
-  (kubectl/get-namespaced context namespace "horizontalpodautoscalers"))
+  (kubectl/get-namespaced-result context namespace "horizontalpodautoscalers"))
 
 (defn- candidates
   [context]
@@ -25,7 +25,7 @@
 (defn- refusal
   [context pick replicas]
   (if pick
-    (workloads/scale-refusal (:kind pick) (fetch context pick) (hpas context pick) replicas)
+    (workloads/scale-refusal-given (:kind pick) (fetch context pick) (hpas context pick) replicas)
     "the pick is not \"<Kind> <namespace>/<name>\" of a Deployment or StatefulSet"))
 
 (mutation/book

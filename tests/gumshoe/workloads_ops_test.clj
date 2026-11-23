@@ -343,3 +343,9 @@
   (is (= ["--namespace=batch" "patch" "cronjob" "backup" "--type=merge" "--patch={\"spec\":{\"suspend\":true}}"]
          (workloads/suspend-args "batch" "backup" true)))
   (is (= "--patch={\"spec\":{\"suspend\":false}}" (last (workloads/suspend-args "batch" "backup" false)))))
+
+(deftest a-scale-is-refused-when-the-autoscalers-could-not-be-read
+  (is (re-find #"could not read the HorizontalPodAutoscalers"
+               (str (workloads/scale-refusal-given "Deployment" (deployment) {:ok? false :items []} 5))))
+  (is (nil? (workloads/scale-refusal-given "Deployment" (deployment) {:ok? true :items []} 5))
+      "an answered read without autoscalers lets the scale through"))
