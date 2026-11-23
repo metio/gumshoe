@@ -238,3 +238,14 @@
       (is (= "kubernetes" (get f "ceph pool")) "the plugin's fact is appended")
       (is (not (contains? f "empty")) "nil-valued plugin facts are dropped"))
     (reset! @#'subject/fact-contributors {})))
+
+(deftest a-crash-looping-init-container-is-the-pods-situation
+  (let [pod {:metadata {:namespace "shop" :name "web-1"}
+             :status {:phase "Pending"
+                      :initContainerStatuses [{:name "migrate" :state {:waiting {:reason "CrashLoopBackOff"}}}
+                                              {:name "done" :state {:terminated {:reason "Completed"}}}]
+                      :containerStatuses [{:name "app" :state {:waiting {:reason "PodInitializing"}}}]}}]
+    (is (= :crash-looping (#'gumshoe.subject/pod-situation pod)))
+    (let [issue (get (into {} (#'gumshoe.subject/pod-facts pod)) "issue")]
+      (is (clojure.string/includes? issue "migrate: CrashLoopBackOff"))
+      (is (not (clojure.string/includes? issue "Completed")) "a finished init container is no issue"))))

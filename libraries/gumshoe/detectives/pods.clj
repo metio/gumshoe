@@ -58,12 +58,20 @@
   [pod]
   [(kubectl/namespace-of pod) (kubectl/workload-of pod)])
 
+(defn reported-waiting?
+  "Whether a container waits in a way this detective reports by name - a
+   crash loop, or a waiting reason it rates - so another detective can leave
+   the pod to it."
+  [status]
+  (boolean (or (crash-loop-back-off? status)
+               (bad-waiting-reasons (-> status :state :waiting :reason)))))
+
 (defn- outage-owners
   "The workloads where at least half of the live pods loop: there the loop is
    an outage, while one looping replica among healthy ones is degradation."
   [pods now]
   (set (for [[owner members] (group-by owner-key (filter live? pods))
-             :let [loops (count (filter (fn [pod] (some #(looping? % now) (-> pod :status :containerStatuses)))
+             :let [loops (count (filter (fn [pod] (some #(looping? % now) (kubectl/container-statuses pod)))
                                         members))]
              :when (<= 1/2 (/ loops (count members)))]
          owner)))
@@ -76,7 +84,7 @@
 (defn- container-findings
   [pod now outage?]
   (let [component (kubectl/namespace-name-of pod)
-        statuses (-> pod :status :containerStatuses)
+        statuses (kubectl/container-statuses pod)
         loop-severity (if outage? :critical :warning)
         loop-hint (fn [status & more]
                     (clojure.string/join " - " (remove nil? (concat more [(last-exit status)
