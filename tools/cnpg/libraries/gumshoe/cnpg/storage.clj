@@ -14,8 +14,7 @@
    the spec means nobody has patched it and nothing is in motion. A capacity
    below the request means the CSI driver is resizing, or has resized and is
    waiting on the filesystem."
-  (:require [clojure.string :as str]
-            [gumshoe.cnpg.instances :as inst]
+  (:require [gumshoe.cnpg.instances :as inst]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.quantity :as quantity]))
 
@@ -45,14 +44,25 @@
   [pvc]
   (quantity/quantity->number (get-in pvc [:status :capacity :storage])))
 
+(defn- operator-name?
+  "Whether a volume name is one the operator gives the cluster's instances:
+   <cluster>-<n>, its -wal volume, or a -tbs-<tablespace> volume."
+  [cluster volume-name]
+  (boolean (re-matches (re-pattern (str (java.util.regex.Pattern/quote cluster) "-\\d+(-wal|-tbs-.+)?"))
+                       (str volume-name))))
+
 (defn cluster-pvcs
   "The volumes belonging to one cluster. The operator labels them with
-   `cnpg.io/cluster`; the name prefix is accepted too, so a volume the operator
-   adopted without the label is still compared rather than silently skipped."
+   `cnpg.io/cluster`; an unlabelled volume named the way the operator names
+   the cluster's volumes is accepted too, so one it adopted without the label
+   is still compared rather than silently skipped. A volume labelled for
+   another cluster is that cluster's, whatever its name."
   [pvcs namespace cluster]
   (filter #(and (= namespace (kubectl/namespace-of %))
-                (or (= cluster (get (-> % :metadata :labels) inst/cluster-label))
-                    (str/starts-with? (kubectl/name-of %) (str cluster "-"))))
+                (let [owner (get (-> % :metadata :labels) inst/cluster-label)]
+                  (if owner
+                    (= cluster owner)
+                    (operator-name? cluster (kubectl/name-of %)))))
           pvcs))
 
 (defn assess-volume
