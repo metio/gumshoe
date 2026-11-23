@@ -91,3 +91,7 @@
     (storage/register-resize-preflight! (fn [_] []))
     (is (empty? (storage/resize-preflight-problems {:plan []}))))
   (reset! @#'storage/resize-preflights []))
+
+(deftest the-claims-start-at-the-start-ordinal
+  (is (= ["data-db-1" "data-db-2"]
+         (storage/statefulset-pvc-names {:metadata {:name "db"} :spec {:replicas 2 :ordinals {:start 1}}} "data"))))
