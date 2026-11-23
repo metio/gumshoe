@@ -98,3 +98,8 @@
     (is (= "ABORTED after 2 effects - declined at the confirmation - the effects before it stay applied" text)))
   (is (= "ABORTED - declined - nothing was changed"
          (:text (outcome/banner {:changes? true :outcome :failed} {:applied 0 :aborted "declined"})))))
+
+(deftest a-rehearsal-stopped-by-an-error-says-so
+  (is (= {:tone :error
+          :text "DRY RUN stopped by an unexpected error - nothing was changed - read the messages above"}
+         (outcome/banner {:dry-run? true :changes? true :outcome :error} {:applied 0}))))
