@@ -95,9 +95,14 @@
    connection never opens the socket; a reachable port that only fails the TLS
    or STARTTLS negotiation still counts as reachable."
   [{:keys [exit out err]}]
-  (not (or (#{124 127} exit)
-           (re-find #"(?i)errno|connection refused|no route to host|could not resolve|name or service not known"
-                    (str out err)))))
+  (or
+   ;; s_client prints CONNECTED(<fd>) once the socket is open; an errno it
+   ;; prints after that (write:errno=32 from a server that drops the line)
+   ;; belongs to the negotiation, not to the connect
+   (boolean (re-find #"(?m)^CONNECTED\(" (str out)))
+   (not (or (#{124 127} exit)
+            (re-find #"(?i)errno|connection refused|no route to host|could not resolve|name or service not known"
+                     (str out err))))))
 
 (defn- enddate-of
   "The certificate's notAfter line, extracted from s_client's PEM output via
