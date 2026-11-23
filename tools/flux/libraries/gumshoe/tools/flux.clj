@@ -350,6 +350,61 @@
                    (str "reconcile.fluxcd.io/resetAt=" timestamp)
                    (str "reconcile.fluxcd.io/requestedAt=" timestamp))))
 
+;; --- Helm storage ------------------------------------------------------------------
+
+(defn pending-release?
+  "Whether a Helm release revision, as kubectl/helm-releases reads it from its
+   Secret's labels, is parked in a pending state: Helm writes pending-install,
+   pending-upgrade or pending-rollback before it acts and replaces it with the
+   result after. Read from the status label alone, so the payload is never
+   decoded."
+  [row]
+  (boolean (some-> (:status row) (clojure.string/starts-with? "pending-"))))
+
+(def ^:private duration-units
+  {"h" 3600000 "m" 60000 "s" 1000 "ms" 1 "us" 1/1000 "µs" 1/1000 "ns" 1/1000000})
+
+(defn duration-seconds
+  "A Go duration such as \"5m0s\" or \"1h30m\" in whole seconds, rounded up so
+   a wait is never zero, or nil when it is not one."
+  [text]
+  (when (and (string? text) (re-matches #"(?:\d+(?:\.\d+)?(?:h|ms|us|µs|ns|m|s))+" text))
+    (let [millis (reduce + (for [[_ n unit] (re-seq #"(\d+(?:\.\d+)?)(h|ms|us|µs|ns|m|s)" text)]
+                             (* (bigdec n) (duration-units unit))))]
+      (long (Math/ceil (/ (double millis) 1000))))))
+
+(def ^:private default-helm-timeout
+  "helm-controller's timeout for a Helm action when spec.timeout is unset."
+  "5m0s")
+
+(defn helm-timeout-seconds
+  "How long one Helm action of this release may take: spec.timeout, else
+   helm-controller's default of five minutes."
+  [release]
+  (duration-seconds (or (not-empty (-> release :spec :timeout)) default-helm-timeout)))
+
+(defn interval-seconds
+  "The object's spec.interval in seconds, or nil when it has none."
+  [resource]
+  (duration-seconds (-> resource :spec :interval)))
+
+(defn action-in-flight?
+  "Whether a Helm action on this release may still be running: a pending
+   revision whose last change is younger than spec.timeout. An older one is
+   parked - helm-controller gave up on it - and is exactly what clearing the
+   storage removes. `now` is epoch seconds, as the revision labels are."
+  [rows release now]
+  (let [name (release-name release)
+        namespace (storage-namespace release)
+        timeout (helm-timeout-seconds release)]
+    (boolean
+     (some (fn [row]
+             (let [changed (or (:modified-at row) (:created-at row))]
+               (and (= name (:release row)) (= namespace (:namespace row))
+                    (pending-release? row)
+                    (or (nil? changed) (<= (- now changed) timeout)))))
+           rows))))
+
 ;; --- suspend / resume --------------------------------------------------------------
 
 (def suspendable
