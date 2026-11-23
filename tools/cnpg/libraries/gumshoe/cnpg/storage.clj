@@ -19,9 +19,23 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.quantity :as quantity]))
 
+(def ^:private role-label :cnpg.io/pvcRole)
+(def ^:private tablespace-label :cnpg.io/tablespaceName)
+
 (defn desired-bytes
-  [cluster]
-  (quantity/quantity->number (get-in cluster [:spec :storage :size])))
+  "The size the cluster asks for a volume of the pvc's role: the data size,
+   walStorage for a WAL volume, and the tablespace's own storage for a
+   tablespace volume. With one argument, the data size."
+  ([cluster]
+   (quantity/quantity->number (get-in cluster [:spec :storage :size])))
+  ([cluster pvc]
+   (let [labels (-> pvc :metadata :labels)]
+     (case (get labels role-label)
+       "PG_WAL" (quantity/quantity->number (get-in cluster [:spec :walStorage :size]))
+       "PG_TABLESPACE" (some #(when (= (get labels tablespace-label) (:name %))
+                                (quantity/quantity->number (get-in % [:storage :size])))
+                             (get-in cluster [:spec :tablespaces]))
+       (desired-bytes cluster)))))
 
 (defn requested-bytes
   [pvc]
@@ -56,10 +70,9 @@
 
 (defn assess
   [cluster pvcs]
-  (let [desired (desired-bytes cluster)
-        namespace (kubectl/namespace-of cluster)
+  (let [namespace (kubectl/namespace-of cluster)
         name (kubectl/name-of cluster)]
-    (map #(assess-volume desired %) (cluster-pvcs pvcs namespace name))))
+    (map #(assess-volume (desired-bytes cluster %) %) (cluster-pvcs pvcs namespace name))))
 
 (defn pending?
   [row]

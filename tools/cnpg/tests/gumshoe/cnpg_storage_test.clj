@@ -78,3 +78,20 @@
                            :metadata dissoc :labels)]
     (is (seq (findings unlabelled))
         "a volume the operator adopted without the label is still short of the spec")))
+
+(deftest each-volume-is-measured-against-the-size-of-its-role
+  (let [cluster {:metadata {:namespace "db" :name "pg"}
+                 :spec {:storage {:size "40Gi"} :walStorage {:size "5Gi"}
+                        :tablespaces [{:name "archive" :storage {:size "100Gi"}}]}}
+        volume (fn [name role & {:keys [tablespace]}]
+                 {:metadata {:namespace "db" :name name
+                             :labels (cond-> {:cnpg.io/cluster "pg" :cnpg.io/pvcRole role}
+                                       tablespace (assoc :cnpg.io/tablespaceName tablespace))}
+                  :spec {:resources {:requests {:storage ({"PG_DATA" "40Gi" "PG_WAL" "5Gi" "PG_TABLESPACE" "100Gi"} role)}}}
+                  :status {:capacity {:storage ({"PG_DATA" "40Gi" "PG_WAL" "5Gi" "PG_TABLESPACE" "100Gi"} role)}}})]
+    (is (= {"pg-1" :matched "pg-1-wal" :matched "pg-1-tbs-archive" :matched}
+           (into {} (map (juxt :pvc :state))
+                 (storage/assess cluster [(volume "pg-1" "PG_DATA")
+                                          (volume "pg-1-wal" "PG_WAL")
+                                          (volume "pg-1-tbs-archive" "PG_TABLESPACE" :tablespace "archive")]))))))
+
