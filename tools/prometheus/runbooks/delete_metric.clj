@@ -10,6 +10,7 @@
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.announce :as announce]
+            [gumshoe.prometheus :as prometheus]
             [gumshoe.runbook :as runbook]
             [gumshoe.stdout :as stdout]
             [gumshoe.verify :as verify]))
@@ -25,6 +26,13 @@
    :service {:desc "The name of the Prometheus service - interactive selection when omitted"
              :alias :s
              :coerce :string}
+   :selector {:desc "Label selector used to find Prometheus services"
+              :alias :l
+              :default prometheus/governing-service-selector
+              :coerce :string}
+   :port-name {:desc "The service port serving the Prometheus API"
+               :default prometheus/default-port-name
+               :coerce :string}
    :port {:desc "The local port used for the port-forward"
           :alias :p
           :default 46372
@@ -62,17 +70,17 @@
   [opts {:keys [announcement-data]}]
   (let [context (kubectl/current-context)
         cluster (kubectl/current-cluster)
-        services (kubectl/get-selected context "services" "app=prometheus")
+        services (kubectl/get-selected context "services" (:selector opts))
         target (interact/choose-namespaced "Prometheus" (kubectl/namespaces-names services)
                                            (:namespace opts) (:service opts))
         metric (:metric opts)]
     (if (nil? target)
-      (do (stdout/error "no Prometheus service selected") false)
+      (do (stdout/error "no Prometheus service selected - check --selector") false)
       (let [{:keys [namespace name]} (kubectl/split-namespace-name target)
-            remote-port (kubectl/service-port (kubectl/find-item services target) "http")]
+            remote-port (prometheus/api-port (kubectl/find-item services target) (:port-name opts))]
         (cond
           (nil? remote-port)
-          (do (stdout/error (format "service %s has no port named 'http'" target)) false)
+          (do (stdout/error (format "service %s has no port named '%s' - check --port-name" target (:port-name opts))) false)
 
           :else
           (flow/change!

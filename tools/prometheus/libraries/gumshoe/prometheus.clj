@@ -6,6 +6,21 @@
    and validation lives in gumshoe.storage."
   (:require [gumshoe.kubectl :as kubectl]))
 
+(def governing-service-selector
+  "The label prometheus-operator puts on the governing service
+   (prometheus-operated) of every Prometheus it runs."
+  "operated-prometheus=true")
+
+(def default-port-name
+  "The name of the governing service's port unless a Prometheus sets
+   spec.portName."
+  "web")
+
+(defn api-port
+  "The number of a service's port of that name, or nil."
+  [service port-name]
+  (kubectl/service-port service port-name))
+
 (defn volume-name-of
   "The pod volume the storage claim template becomes: the template's own name,
    else the operator's default <prefix>-<name>-db, with prefix prometheus for a

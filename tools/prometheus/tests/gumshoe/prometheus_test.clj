@@ -47,3 +47,12 @@
   (is (= "data"
          (prometheus/volume-name-of {:kind "Prometheus" :metadata {:name "k8s"}
                                      :spec {:storage {:volumeClaimTemplate {:metadata {:name "data"}}}}}))))
+
+(deftest the-defaults-find-the-operators-governing-service
+  (let [operated {:metadata {:name "prometheus-operated" :namespace "monitoring"
+                             :labels {:operated-prometheus "true"}}
+                  :spec {:ports [{:name "web" :port 9090}]}}]
+    (is (= "operated-prometheus=true" prometheus/governing-service-selector))
+    (is (= 9090 (prometheus/api-port operated prometheus/default-port-name)))
+    (is (nil? (prometheus/api-port operated "http"))
+        "a port name the service lacks finds nothing, so the book refuses")))
