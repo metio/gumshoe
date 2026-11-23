@@ -182,12 +182,21 @@
   (when-let [f (:field (active))]
     (not-empty (f path field-name))))
 
+(defn- search-term
+  "A URL's host, since store paths name hosts and never contain a scheme or a
+   port; any other term unchanged."
+  [term]
+  (or (when (str/includes? (str term) "://")
+        (try (.getHost (java.net.URI. (str term))) (catch Exception _ nil)))
+      term))
+
 (defn find-path
-  "The secret path matching a fuzzy search term (a hostname), or nil - so a book
-   locates a secret without hard-coding its full path."
+  "The secret path matching a fuzzy search term (a hostname, or a URL, which
+   searches for its host), or nil - so a book locates a secret without
+   hard-coding its full path."
   [term]
   (when-let [f (:find-path (active))]
-    (not-empty (f term))))
+    (not-empty (f (search-term term)))))
 
 (defn available?
   "Whether the secret exists - the prerequisites check."

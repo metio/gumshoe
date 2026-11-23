@@ -5,6 +5,7 @@
   (:require [clojure.string]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.config :as config]
+            [gumshoe.promql]
             [gumshoe.secrets :as secrets]))
 
 (defn- with-secrets
@@ -82,3 +83,19 @@
       (binding [*err* err]
         (is (= "gopass" (with-secrets {:provider :nonexistent-typo} secrets/command-name))))
       (is (clojure.string/includes? (str err) "not registered")))))
+
+(deftest a-url-finds-the-secret-named-for-its-host
+  (let [searched (atom [])]
+    (secrets/register-provider! {:name :substring-store
+                                 :password (fn [_] "p") :field (fn [_ _] "u")
+                                 :find-path (fn [term]
+                                              (swap! searched conj term)
+                                              (first (filter #(clojure.string/includes? % term)
+                                                             ["api/prometheus.example.org"])))
+                                 :available? (fn [_] true)})
+    (with-secrets {:provider :substring-store}
+      (fn []
+        (is (= "api/prometheus.example.org" (secrets/find-path "https://prometheus.example.org:9090/")))
+        (is (= "api/prometheus.example.org" (secrets/find-path "prometheus.example.org")))
+        (is (= {:username "u" :password "p"}
+               (gumshoe.promql/credentials "https://prometheus.example.org/" {})))))))
