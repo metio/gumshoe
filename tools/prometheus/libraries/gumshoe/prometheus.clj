@@ -7,8 +7,14 @@
   (:require [gumshoe.kubectl :as kubectl]))
 
 (defn volume-name-of
+  "The pod volume the storage claim template becomes: the template's own name,
+   else the operator's default <prefix>-<name>-db, with prefix prometheus for a
+   Prometheus and prom-agent for a PrometheusAgent."
   [prometheus]
-  (-> prometheus :spec :storage :volumeClaimTemplate :metadata :name))
+  (or (not-empty (-> prometheus :spec :storage :volumeClaimTemplate :metadata :name))
+      (format "%s-%s-db"
+              (if (= "PrometheusAgent" (:kind prometheus)) "prom-agent" "prometheus")
+              (-> prometheus :metadata :name))))
 
 (defn pvc-of-pod
   [pod volume-name]

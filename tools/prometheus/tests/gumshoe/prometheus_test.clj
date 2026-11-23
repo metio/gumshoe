@@ -36,3 +36,14 @@
            plan))
     (testing "a growing plan on expandable storage has no problems"
       (is (empty? (storage/expansion-problems plan))))))
+
+(deftest an-unnamed-claim-template-uses-the-operators-volume-name
+  (is (= "prometheus-k8s-db"
+         (prometheus/volume-name-of {:kind "Prometheus" :metadata {:name "k8s"}
+                                     :spec {:storage {:volumeClaimTemplate {:spec {}}}}})))
+  (is (= "prom-agent-edge-db"
+         (prometheus/volume-name-of {:kind "PrometheusAgent" :metadata {:name "edge"}
+                                     :spec {:storage {:volumeClaimTemplate {:spec {}}}}})))
+  (is (= "data"
+         (prometheus/volume-name-of {:kind "Prometheus" :metadata {:name "k8s"}
+                                     :spec {:storage {:volumeClaimTemplate {:metadata {:name "data"}}}}}))))
