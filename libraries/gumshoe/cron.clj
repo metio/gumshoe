@@ -17,7 +17,8 @@
    "@midnight" (java.time.Duration/ofDays 1)
    "@hourly" (java.time.Duration/ofHours 1)})
 
-(defn- every?-field [field] (= "*" field))
+;; the CronJob controller's parser (robfig/cron) reads ? as * in any field
+(defn- every?-field [field] (contains? #{"*" "?"} field))
 
 (defn- step
   "n for a */n field, else nil."

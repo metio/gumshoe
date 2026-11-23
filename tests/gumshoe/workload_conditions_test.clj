@@ -104,3 +104,7 @@
             ["pod was evicted: node ran low on memory" :warning]]
            (map (juxt :summary :severity) findings)))
     (is (str/ends-with? (:hint (second findings)) "no controller recreates this pod"))))
+
+(deftest a-question-mark-is-every-day
+  (is (= (java.time.Duration/ofDays 1) (cron/interval "0 2 ? * *")))
+  (is (= (java.time.Duration/ofDays 1) (cron/interval "0 2 * * ?"))))
