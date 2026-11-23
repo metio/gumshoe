@@ -133,3 +133,12 @@
         findings (csi/detect-orphaned-local-volumes evidence)]
     (is (= ["pv-on-gone-node"] (map :component findings)))
     (is (= [:critical] (map :severity findings)))))
+
+(deftest an-event-series-counts-its-repeats-and-its-last-observation
+  (let [now (java.time.Instant/parse "2026-11-18T12:00:00Z")
+        series-event {:type "Warning" :reason "FailedScheduling" :message "0/3 nodes are available"
+                      :eventTime "2026-11-18T08:00:00.123456Z"
+                      :series {:count 240 :lastObservedTime "2026-11-18T11:59:00.000000Z"}
+                      :involvedObject {:kind "Pod" :namespace "shop" :name "web-1"}}]
+    (is (= ["FailedScheduling seen 240x in the last hour"]
+           (map :summary (events/detect-warning-events {:now now "events" {:items [series-event]}}))))))

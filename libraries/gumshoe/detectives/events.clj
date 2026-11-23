@@ -19,9 +19,19 @@
       (format "%s/%s" (:namespace object) (:name object))
       (:name object))))
 
+(defn- last-seen
+  "When the event last happened. An event written through events.k8s.io sets
+   eventTime once and records its repeats in series, so series wins."
+  [event]
+  (or (-> event :series :lastObservedTime) (:lastTimestamp event) (:eventTime event)))
+
+(defn- occurrences
+  [event]
+  (or (-> event :series :count) (:count event) 1))
+
 (defn- recent?
   [now event]
-  (when-let [timestamp (or (:lastTimestamp event) (:eventTime event))]
+  (when-let [timestamp (last-seen event)]
     (.isAfter (java.time.Instant/parse timestamp) (.minus now recent-window))))
 
 (defn- truncate
@@ -38,7 +48,7 @@
                          (kubectl/items-of (get evidence "events")))
         grouped (group-by (juxt #(-> % :involvedObject :kind) component-of :reason) warnings)]
     (for [[[kind component reason] events] grouped
-          :let [total (reduce + (map #(or (:count %) 1) events))
+          :let [total (reduce + (map occurrences events))
                 object (:involvedObject (last events))]]
       (cond-> {:severity :warning
                :component component
