@@ -266,8 +266,8 @@
                          (filter #(seq (crash-looping %)) pods))]
     (for [release (kubectl/items-of (get evidence helmrelease-type))
           :let [ready (ready-condition release)
-                namespace (kubectl/namespace-of release)
-                casualties (get broken namespace)]
+                ;; the workload runs where the release installed it
+                casualties (get broken (release-namespace release))]
           :when (and (= "True" (:status ready)) (seq casualties))]
       {:severity :critical
        :component (kubectl/namespace-name-of release)

@@ -220,3 +220,19 @@
         (is (= "recorded" (flux/release-name r)))
         (is (= "elsewhere" (flux/release-namespace r)))
         (is (= "stored" (flux/storage-namespace r)))))))
+
+(deftest a-release-is-paired-with-the-pods-of-its-target-namespace
+  (let [crashing {:metadata {:namespace "apps" :name "podinfo-0"}
+                  :status {:containerStatuses [{:name "podinfo" :restartCount 9
+                                                :state {:waiting {:reason "CrashLoopBackOff"}}}]}}
+        release (fn [name target] {:metadata {:namespace "flux-system" :name name}
+                                   :spec (cond-> {} target (assoc :targetNamespace target))
+                                   :status {:conditions [{:type "Ready" :status "True"}]}})]
+    (is (= ["flux-system/podinfo"]
+           (map :component (flux/detect-succeeded-over-broken
+                            {flux/helmrelease-type {:items [(release "podinfo" "apps") (release "other" "web")]}
+                             "pods" {:items [crashing]}}))))
+    (is (empty? (flux/detect-succeeded-over-broken
+                 {flux/helmrelease-type {:items [(release "other" "web")]}
+                  "pods" {:items [(assoc-in crashing [:metadata :namespace] "flux-system")]}}))
+        "a release kept in flux-system is not blamed for flux-system's pods when it targets elsewhere")))
