@@ -15,9 +15,13 @@
 ;; pure parsing of the effective config
 
 (defn nginx-body-sizes
-  "Every client_max_body_size value in an 'nginx -T' dump (one per block)."
+  "Every client_max_body_size value in an 'nginx -T' dump (one per block).
+   The dump carries the files verbatim, so a commented-out directive is
+   dropped first: a # at the start of a line or after whitespace, ; { or }
+   starts a comment."
   [nginx-config]
-  (->> (re-seq #"client_max_body_size\s+([^;]+);" (str nginx-config))
+  (->> (re-seq #"client_max_body_size\s+([^;]+);"
+               (str/replace (str nginx-config) #"(?m)(^|[\s;{}])#.*$" "$1"))
        (map (comp str/trim second))
        distinct
        vec))

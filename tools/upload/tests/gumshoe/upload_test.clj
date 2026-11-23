@@ -89,3 +89,7 @@
       (is (= 1048576 (:nginx-body-size evidence)))
       (is (= 2097152 (:upload-max evidence)))
       (is (:found-php? evidence)))))
+
+(deftest a-commented-out-body-size-sets-no-limit
+  (is (= ["512m"] (gumshoe.phpstack/nginx-body-sizes
+                   "# configuration file /etc/nginx/nginx.conf:\n    #client_max_body_size 1m;\n    client_max_body_size 512m; # was 1m\n"))))
