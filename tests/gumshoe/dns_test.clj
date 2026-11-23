@@ -96,3 +96,15 @@
                                {"probes" {"grafana.example.org" {"ns1" ["203.0.113.10"]
                                                                "ns2" ["203.0.113.99"]}}}))
                    "nameservers return different answers for this name"))))
+
+(deftest dig-diagnostics-are-not-records
+  (testing "dig prints ;; lines on stdout even with +short; they are not answers"
+    (is (= ["ns1.example.org. hostmaster.example.org. 2026070401 3600 900 1209600 300"]
+           (dns/parse-answer (str ";; communications error to 192.0.2.1#53: timed out\n"
+                                  "ns1.example.org. hostmaster.example.org. 2026070401 3600 900 1209600 300\n"))))
+    (is (= [] (dns/parse-answer ";; communications error to 192.0.2.1#53: timed out\n"))))
+  (testing "the SOA serial comes from the record, not from the error line"
+    (with-redefs [gumshoe.shell/execute
+                  (fn [& _] {:exit 0 :out (str ";; communications error to 192.0.2.1#53: timed out\n"
+                                               "ns1. host. 2026070401 3600 900 1209600 300\n")})]
+      (is (= "2026070401" (dns/soa-serial {} "example.org"))))))
