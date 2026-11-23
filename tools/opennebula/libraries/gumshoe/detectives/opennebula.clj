@@ -21,7 +21,8 @@
    "8" ["OFFLINE" :warning]})
 
 (def vm-failure-states
-  "VM STATE codes that mean a VM is broken."
+  "VM STATE codes that mean a VM is broken. 7 (FAILED) is retired upstream and
+   kept for older frontends."
   {"7" "FAILED"
    "11" "CLONING_FAILURE"})
 
@@ -36,15 +37,48 @@
      :hint (when (= :critical severity)
              "the frontend can not manage this host - VMs on it are unmanaged")}))
 
+(def ^:private active-state "3")
+
+(def lcm-failure-states
+  "LCM_STATE codes of an ACTIVE VM -> [name severity]. A failed operation
+   leaves the VM in a *_FAILURE state; UNKNOWN means the frontend lost
+   contact with it."
+  {"16" ["UNKNOWN" :warning]
+   "19" ["BOOT_UNKNOWN" :warning]
+   "36" ["BOOT_FAILURE" :critical]
+   "37" ["BOOT_MIGRATE_FAILURE" :critical]
+   "38" ["PROLOG_MIGRATE_FAILURE" :critical]
+   "39" ["PROLOG_FAILURE" :critical]
+   "40" ["EPILOG_FAILURE" :critical]
+   "41" ["EPILOG_STOP_FAILURE" :critical]
+   "42" ["EPILOG_UNDEPLOY_FAILURE" :critical]
+   "44" ["PROLOG_MIGRATE_POWEROFF_FAILURE" :critical]
+   "46" ["PROLOG_MIGRATE_SUSPEND_FAILURE" :critical]
+   "47" ["BOOT_UNDEPLOY_FAILURE" :critical]
+   "48" ["BOOT_STOPPED_FAILURE" :critical]
+   "49" ["PROLOG_RESUME_FAILURE" :critical]
+   "50" ["PROLOG_UNDEPLOY_FAILURE" :critical]
+   "60" ["PROLOG_MIGRATE_UNKNOWN" :warning]
+   "61" ["PROLOG_MIGRATE_UNKNOWN_FAILURE" :critical]})
+
+(defn- vm-problem
+  [vm]
+  (if-let [failure (get vm-failure-states (str (:STATE vm)))]
+    [failure :critical]
+    (when (= active-state (str (:STATE vm)))
+      (get lcm-failure-states (str (:LCM_STATE vm))))))
+
 (defn detect-vm-problems
   [evidence]
   (for [vm (get evidence "vms")
-        :let [failure (get vm-failure-states (str (:STATE vm)))]
+        :let [[failure severity] (vm-problem vm)]
         :when failure]
-    {:severity :critical
+    {:severity severity
      :component (format "%s (id %s)" (:NAME vm) (:ID vm))
      :summary (format "VM is %s" failure)
-     :hint "recover or delete it - a failed VM holds its resources without running"}))
+     :hint (if (= :critical severity)
+             "recover or delete it - a failed VM holds its resources without running"
+             "the frontend lost contact with it - check its host")}))
 
 (defn datastore-usage
   "Percent used of a datastore, or nil when the totals are unreadable."
