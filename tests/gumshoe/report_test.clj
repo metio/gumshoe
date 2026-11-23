@@ -10,7 +10,8 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [gumshoe.detective :as detective]
-            [gumshoe.report :as report]))
+            [gumshoe.report :as report]
+            [gumshoe.summary]))
 
 (use-fixtures :each (fn [t] (reset! @#'report/formats {}) (t) (reset! @#'report/formats {})))
 
@@ -69,3 +70,9 @@
                                              :extra-env {"GUMSHOE_ENV" (str dir "/env.edn")}}
                                             "bb" "-cp" (str (System/getProperty "java.class.path") ":" dir) "-e" script)]
       (is (clojure.string/includes? (:out result) "ran with probe-fmt") (:err result)))))
+
+(deftest every-report-captures-its-findings-for-the-banner
+  (reset! @#'gumshoe.summary/captured [])
+  (binding [*out* (java.io.StringWriter.)]
+    (detective/report! detectives findings "json"))
+  (is (gumshoe.summary/captured?) "a book rendering through report! gets the findings banner and the share offer"))

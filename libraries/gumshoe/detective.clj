@@ -317,6 +317,9 @@
                                     :summary (summary-of findings)})
                 blind (assoc :nothing-checked true))
          healthy (and (not blind) (healthy? findings))]
+     ;; keep the findings so the harness banners them and offers to share
+     ;; them - every scan renders through here, the custom flows included
+     (summary/capture! findings)
      (case output
        "json" (do (println (json/generate-string data {:pretty true}))
                   healthy)
@@ -407,8 +410,6 @@
    the same drill-down. Returns true when nothing critical was found."
   [context detectives findings output]
   (let [healthy (report! detectives findings output)]
-    ;; keep the findings so the harness can offer to share them as a pad
-    (summary/capture! findings)
     (when (= "text" output)
       (offer-drill-down! context findings))
     healthy))
