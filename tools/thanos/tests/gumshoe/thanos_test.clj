@@ -43,9 +43,21 @@
 (deftest thanos-rules-test
   (is (= #{"rule fails to evaluate"}
          (summaries (thanos/detect-rules
-                     {"rules" {:json {:data {:groups [{:name "recording"
+                     {"rules" {:reachable true :status 200
+                               :json {:data {:groups [{:name "recording"
                                                        :rules [{:name "job:up" :health "ok"}
                                                                {:name "job:errs" :health "err"
                                                                 :lastError "parse error"}]}]}}}}))))
   (is (empty? (thanos/detect-rules
-               {"rules" {:json {:data {:groups [{:name "g" :rules [{:name "r" :health "ok"}]}]}}}}))))
+               {"rules" {:reachable true :status 200
+                         :json {:data {:groups [{:name "g" :rules [{:name "r" :health "ok"}]}]}}}}))))
+
+(deftest a-rules-endpoint-that-errors-is-not-a-clean-pass
+  (is (= ["the rules endpoint returned HTTP 502"]
+         (map :summary (thanos/detect-rules {"url" "https://thanos.example.org"
+                                             "rules" {:reachable true :status 502 :body "bad gateway"}}))))
+  (is (= ["the rules endpoint returned an unexpected response"]
+         (map :summary (thanos/detect-rules {"url" "https://thanos.example.org"
+                                             "rules" {:reachable true :status 200 :body "<html>"}}))))
+  (is (empty? (thanos/detect-rules {"url" "u" "rules" {:reachable false}}))
+      "an unreachable query layer is the readiness detective's finding"))
