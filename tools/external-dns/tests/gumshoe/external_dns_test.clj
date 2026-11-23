@@ -41,3 +41,13 @@
       (is (contains? (summaries findings) "dns.example.org did not answer the query")))
     (testing "resolving hostnames stay silent"
       (is (= 2 (count findings))))))
+
+(deftest only-address-records-are-checked-with-address-queries
+  (is (= ["app.example.org" "plain.example.org" "www.example.org"]
+         (keys (external-dns/hostname-sources
+                {:endpoints {:items [{:spec {:endpoints [{:dnsName "_acme-challenge.example.org" :recordType "TXT"}
+                                                         {:dnsName "example.org" :recordType "MX"}
+                                                         {:dnsName "_sip._tcp.example.org" :recordType "SRV"}
+                                                         {:dnsName "app.example.org" :recordType "A"}
+                                                         {:dnsName "www.example.org" :recordType "CNAME"}
+                                                         {:dnsName "plain.example.org"}]}}]}})))))
