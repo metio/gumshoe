@@ -240,3 +240,10 @@
         (is (not (kubectl/pvc-unused? "ctx" "db" "data"))))
       (with-redefs [kubectl/get-json-result (reads {:ok? false :doc nil})]
         (is (not (kubectl/pvc-unused? "ctx" "db" "spare")) "an unanswered read is not an absence")))))
+
+(deftest a-generic-ephemeral-volume-claims-its-pod-named-pvc
+  (let [pods {:items [{:metadata {:namespace "ci" :name "runner-abc"}
+                       :spec {:volumes [{:name "scratch"
+                                         :ephemeral {:volumeClaimTemplate {:spec {}}}}]}}]}]
+    (is (= #{"ci/runner-abc-scratch"} (kubectl/claimed-pvcs pods)))
+    (is (= [] (kubectl/unused-pvcs {:items [{:metadata {:namespace "ci" :name "runner-abc-scratch"}}]} pods)))))
