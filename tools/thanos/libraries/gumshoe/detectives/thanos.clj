@@ -75,13 +75,35 @@
 
 (defn detect-rules
   [evidence]
-  (for [group (-> evidence (get "rules") :json :data :groups)
-        rule (:rules group)
-        :when (= "err" (:health rule))]
-    {:severity :critical
-     :component (format "%s/%s" (:name group) (:name rule))
-     :summary "rule fails to evaluate"
-     :hint (:lastError rule)}))
+  (let [rules (get evidence "rules")
+        url (get evidence "url")]
+    (cond
+      ;; the readiness detective reports an unreachable query layer
+      (not (:reachable rules))
+      []
+
+      ;; no groups from an erroring or non-JSON response would read as every
+      ;; rule evaluating cleanly
+      (not (http/ok? rules))
+      [{:severity :warning
+        :component url
+        :summary (format "the rules endpoint returned HTTP %s" (:status rules))
+        :hint "/api/v1/rules is erroring, so no rule was judged - check the reverse proxy"}]
+
+      (nil? (-> rules :json :data))
+      [{:severity :warning
+        :component url
+        :summary "the rules endpoint returned an unexpected response"
+        :hint "/api/v1/rules did not return the expected JSON, so no rule was judged"}]
+
+      :else
+      (for [group (-> rules :json :data :groups)
+            rule (:rules group)
+            :when (= "err" (:health rule))]
+        {:severity :critical
+         :component (format "%s/%s" (:name group) (:name rule))
+         :summary "rule fails to evaluate"
+         :hint (:lastError rule)}))))
 
 (def detectives
   [{:name "thanos-readiness"
@@ -94,5 +116,5 @@
     :detect detect-stores}
    {:name "thanos-rules"
     :description "Recording and alerting rules evaluate cleanly"
-    :requires ["rules"]
+    :requires ["rules" "url"]
     :detect detect-rules}])
