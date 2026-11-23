@@ -58,9 +58,26 @@
   []
   @recorded)
 
+(def ^:private shell-safe
+  "Characters a POSIX shell leaves alone. Anything else means the token has to be
+   quoted before a shell sees it."
+  #"[^A-Za-z0-9_@%+=:,./-]")
+
+(defn quote-token
+  "Quotes one token for a POSIX shell, so the shell reads it back as exactly one
+   argument. Tokens that need no quoting are passed through, so a recorded
+   reproducer stays readable."
+  [token]
+  (let [s (str token)]
+    (if (or (empty? s) (re-find shell-safe s))
+      (str "'" (str/replace s "'" "'\\''") "'")
+      s)))
+
 (defn- record!
+  "Records the command as a line sh replays with the same argv: a jsonpath
+   template or a message carries spaces, quotes and globs."
   [args]
-  (swap! recorded conj (str/join " " (map str (flatten args)))))
+  (swap! recorded conj (str/join " " (map quote-token (flatten args)))))
 
 (defn- capture
   "Runs a command capturing its output, bounded by *timeout-ms*. On expiry the

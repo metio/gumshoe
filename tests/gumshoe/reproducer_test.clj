@@ -24,3 +24,10 @@
       (let [after (shell/recording)]
         (is (= (inc before) (count after)))
         (is (= "true recording-probe" (last after)))))))
+
+(deftest a-recorded-command-replays-with-the-same-arguments
+  (shell/execute "printf" "%s|" "a b;c" "{range .items[*]}{\"\\t\"}" "it's")
+  (let [line (last (shell/recording))
+        replay (shell/execute "sh" "-c" line)]
+    (is (= "printf '%s|' 'a b;c' '{range .items[*]}{\"\\t\"}' 'it'\\''s'" line))
+    (is (= "a b;c|{range .items[*]}{\"\\t\"}|it's|" (:out replay)))))

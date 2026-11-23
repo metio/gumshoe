@@ -7,7 +7,6 @@
    password prompt. Works against any distribution - all it needs is ssh on
    the far end (and sudo only for the books that ask for it)."
   (:require [babashka.fs :as fs]
-            [clojure.string :as str]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
@@ -48,11 +47,6 @@
   [{:keys [host user]}]
   (if user (str user "@" host) host))
 
-(def ^:private shell-safe
-  "Characters a POSIX shell leaves alone. Anything else means the token has to be
-   quoted before the remote shell sees it."
-  #"[^A-Za-z0-9_@%+=:,./-]")
-
 (defn shell-quote
   "Quotes one token for the remote shell.
 
@@ -61,15 +55,9 @@
    argument containing a space arrives as several arguments unless it is quoted
    here. `vtysh -c 'show evpn mac vni 4208'` is the case that matters: unquoted,
    vtysh reads 'show' as its command and the rest as stray arguments, and prints
-   nothing at all.
-
-   Tokens that need no quoting are passed through, so a recorded reproducer stays
-   readable."
+   nothing at all."
   [token]
-  (let [s (str token)]
-    (if (or (empty? s) (re-find shell-safe s))
-      (str "'" (str/replace s "'" "'\\''") "'")
-      s)))
+  (shell/quote-token token))
 
 (defn ssh-args
   "Pure assembly of the full ssh command. The option terminator '--' precedes
