@@ -49,3 +49,13 @@
       (is (= #{"datastore is 80% full" "datastore is 95% full"} (summaries findings)))
       (is (= :warning (:severity (first (filter #(= "images" (:component %)) findings)))))
       (is (= :critical (:severity (first (filter #(= "backups" (:component %)) findings))))))))
+
+(deftest an-active-vm-whose-lifecycle-failed-is-reported
+  (is (= #{["VM is BOOT_FAILURE" :critical] ["VM is PROLOG_FAILURE" :critical] ["VM is UNKNOWN" :warning]}
+         (set (map (juxt :summary :severity)
+                   (detectives/detect-vm-problems
+                    {"vms" [{:NAME "web" :ID "10" :STATE "3" :LCM_STATE "3"}
+                            {:NAME "boot" :ID "13" :STATE "3" :LCM_STATE "36"}
+                            {:NAME "prolog" :ID "14" :STATE "3" :LCM_STATE "39"}
+                            {:NAME "lost" :ID "15" :STATE "3" :LCM_STATE "16"}
+                            {:NAME "off" :ID "16" :STATE "8" :LCM_STATE "36"}]}))))))
