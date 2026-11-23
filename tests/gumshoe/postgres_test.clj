@@ -36,3 +36,10 @@
         (is (postgres/dump-complete? complete))
         (is (not (postgres/dump-complete? truncated)))
         (is (not (postgres/dump-complete? (str (fs/path workdir "missing.sql")))))))))
+
+(deftest a-dump-runs-without-the-probe-timeout
+  (let [bound (atom :unset)]
+    (with-redefs [gumshoe.shell/execute-env (fn [& _] (reset! bound gumshoe.shell/*timeout-ms*) {:exit 0})
+                  gumshoe.stdout/print-command (fn [& _])]
+      (is (true? (postgres/pg-dump! {:user "u" :database "d" :password "p"} 5432 "/dev/null")))
+      (is (nil? @bound) "a dump may take as long as the database needs"))))
