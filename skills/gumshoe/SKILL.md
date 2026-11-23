@@ -179,7 +179,10 @@ and current list.
    no post-check. It still checks each step's precondition. A banner naming
    steps whose precondition does not hold, with exit code 1, means the real
    run would stop there, unless an earlier step of the same playbook creates
-   what that step needs. A playbook passes its pauses under `--dry-run`; a
+   what that step needs. A `DRY RUN stopped by an unexpected error` banner
+   means the rehearsal itself broke and the plans after the error were never
+   shown; read the error before relying on the plan. A playbook passes its
+   pauses under `--dry-run`; a
    real run without a terminal stops at the first pause with a `PAUSED`
    banner naming the `--from-segment` that continues after the human acted.
 3. Show the human the plan and the command without `--dry-run`, written so
