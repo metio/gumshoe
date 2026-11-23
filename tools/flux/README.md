@@ -39,7 +39,13 @@ about Flux, in one place, registered through a single `plugin/provide!` in
   (diffs the stored manifest against live, field by field), and
   `runbooks/flux/suspend.clj` / `runbooks/flux/resume.clj` (set `spec.suspend` on a
   HelmRelease, Kustomization, GitRepository or OCIRepository; resuming also
-  requests a reconcile).
+  requests a reconcile), and `runbooks/flux/clear_helm_storage.clj` (clears a
+  HelmRelease's Helm storage so the next action is an install: it suspends the
+  Kustomization or ResourceSet that renders the release before anything is
+  deleted, refuses while a Helm action is running, deletes workloads before
+  volumes, confirms the storage is empty, then resumes the release and its
+  owner, with every wait taken from the release's `spec.timeout` and
+  `spec.interval` and the owner's interval).
 
 ## Use
 
