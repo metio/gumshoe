@@ -20,10 +20,12 @@
 
 (defn statefulset-pvc-names
   "The PVC names a StatefulSet's volume claim template creates:
-   <template>-<statefulset>-<ordinal>."
+   <template>-<statefulset>-<ordinal>, the ordinals counting from
+   spec.ordinals.start."
   [statefulset template-name]
-  (let [replicas (or (-> statefulset :spec :replicas) 1)]
-    (vec (for [ordinal (range replicas)]
+  (let [replicas (or (-> statefulset :spec :replicas) 1)
+        start (or (-> statefulset :spec :ordinals :start) 0)]
+    (vec (for [ordinal (range start (+ start replicas))]
            (format "%s-%s-%d" template-name (kubectl/name-of statefulset) ordinal)))))
 
 (defn expansion-plan
