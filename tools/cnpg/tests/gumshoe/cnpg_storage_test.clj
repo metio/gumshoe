@@ -95,3 +95,12 @@
                                           (volume "pg-1-wal" "PG_WAL")
                                           (volume "pg-1-tbs-archive" "PG_TABLESPACE" :tablespace "archive")]))))))
 
+(deftest a-sibling-clusters-volumes-are-not-claimed-by-name
+  (let [pg {:metadata {:namespace "db" :name "pg"} :spec {:storage {:size "40Gi"}}}
+        claim (fn [name labels] {:metadata {:namespace "db" :name name :labels labels}
+                                 :spec {:resources {:requests {:storage "10Gi"}}}})]
+    (is (= ["pg-1" "pg-2"]
+           (map :pvc (storage/assess pg [(claim "pg-1" {:cnpg.io/cluster "pg"})
+                                         (claim "pg-small-1" {:cnpg.io/cluster "pg-small"})
+                                         (claim "pg-small-2" {})
+                                         (claim "pg-2" {})]))))))
