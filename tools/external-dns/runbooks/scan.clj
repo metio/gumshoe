@@ -9,13 +9,14 @@
             [gumshoe.detective :as detective]
             [gumshoe.detectives.external-dns :as external-dns-detectives]
             [gumshoe.external-dns :as external-dns]
+            [gumshoe.inputs :as inputs]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.runbook :as runbook]))
 
 (def options
   (merge {:server {:desc "The DNS server the records must exist on"
                    :alias :s
-                   :default (config/env-value {} [:dns :server])
+                   :default (inputs/env-default [:dns :server])
                    :coerce :string}}
          detective/output-option))
 

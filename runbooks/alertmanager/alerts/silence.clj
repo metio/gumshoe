@@ -5,19 +5,19 @@
   "Silences alerts matching a set of label matchers on one alertmanager."
   (:require [babashka.fs :as fs]
             [clojure.string :as str]
-            [gumshoe.config :as config]
+            [gumshoe.announce :as announce]
             [gumshoe.effect :as effect]
             [gumshoe.flow :as flow]
-            [gumshoe.secrets :as secrets]
-            [gumshoe.announce :as announce]
+            [gumshoe.inputs :as inputs]
             [gumshoe.runbook :as runbook]
+            [gumshoe.secrets :as secrets]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
 (def options
   {:alertmanager {:desc "The alertmanager host (e.g. alertmanager.example.org); defaults to env.edn :alertmanager :host"
                   :alias :a
-                  :default (config/env-value {} [:alertmanager :host])
+                  :default (inputs/env-default [:alertmanager :host])
                   :coerce :string}
    :duration {:desc "The duration of the silence"
               :alias :d

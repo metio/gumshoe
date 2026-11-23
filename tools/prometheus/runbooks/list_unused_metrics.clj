@@ -5,10 +5,10 @@
   "Lists every metric in a Prometheus TSDB that neither Grafana dashboards
    nor alerting rules use - candidates for deletion."
   (:require [babashka.fs :as fs]
-            [gumshoe.config :as config]
-            [gumshoe.secrets :as secrets]
+            [gumshoe.inputs :as inputs]
             [gumshoe.mimirtool :as mimirtool]
             [gumshoe.runbook :as runbook]
+            [gumshoe.secrets :as secrets]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
@@ -18,14 +18,14 @@
                :coerce :string}
    :grafana {:desc "The Grafana base URL (e.g. https://grafana.example.org); defaults to env.edn :grafana :url"
              :alias :g
-             :default (config/env-value {} [:grafana :url])
+             :default (inputs/env-default [:grafana :url])
              :coerce :string}
    :token {:desc "The Grafana service account token - resolved via gopass when omitted"
            :alias :t
            :coerce :string}
    :prometheus {:desc "The Prometheus base URL (e.g. https://prometheus.example.org); defaults to env.edn :prometheus :url"
                 :alias :p
-                :default (config/env-value {} [:prometheus :url])
+                :default (inputs/env-default [:prometheus :url])
                 :coerce :string}
    :prometheus-username {:desc "The Prometheus basic auth username - resolved via gopass when omitted"
                          :alias :u
@@ -48,7 +48,7 @@
 (defn- rules-directory
   [provided]
   (or provided
-      (config/env-value {} [:prometheus :rules-directory])))
+      (inputs/env-default [:prometheus :rules-directory])))
 
 (defn- list-unused-metrics
   [opts _ctx]

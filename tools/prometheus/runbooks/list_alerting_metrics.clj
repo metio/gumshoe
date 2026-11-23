@@ -5,7 +5,7 @@
   "Lists every metric used by the Prometheus alerting rule files in a
    directory."
   (:require [babashka.fs :as fs]
-            [gumshoe.config :as config]
+            [gumshoe.inputs :as inputs]
             [gumshoe.mimirtool :as mimirtool]
             [gumshoe.runbook :as runbook]
             [gumshoe.stdout :as stdout]))
@@ -14,7 +14,7 @@
   "The --directory flag, or the directory configured in env.edn."
   [provided]
   (or provided
-      (config/env-value {} [:prometheus :rules-directory])))
+      (inputs/env-default [:prometheus :rules-directory])))
 
 (def options
   {:directory {:desc "Directory with Prometheus rule files; defaults to env.edn :prometheus :rules-directory"

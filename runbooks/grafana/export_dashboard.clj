@@ -5,11 +5,11 @@
   "Exports a single dashboard as JSON via Grafana's app-platform API. The
    dashboard model goes to stdout, so it pipes and redirects cleanly."
   (:require [cheshire.core :as json]
-            [gumshoe.config :as config]
-            [gumshoe.secrets :as secrets]
             [gumshoe.grafana :as grafana]
+            [gumshoe.inputs :as inputs]
             [gumshoe.interact :as interact]
             [gumshoe.runbook :as runbook]
+            [gumshoe.secrets :as secrets]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
@@ -22,7 +22,7 @@
                :coerce :string}
    :grafana {:desc "The Grafana base URL (e.g. https://grafana.example.org); defaults to env.edn :grafana :url"
              :alias :g
-             :default (config/env-value {} [:grafana :url])
+             :default (inputs/env-default [:grafana :url])
              :coerce :string}
    :namespace {:desc "The Grafana org namespace ('default' is org 1)"
                :alias :n

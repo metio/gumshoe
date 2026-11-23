@@ -7,17 +7,17 @@
    the reporting hosts with a declared list when one is given. Read-only."
   (:require [babashka.fs :as fs]
             [clojure.string :as str]
-            [gumshoe.config :as config]
             [gumshoe.detective :as detective]
             [gumshoe.detectives.hosts :as host-detectives]
             [gumshoe.hosts :as hosts]
+            [gumshoe.inputs :as inputs]
             [gumshoe.promql :as promql]
             [gumshoe.runbook :as runbook]
             [gumshoe.stdout :as stdout]))
 
 (def options
   (merge {:url {:desc "The query API base URL (e.g. https://prometheus.example.org); defaults to env.edn :prometheus :url"
-                :default (config/env-value {} [:prometheus :url])
+                :default (inputs/env-default [:prometheus :url])
                 :coerce :string}
           :flavor {:desc "prometheus, thanos (deduplicates, refuses partial answers) or mimir (/prometheus prefix, tenant header)"
                    :default "prometheus"
