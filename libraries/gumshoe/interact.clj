@@ -163,5 +163,5 @@
     (record-only! (str "confirm: " (:action request)) (if approved "approved" "aborted"))
     (or approved
         (do (outcome/aborted! "declined at the confirmation")
-            (stdout/error "aborted, nothing was changed")
+            (stdout/error "aborted, this change was not made")
             false))))

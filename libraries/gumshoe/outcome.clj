@@ -110,8 +110,16 @@
                     (str "; " (effects applied) " had been applied before it"))
                   " - read the messages above")}
 
+      ;; a playbook can abort at a later step, after earlier ones applied
       aborted
-      {:tone :neutral :text (str "ABORTED - " aborted " - nothing was changed")}
+      (cond
+        (pos? applied)
+        {:tone :error
+         :text (str "ABORTED after " (effects applied) " - " aborted " - the effects before it stay applied")}
+        (changed? record)
+        {:tone :error :text (str "ABORTED - " aborted " - after a change had already run")}
+        :else
+        {:tone :neutral :text (str "ABORTED - " aborted " - nothing was changed")})
 
       paused
       {:tone :neutral
