@@ -204,3 +204,11 @@
   (testing "with a domain, a missing record is still reported"
     (let [mx (first (filter #(= "mail-mx" (:name %)) detectives/detectives))]
       (is (= ["domain has no MX records"] (map :summary ((:detect mx) {"domain" "example.org"})))))))
+
+(deftest a-port-openssl-connected-to-is-reachable
+  (let [connected? #'gumshoe.mail/connected?]
+    (testing "an errno after the connect is a failed negotiation, not an unreachable port"
+      (is (connected? {:exit 1 :out "CONNECTED(00000003)\n---\nno peer certificate available\n"
+                       :err "4087E7A3E87F0000:error:80000020:system library:BIO_write:Broken pipe:../crypto/bio/bss_sock.c:86:calling write()\nwrite:errno=32\n"})))
+    (testing "a refused connect never printed CONNECTED"
+      (is (not (connected? {:exit 1 :out "" :err "4007:error:8000006F:system library:BIO_connect:Connection refused\nconnect:errno=111\n"}))))))
