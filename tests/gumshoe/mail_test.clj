@@ -212,3 +212,8 @@
                        :err "4087E7A3E87F0000:error:80000020:system library:BIO_write:Broken pipe:../crypto/bio/bss_sock.c:86:calling write()\nwrite:errno=32\n"})))
     (testing "a refused connect never printed CONNECTED"
       (is (not (connected? {:exit 1 :out "" :err "4007:error:8000006F:system library:BIO_connect:Connection refused\nconnect:errno=111\n"}))))))
+
+(deftest a-cname-in-the-address-answer-is-not-looked-up-as-an-address
+  (with-redefs [gumshoe.dns/query (fn [_ type _] (if (= "A" type) ["mx.provider.net." "203.0.113.5"] []))
+                gumshoe.dns/ptr-records (fn [_ ip] (when (= "203.0.113.5" ip) ["mail.example.org."]))]
+    (is (= [["203.0.113.5" "mail.example.org."]] (mail/ptr-evidence nil "mail.example.org")))))

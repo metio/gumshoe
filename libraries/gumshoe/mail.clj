@@ -136,6 +136,18 @@
 ;; ---------------------------------------------------------------------------
 ;; evidence collection
 
+(defn- address?
+  [s]
+  (boolean (re-matches #"\d{1,3}(\.\d{1,3}){3}|[0-9A-Fa-f:]*:[0-9A-Fa-f:.]*" s)))
+
+(defn ptr-evidence
+  "Each address the host resolves to, paired with its first PTR name. dig
+   +short lists a CNAME's target before the addresses it leads to; that name
+   is no address and has no reverse record of its own, so it is skipped."
+  [server host]
+  (mapv #(vector % (first (dns/ptr-records {:server server} %)))
+        (filter address? (dns/query {:server server} "A" host))))
+
 (defn collect-evidence!
   "Collects deliverability records and live protocol probes in parallel."
   [{:keys [domain host server dkim-selectors]}]
@@ -145,8 +157,7 @@
         mx (future (q "MX" domain))
         spf (future (q "TXT" domain))
         dmarc (future (q "TXT" (str "_dmarc." domain)))
-        ptr (future (mapv #(vector % (first (dns/ptr-records {:server server} %)))
-                          (remove str/blank? (q "A" host))))
+        ptr (future (ptr-evidence server host))
         dkim (future (into {} (map (fn [selector]
                                      [selector (q "TXT" (format "%s._domainkey.%s" selector domain))])
                                    dkim-selectors)))
