@@ -198,3 +198,25 @@
         (str phase " retries -1 retries for ever")))
   (is (flux/parked? {:spec {:upgrade {:remediation {:retries 2}}} :status {:upgradeFailures 3}})
       "a finite budget that is spent still parks"))
+
+(deftest a-release-is-found-where-flux-put-it
+  (let [hr (fn [spec & [status]] {:metadata {:namespace "flux-system" :name "podinfo"} :spec spec :status status})]
+    (testing "targetNamespace prefixes the name and moves the objects, the storage stays"
+      (let [r (hr {:targetNamespace "apps"})]
+        (is (= "apps-podinfo" (flux/release-name r)))
+        (is (= "apps" (flux/release-namespace r)))
+        (is (= "flux-system" (flux/storage-namespace r)))))
+    (testing "releaseName and storageNamespace win"
+      (let [r (hr {:targetNamespace "apps" :releaseName "web" :storageNamespace "helm"})]
+        (is (= "web" (flux/release-name r)))
+        (is (= "helm" (flux/storage-namespace r)))))
+    (testing "a name over 53 characters is shortened with its hash, as helm-controller does"
+      ;; the expected value is helm-controller's ShortenName computed outside
+      (is (= "observability-and-monitoring-stack-for-t-a1128d8ed56e"
+             (flux/release-name (hr {:targetNamespace "observability-and-monitoring-stack-for-the-production-tenant"})))))
+    (testing "what the status recorded wins over the rule"
+      (let [r (hr {:targetNamespace "apps"} {:history [{:name "recorded" :namespace "elsewhere"}]
+                                            :storageNamespace "stored"})]
+        (is (= "recorded" (flux/release-name r)))
+        (is (= "elsewhere" (flux/release-namespace r)))
+        (is (= "stored" (flux/storage-namespace r)))))))

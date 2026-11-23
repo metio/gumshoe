@@ -16,7 +16,7 @@
             [gumshoe.runbook :as runbook]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]
-            [gumshoe.tools.flux]))
+            [gumshoe.tools.flux :as flux]))
 
 (def helmrelease-type "helmreleases.helm.toolkit.fluxcd.io")
 
@@ -42,12 +42,6 @@
   (let [releases (kubectl/items-of (kubectl/get-all context helmrelease-type))]
     (mapv kubectl/namespace-name-of
           (concat (filter drifted? releases) (remove drifted? releases)))))
-
-(defn release-name
-  "The Helm release name: spec.releaseName when set, the object's own name
-   otherwise. `helm get manifest` takes the former."
-  [release fallback]
-  (or (-> release :spec :releaseName) fallback))
 
 (defn drift-message
   [release]
@@ -93,9 +87,13 @@
       (do (stdout/error "no HelmRelease selected") false)
       (let [{:keys [namespace name]} (kubectl/split-namespace-name target)
             release (kubectl/get-namespaced-resource context namespace helmrelease-type name)
-            helm-name (release-name release name)
+            ;; targetNamespace renames the release and moves its objects,
+            ;; while Helm's records stay in the storage namespace
+            helm-name (flux/release-name release)
+            storage (flux/storage-namespace release)
+            objects (flux/release-namespace release)
             manifest (shell/stdout-of "helm" (str "--kube-context=" context)
-                                      "-n" namespace "get" "manifest" helm-name)]
+                                      "-n" storage "get" "manifest" helm-name)]
         (stdout/print-section-marker)
         (if-let [message (drift-message release)]
           (stdout/ok (format "%s reports drift:%n%s" target message))
@@ -103,9 +101,9 @@
         (stdout/print-section-marker)
         (if (str/blank? manifest)
           (do (stdout/error (format "helm has no manifest for release %s in %s"
-                                    helm-name namespace))
+                                    helm-name storage))
               false)
-          (report-diff context namespace manifest))))))
+          (report-diff context objects manifest))))))
 
 (runbook/execute!
  {:description "Diffs what a HelmRelease applied against what is live, field by field"
