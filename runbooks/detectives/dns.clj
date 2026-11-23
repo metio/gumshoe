@@ -8,20 +8,21 @@
             [gumshoe.detective :as detective]
             [gumshoe.detectives.dns :as dns-detectives]
             [gumshoe.dns :as dns]
+            [gumshoe.inputs :as inputs]
             [gumshoe.runbook :as runbook]))
 
 (def options
   (merge {:zone {:desc "The zone to investigate"
                  :alias :z
-                 :default (config/env-value {} [:dns :zone])
+                 :default (inputs/env-default [:dns :zone])
                  :coerce :string}
           :server {:desc "The DNS server used as the entry point"
                    :alias :s
-                   :default (config/env-value {} [:dns :server])
+                   :default (inputs/env-default [:dns :server])
                    :coerce :string}
           :probes {:desc "Names that must resolve identically everywhere, repeatable"
                    :alias :p
-                   :default (config/env-value {} [:dns :probes])
+                   :default (inputs/env-default [:dns :probes])
                    :coerce [:string]}}
          detective/output-option))
 

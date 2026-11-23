@@ -82,6 +82,14 @@
   []
   {:kubernetes-cluster (try (kubectl/current-cluster) (catch Exception _ nil))})
 
+(defn env-default
+  "A key path from env.edn for the environment of the current cluster - what
+   a book offers as an option's default. The environment comes from the same
+   signals value uses, so a value the setup wizard wrote into a named
+   environment is found, not only :defaults and the top level."
+  [path]
+  (config/env-value (current-signals) path))
+
 (defn value
   "The resolved value for a registered input key given a book's parsed opts:
    the flag, then env.edn for the active environment, then the declared default."

@@ -7,6 +7,7 @@
    that would apply a recommendation, and runs none of them."
   (:require [gumshoe.config :as config]
             [gumshoe.http :as http]
+            [gumshoe.inputs :as inputs]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.promql :as promql]
             [gumshoe.rightsizing :as rightsizing]
@@ -16,7 +17,7 @@
 (def options
   {:prometheus {:desc "The Prometheus base URL (e.g. https://prometheus.example.org); defaults to env.edn :prometheus :url"
                 :alias :p
-                :default (config/env-value {} [:prometheus :url])
+                :default (inputs/env-default [:prometheus :url])
                 :coerce :string}
    :prometheus-username {:desc "The Prometheus basic auth username - resolved from the secret store when omitted"
                          :alias :u

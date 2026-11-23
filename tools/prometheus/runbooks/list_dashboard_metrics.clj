@@ -4,17 +4,17 @@
 (ns runbooks.prometheus.list-dashboard-metrics
   "Lists every metric used by the dashboards of a Grafana instance."
   (:require [babashka.fs :as fs]
-            [gumshoe.config :as config]
-            [gumshoe.secrets :as secrets]
+            [gumshoe.inputs :as inputs]
             [gumshoe.mimirtool :as mimirtool]
             [gumshoe.runbook :as runbook]
+            [gumshoe.secrets :as secrets]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
 (def options
   {:grafana {:desc "The Grafana base URL (e.g. https://grafana.example.org); defaults to env.edn :grafana :url"
              :alias :g
-             :default (config/env-value {} [:grafana :url])
+             :default (inputs/env-default [:grafana :url])
              :coerce :string}
    :token {:desc "The Grafana service account token - resolved via gopass when omitted"
            :alias :t

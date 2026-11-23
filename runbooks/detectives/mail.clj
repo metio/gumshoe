@@ -8,21 +8,22 @@
   (:require [gumshoe.config :as config]
             [gumshoe.detective :as detective]
             [gumshoe.detectives.mail :as mail-detectives]
+            [gumshoe.inputs :as inputs]
             [gumshoe.mail :as mail]
             [gumshoe.runbook :as runbook]))
 
 (def options
   (merge {:domain {:desc "The mail domain (used for MX, SPF, DMARC, DKIM lookups)"
                    :alias :d
-                   :default (config/env-value {} [:mail :domain])
+                   :default (inputs/env-default [:mail :domain])
                    :coerce :string}
           :host {:desc "The mail server host to probe"
                  :alias :m
-                 :default (config/env-value {} [:mail :host])
+                 :default (inputs/env-default [:mail :host])
                  :coerce :string}
           :server {:desc "The DNS server to resolve records against"
                    :alias :s
-                   :default (config/env-value {} [:dns :server])
+                   :default (inputs/env-default [:dns :server])
                    :coerce :string}
           :dkim-selectors {:desc "DKIM selectors to check, repeatable"
                            :alias :k

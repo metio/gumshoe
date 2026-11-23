@@ -58,3 +58,12 @@
   (testing "a blank registry answer is omitted"
     (let [body (config/from-answers {:inputs [[[:matrix :host] "  "]]})]
       (is (empty? body)))))
+
+(deftest a-books-default-comes-from-the-environment-of-the-current-cluster
+  (with-redefs [config/all (constantly {:environments {:prod {:select {:kubernetes-cluster "kube.example.org"}
+                                                              :dns {:server "dns.example.org"}}}})
+                gumshoe.kubectl/current-cluster (constantly "kube.example.org")]
+    (is (= "dns.example.org" (inputs/env-default [:dns :server]))))
+  (with-redefs [config/all (constantly {:dns {:server "flat.example.org"}})
+                gumshoe.kubectl/current-cluster (fn [] (throw (ex-info "no kubectl" {})))]
+    (is (= "flat.example.org" (inputs/env-default [:dns :server])) "a flat env.edn and no cluster still work")))
