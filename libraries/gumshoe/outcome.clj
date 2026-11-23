@@ -134,6 +134,9 @@
 
       (not changes?)
       (cond
+        ;; a healthy scan has nothing critical, and may still have reported
+        ;; warnings and info findings
+        (and (= :ok outcome) findings?) {:tone :ok :text "DONE - nothing critical; read the findings above"}
         (= :ok outcome) {:tone :ok :text "DONE - no findings"}
         findings? {:tone :neutral :text "FINDINGS - read the report above"}
         :else {:tone :error :text "FAILED - read the messages above"})

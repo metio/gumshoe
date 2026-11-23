@@ -103,3 +103,8 @@
   (is (= {:tone :error
           :text "DRY RUN stopped by an unexpected error - nothing was changed - read the messages above"}
          (outcome/banner {:dry-run? true :changes? true :outcome :error} {:applied 0}))))
+
+(deftest a-scan-with-warnings-does-not-claim-no-findings
+  (is (= {:tone :ok :text "DONE - nothing critical; read the findings above"}
+         (outcome/banner {:changes? false :outcome :ok :findings? true} {:applied 0})))
+  (is (= "DONE - no findings" (:text (outcome/banner {:changes? false :outcome :ok} {:applied 0})))))
