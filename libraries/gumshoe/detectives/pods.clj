@@ -76,6 +76,17 @@
              :when (<= 1/2 (/ loops (count members)))]
          owner)))
 
+(def ^:private oom-recent-hours 24)
+
+(defn- recent-oom?
+  "Whether a terminated state is an OOM kill within the last day; one without
+   a finishedAt counts, since its age is unknown."
+  [terminated now]
+  (and (= "OOMKilled" (:reason terminated))
+       (let [finished (instant (:finishedAt terminated))]
+         (or (nil? finished) (nil? now)
+             (< (minutes-between finished now) (* 60 oom-recent-hours))))))
+
 (defn- last-exit
   [status]
   (when-let [last (-> status :lastState :terminated)]
@@ -105,11 +116,12 @@
         :summary (format "container %s is waiting: CrashLoopBackOff" (:name status))
         :hint (loop-hint status (-> status :state :waiting :message))})
      (for [status statuses
-           ;; A container restarted after an OOM kill records it in lastState; a
-           ;; one-shot container (restartPolicy Never) is left terminated in its
-           ;; current state instead, so both must be checked.
-           :when (= "OOMKilled" (or (-> status :state :terminated :reason)
-                                    (-> status :lastState :terminated :reason)))]
+           ;; A container restarted after an OOM kill records it in lastState,
+           ;; which the kubelet keeps until the next termination, so only a
+           ;; recent one counts; a one-shot container (restartPolicy Never) is
+           ;; left terminated in its current state instead, and counts as is.
+           :when (or (= "OOMKilled" (-> status :state :terminated :reason))
+                     (recent-oom? (-> status :lastState :terminated) now))]
        {:severity :warning
         :component component
         :summary (format "container %s was OOMKilled" (:name status))

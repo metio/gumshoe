@@ -66,3 +66,17 @@
     (is (= [:warning]
            (map :severity (run (pod "web-new" (container) :owner "web-8f1")
                                (healthy "web-a") (healthy "web-b")))))))
+
+(deftest an-oom-kill-long-ago-is-history
+  (let [oom (fn [finished] {:name "app" :restartCount 1
+                            :lastState {:terminated {:reason "OOMKilled" :exitCode 137
+                                                     :startedAt "2026-09-01T00:00:00Z" :finishedAt finished}}
+                            :state {:running {:startedAt finished}}})
+        summaries (fn [status] (set (map :summary (pods/detect-unhealthy-pods {:now now "pods" {:items [(pod "web-1" status)]}}))))]
+    (is (not (contains? (summaries (oom "2026-09-26T10:00:00Z")) "container app was OOMKilled"))
+        "53 days of healthy running since")
+    (is (contains? (summaries (oom "2026-11-18T09:00:00Z")) "container app was OOMKilled")
+        "three hours ago is worth a look")
+    (is (contains? (summaries {:name "job" :state {:terminated {:reason "OOMKilled" :finishedAt "2026-10-01T00:00:00Z"}}})
+                   "container job was OOMKilled")
+        "a one-shot container still lying terminated is reported whatever its age")))
