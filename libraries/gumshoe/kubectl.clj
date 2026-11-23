@@ -99,12 +99,16 @@
   (names-of (filter-list nodes-list #(not (true? (-> % :spec :unschedulable))))))
 
 (defn claimed-pvcs
-  "Set of namespace/name for every PersistentVolumeClaim referenced by a pod."
+  "Set of namespace/name for every PersistentVolumeClaim referenced by a pod:
+   named in a persistentVolumeClaim volume, or created for a generic
+   ephemeral volume, whose claim Kubernetes names <pod>-<volume>."
   [pods-list]
   (into #{}
         (for [pod (items-of pods-list)
               volume (-> pod :spec :volumes)
-              :let [claim (-> volume :persistentVolumeClaim :claimName)]
+              :let [claim (or (-> volume :persistentVolumeClaim :claimName)
+                              (when (:ephemeral volume)
+                                (str (-> pod :metadata :name) "-" (:name volume))))]
               :when claim]
           (format "%s/%s" (namespace-of pod) claim))))
 
