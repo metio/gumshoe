@@ -66,7 +66,11 @@
   [(unschedulable-check context node)
    {:description (format "no evictable pods remain on node %s" node)
     :timeout 120 :interval 10
-    :check (fn [] (empty? (kubectl/drainable-pods (kubectl/pods-on-node context node))))}])
+    ;; only a read that answered can show the node empty; a failed one
+    ;; would read as no pods and verify a drain that did not happen
+    :check (fn [] (let [{:keys [ok? doc]} (kubectl/get-json-result context "pods" "--all-namespaces"
+                                                                   (str "--field-selector=spec.nodeName=" node))]
+                    (and ok? (empty? (kubectl/drainable-pods doc)))))}])
 
 (def cordon
   {:options (node-option "cordon")

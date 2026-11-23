@@ -243,3 +243,10 @@
                                      "w-1" {:from-segment 2} {})))))
         (is (zero? @waited))
         (is (= [["after" "w-1"]] @ran))))))
+
+(deftest a-drain-is-not-verified-by-a-pod-read-that-failed
+  (let [check (:check (second (nodes/drain-checks "ctx" "n1")))]
+    (with-redefs [gumshoe.shell/execute (fn [& _] {:exit 1 :out "" :err "the server is currently unable to handle the request"})]
+      (is (false? (check)) "a failed read is no empty node"))
+    (with-redefs [gumshoe.shell/execute (fn [& _] {:exit 0 :out "{\"items\":[]}" :err ""})]
+      (is (true? (check)) "an answered read without pods is"))))

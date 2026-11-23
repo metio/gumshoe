@@ -103,7 +103,7 @@
           (verify/all [{:description "the fire-drill namespace is gone"
                         :timeout 180
                         :interval 10
-                        :check #(nil? (kubectl/get-cluster-resource context "namespaces" drill-namespace))}])))))
+                        :check #(kubectl/confirmed-gone? context nil "namespaces" drill-namespace)}])))))
 
 (defn burning-check
   "Post-check map proving that a drill resource exists inside the namespace."

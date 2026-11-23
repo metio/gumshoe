@@ -503,6 +503,17 @@
   (parse-json (shell/stdout-of "kubectl" (str "--context=" context) (str "--namespace=" namespace) request-timeout
                           "get" type name "--output=json")))
 
+(defn confirmed-gone?
+  "True ONLY when a read answered and found no such object - the fail-safe way
+   to verify a deletion. A failed or unreachable read returns false, where the
+   plain getters return the same nil for a failure as for NotFound. namespace
+   is nil for a cluster-scoped type."
+  [context namespace type name]
+  (let [{:keys [exit out]} (apply shell/execute "kubectl" (str "--context=" context) request-timeout
+                                  (concat (when namespace [(str "--namespace=" namespace)])
+                                          ["get" type name "--ignore-not-found" "--output=name"]))]
+    (and (zero? exit) (str/blank? out))))
+
 (defn pods-on-node
   [context node]
   (get-json context "pods" "--all-namespaces" (str "--field-selector=spec.nodeName=" node)))
