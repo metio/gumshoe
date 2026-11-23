@@ -189,3 +189,12 @@
   (is (false? (flux/parked?
                {:spec {:upgrade {:strategy {:name "RetryOnFailure"}}}
                 :status {:upgradeFailures 5}}))))
+
+(deftest unlimited-retries-never-park-a-release
+  (doseq [phase [:install :upgrade]
+          :let [counter (if (= :install phase) :installFailures :upgradeFailures)]]
+    (is (not (flux/parked? {:spec {phase {:remediation {:retries -1}}}
+                            :status {counter 5}}))
+        (str phase " retries -1 retries for ever")))
+  (is (flux/parked? {:spec {:upgrade {:remediation {:retries 2}}} :status {:upgradeFailures 3}})
+      "a finite budget that is spent still parks"))

@@ -54,18 +54,26 @@
   [release phase]
   (or (get-in release [:spec phase :remediation :retries]) 0))
 
+(defn- spent?
+  "Whether the failures used up the phase's retries. A negative retries is
+   Flux's unlimited, which is never spent."
+  [release phase counter]
+  (let [budget (retries release phase)]
+    (and (not (neg? budget)) (> (failures release counter) budget))))
+
 (defn parked?
   "A failed release that will not try again. Flux defaults both install and
    upgrade to `retries: 0`, and once they are spent the release is left failed
    until its spec or chart changes - so `status.conditions` keeps describing a
    cause that may have cleared long ago. `RetryOnFailure` keeps retrying on its
-   own interval, so a release using it is never parked."
+   own interval, and so does a negative `retries`, Flux's unlimited, so a
+   release using either is never parked."
   [release]
   (boolean
    (or (and (not (retry-on-failure? release :install))
-            (> (failures release :installFailures) (retries release :install)))
+            (spent? release :install :installFailures))
        (and (not (retry-on-failure? release :upgrade))
-            (> (failures release :upgradeFailures) (retries release :upgrade))))))
+            (spent? release :upgrade :upgradeFailures)))))
 
 (def ^:private settle-minutes
   "How long an object may stay not Ready while it is still reconciling before
