@@ -90,3 +90,11 @@
          (banner {:changes? true :outcome :failed}
                  {:applied 2 :paused "continue with --segment 2 once the maintenance is done"})))
   (is (= 1 (outcome/exit-code :failed {:paused "x"}))))
+
+(deftest an-abort-after-applied-effects-says-they-stay-applied
+  (let [{:keys [tone text]} (outcome/banner {:changes? true :outcome :failed}
+                                            {:applied 2 :aborted "declined at the confirmation"})]
+    (is (= :error tone))
+    (is (= "ABORTED after 2 effects - declined at the confirmation - the effects before it stay applied" text)))
+  (is (= "ABORTED - declined - nothing was changed"
+         (:text (outcome/banner {:changes? true :outcome :failed} {:applied 0 :aborted "declined"})))))
