@@ -223,3 +223,23 @@
              (playbook/run-on! pb "w-1" {:from-segment 2} {}))))
       (is (zero? @waited))
       (is (= [["after" "w-1"]] @ran)))))
+
+(deftest a-playbook-opening-with-a-pause-can-be-resumed-where-it-says
+  (let [ran (atom [])
+        steps [{:pause "act"} (change "after" ran)]
+        segs (playbook/segments steps)]
+    (is (= 2 (::playbook/segment (first (playbook/numbered steps)))) "the pause names segment 2")
+    (is (= 2 (count segs)) "so there is a segment 2")
+    (is (= [] (first segs)) "and segment 1 holds nothing")
+    (testing "--from-segment 2 runs the steps after the pause without waiting again"
+      (let [waited (atom 0)]
+        (binding [*err* (java.io.StringWriter.) *out* (java.io.StringWriter.)]
+          (with-redefs-fn {#'gumshoe.playbook/attended? (constantly true)
+                           #'gumshoe.playbook/wait-for-operator! (fn [_] (swap! waited inc) false)}
+            #(with-redefs [kubectl/current-context (constantly "ctx")
+                           kubectl/current-cluster (constantly "cluster")
+                           interact/confirm! (constantly true)]
+               (is (playbook/run-on! {:select {:mode :one} :confirm {:action "m"} :steps steps}
+                                     "w-1" {:from-segment 2} {})))))
+        (is (zero? @waited))
+        (is (= [["after" "w-1"]] @ran))))))

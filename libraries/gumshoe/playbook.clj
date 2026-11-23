@@ -118,11 +118,14 @@
              steps))))
 
 (defn segments
-  "The steps split at each pause, the pause opening the segment after it."
+  "The steps split at each pause, the pause opening the segment after it.
+   Segment n is at index n-1; a playbook that opens with a pause has an
+   empty segment 1, so the --from-segment 2 its pause names exists."
   [steps]
-  (->> (numbered steps)
-       (partition-by ::segment)
-       (mapv vec)))
+  (let [numbered (numbered steps)
+        by-segment (group-by ::segment numbered)]
+    (mapv #(vec (get by-segment % []))
+          (range 1 (inc (reduce max 1 (map ::segment numbered)))))))
 
 (defn- separately?
   [step]
