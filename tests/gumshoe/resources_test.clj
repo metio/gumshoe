@@ -134,3 +134,16 @@
                                    :spec {:containers [{:resources {:requests {:cpu "100" :memory "200Gi"}}}]}}
                                   {:status {:phase "Running"}
                                    :spec {:containers [{:resources {:requests {:cpu "1" :memory "1Gi"}}}]}}]}})))))
+
+(deftest a-pod-is-charged-for-its-init-containers-and-sidecars
+  (let [cpu (fn [n] {:resources {:requests {:cpu n}}})
+        pod {:status {:phase "Running"}
+             :spec {:overhead {:cpu "500m"}
+                    :initContainers [(assoc (cpu "1") :name "proxy" :restartPolicy "Always")
+                                     (assoc (cpu "3") :name "migrate")]
+                    :containers [(assoc (cpu "1") :name "app")]}}
+        node (fn [n] {:status {:allocatable {:cpu n :memory "64Gi"}}})]
+    ;; max(app 1 + proxy 1, migrate 3 + proxy 1) + overhead 0.5 = 4.5 cores
+    (is (= ["CPU requests (4.5 cores) exceed capacity without the largest node (4.0 cores)"]
+           (map :summary (capacity/detect-overcommit {"pods" {:items [pod]}
+                                                      "nodes" {:items [(node "4") (node "4")]}}))))))
