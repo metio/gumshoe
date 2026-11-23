@@ -4,7 +4,8 @@
 (ns runbooks.detectives.gateway-api
   "Investigates the Gateway API layer: Gateways, listeners, and HTTPRoutes."
   (:require [gumshoe.detective :as detective]
-            [gumshoe.detectives.registry :as registry]))
+            ;; registers the :traffic scope's detectives
+            [gumshoe.tools.gateway]))
 
 (detective/book
  {:description "Investigates the Gateway API layer: Gateways, listeners, HTTPRoutes"

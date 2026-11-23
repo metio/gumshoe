@@ -52,6 +52,7 @@
                    [gumshoe.correlation-test]
                    [gumshoe.custom-resources-test]
                    [gumshoe.tls-secrets-test]
+                   [gumshoe.tool-books-test]
                    [gumshoe.storage-conditions-test]
                    [gumshoe.detective-edge-cases-test]
                    [gumshoe.healthy-cluster-test]
@@ -201,6 +202,7 @@
                                                          'gumshoe.correlation-test
                                                          'gumshoe.custom-resources-test
                                                          'gumshoe.tls-secrets-test
+                                                         'gumshoe.tool-books-test
                                                          'gumshoe.storage-conditions-test
                                                          'gumshoe.detective-edge-cases-test
                                                          'gumshoe.healthy-cluster-test
