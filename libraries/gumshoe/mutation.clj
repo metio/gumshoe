@@ -144,13 +144,16 @@
 (defn run!
   "Selects the spec's subject (interactive, honouring the CLI flags) and runs it
    through run-on!. Returns true when there is nothing to select (its
-   :empty-message is shown), false when the operator picks nothing, otherwise the
+   :empty-message is shown), false when the candidates could not be read or
+   the operator picks nothing, otherwise the
    change's result. Use run! for a single confirmed step; use run-on! to compose
    several steps against one already-picked subject."
   [{:keys [select empty-message] :as spec} opts announcement-data]
   (let [context (kubectl/current-context)
-        {:keys [candidates target]} (select/resolve-target select opts context)]
+        {:keys [candidates target unread]} (select/resolve-target select opts context)]
     (cond
+      unread (select/unread! select unread)
+
       (empty? candidates)
       (do (stdout/ok (or empty-message "nothing to do")) true)
 

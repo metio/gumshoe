@@ -96,8 +96,10 @@
   "Picks the subject, honouring the flags, and runs its route. Returns true
    when there is nothing to pick, false when nothing was picked."
   [{:keys [select] :as dispatcher} opts announcement-data]
-  (let [{:keys [candidates target]} (select/resolve-target select opts (kubectl/current-context))]
+  (let [{:keys [candidates target unread]} (select/resolve-target select opts (kubectl/current-context))]
     (cond
+      unread (select/unread! select unread)
+
       (empty? candidates)
       (do (stdout/ok (or (:empty-message select) "nothing to do")) true)
 

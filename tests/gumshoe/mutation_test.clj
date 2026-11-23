@@ -57,3 +57,23 @@
                             :confirm {:action "delete it" :destructive? true}
                             :precondition (constantly true)
                             :prerequisites {:installed-tools ["kubectl"]}}))))
+
+(deftest an-unreadable-cluster-is-not-nothing-to-do
+  (let [spec {:select {:mode :one :label "Node" :candidates #(map kubectl/name-of (kubectl/items-of (kubectl/get-all % "nodes")))}
+              :empty-message "every node is already cordoned"}
+        out (java.io.StringWriter.)]
+    (with-redefs [kubectl/current-context (constantly "ctx")
+                  gumshoe.shell/execute (fn [& _] {:exit 1 :out "" :err "Unable to connect to the server: dial tcp: i/o timeout"})]
+      (binding [*out* out *err* out]
+        (is (false? (mutation/run! spec {} {})))))
+    (is (not (clojure.string/includes? (str out) "every node is already cordoned")))
+    (testing "an answered read with nothing in it is still nothing to do"
+      (with-redefs [kubectl/current-context (constantly "ctx")
+                    gumshoe.shell/execute (fn [& _] {:exit 0 :out "{\"items\":[]}" :err ""})]
+        (binding [*out* (java.io.StringWriter.) *err* (java.io.StringWriter.)]
+          (is (true? (mutation/run! spec {} {}))))))
+    (testing "a type the cluster does not serve has no candidates"
+      (with-redefs [kubectl/current-context (constantly "ctx")
+                    gumshoe.shell/execute (fn [& _] {:exit 1 :out "" :err "error: the server doesn't have a resource type \"widgets\""})]
+        (binding [*out* (java.io.StringWriter.) *err* (java.io.StringWriter.)]
+          (is (true? (mutation/run! spec {} {}))))))))
