@@ -38,11 +38,20 @@
         :when (:hostname listener)]
     [(:hostname listener) "Gateway"]))
 
+(def ^:private address-record-types
+  "The record types an A/AAAA lookup answers for; a CNAME's answer carries
+   the addresses it leads to. external-dns reads a missing recordType as A."
+  #{nil "A" "AAAA" "CNAME"})
+
 (defn dnsendpoint-hosts
+  "Names of the DNSEndpoint records an address lookup can confirm. A TXT, MX,
+   SRV, NS or CAA record has no address even when it is synced, so it is left
+   out rather than reported as unresolved."
   [endpoints]
   (for [endpoint (kubectl/items-of endpoints)
         record (-> endpoint :spec :endpoints)
-        :when (:dnsName record)]
+        :when (:dnsName record)
+        :when (contains? address-record-types (:recordType record))]
     [(:dnsName record) "DNSEndpoint"]))
 
 (defn hostname-sources
