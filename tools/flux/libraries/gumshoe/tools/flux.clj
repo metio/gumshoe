@@ -42,6 +42,50 @@
   [resource]
   (some #(= "disabled" (annotation resource %)) reconcile-annotations))
 
+(defn- shorten-release-name
+  "helm-controller's ShortenName: a name over 53 characters keeps its first 40
+   and gains a dash and the first 12 hex digits of its SHA-256."
+  [release-name]
+  (if (<= (count release-name) 53)
+    release-name
+    (let [digest (.digest (java.security.MessageDigest/getInstance "SHA-256")
+                          (.getBytes ^String release-name "UTF-8"))
+          hex (apply str (map #(format "%02x" (bit-and % 0xff)) digest))]
+      (str (subs release-name 0 40) "-" (subs hex 0 12)))))
+
+(defn- last-snapshot
+  [release]
+  (first (-> release :status :history)))
+
+(defn release-name
+  "The Helm release a HelmRelease manages: the name its status recorded, else
+   helm-controller's rule - spec.releaseName, else <targetNamespace>-<name>
+   when the release targets another namespace, else the object's name -
+   shortened past 53 characters."
+  [release]
+  (or (:name (last-snapshot release))
+      (shorten-release-name
+       (or (not-empty (-> release :spec :releaseName))
+           (when-let [target (not-empty (-> release :spec :targetNamespace))]
+             (str target "-" (-> release :metadata :name)))
+           (-> release :metadata :name)))))
+
+(defn release-namespace
+  "Where the release's objects live: the namespace its status recorded, else
+   spec.targetNamespace, else the HelmRelease's own."
+  [release]
+  (or (:namespace (last-snapshot release))
+      (not-empty (-> release :spec :targetNamespace))
+      (-> release :metadata :namespace)))
+
+(defn storage-namespace
+  "Where Helm keeps the release's records, which `helm get` reads: the status's
+   storageNamespace, else the spec's, else the HelmRelease's own namespace."
+  [release]
+  (or (not-empty (-> release :status :storageNamespace))
+      (not-empty (-> release :spec :storageNamespace))
+      (-> release :metadata :namespace)))
+
 (defn- retry-on-failure?
   [release phase]
   (= "RetryOnFailure" (get-in release [:spec phase :strategy :name])))
