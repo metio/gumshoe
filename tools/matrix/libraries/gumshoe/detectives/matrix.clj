@@ -121,17 +121,30 @@
 
       :else [])))
 
+(defn- federation-failures
+  [response]
+  (for [destination (-> response :json :destinations)
+        :let [failure-ts (:failure_ts destination)]
+        :when (and (number? failure-ts) (pos? failure-ts))]
+    {:severity :warning
+     :component (:destination destination)
+     :summary "federation to this server is currently failing"
+     :hint (format "Synapse is backing off (retry interval %s ms) - the remote may be down or unreachable"
+                   (:retry_interval destination))}))
+
 (defn detect-federation-destinations
   [evidence]
   (when (get evidence "admin?")
-    (for [destination (-> evidence (get "destinations") :json :destinations)
-          :let [failure-ts (:failure_ts destination)]
-          :when (and (number? failure-ts) (pos? failure-ts))]
-      {:severity :warning
-       :component (:destination destination)
-       :summary "federation to this server is currently failing"
-       :hint (format "Synapse is backing off (retry interval %s ms) - the remote may be down or unreachable"
-                     (:retry_interval destination))})))
+    (let [response (get evidence "destinations")]
+      (if-not (http/ok? response)
+        ;; a rejected token or an admin API the proxy does not expose gives no
+        ;; destinations, which would read as federation working everywhere
+        [{:severity :warning
+          :component (get evidence "host")
+          :summary (format "could not read the federation destinations (%s)"
+                           (if (:reachable response) (str "HTTP " (:status response)) "unreachable"))
+          :hint "check the admin token and that /_synapse/admin is reachable through the proxy"}]
+        (federation-failures response)))))
 
 (def detectives
   [{:name "matrix-client-api"
@@ -156,5 +169,5 @@
     :detect detect-wellknown}
    {:name "matrix-federation-destinations"
     :description "Federation to other servers is not silently failing (needs admin token)"
-    :requires ["destinations" "admin?"]
+    :requires ["destinations" "admin?" "host"]
     :detect detect-federation-destinations}])

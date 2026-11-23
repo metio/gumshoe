@@ -91,9 +91,20 @@
     (is (nil? (matrix/detect-federation-destinations {"admin?" false "destinations" nil}))))
   (testing "destinations with a failure timestamp are reported, healthy ones are not"
     (let [evidence {"admin?" true
-                    "destinations" {:json {:destinations [{:destination "good.org" :failure_ts nil}
+                    "destinations" {:reachable true :status 200
+                                    :json {:destinations [{:destination "good.org" :failure_ts nil}
                                                           {:destination "dead.org" :failure_ts 1720000000000
                                                            :retry_interval 3600000}]}}}
           findings (matrix/detect-federation-destinations evidence)]
       (is (= ["dead.org"] (map :component findings)))
       (is (= #{"federation to this server is currently failing"} (summaries findings))))))
+
+(deftest a-rejected-admin-token-is-not-a-clean-pass
+  (is (= [["could not read the federation destinations (HTTP 401)" :warning]]
+         (map (juxt :summary :severity)
+              (matrix/detect-federation-destinations
+               {"admin?" true "host" "matrix.example.org"
+                "destinations" {:reachable true :status 401 :json {:errcode "M_UNKNOWN_TOKEN"}}}))))
+  (is (= ["could not read the federation destinations (unreachable)"]
+         (map :summary (matrix/detect-federation-destinations
+                        {"admin?" true "host" "matrix.example.org" "destinations" {:reachable false}})))))
