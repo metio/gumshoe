@@ -23,12 +23,21 @@
                (when server [(str "@" server)])
                (if reverse? ["-x" name] [type name]))))
 
+(defn parse-answer
+  "The answer lines of dig +short output. dig still prints its own
+   diagnostics on stdout, prefixed with `;`, when one server times out and
+   another answers (`;; communications error to …`), and exits 0; those
+   lines are not records."
+  [out]
+  (into [] (remove #(or (str/blank? %) (str/starts-with? (str/triml %) ";")))
+        (str/split-lines (str out))))
+
 (defn query
   "Answers as a vector of lines; nil when the server did not reply."
   [connection type name]
   (let [result (apply shell/execute (dig-args connection type name))]
     (when (zero? (:exit result))
-      (vec (remove str/blank? (str/split-lines (:out result)))))))
+      (parse-answer (:out result)))))
 
 (defn ptr-records
   "Reverse-DNS (PTR) answers for an IP address, via `dig -x`. nil when the
