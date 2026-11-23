@@ -7,11 +7,6 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]))
 
-(defn unused-pvcs
-  [context]
-  (kubectl/unused-pvcs (kubectl/get-all context "persistentvolumeclaims")
-                       (kubectl/get-all context "pods")))
-
 (defn gone-check
   [context namespace name target]
   {:description (format "PersistentVolumeClaim %s is gone" target)
@@ -29,10 +24,14 @@
                   :kubectl-can-get ["persistentvolumeclaims" "pods"]
                   :kubectl-can-delete ["persistentvolumeclaims"]}
   :select {:mode :namespaced :label "PersistentVolumeClaim" :namespace-flag :namespace :name-flag :pvc
-           :candidates unused-pvcs}
+           :candidates kubectl/unused-pvc-candidates}
   :empty-message "every PersistentVolumeClaim is in use"
   :confirm {:action "delete a PersistentVolumeClaim - the data on the volume is lost"
             :destructive? true}
+  ;; a pod may have started using the claim since it was offered
+  :precondition (fn [{:keys [context target]}]
+                  (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+                    (kubectl/pvc-unused? context namespace name)))
   :announce (fn [{:keys [target]}] (format "Delete unused PersistentVolumeClaim %s" target))
   :effect (fn [{:keys [context target]}]
             (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]

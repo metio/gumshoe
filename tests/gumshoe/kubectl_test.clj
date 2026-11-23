@@ -216,3 +216,27 @@
   (testing "kubectl answered with output that does not parse"
     (with-redefs [shell/execute (fn [& _] {:exit 0 :out "{\"items\":[{"})]
       (is (= {:ok? false :doc nil} (kubectl/get-json-result "ctx" "namespaces"))))))
+
+(deftest a-claim-counts-as-unused-only-when-the-pods-were-read
+  (let [pvcs {:items [{:metadata {:namespace "db" :name "data"}}
+                      {:metadata {:namespace "db" :name "spare"}}]}
+        pods {:items [{:metadata {:namespace "db" :name "pg-0"}
+                       :spec {:volumes [{:persistentVolumeClaim {:claimName "data"}}]}}]}
+        reads (fn [pod-read]
+                (fn [_ & args]
+                  (if (some #{"pods"} args)
+                    pod-read
+                    {:ok? true :doc pvcs})))]
+    (testing "with the pods read, only the claim no pod uses is offered"
+      (with-redefs [kubectl/get-json-result (reads {:ok? true :doc pods})]
+        (is (= ["db/spare"] (kubectl/unused-pvc-candidates "ctx")))))
+    (testing "a failed pod read offers nothing and says why"
+      (with-redefs [kubectl/get-json-result (reads {:ok? false :doc nil})]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"could not read the pods"
+                              (kubectl/unused-pvc-candidates "ctx")))))
+    (testing "right before deleting, the claim is checked again in its namespace"
+      (with-redefs [kubectl/get-json-result (reads {:ok? true :doc pods})]
+        (is (kubectl/pvc-unused? "ctx" "db" "spare"))
+        (is (not (kubectl/pvc-unused? "ctx" "db" "data"))))
+      (with-redefs [kubectl/get-json-result (reads {:ok? false :doc nil})]
+        (is (not (kubectl/pvc-unused? "ctx" "db" "spare")) "an unanswered read is not an absence")))))
