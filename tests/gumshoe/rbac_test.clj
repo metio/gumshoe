@@ -132,3 +132,14 @@
       (is (= [{:component "sloppy"
                :summary "2 pod(s) run with the default ServiceAccount token mounted"}]
              (map #(select-keys % [:component :summary]) findings))))))
+
+(deftest a-star-verb-on-what-the-escalation-verbs-act-on-escalates
+  (let [role (fn [name & rules] {:metadata {:name name} :rules (vec rules)})
+        roles {:items [(role "rbac-manager" {:apiGroups ["rbac.authorization.k8s.io"] :resources ["clusterroles" "clusterrolebindings"] :verbs ["*"]})
+                       (role "impersonator" {:apiGroups [""] :resources ["serviceaccounts"] :verbs ["*"]})
+                       (role "config-editor" {:apiGroups [""] :resources ["configmaps"] :verbs ["*"]})
+                       (role "god" {:apiGroups ["*"] :resources ["*"] :verbs ["*"]})]}]
+    (is (= #{"ClusterRole carries privilege-escalation verbs: bind, escalate"
+             "ClusterRole carries privilege-escalation verbs: impersonate"}
+           (summaries (rbac/detect-escalation-verbs {"clusterroles" roles})))
+        "a full wildcard is reported as cluster-admin by another name instead")))

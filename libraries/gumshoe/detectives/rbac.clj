@@ -102,19 +102,41 @@
 
 (def ^:private escalation-verbs #{"escalate" "bind" "impersonate"})
 
+(defn- covers?
+  [values wanted]
+  (boolean (some (conj (set wanted) "*") values)))
+
+(defn- escalation-verbs-of
+  "The escalation verbs a rule grants: those it names, and, through a * verb,
+   escalate and bind on RBAC roles and impersonate on identities."
+  [rule]
+  (let [named (filter (set (:verbs rule)) escalation-verbs)]
+    (if (some #{"*"} (:verbs rule))
+      (concat named
+              (when (and (covers? (:apiGroups rule) ["rbac.authorization.k8s.io"])
+                         (covers? (:resources rule) ["roles" "clusterroles"]))
+                ["escalate" "bind"])
+              (when (and (covers? (:apiGroups rule) ["" "authentication.k8s.io"])
+                         (covers? (:resources rule) ["users" "groups" "serviceaccounts" "userextras" "uids"]))
+                ["impersonate"]))
+      named)))
+
 (defn detect-escalation-verbs
   [evidence]
-  (for [role (kubectl/items-of (get evidence "clusterroles"))
-        :let [role-name (kubectl/name-of role)]
-        :when (not (system-name? role-name))
-        :when (not= "cluster-admin" role-name)
-        :let [verbs (set (mapcat :verbs (:rules role)))
-              found (sort (filter verbs escalation-verbs))]
-        :when (seq found)]
-    {:severity :warning
-     :component role-name
-     :summary (format "ClusterRole carries privilege-escalation verbs: %s" (str/join ", " found))
-     :hint "escalate/bind/impersonate let holders grant themselves more power"}))
+  (let [clusterroles (get evidence "clusterroles")
+        ;; a full wildcard is reported as cluster-admin by another name
+        admins (full-wildcard-roles clusterroles)]
+    (for [role (kubectl/items-of clusterroles)
+          :let [role-name (kubectl/name-of role)]
+          :when (not (system-name? role-name))
+          :when (not= "cluster-admin" role-name)
+          :when (not (contains? admins role-name))
+          :let [found (sort (distinct (mapcat escalation-verbs-of (:rules role))))]
+          :when (seq found)]
+      {:severity :warning
+       :component role-name
+       :summary (format "ClusterRole carries privilege-escalation verbs: %s" (str/join ", " found))
+       :hint "escalate/bind/impersonate let holders grant themselves more power"})))
 
 (defn- reads-secrets?
   [rule]
