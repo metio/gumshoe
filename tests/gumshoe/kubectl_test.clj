@@ -247,3 +247,14 @@
                                          :ephemeral {:volumeClaimTemplate {:spec {}}}}]}}]}]
     (is (= #{"ci/runner-abc-scratch"} (kubectl/claimed-pvcs pods)))
     (is (= [] (kubectl/unused-pvcs {:items [{:metadata {:namespace "ci" :name "runner-abc-scratch"}}]} pods)))))
+
+(deftest an-object-is-gone-only-when-the-read-answered
+  (with-redefs [gumshoe.shell/execute (fn [& _] {:exit 1 :out "" :err "Unable to connect to the server"})]
+    (is (false? (kubectl/confirmed-gone? "ctx" "ns" "pvc" "data")) "a failed read proves nothing"))
+  (with-redefs [gumshoe.shell/execute (fn [& _] {:exit 0 :out "persistentvolumeclaim/data\n" :err ""})]
+    (is (false? (kubectl/confirmed-gone? "ctx" "ns" "pvc" "data")) "still there"))
+  (let [argv (atom nil)]
+    (with-redefs [gumshoe.shell/execute (fn [& args] (reset! argv args) {:exit 0 :out "" :err ""})]
+      (is (true? (kubectl/confirmed-gone? "ctx" nil "namespaces" "drill")))
+      (is (some #{"--ignore-not-found"} @argv))
+      (is (not-any? #(clojure.string/starts-with? (str %) "--namespace") @argv)))))

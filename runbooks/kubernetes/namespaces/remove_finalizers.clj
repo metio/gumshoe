@@ -38,4 +38,4 @@
   :verify (fn [{:keys [context target]}]
             [{:description (format "namespace %s is gone" target)
               :timeout 120 :interval 10
-              :check (fn [] (nil? (kubectl/get-cluster-resource context "namespaces" target)))}])})
+              :check (fn [] (kubectl/confirmed-gone? context nil "namespaces" target))}])})

@@ -33,7 +33,7 @@
   (for [volume volumes]
     {:description (format "PersistentVolume %s is gone" volume)
      :timeout 120 :interval 10
-     :check (fn [] (nil? (kubectl/get-cluster-resource context "persistentvolumes" volume)))}))
+     :check (fn [] (kubectl/confirmed-gone? context nil "persistentvolumes" volume))}))
 
 (mutation/book
  {:description "Deletes PersistentVolumes stuck in Released"

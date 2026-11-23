@@ -60,4 +60,7 @@
   :verify (fn [{:keys [context pick target]}]
             [{:description (format "%s is gone or terminating" target)
               :timeout 60 :interval 5
-              :check (fn [] (deletion/deleted? (fetch context pick)))}])})
+              ;; a fetch that failed returns nil like a deleted object, so
+              ;; gone needs a read that answered NotFound
+              :check (fn [] (or (some-> (fetch context pick) :metadata :deletionTimestamp some?)
+                                (kubectl/confirmed-gone? context (:namespace pick) (:type pick) (:name pick))))}])})

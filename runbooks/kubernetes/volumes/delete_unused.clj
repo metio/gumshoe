@@ -11,7 +11,7 @@
   [context namespace name target]
   {:description (format "PersistentVolumeClaim %s is gone" target)
    :timeout 120 :interval 10
-   :check (fn [] (nil? (kubectl/get-namespaced-resource context namespace "persistentvolumeclaims" name)))})
+   :check (fn [] (kubectl/confirmed-gone? context namespace "persistentvolumeclaims" name))})
 
 (mutation/book
  {:description "Deletes a PersistentVolumeClaim that no pod uses"
