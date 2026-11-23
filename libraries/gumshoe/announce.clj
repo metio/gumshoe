@@ -89,10 +89,12 @@
   [announcer system {:keys [actor]} message]
   (if-let [url (:url announcer)]
     (try
-      (http/post url {:headers {"Content-Type" "application/json"}
-                      :throw false :timeout 10000
-                      :body (json/encode (webhook-payload (:format announcer) system message actor))})
-      nil
+      (let [response (http/post url {:headers {"Content-Type" "application/json"}
+                                     :throw false :timeout 10000
+                                     :body (json/encode (webhook-payload (:format announcer) system message actor))})]
+        ;; Slack answers 200, Discord 204: any 2xx took the post
+        (when-not (<= 200 (or (:status response) 0) 299)
+          (stdout/warn "webhook: could not post, status" (:status response))))
       (catch Exception e
         (stdout/warn "webhook: could not post:" (ex-message e))))
     (stdout/warn "webhook: no :url configured - skipping")))

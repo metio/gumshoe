@@ -2,7 +2,9 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.announce-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [babashka.http-client]
+            [clojure.string]
+            [clojure.test :refer [deftest is testing]]
             [gumshoe.announce :as announce]))
 
 (deftest changelog-message-test
@@ -30,3 +32,11 @@
       (binding [*err* err]
         (announce/announce! "kube.example.org" {:cluster "kube.nowhere"} "some change"))
       (is (clojure.string/includes? (str err) "no announcers configured")))))
+
+(deftest a-webhook-that-refuses-the-post-is-warned-about
+  (doseq [[status warns?] [[404 true] [500 true] [200 false] [204 false]]]
+    (let [err (java.io.StringWriter.)]
+      (with-redefs [babashka.http-client/post (fn [& _] {:status status})]
+        (binding [*err* err *out* err]
+          (announce/announce-via {:type :webhook :url "http://hooks.example.org/x"} "sys" {:actor "a"} "msg")))
+      (is (= warns? (clojure.string/includes? (str err) "webhook")) (str "status " status)))))
