@@ -320,6 +320,34 @@
 ;; running for as long as it needs.
 (def ^:private request-timeout "--request-timeout=30s")
 
+(def ^:dynamic *strict-reads*
+  "When true, a plain read that did not answer throws an ex-info carrying
+   ::unread instead of returning nil. select/resolve-target binds it while it
+   lists candidates, so an unreachable API is reported as such rather than as
+   an empty list - every candidate fn built on these readers inherits it."
+  false)
+
+(defn- answered-empty?
+  "A failed kubectl get that still answered: the object or the resource type
+   does not exist."
+  [err]
+  (boolean (re-find #"\(NotFound\)|doesn't have a resource type" (str err))))
+
+(defn- read-json
+  "The parsed output of a kubectl get, nil when it failed or did not parse.
+   Under *strict-reads* the exit status is kept, and a read that did not
+   answer throws."
+  [& argv]
+  (if-not *strict-reads*
+    (parse-json (apply shell/stdout-of argv))
+    (let [{:keys [exit out err]} (apply shell/execute argv)
+          doc (when (zero? exit) (parse-json (str/trim (str out))))]
+      (when (and (nil? doc) (not (answered-empty? err)))
+        (throw (ex-info (format "kubectl get did not answer: %s"
+                                (or (not-empty (str/trim (str err))) (str "exit " exit)))
+                        {::unread true})))
+      doc)))
+
 (defn get-json
   "Runs `kubectl get` with `args` - a type, names, selectors, a namespace, any
    flag - and returns the parsed JSON document, or nil when the read failed or
@@ -328,8 +356,8 @@
 
      (get-json context \"namespaces\" \"--selector=team=web\")"
   [context & args]
-  (parse-json (apply shell/stdout-of "kubectl" (str "--context=" context) request-timeout
-                     "get" (concat args ["--output=json"]))))
+  (apply read-json "kubectl" (str "--context=" context) request-timeout
+         "get" (concat args ["--output=json"])))
 
 (defn get-json-result
   "Like get-json, but returns {:ok? <the read answered> :doc <the document>}.
@@ -500,8 +528,8 @@
 
 (defn get-namespaced-resource
   [context namespace type name]
-  (parse-json (shell/stdout-of "kubectl" (str "--context=" context) (str "--namespace=" namespace) request-timeout
-                          "get" type name "--output=json")))
+  (read-json "kubectl" (str "--context=" context) (str "--namespace=" namespace) request-timeout
+             "get" type name "--output=json"))
 
 (defn confirmed-gone?
   "True ONLY when a read answered and found no such object - the fail-safe way
@@ -521,8 +549,8 @@
 (defn get-namespaced
   "Every resource of a type within one namespace."
   [context namespace type]
-  (parse-json (shell/stdout-of "kubectl" (str "--context=" context) (str "--namespace=" namespace) request-timeout
-                          "get" type "--output=json")))
+  (read-json "kubectl" (str "--context=" context) (str "--namespace=" namespace) request-timeout
+             "get" type "--output=json"))
 
 (defn get-namespaced-result
   "Like get-namespaced, but returns {:ok? <did the read succeed> :items <seq>}.

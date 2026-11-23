@@ -18,6 +18,7 @@
       :preview \"kubectl describe node {}\"  ; :one, optional fzf side pane
       :empty-message \"every node is already cordoned\"}  ; shown by pick when empty"
   (:require [gumshoe.interact :as interact]
+            [gumshoe.kubectl :as kubectl]
             [gumshoe.stdout :as stdout]))
 
 (defn nothing-selected?
@@ -33,20 +34,40 @@
   [mode target]
   (if (= :many mode) (vec target) [target]))
 
+(defn- list-candidates
+  "{:names [...]} or {:unread <reason>}. Candidates are read under strict
+   reads and realized inside the binding, so a lazy seq cannot run its reads
+   after it, and an unanswered read surfaces as its message instead of as an
+   empty list."
+  [candidates context]
+  (try
+    {:names (binding [kubectl/*strict-reads* true] (into [] (candidates context)))}
+    (catch clojure.lang.ExceptionInfo e
+      (if (::kubectl/unread (ex-data e)) {:unread (ex-message e)} (throw e)))))
+
+(defn unread!
+  "Reports candidates that could not be listed; false, for a run's result."
+  [{:keys [label]} reason]
+  (stdout/error (format "could not list the %s candidates - %s" label reason))
+  false)
+
 (defn resolve-target
   "Runs the candidate query and the interactive pick for a select spec, returning
-   {:candidates <names> :target <the pick, or nil/[] when nothing was chosen>}.
+   {:candidates <names> :target <the pick, or nil/[] when nothing was chosen>},
+   or {:unread <reason>} when a read behind the candidates did not answer.
    The lowest-level primitive - use it when you need the raw candidate list too
    (e.g. to distinguish 'nothing to pick' from 'nothing picked' yourself)."
   [{:keys [mode label candidates flag namespace-flag name-flag preview]} opts context]
-  (let [names (candidates context)]
-    {:candidates names
+  (let [{:keys [names unread]} (list-candidates candidates context)]
+    (if unread
+      {:unread unread}
+      {:candidates names
      :target (case mode
                :one (interact/choose-one label names (get opts flag) preview)
                :many (interact/choose-many label names (get opts flag))
                :namespaced (interact/choose-namespaced label names
                                                        (get opts namespace-flag)
-                                                       (get opts name-flag)))}))
+                                                       (get opts name-flag)))})))
 
 (defn pick
   "Discovers candidates for a select spec and lets the operator choose, returning
@@ -60,8 +81,9 @@
    mutation/book uses resolve-target instead, because it maps empty candidates to
    its own success (nothing-to-do) rather than to nil."
   [{:keys [mode label empty-message] :as spec} opts context]
-  (let [{:keys [candidates target]} (resolve-target spec opts context)]
+  (let [{:keys [candidates target unread]} (resolve-target spec opts context)]
     (cond
+      unread (do (unread! spec unread) nil)
       (empty? candidates) (do (stdout/ok (or empty-message "nothing to select")) nil)
       (nothing-selected? mode target) (do (stdout/error (format "no %s selected" label)) nil)
       :else target)))
