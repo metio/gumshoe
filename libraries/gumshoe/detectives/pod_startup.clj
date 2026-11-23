@@ -9,6 +9,7 @@
    is reported too, because the cause then sits in the node's kubelet or
    runtime."
   (:require [clojure.string :as str]
+            [gumshoe.detectives.pods :as pods]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
@@ -53,11 +54,14 @@
 
 (defn- startup-pod?
   "A pod bound to a node that has not started: Pending, or its containers are
-   still being created."
+   still being created. A container the pods detective reports by name, such
+   as a crash-looping init container, is the cause already, so the pod is
+   left to it rather than blamed on the node."
   [pod]
   (and (-> pod :spec :nodeName)
        (= "Pending" (-> pod :status :phase))
-       (nil? (-> pod :metadata :deletionTimestamp))))
+       (nil? (-> pod :metadata :deletionTimestamp))
+       (not-any? pods/reported-waiting? (kubectl/container-statuses pod))))
 
 (defn- bound-at
   [pod]

@@ -531,6 +531,14 @@
   (let [{:keys [ok? items]} (get-namespaced-result context namespace type)]
     (and ok? (not-any? pred items))))
 
+(defn container-statuses
+  "Every container status of a pod: the init containers first, among them
+   restartable ones (native sidecars), then the app containers. A failing
+   init container keeps a pod from starting, and a failing sidecar runs
+   beside the app, so a check on containers reads both."
+  [pod]
+  (concat (-> pod :status :initContainerStatuses) (-> pod :status :containerStatuses)))
+
 (defn container-names
   [pod]
   (mapv :name (-> pod :spec :containers)))

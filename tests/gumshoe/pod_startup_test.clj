@@ -78,3 +78,27 @@
 
 (deftest the-pods-detective-leaves-bound-pods-to-pod-startup
   (is (empty? (pods/detect-unhealthy-pods {:now now "pods" {:items [(pod "web-1")]}}))))
+
+(deftest a-failing-init-container-is-named-instead-of-the-kubelet
+  (let [stuck (-> (pod "web-1" :bound "2026-11-18T11:00:00Z")
+                  (assoc-in [:status :initContainerStatuses]
+                            [{:name "migrate" :restartCount 12
+                              :state {:waiting {:reason "CrashLoopBackOff" :message "back-off 5m0s"}}}])
+                  (assoc-in [:status :containerStatuses]
+                            [{:name "app" :restartCount 0 :state {:waiting {:reason "PodInitializing"}}}]))]
+    (testing "the pods detective reports the init container"
+      (is (= ["container migrate is waiting: CrashLoopBackOff"]
+             (map :summary (pods/detect-unhealthy-pods {:now now "pods" {:items [stuck]}})))))
+    (testing "and pod-startup does not blame the node for it"
+      (is (empty? (run [stuck] []))))))
+
+(deftest a-crash-looping-native-sidecar-is-reported
+  (let [running {:metadata {:namespace "shop" :name "web-2"}
+                 :spec {:nodeName "worker-1"}
+                 :status {:phase "Running"
+                          :initContainerStatuses [{:name "proxy" :restartCount 9
+                                                   :state {:waiting {:reason "CrashLoopBackOff"}}}]
+                          :containerStatuses [{:name "app" :restartCount 0 :ready true
+                                               :state {:running {:startedAt "2026-11-18T10:00:00Z"}}}]}}]
+    (is (= ["container proxy is waiting: CrashLoopBackOff"]
+           (map :summary (pods/detect-unhealthy-pods {:now now "pods" {:items [running]}}))))))

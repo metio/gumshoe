@@ -72,7 +72,11 @@
         containers (-> pod :spec :containers)
         ready (count (filter :ready statuses))
         restarts (reduce + 0 (keep :restartCount statuses))
-        issues (distinct (keep container-issue statuses))
+        ;; an init container that ran to completion is terminated by design,
+        ;; so only one that waits is an issue
+        issues (distinct (concat (keep #(some->> (-> % :state :waiting :reason) (str (:name %) ": "))
+                                       (-> pod :status :initContainerStatuses))
+                                 (keep container-issue statuses)))
         ;; spotlight the container in trouble (its image and limits are what an
         ;; OOM or a pull error hinges on), else the first container.
         failing-name (some #(when (or (-> % :state :waiting) (-> % :state :terminated)) (:name %)) statuses)
@@ -382,7 +386,10 @@
 (defn- pod-situation
   [pod]
   (let [statuses (-> pod :status :containerStatuses)
-        waiting (set (keep #(-> % :state :waiting :reason) statuses))
+        ;; a crash-looping init container or native sidecar is as much the
+        ;; situation as an app container
+        waiting (set (keep #(-> % :state :waiting :reason)
+                           (concat (-> pod :status :initContainerStatuses) statuses)))
         terminated (set (keep #(-> % :state :terminated :reason) statuses))
         phase (-> pod :status :phase)]
     (cond
