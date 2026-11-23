@@ -10,16 +10,37 @@
   (:require [gumshoe.kubectl :as kubectl]
             [gumshoe.quantity :as quantity]))
 
+(defn- request-of
+  [container resource]
+  (or (quantity/quantity->number (get-in container [:resources :requests resource])) 0.0))
+
+(defn- effective-request
+  "What the scheduler charges a pod for one resource, as Kubernetes'
+   PodRequests computes it: the app containers plus the restartable init
+   containers (native sidecars), or the largest regular init container
+   together with the sidecars started before it, whichever is more, plus the
+   pod's overhead."
+  [pod resource]
+  (let [[running peak]
+        (reduce (fn [[running peak sidecars] container]
+                  (let [request (request-of container resource)]
+                    (if (= "Always" (:restartPolicy container))
+                      [(+ running request) (max peak (+ sidecars request)) (+ sidecars request)]
+                      [running (max peak (+ sidecars request)) sidecars])))
+                [(reduce + 0.0 (map #(request-of % resource) (-> pod :spec :containers))) 0.0 0.0]
+                (-> pod :spec :initContainers))]
+    (+ (max running peak)
+       (or (quantity/quantity->number (get-in pod [:spec :overhead resource])) 0.0))))
+
 (defn- pod-requests
   [pods resource]
   ;; Terminated pods (Succeeded/Failed) linger in `kubectl get pods` until GC'd
   ;; but hold no schedulable capacity, so counting their requests inflates the
   ;; commitment - matching the scheduler and kube-prometheus, which both ignore
   ;; those phases.
-  (quantity/sum (for [pod (kubectl/items-of pods)
-                      :when (not (#{"Succeeded" "Failed"} (-> pod :status :phase)))
-                      container (-> pod :spec :containers)]
-                  (get-in container [:resources :requests resource]))))
+  (reduce + 0.0 (for [pod (kubectl/items-of pods)
+                      :when (not (#{"Succeeded" "Failed"} (-> pod :status :phase)))]
+                  (effective-request pod resource))))
 
 (defn- node-allocatables
   [nodes resource]
