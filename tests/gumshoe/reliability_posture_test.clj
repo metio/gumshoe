@@ -103,3 +103,10 @@
     (doseq [name ["rollouts-without-capacity" "replicas-on-one-node" "missing-resources"]]
       (is (contains? posture-names name))
       (is (not (contains? all-names name))))))
+
+(deftest a-limit-without-a-request-becomes-the-request
+  (is (= [] (posture/missing-resources {:resources {:limits {:cpu "1" :memory "1Gi"}}} "shop" #{}))
+      "the API server copies each limit into the missing request")
+  (is (= ["memory request" "memory limit"]
+         (posture/missing-resources {:resources {:requests {:cpu "100m"}}} "shop" #{}))
+      "a resource with neither a request nor a limit is still missing"))

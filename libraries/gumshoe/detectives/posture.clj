@@ -249,13 +249,15 @@
 (defn missing-resources
   "What a container leaves unset: CPU and memory requests, and the memory
    limit. A CPU limit is left out on purpose - throttling a container that
-   could use idle CPU is a choice, not a gap."
+   could use idle CPU is a choice, not a gap. A container's limit stands in
+   for its missing request, which the API server copies it into."
   [container namespace defaults]
   (let [has? (fn [kind resource] (or (some? (get-in container [:resources kind resource]))
-                                     (contains? defaults [namespace kind resource])))]
+                                     (contains? defaults [namespace kind resource])))
+        requested? (fn [resource] (or (has? :requests resource) (has? :limits resource)))]
     (cond-> []
-      (not (has? :requests :cpu)) (conj "cpu request")
-      (not (has? :requests :memory)) (conj "memory request")
+      (not (requested? :cpu)) (conj "cpu request")
+      (not (requested? :memory)) (conj "memory request")
       (not (has? :limits :memory)) (conj "memory limit"))))
 
 (defn detect-missing-resources
