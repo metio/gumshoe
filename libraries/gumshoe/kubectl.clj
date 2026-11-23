@@ -594,3 +594,23 @@
                         (recur (inc attempt)))))
           (finally
             (process/destroy-tree forward)))))))
+
+(defn unused-pvc-candidates
+  "Namespace/name of every PersistentVolumeClaim no pod refers to, for a book
+   that offers them for deletion. Throws when the pods could not be read:
+   without them every claim would look unused."
+  [context]
+  (let [pods (get-json-result context "pods" "--all-namespaces")
+        pvcs (get-json-result context "persistentvolumeclaims" "--all-namespaces")]
+    (when-not (and (:ok? pods) (:ok? pvcs))
+      (throw (ex-info (str "could not read the pods and PersistentVolumeClaims of the cluster;"
+                           " refusing to call any claim unused")
+                      {:pods-read? (:ok? pods) :pvcs-read? (:ok? pvcs)})))
+    (unused-pvcs (:doc pvcs) (:doc pods))))
+
+(defn pvc-unused?
+  "True only when the pods of `namespace` were read and none refers to the
+   claim `name` - the check to repeat right before deleting it."
+  [context namespace name]
+  (confirmed-absent? context namespace "pods"
+                     #(contains? (claimed-pvcs {:items [%]}) (format "%s/%s" namespace name))))
