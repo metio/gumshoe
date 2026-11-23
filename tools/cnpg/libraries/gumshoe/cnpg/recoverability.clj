@@ -9,9 +9,9 @@
    is nothing for them to be applied to, so a cluster can report archiving
    healthy and still have no restore path at all.
 
-   Two shapes configure a destination: barmanObjectStore under spec.backup, and
-   a WAL archiver plugin under spec.plugins. A plugin that does not declare
-   itself the WAL archiver is not read as one."
+   Three shapes configure a destination: barmanObjectStore or volumeSnapshot
+   under spec.backup, and a WAL archiver plugin under spec.plugins. A plugin
+   that does not declare itself the WAL archiver is not read as one."
   (:require [gumshoe.kubectl :as kubectl]))
 
 (def ^:private completed-phase "completed")
@@ -20,6 +20,7 @@
   "Whether the spec names somewhere for a backup to go."
   [cluster]
   (boolean (or (get-in cluster [:spec :backup :barmanObjectStore])
+               (get-in cluster [:spec :backup :volumeSnapshot])
                (some :isWALArchiver (get-in cluster [:spec :plugins])))))
 
 (defn backups-of
