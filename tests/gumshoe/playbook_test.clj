@@ -191,3 +191,35 @@
             "Needs:"]
            (subvec lines 0 9)))
     (is (some #{"  kubectl delete: pods"} lines))))
+
+(deftest a-pause-right-after-the-leading-checks-waits-for-the-operator
+  (doseq [[what steps] {"after the leading checks" [(check "look" (atom []) true) {:pause "act"}]
+                        "opening the playbook" [{:pause "act"}]}]
+    (testing what
+      (let [ran (atom [])
+            waited (atom 0)
+            pb {:select {:mode :one} :confirm {:action "maintain"}
+                :steps (conj steps (change "after" ran))}]
+        (binding [*err* (java.io.StringWriter.) *out* (java.io.StringWriter.)]
+          (with-redefs-fn {#'gumshoe.playbook/attended? (constantly true)
+                           #'gumshoe.playbook/wait-for-operator! (fn [_] (swap! waited inc) false)}
+            #(with-redefs [kubectl/current-context (constantly "ctx")
+                           kubectl/current-cluster (constantly "cluster")
+                           interact/confirm! (constantly true)]
+               (playbook/run-on! pb "w-1" {} {}))))
+        (is (= 1 @waited) "the operator is asked to do the manual step")
+        (is (empty? @ran) "nothing after the pause runs before they have"))))
+  (testing "the pause opening a resumed segment does not wait again"
+    (let [ran (atom [])
+          waited (atom 0)
+          pb {:select {:mode :one} :confirm {:action "maintain"}
+              :steps [(change "before" ran) {:pause "act"} (change "after" ran)]}]
+      (binding [*err* (java.io.StringWriter.) *out* (java.io.StringWriter.)]
+        (with-redefs-fn {#'gumshoe.playbook/attended? (constantly true)
+                         #'gumshoe.playbook/wait-for-operator! (fn [_] (swap! waited inc) false)}
+          #(with-redefs [kubectl/current-context (constantly "ctx")
+                         kubectl/current-cluster (constantly "cluster")
+                         interact/confirm! (constantly true)]
+             (playbook/run-on! pb "w-1" {:from-segment 2} {}))))
+      (is (zero? @waited))
+      (is (= [["after" "w-1"]] @ran)))))

@@ -236,9 +236,13 @@
           false)
       (let [steps (apply concat (drop (dec from) segs))
             [leading later] (split-with #(= :check (kind %)) steps)]
+        ;; only the pause that opens a resumed segment skips the wait:
+        ;; the operator did its manual step before running --from-segment.
+        ;; A pause after the leading checks, or one opening a fresh run,
+        ;; still has its manual step ahead of it
         (and (run-steps! leading ctx false)
              (confirmed! playbook later ctx)
-             (run-steps! later ctx false))))))
+             (run-steps! later ctx (or (= 1 from) (boolean (seq leading)))))))))
 
 (defn run!
   "Selects the subject, honouring the flags, and runs the playbook against it.
