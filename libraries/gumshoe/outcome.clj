@@ -93,6 +93,11 @@
   [{:keys [dry-run? changes? outcome findings?]} record]
   (let [{:keys [aborted applied paused stopped thunk verified unmet]} record]
     (cond
+      ;; a rehearsal that threw never showed the plans after the throw
+      (and dry-run? changes? (= :error outcome))
+      {:tone :error
+       :text "DRY RUN stopped by an unexpected error - nothing was changed - read the messages above"}
+
       (and dry-run? changes? (seq unmet))
       {:tone :error
        :text (str "DRY RUN - nothing was changed; the precondition of "
