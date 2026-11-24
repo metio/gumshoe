@@ -281,6 +281,18 @@ mostly data:
   check still turns that timeout into a warning. Reads over SSH, among them
   every `gumshoe.ceph` read, ignore the binding, so a check built on them
   still has to tell a failed read from an empty one itself;
+- a change that acts on one object declares it as `:subject {:type
+  "cronjobs"}`, with `:parse` for a pick of another shape (`gumshoe.pick`
+  has `namespaced`, `cluster-scoped`, `(kinded kind->type)` and `(typed
+  types)`; a parser may name the `:type` itself), `:invalid` for the reason
+  a pick that does not parse is refused, and `:facts` for what outside the
+  spec the change rests on. The engine reads the object strictly before
+  `:derive`, hands every callback `:ref` and `:object`, pins the ref, and
+  reads the object again before `:refusal`, a `(fn [ctx] reason-or-nil)`
+  whose reason it prints as "refusing: …"; a post-check reads it with
+  `(mutation/read-subject ctx)`. So the book writes no fetch, pin or refusal
+  printer of its own, and keeps `:precondition` for any other check
+  (`runbooks/kubernetes/cronjobs/suspend.clj` is the short example);
 - a playbook is `(playbook/book {:select … :confirm … :steps […]})`, whose
   steps are mutation specs, checks and pauses; it derives its prerequisites
   and options from the steps and asks for one confirmation;
@@ -321,7 +333,8 @@ mostly data:
   `(kubectl/get-json context "namespaces" "--selector=…")`, nil when the read
   fails, or `get-json-result`, whose `:ok?` tells a failed read from an empty
   one before a gate trusts an absence. Both are strict readers: while a
-  `:select` lists candidates, or a `:derive`, `:precondition` or post-check
+  `:select` lists candidates, or a subject read, `:derive`, `:refusal`,
+  `:precondition` or post-check
   runs, `kubectl/*strict-reads*` is bound and a read
   that did not answer throws `::kubectl/unread`, which a `:select` reports as
   "could not list the … candidates" instead of "nothing to do". A

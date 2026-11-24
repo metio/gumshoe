@@ -8,10 +8,6 @@
             [gumshoe.mutation :as mutation]
             [gumshoe.workloads :as workloads]))
 
-(defn- fetch
-  [context {:keys [namespace name]}]
-  (kubectl/get-namespaced-resource context namespace "deployments" name))
-
 (defn- candidates
   [context]
   (workloads/picks [["Deployment" (kubectl/get-all context "deployments")]]
@@ -33,28 +29,21 @@
   :select {:mode :one :label "Deployment" :flag :pick :candidates candidates}
   :empty-message "every Deployment is paused already"
   :confirm {:action "pause a Deployment's rollouts"}
-  :derive (fn [{:keys [context target]}]
-            (let [pick (deployment-pick target)
-                  deployment (when pick (fetch context pick))
-                  hpa (when deployment
-                        (workloads/managing-hpa (kubectl/get-namespaced context (:namespace pick) "horizontalpodautoscalers")
-                                                "Deployment" deployment))]
-              {:pick pick :deployment deployment :hpa (some-> hpa kubectl/name-of)}))
-  :items (fn [{:keys [deployment hpa target]}]
-           (if deployment
-             (workloads/pause-items deployment hpa true)
+  :subject {:parse deployment-pick :invalid "the pick is not \"Deployment <namespace>/<name>\""}
+  :derive (fn [{:keys [context ref object]}]
+            (let [hpa (when object
+                        (workloads/managing-hpa (kubectl/get-namespaced context (:namespace ref) "horizontalpodautoscalers")
+                                                "Deployment" object))]
+              {:hpa (some-> hpa kubectl/name-of)}))
+  :items (fn [{:keys [object hpa target]}]
+           (if object
+             (workloads/pause-items object hpa true)
              [(str "pause " target)]))
-  :pin :pick
-  :precondition (fn [{:keys [context pick]}]
-                  (let [why (if pick
-                              (workloads/pause-refusal (fetch context pick) true)
-                              "the pick is not \"Deployment <namespace>/<name>\"")]
-                    (when why (println (str "refusing: " why)))
-                    (nil? why)))
+  :refusal (fn [{:keys [object]}] (workloads/pause-refusal object true))
   :announce (fn [{:keys [target]}] (format "Pause %s" target))
-  :effect (fn [{:keys [context pick]}]
-            (effect/plan (apply effect/kubectl context (workloads/pause-args pick true))))
-  :verify (fn [{:keys [context pick target]}]
+  :effect (fn [{:keys [context ref]}]
+            (effect/plan (apply effect/kubectl context (workloads/pause-args ref true))))
+  :verify (fn [{:keys [target] :as ctx}]
             [{:description (format "%s is paused" target)
               :timeout 60 :interval 5
-              :check (fn [] (workloads/pause-applied? (fetch context pick) true))}])})
+              :check (fn [] (workloads/pause-applied? (mutation/read-subject ctx) true))}])})

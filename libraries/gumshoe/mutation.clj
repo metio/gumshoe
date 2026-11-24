@@ -24,7 +24,14 @@
       :empty-message \"every node is already cordoned\"   ; when nothing to pick
       :confirm  {:action \"...\" :destructive? false
                  :separately? false}   ; true: asks again inside a playbook
-      :precondition (fn [ctx] -> bool)            ; optional, re-checked after confirm;
+      :subject  {:type \"cronjobs\"                ; the object the change acts on, see below
+                 :parse pick/namespaced          ; optional, the pick as a ref
+                 :invalid \"...\"                 ; optional, why a pick that does not parse is refused
+                 :facts (fn [object] -> value)}  ; optional, joins the pin
+      :refusal  (fn [ctx] -> reason or nil)       ; optional, re-checked after confirm;
+                                                  ; a reason is printed as \"refusing: <reason>\"
+      :precondition (fn [ctx] -> bool)            ; optional, re-checked after confirm
+                                                  ; and after :refusal;
                                                   ; reads only, a dry run calls it too
       :announce (fn [ctx] -> changelog message)   ; optional
       :effect   (fn [ctx] -> effect plan)         ; one effect runs as a plan of one;
@@ -41,11 +48,32 @@
                                     ; see gumshoe.playbook
       :confirmed? true}  ; set by a playbook whose confirmation covered this step
 
-   The :precondition, :announce, :effect, :verify, :derive and :items callbacks
-   each receive one context map, so a book destructures exactly what it needs:
-     {:context .. :cluster .. :target <the pick(s)> :opts <parsed flags>}
+   The :refusal, :precondition, :announce, :effect, :verify, :derive and :items
+   callbacks each receive one context map, so a book destructures exactly what
+   it needs:
+     {:context .. :cluster .. :target <the pick(s)> :opts <parsed flags>
+      :ref .. :object ..}   ; with a :subject
 
-   :derive and :precondition run under kubectl/*strict-reads*, as the
+   :subject declares the one object a change acts on. :parse turns the pick
+   into a ref {:type :namespace :name}, plus whatever else the pick carries
+   (a kind, a revision); it defaults to gumshoe.pick/namespaced for a
+   :namespaced select and gumshoe.pick/cluster-scoped for a :one select, and
+   :type fills in a ref whose parser names no type. A :many select picks
+   several objects and takes no :subject. The engine then hands every
+   callback the ref as :ref and the object as :object, read strictly before
+   :derive runs; pins the ref, with :facts, unless the spec names its own
+   :pin; and reads the object again right before :refusal and :precondition,
+   so both judge the object as it is when the change is about to run. A pick
+   that does not parse is refused with :invalid, read nothing, and leaves
+   :ref and :object nil for the callbacks that run before the refusal.
+   read-subject reads the object again, for a post-check.
+
+   :refusal returns why the change must not run, or nil. The engine prints
+   the reason as \"refusing: <reason>\" and stops, and only a change no
+   refusal stopped reaches :precondition.
+
+   The subject read, :derive, :refusal and :precondition run under
+   kubectl/*strict-reads*, as the
    candidate query of :select and every post-check do. A read in :derive that
    did not answer stops the change before the confirmation, so neither the
    precondition nor the effect is computed from a read that stood in for an
@@ -77,6 +105,7 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.announce :as announce]
             [gumshoe.outcome :as outcome]
+            [gumshoe.pick :as pick]
             [gumshoe.runbook :as runbook]
             [gumshoe.stdout :as stdout]))
 
@@ -110,6 +139,13 @@
     (format "what the change rests on moved after the confirmation (%s, now %s)" (pr-str (:facts before)) (pr-str (:facts after)))
     :else nil))
 
+(defn- refuse!
+  "Prints why the change is refused and returns false, the verdict of a
+   precondition that refused."
+  [why]
+  (println (str "refusing: " why))
+  false)
+
 (defn fetch-pinned
   [context {:keys [type namespace name]}]
   (if namespace
@@ -131,8 +167,7 @@
            (let [why (if before
                        (drift before (fingerprint (fetch ref) (:facts ref)))
                        "it could not be read when the change was confirmed")]
-             (when why (println (str "refusing: " why)))
-             (nil? why))))))
+             (if why (refuse! why) true))))))
 
 (defn derived
   "{:values <what derive returned>} or {:unread <reason>}. derive runs under
@@ -161,9 +196,72 @@
           (boolean (precondition)))
         (catch clojure.lang.ExceptionInfo e
           (if (::kubectl/unread (ex-data e))
-            (do (println (str "refusing: could not read what the precondition rests on - " (ex-message e)))
-                false)
+            (refuse! (str "could not read what the precondition rests on - " (ex-message e)))
             (throw e)))))))
+
+(defn subject-ref
+  "The ref {:type :namespace :name ..} a :subject makes of target, or nil
+   when target does not parse into an object with a type and a name."
+  [{:keys [type parse]} select target]
+  (when (= :many (:mode select))
+    (throw (ex-info "a :subject needs a select that picks one object, not a :many select"
+                    {:select select})))
+  (let [parse (or parse (if (= :namespaced (:mode select)) pick/namespaced pick/cluster-scoped))
+        ref (some->> (parse target) (merge (when type {:type type})))]
+    (when (and (:type ref) (:name ref)) ref)))
+
+(defn read-subject
+  "The object the ref of ctx names, read now, or nil without a ref. A
+   post-check calls it to see the subject after the change."
+  [{:keys [context ref]}]
+  (when ref (fetch-pinned context ref)))
+
+(defn- invalid-pick
+  [{:keys [invalid]} select target]
+  (or invalid (format "the pick %s does not name a %s" (pr-str target) (:label select))))
+
+(defn- subject-derive
+  "derive preceded by the subject read, as one function of the base context:
+   {:ref :object} merged with what derive returns for the context holding
+   them. nil when the spec has neither."
+  [{:keys [subject select derive]}]
+  (cond
+    subject (fn [{:keys [target] :as base}]
+              (let [ref (subject-ref subject select target)
+                    values {:ref ref :object (read-subject (assoc base :ref ref))}]
+                (merge values (when derive (derive (merge base values))))))
+    derive derive
+    :else nil))
+
+(defn- judged-precondition
+  "The :refusal and :precondition of a spec as one thunk over ctx, or nil
+   when the spec has neither and no :subject. With a :subject, a pick that
+   does not parse is refused, and both judge the object read again."
+  [{:keys [subject select refusal precondition]} ctx]
+  (when (or subject refusal precondition)
+    (fn []
+      (let [{:keys [ref target]} ctx
+            judge? (or refusal precondition)
+            ctx (if (and subject ref judge?) (assoc ctx :object (read-subject ctx)) ctx)
+            why (cond
+                  (and subject (nil? ref)) (invalid-pick subject select target)
+                  refusal (refusal ctx))]
+        (cond
+          why (refuse! why)
+          precondition (boolean (precondition ctx))
+          :else true)))))
+
+(defn- pin-of
+  "The ref the change pins and its fingerprint at the confirmation: the
+   spec's :pin when it names one, else the subject's ref, whose object ctx
+   already holds from the strict read before the confirmation."
+  [{:keys [pin subject]} {:keys [context ref object] :as ctx}]
+  (cond
+    pin (when-let [pinned (pin ctx)]
+          {:ref pinned :before (fingerprint (fetch-pinned context pinned) (:facts pinned))})
+    (and subject ref) (let [pinned (cond-> ref (:facts subject) (assoc :facts (:facts subject)))]
+                        {:ref pinned :before (fingerprint object (:facts pinned))})
+    :else nil))
 
 (defn run-on!
   "Runs a mutation spec against an ALREADY-CHOSEN `target`, skipping the spec's own
@@ -175,21 +273,20 @@
 
    `opts` is the parsed CLI flags; `announcement-data` is the value the runbook
    action receives in its ctx (nil when the book does not announce)."
-  [{:keys [select confirm derive precondition announce effect verify] :as spec}
+  [{:keys [select confirm announce effect verify] :as spec}
    target opts announcement-data]
   (let [context (kubectl/current-context)
         cluster (kubectl/current-cluster)
         base {:context context :cluster cluster :target target
               :opts opts :announcement-data announcement-data}
-        {:keys [values unread]} (derived derive base)]
+        {:keys [values unread]} (derived (subject-derive spec) base)]
     (if unread
       (do (stdout/error (format "could not read what the change rests on - %s" unread))
           false)
       (let [ctx (merge base values)
             failed! #(when-not flow/*dry-run* (outcome/recovery! (:recovery spec) ctx))
             ok? (try
-                  (let [ref (when-let [pin (:pin spec)] (pin ctx))
-                        before (when ref (fingerprint (fetch-pinned context ref) (:facts ref)))
+                  (let [{:keys [ref before]} (pin-of spec ctx)
                         items-fn (:items spec)]
                     (flow/change!
                      {:confirmation {:action (:action confirm)
@@ -197,7 +294,7 @@
                                      :items (if items-fn (items-fn ctx) (select/items (:mode select) target))
                                      :destructive? (:destructive? confirm)}
                       :precondition (strict-precondition
-                                     (pinned-precondition (when precondition #(precondition ctx))
+                                     (pinned-precondition (judged-precondition spec ctx)
                                                           ref before #(fetch-pinned context %)))
                       :confirmed? (:confirmed? spec)
                       :announce! (when announce
@@ -248,13 +345,13 @@
 
 (defn details
   "What --help says a mutation book does, generated from its spec."
-  [{:keys [select confirm precondition announce verify pin prerequisites]}]
+  [{:keys [select confirm precondition refusal subject announce verify pin prerequisites]}]
   (concat
    ["What it does:"
     (str "  picks " (picks select))
     (str "  asks to confirm: " (:action confirm)
          (when (:destructive? confirm) " (destructive - type yes)"))]
-   (when (or precondition pin)
+   (when (or precondition refusal subject pin)
      ["  checks again right before acting that what was confirmed still holds"])
    (when announce ["  announces the change to the changelog"])
    [(if verify

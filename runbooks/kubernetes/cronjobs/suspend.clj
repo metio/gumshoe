@@ -8,11 +8,6 @@
             [gumshoe.mutation :as mutation]
             [gumshoe.workloads :as workloads]))
 
-(defn- fetch
-  [context target]
-  (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
-    (kubectl/get-namespaced-resource context namespace "cronjobs" name)))
-
 (defn- candidates
   [context]
   (kubectl/namespaces-names {:items (filter #(not (workloads/suspended? %)) (kubectl/items-of (kubectl/get-all context "cronjobs")))}))
@@ -31,19 +26,14 @@
            :candidates candidates}
   :empty-message "every CronJob is suspended already"
   :confirm {:action "suspend a CronJob"}
-  :derive (fn [{:keys [context target]}] {:cronjob (fetch context target)})
-  :items (fn [{:keys [cronjob target]}]
-           (if cronjob (workloads/suspend-items cronjob true) [(str "suspend " target)]))
-  :pin (fn [{:keys [target]}] (assoc (kubectl/namespace-name-map target) :type "cronjobs"))
-  :precondition (fn [{:keys [context target]}]
-                  (let [why (workloads/suspend-refusal (fetch context target) true)]
-                    (when why (println (str "refusing: " why)))
-                    (nil? why)))
+  :subject {:type "cronjobs"}
+  :items (fn [{:keys [object target]}]
+           (if object (workloads/suspend-items object true) [(str "suspend " target)]))
+  :refusal (fn [{:keys [object]}] (workloads/suspend-refusal object true))
   :announce (fn [{:keys [target]}] (format "Suspend CronJob %s" target))
-  :effect (fn [{:keys [context target]}]
-            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
-              (effect/plan (apply effect/kubectl context (workloads/suspend-args namespace name true)))))
-  :verify (fn [{:keys [context target]}]
+  :effect (fn [{:keys [context ref]}]
+            (effect/plan (apply effect/kubectl context (workloads/suspend-args (:namespace ref) (:name ref) true))))
+  :verify (fn [{:keys [target] :as ctx}]
             [{:description (format "CronJob %s is suspended" target)
               :timeout 30 :interval 3
-              :check (fn [] (= true (workloads/suspended? (fetch context target))))}])})
+              :check (fn [] (= true (workloads/suspended? (mutation/read-subject ctx))))}])})

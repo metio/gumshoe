@@ -11,7 +11,8 @@
   (:require [cheshire.core :as json]
             [clojure.string :as str]
             [gumshoe.cnpg.instances :as instances]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.pick :as pick]))
 
 (def healthy-phase "Cluster in healthy state")
 (def restart-annotation "kubectl.kubernetes.io/restartedAt")
@@ -27,11 +28,9 @@
   [object type]
   (first (filter #(= type (:type %)) (-> object :status :conditions))))
 
-(defn parse-pick
+(def parse-pick
   "\"<namespace>/<name>\" as {:namespace :name}, or nil."
-  [pick]
-  (when-let [[_ namespace name] (re-matches #"\s*([^/\s]+)/([^/\s]+)\s*" (str pick))]
-    {:namespace namespace :name name}))
+  pick/namespaced)
 
 (defn healthy?
   "The cluster reports a healthy phase with every instance ready."

@@ -9,10 +9,6 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]))
 
-(defn- fetch
-  [context {:keys [namespace name]}]
-  (kubectl/get-namespaced-resource context namespace argocd/application-type name))
-
 (mutation/book
  {:description "Syncs an Argo CD Application to its source and waits for the operation"
   :options {:application {:desc "\"<namespace>/<name>\" - interactive selection when omitted" :alias :a :coerce :string}
@@ -28,24 +24,18 @@
                                 (kubectl/namespace-name-of app))))}
   :empty-message "every Application is running an operation already"
   :confirm {:action "sync an Application - the cluster is changed to match its source" :destructive? true}
-  :derive (fn [{:keys [context target]}]
-            (let [pick (actions/parse-pick target)]
-              ;; taken before the change, so the operation it starts is newer
-              {:pick pick :application (when pick (fetch context pick)) :requested (java.time.Instant/now)}))
-  :items (fn [{:keys [application target opts]}]
-           (if application (actions/sync-items application (boolean (:prune opts))) [(str "sync " target)]))
-  :pin (fn [{:keys [pick]}] (when pick {:type argocd/application-type :namespace (:namespace pick) :name (:name pick)}))
-  :precondition (fn [{:keys [context pick opts]}]
-                  (let [app (when pick (fetch context pick))
-                        why (if pick (actions/sync-refusal app) "the pick is not \"<namespace>/<name>\"")]
-                    (when why (println (str "refusing: " why)))
-                    (nil? why)))
+  :subject {:type argocd/application-type :parse actions/parse-pick :invalid "the pick is not \"<namespace>/<name>\""}
+  ;; taken before the change, so the operation it starts is newer
+  :derive (fn [_] {:requested (java.time.Instant/now)})
+  :items (fn [{:keys [object target opts]}]
+           (if object (actions/sync-items object (boolean (:prune opts))) [(str "sync " target)]))
+  :refusal (fn [{:keys [object]}] (actions/sync-refusal object))
   :announce (fn [{:keys [target]}] (format "Sync Application %s" target))
-  :effect (fn [{:keys [context pick opts]}]
-            (effect/plan (effect/kubectl context (str "--namespace=" (:namespace pick)) "patch" argocd/application-type (:name pick)
+  :effect (fn [{:keys [context ref opts]}]
+            (effect/plan (effect/kubectl context (str "--namespace=" (:namespace ref)) "patch" argocd/application-type (:name ref)
                                          "--type=merge" (str "--patch=" (actions/sync-patch "gumshoe" (boolean (:prune opts)))))))
-  :verify (fn [{:keys [context pick target requested]}]
+  :verify (fn [{:keys [target requested] :as ctx}]
             [{:description (format "%s synced" target)
               :timeout 900 :interval 10
-              :abort #(first (actions/sync-signals (fetch context pick) requested))
-              :check #(actions/synced? (fetch context pick) requested)}])})
+              :abort #(first (actions/sync-signals (mutation/read-subject ctx) requested))
+              :check #(actions/synced? (mutation/read-subject ctx) requested)}])})

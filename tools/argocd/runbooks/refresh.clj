@@ -9,10 +9,6 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]))
 
-(defn- fetch
-  [context {:keys [namespace name]}]
-  (kubectl/get-namespaced-resource context namespace argocd/application-type name))
-
 (defn- refresh-type [opts] (if (:hard opts) "hard" "normal"))
 (mutation/book
  {:description "Refreshes an Argo CD Application, comparing it with its source again"
@@ -29,22 +25,15 @@
                                 (kubectl/namespace-name-of app))))}
   :empty-message "every Application has a refresh pending"
   :confirm {:action "refresh an Application"}
-  :derive (fn [{:keys [context target]}]
-            (let [pick (actions/parse-pick target)]
-              {:pick pick :application (when pick (fetch context pick))}))
-  :items (fn [{:keys [application target opts]}]
-           (if application (actions/refresh-items application (refresh-type opts)) [(str "refresh " target)]))
-  :pin (fn [{:keys [pick]}] (when pick {:type argocd/application-type :namespace (:namespace pick) :name (:name pick)}))
-  :precondition (fn [{:keys [context pick opts]}]
-                  (let [app (when pick (fetch context pick))
-                        why (if pick (actions/refresh-refusal app (refresh-type opts)) "the pick is not \"<namespace>/<name>\"")]
-                    (when why (println (str "refusing: " why)))
-                    (nil? why)))
+  :subject {:type argocd/application-type :parse actions/parse-pick :invalid "the pick is not \"<namespace>/<name>\""}
+  :items (fn [{:keys [object target opts]}]
+           (if object (actions/refresh-items object (refresh-type opts)) [(str "refresh " target)]))
+  :refusal (fn [{:keys [object opts]}] (actions/refresh-refusal object (refresh-type opts)))
   :announce (fn [{:keys [target]}] (format "Refresh Application %s" target))
-  :effect (fn [{:keys [context pick opts]}]
-            (effect/plan (effect/kubectl context (str "--namespace=" (:namespace pick)) "annotate" argocd/application-type (:name pick)
+  :effect (fn [{:keys [context ref opts]}]
+            (effect/plan (effect/kubectl context (str "--namespace=" (:namespace ref)) "annotate" argocd/application-type (:name ref)
                                          "--overwrite" (actions/refresh-arg (refresh-type opts)))))
-  :verify (fn [{:keys [context pick target]}]
+  :verify (fn [{:keys [target] :as ctx}]
             [{:description (format "the controller refreshed %s" target)
               :timeout 300 :interval 5
-              :check #(actions/refreshed? (fetch context pick))}])})
+              :check #(actions/refreshed? (mutation/read-subject ctx))}])})

@@ -1062,7 +1062,7 @@
    [{:description "the controller refreshed shop",
      :timeout 300,
      :interval 5,
-     :holds true}]},
+     :holds false}]},
   :permitted
   {:action "refresh an Application",
    :destructive? false,

@@ -8,10 +8,6 @@
             [gumshoe.mutation :as mutation]
             [gumshoe.workloads :as workloads]))
 
-(defn- fetch
-  [context {:keys [type namespace name]}]
-  (kubectl/get-namespaced-resource context namespace type name))
-
 (defn- candidates
   [context]
   (workloads/picks (for [[type kind] workloads/types] [kind (kubectl/get-all context type)])
@@ -29,18 +25,12 @@
   :empty-message "no workload runs pods that a rollout could restart"
   :confirm {:action (str "restart every pod of the workload, one batch at a time as its update strategy allows - "
                          "a workload with a single replica is unavailable while its pod restarts")}
-  :derive (fn [{:keys [target]}] {:pick (workloads/parse-pick target)})
-  :pin :pick
-  :precondition (fn [{:keys [context pick]}]
-                  (let [why (if pick
-                              (workloads/restart-refusal (:kind pick) (fetch context pick))
-                              "the pick is not \"<Kind> <namespace>/<name>\"")]
-                    (when why (println (str "refusing: " why)))
-                    (nil? why)))
+  :subject {:parse workloads/parse-pick :invalid "the pick is not \"<Kind> <namespace>/<name>\""}
+  :refusal (fn [{:keys [ref object]}] (workloads/restart-refusal (:kind ref) object))
   :announce (fn [{:keys [target]}] (format "Restart %s" target))
-  :effect (fn [{:keys [context pick]}]
-            (effect/plan (apply effect/kubectl context (workloads/restart-args pick))))
-  :verify (fn [{:keys [context pick target]}]
+  :effect (fn [{:keys [context ref]}]
+            (effect/plan (apply effect/kubectl context (workloads/restart-args ref))))
+  :verify (fn [{:keys [ref target] :as ctx}]
             [{:description (format "%s rolled out" target)
               :timeout 600 :interval 10
-              :check (fn [] (workloads/rolled-out? (:kind pick) (fetch context pick)))}])})
+              :check (fn [] (workloads/rolled-out? (:kind ref) (mutation/read-subject ctx)))}])})

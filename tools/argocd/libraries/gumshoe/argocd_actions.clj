@@ -8,16 +8,15 @@
    a sync is an operation written into the Application, which the controller
    runs and reports in status.operationState."
   (:require [cheshire.core :as json]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.pick :as pick]))
 
 (def refresh-annotation "argocd.argoproj.io/refresh")
 (def refresh-types #{"normal" "hard"})
 
-(defn parse-pick
+(def parse-pick
   "\"<namespace>/<name>\" as {:namespace :name}, or nil."
-  [pick]
-  (when-let [[_ namespace name] (re-matches #"\s*([^/\s]+)/([^/\s]+)\s*" (str pick))]
-    {:namespace namespace :name name}))
+  pick/namespaced)
 
 (defn source-of
   "repoURL@targetRevision of the Application's first source."
