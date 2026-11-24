@@ -111,11 +111,15 @@
 
 ;; --- the plan order ---------------------------------------------------------------
 
+(def ^:private owner
+  {:kind "Kustomization" :type flux/kustomization-type :namespace "flux-system" :name "apps"
+   :object {:spec {:interval "5m"}}})
+
 (def ^:private observed
   {:release (assoc release :status {})
    :release-name "podinfo" :release-namespace "apps" :storage-namespace "apps"
-   :owner {:kind "Kustomization" :type flux/kustomization-type :namespace "flux-system" :name "apps"
-           :object {:spec {:interval "5m"}}}
+   :owner owner
+   :known-owner owner
    :workloads [{:type "deployments" :namespace "apps" :name "web"}]
    :volumes [{:type "persistentvolumeclaims" :namespace "apps" :name "cache"}]})
 
@@ -162,7 +166,7 @@
 
 (defn- fake-cluster
   "A kubectl that answers `get` from state, an atom of type -> objects. A type
-   mapped to :fail does not answer."
+   mapped to :fail does not answer, one mapped to :no-type is not served."
   [state]
   (fn [& argv]
     (let [[type name] (rest (drop-while #(not= "get" %) argv))
@@ -170,10 +174,18 @@
           objects (get @state type)]
       (cond
         (= :fail objects) {:exit 1 :out "" :err "Unable to connect to the server"}
+        (= :no-type objects) {:exit 1 :out "" :err (str "error: the server doesn't have a resource type \"" type "\"")}
         name (if-let [object (first (filter #(= name (-> % :metadata :name)) objects))]
                {:exit 0 :out (json/generate-string object) :err ""}
                {:exit 1 :out "" :err (str "Error from server (NotFound): " type " \"" name "\" not found")})
         :else {:exit 0 :out (json/generate-string {:items (or objects [])}) :err ""}))))
+
+(defn- quietly
+  "The value of (f), with what it prints kept off the test output."
+  [f]
+  (let [result (atom nil)]
+    (with-out-str (binding [*err* *out*] (reset! result (f))))
+    @result))
 
 (defn- step-titled [steps re]
   (first (filter #(re-find re (str (:title %))) steps)))
@@ -201,3 +213,53 @@
       (is (= ["data-db-0" "data-db-1"]
              (sort (map :name (:volumes (:observed (derive-in (step-titled steps #"volumes")))))))
           "the claims the deleted StatefulSet made from its templates are still the release's volumes"))))
+
+(def ^:private owning-kustomization
+  (merge {:metadata {:namespace "flux-system" :name "apps"} :spec {:interval "5m"}}
+         (inventory "apps_podinfo_helm.toolkit.fluxcd.io_HelmRelease")))
+
+(defn- step-ctx [step]
+  (merge {:context "ctx" :target "apps/podinfo"} (derive-in step)))
+
+(deftest an-unanswered-owner-read-is-not-read-as-no-owner
+  (let [state (atom (assoc (cluster-state)
+                           flux/kustomization-type :fail
+                           storage/resourceset-type :no-type
+                           "secrets" []))
+        steps (storage/steps)
+        suspend (step-titled steps #"Suspend the owner")]
+    (with-redefs [shell/execute (fake-cluster state)]
+      (is (false? (quietly #((:check (first steps)) {:context "ctx" :target "apps/podinfo"})))
+          "the report refuses to go on")
+      (is (false? (quietly #((:precondition suspend) (step-ctx suspend))))
+          "suspending the owner refuses, where it would have planned a note")
+      (doseq [step (filter :effect steps)
+              :when (re-find #"Delete" (:title step))]
+        (is (false? (quietly #((:precondition step) (step-ctx step)))) (:title step))))))
+
+(deftest a-missing-resourceset-crd-means-no-resourceset-owner
+  (let [state (atom (assoc (cluster-state)
+                           flux/kustomization-type [owning-kustomization]
+                           storage/resourceset-type :no-type))
+        steps (storage/steps)
+        suspend (step-titled steps #"Suspend the owner")]
+    (with-redefs [shell/execute (fake-cluster state)]
+      (let [ctx (step-ctx suspend)]
+        (is (= "apps" (-> ctx :observed :owner :name)))
+        (is (true? ((:precondition suspend) ctx)))))))
+
+(deftest the-owner-the-run-suspended-is-resumed-when-the-owner-read-fails-later
+  (let [state (atom (assoc (cluster-state)
+                           flux/kustomization-type [owning-kustomization]
+                           storage/resourceset-type []))
+        steps (storage/steps)
+        suspend (step-titled steps #"Suspend the owner")
+        resume (step-titled steps #"Resume the owner")]
+    (with-redefs [shell/execute (fake-cluster state)]
+      (step-ctx suspend)
+      (swap! state assoc flux/kustomization-type :fail)
+      (let [ctx (step-ctx resume)
+            plan (str/join " " (flatten ((:effect resume) ctx)))]
+        (is (str/includes? plan "flux-system") plan)
+        (is (str/includes? plan "\"suspend\":false") plan)
+        (is (true? (if-let [precondition (:precondition resume)] (precondition ctx) true)))))))
