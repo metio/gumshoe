@@ -2,7 +2,9 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.prerequisites-test
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [babashka.fs :as fs]
+            [clojure.string :as str]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [gumshoe.prerequisites :as prerequisites]))
 
 ;; The registry is a process-wide atom; reset it around each test.
@@ -76,3 +78,79 @@
                                  :kubectl-can-get ["nodes"]
                                  :minimum-tool-versions {"kubectl" "1.30"}
                                  :cluster-capabilities [:flux]}))))
+
+(defn- path-results
+  "Every {:ok? :label} the :existing-paths declaration yields for these options."
+  [declaration opts]
+  (mapv run-item (prerequisites/existing-path-items declaration opts)))
+
+(deftest an-existing-directory-passes-and-names-the-option-test
+  (fs/with-temp-dir [dir {}]
+    (let [[result] (path-results [:checkout] {:checkout (str dir)})]
+      (is (:ok? result))
+      (is (str/includes? (:label result) "--checkout"))
+      (is (str/includes? (:label result) (str dir))))))
+
+(deftest a-missing-directory-fails-naming-the-option-test
+  (fs/with-temp-dir [dir {}]
+    (let [missing (str (fs/path dir "no-such-checkout"))
+          [[label _] :as items] (prerequisites/existing-path-items [:k8s-deployments] {:k8s-deployments missing})
+          [result] (mapv run-item items)]
+      (is (str/includes? label "--k8s-deployments") "the pending line names the option")
+      (is (false? (:ok? result)))
+      (is (= (str "directory --k8s-deployments: " missing " does not exist") (:label result))))))
+
+(deftest a-file-in-place-of-a-directory-fails-test
+  (fs/with-temp-dir [dir {}]
+    (let [file (str (fs/create-file (fs/path dir "hostname")))
+          [result] (path-results [:fahrplan] {:fahrplan file})]
+      (is (false? (:ok? result)))
+      (is (= (str "directory --fahrplan: " file " is not a directory") (:label result))))))
+
+(deftest an-unwritable-directory-fails-only-when-writable-is-required-test
+  (fs/with-temp-dir [dir {}]
+    (let [read-only (fs/create-dir (fs/path dir "read-only"))]
+      (fs/set-posix-file-permissions read-only "r-xr-xr-x")
+      (try
+        (let [[readable writable] (path-results [:a {:option :b :writable true}]
+                                                {:a (str read-only) :b (str read-only)})]
+          (is (:ok? readable) "a plain entry only needs the directory to exist")
+          (is (false? (:ok? writable)))
+          (is (= (str "directory --b: " read-only " is not writable") (:label writable))))
+        (finally (fs/set-posix-file-permissions read-only "rwxr-xr-x"))))))
+
+(deftest a-writable-directory-passes-when-writable-is-required-test
+  (fs/with-temp-dir [dir {}]
+    (let [[result] (path-results [{:option :checkout :writable true}] {:checkout (str dir)})]
+      (is (:ok? result))
+      (is (str/includes? (:label result) "writable")))))
+
+(deftest an-option-without-a-value-is-skipped-with-a-note-test
+  (doseq [opts [{} {:checkout nil} {:checkout ""} {:checkout "  "}]]
+    (let [[result :as results] (path-results [:checkout] opts)]
+      (is (= 1 (count results)) "the checklist still shows the declared option")
+      (is (:ok? result) "an optional option left unset does not stop the book")
+      (is (= "directory --checkout: not set, nothing to check" (:label result))))))
+
+(deftest a-relative-path-resolves-against-the-working-directory-test
+  (let [[result] (path-results [:checkout] {:checkout "."})]
+    (is (:ok? result))
+    (is (str/includes? (:label result) (str (fs/cwd))))))
+
+(deftest a-leading-tilde-names-the-home-directory-test
+  (is (= (str (fs/home)) (prerequisites/directory-path "~")))
+  (is (= (str (fs/path (fs/home) "checkouts" "fahrplan")) (prerequisites/directory-path "~/checkouts/fahrplan")))
+  (is (= (str (fs/path (fs/cwd) "a")) (prerequisites/directory-path "x/../a"))))
+
+(deftest a-malformed-entry-fails-closed-test
+  (let [[result] (path-results ["checkout"] {"checkout" "/tmp"})]
+    (is (false? (:ok? result)))
+    (is (str/includes? (:label result) ":existing-paths"))))
+
+(deftest the-summary-names-the-directories-a-book-needs-test
+  (is (= ["existing directories: --k8s-deployments, --fahrplan (writable)"]
+         (prerequisites/summary {:existing-paths [:k8s-deployments {:option :fahrplan :writable true}]}))))
+
+(deftest the-union-joins-the-directories-of-several-steps-test
+  (is (= {:existing-paths [:a {:option :b :writable true}]}
+         (prerequisites/union {:existing-paths [:a]} {:existing-paths [:a {:option :b :writable true}]}))))

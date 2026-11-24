@@ -79,8 +79,8 @@ bb runbooks/detectives/cluster.clj    # it tells you if a tool is missing
    that says "verified" promises the post-checks held.
 
 Every book checks its own prerequisites before doing anything: required tools,
-connectivity to the systems it touches, and the permissions of the user running
-it.
+connectivity to the systems it touches, the directories its options name, and
+the permissions of the user running it.
 
 **Host-specific config (`env.edn`).** Optional, gitignored, per machine. Run
 `bb runbooks/setup/init.clj` and it builds one *with* you - detecting the
@@ -526,7 +526,7 @@ unifying convenience.
   a plugin registers a native backend with `(secrets/register-provider! { …
   })`.
 - **Prerequisite checks** - the built-ins (tools, versions, connectivity,
-  secrets, cluster capabilities, permissions) plus any a plugin registers with
+  secrets, directories an option names, cluster capabilities, permissions) plus any a plugin registers with
   `(prerequisites/register-check! :change-window (fn [value opts] …))` - gate a
   book on org policy the core can't know: a change-freeze window, a ticket, an
   on-call ack. They animate in the Prerequisites checklist like the built-ins.

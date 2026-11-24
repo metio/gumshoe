@@ -231,8 +231,8 @@ entirely.
 
 ## Prerequisites and configuration
 
-Every book checks its tools, their versions, connectivity, secrets, and
-permissions before it acts, and prints a checklist naming what is missing.
+Every book checks its tools, their versions, connectivity, secrets, the
+directories its options name, and permissions before it acts, and prints a checklist naming what is missing.
 With breto, `eval "$(breto env)"` puts every tool a book needs on `PATH`.
 
 `env.edn` (optional, gitignored, built by `bb runbooks/setup/init.clj`)
@@ -310,6 +310,16 @@ mostly data:
   names its description beside it, `(mutation/book (merge nodes/cordon
   {:description "…"}))`, so `./run --list` reads it without loading the book;
 - a bespoke book calls `runbook/execute!` with its own `:action`;
+- an option naming a checkout or another directory the book reads goes in
+  `:prerequisites {:existing-paths [:fahrplan {:option :k8s-deployments
+  :writable true}]}`: a keyword requires an existing directory, the map form
+  also requires it writable. The value resolves against the working
+  directory, with a leading `~` as home, and a missing path, a file or an
+  unwritable directory is a failed line in the Prerequisites checklist naming
+  the option, so the run stops before the action. An option left without a
+  value passes with a note; mark it `:require` in `:options` when the book
+  cannot run without it. A book that hands the value to a process resolves
+  it with `(prerequisites/directory-path value)`, the path the check judged;
 - a PromQL read goes through `gumshoe.promql`: `(promql/endpoint {:url …
   :flavor :thanos})` (or `:prometheus`, `:mimir` with `:tenant`), then
   `(promql/query! ep "…")`, which returns `{:ok true :series […]}` or `{:ok

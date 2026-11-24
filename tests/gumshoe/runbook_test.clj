@@ -2,7 +2,10 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.runbook-test
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [babashka.fs :as fs]
+            [babashka.process :as process]
+            [clojure.string :as str]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [gumshoe.config :as config]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.prerequisites :as prerequisites]
@@ -71,7 +74,8 @@
   (testing "a built-in prerequisite key is not flagged as unknown"
     (is (empty? (unknown-items {:installed-tools ["kubectl"]
                                 :kubectl-can-get ["pods"]
-                                :can-ping-using-ipv4 [:host]}))))
+                                :can-ping-using-ipv4 [:host]
+                                :existing-paths [:checkout {:option :out :writable true}]}))))
   (testing "a plugin-registered key is not flagged as unknown"
     (prerequisites/register-check! :change-window (fn [_ _] []))
     (is (empty? (unknown-items {:change-window "prod"}))))
@@ -87,3 +91,43 @@
     (is (= config (binding [runbook/*loading* true] (runbook/execute! config)))
         "execute! hands back the config it was given")
     (is (false? @ran))))
+
+(defn- absolute-classpath
+  "This run's classpath with every entry absolute, so a bb started in another
+   directory loads the same libraries."
+  []
+  (->> (str/split (System/getProperty "java.class.path") #":")
+       (map #(str (fs/absolutize %)))
+       (str/join ":")))
+
+(defn- run-book
+  "Runs a book declaring an :existing-paths prerequisite in a fresh bb, from a
+   scratch directory with no env.edn, with the given arguments."
+  [dir & args]
+  (let [script (str "(require '[gumshoe.runbook :as runbook])"
+                    "(binding [*command-line-args* " (pr-str (vec args)) "]"
+                    "  (runbook/execute! {:description \"needs a checkout\" :announce? false"
+                    "                     :options {:checkout {:desc \"the checkout\"}}"
+                    "                     :prerequisites {:existing-paths [:checkout]}"
+                    "                     :action (fn [_ _] (println \"ACTION RAN\") true)}))")]
+    @(process/process {:dir (str dir) :out :string :err :string :continue true
+                       :extra-env {"GUMSHOE_ENV" (str (fs/path dir "env.edn")) "NO_COLOR" "1"}}
+                      "bb" "-cp" (absolute-classpath) "-e" script)))
+
+(deftest a-missing-directory-stops-the-book-in-the-prerequisites-test
+  (fs/with-temp-dir [dir {}]
+    (let [missing (str (fs/path dir "nonexistent"))
+          {:keys [exit out err]} (run-book dir "--checkout" missing)
+          output (str out err)]
+      (is (= 1 exit))
+      (is (str/includes? output "Prerequisites"))
+      (is (str/includes? output (str "directory --checkout: " missing " does not exist")) output)
+      (is (str/includes? output "PREREQUISITES NOT MET"))
+      (is (not (str/includes? output "ACTION RAN")) "the action never runs")
+      (is (not (str/includes? output "unexpected error"))))))
+
+(deftest an-existing-directory-lets-the-book-run-test
+  (fs/with-temp-dir [dir {}]
+    (let [{:keys [exit out err]} (run-book dir "--checkout" (str dir))]
+      (is (zero? exit) (str out err))
+      (is (str/includes? out "ACTION RAN")))))

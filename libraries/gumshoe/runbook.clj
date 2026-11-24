@@ -155,7 +155,7 @@
    a plugin-registered check. A declared key in neither set is a typo or a plugin
    that failed to load."
   #{:can-ping-using-ipv4 :can-ping-using-ipv6 :access-gopass-secrets
-    :installed-tools :minimum-tool-versions :cluster-capabilities
+    :installed-tools :minimum-tool-versions :existing-paths :cluster-capabilities
     :kubectl-can-get :kubectl-can-create :kubectl-can-patch
     :kubectl-can-delete :kubectl-can-exec})
 
@@ -191,6 +191,7 @@
      (map (partial ping-item 4) ipv4-hosts)
      (map (partial ping-item 6) ipv6-hosts)
      (map secret-item secrets)
+     (prerequisites/existing-path-items (:existing-paths prerequisites) opts)
      (when (contains? prerequisites :cluster-capabilities)
        [(cluster-item (:cluster-capabilities prerequisites))])
      (map (partial can-i-item "get") (:kubectl-can-get prerequisites))
