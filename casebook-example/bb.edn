@@ -8,7 +8,10 @@
 ;; set is reproducible and Renovate can bump it.
 ;;
 ;; Run the front doors as tasks: `bb gumshoe`, `bb detect`, `bb run` (they call
-;; gumshoe's entry points with this casebook's deps on the classpath). babashka
+;; gumshoe's entry points with this casebook's deps on the classpath).
+;; `bb run --list` and `bb gumshoe --list` print every book by its path within
+;; its checkout, and `bb run <path>` or `bb gumshoe <path>` runs it: this
+;; casebook's file at that path when there is one, else the dependency's. babashka
 ;; resolves the git dep once via tools.deps (needs a JVM - the gumshoe devShell
 ;; provides it) and caches it under ~/.gitlibs.
 {:deps {io.github.metio/gumshoe {:git/tag "2026.11.24204923"

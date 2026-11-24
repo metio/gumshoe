@@ -149,10 +149,14 @@ clone of this repo**, where every book is present on disk. From a **casebook**
 (where gumshoe is a git dependency), its built-in books live in the dependency
 cache (`GITLIBS`, i.e. `~/.gitlibs`), not your working tree, so a repo-relative
 `bb runbooks/...` finds nothing. Launch them through the front door instead -
-`bb run <name>`, `bb detect`, `bb investigate`, or `bb gumshoe <search>` - which
-resolves a book from the classpath wherever it physically sits and runs it. Your
-casebook's own books (under its `:paths`) run by path either way. The examples
-below use the in-repo path form; from a casebook, read them as `bb run <book>`.
+`bb run <path>`, `bb gumshoe <path>`, `bb run <name>`, `bb detect`, or
+`bb gumshoe <search>` - which resolves a book from the classpath wherever it
+physically sits and runs it. A path is the one `bb run --list` (or
+`bb gumshoe --list`) prints, such as `runbooks/detectives/cluster.clj`; it stays
+the same when the gumshoe pin moves, and a casebook book at the same path wins
+over the built-in. The examples below use the in-repo path form; from a
+casebook, read `bb runbooks/detectives/cluster.clj` as
+`bb run runbooks/detectives/cluster.clj`.
 
 Every book behaves the same way:
 
@@ -433,11 +437,14 @@ them.
                   :task (System/exit (main/front-door *command-line-args*))}
          detect  {:requires ([gumshoe.main :as main])
                   :task (System/exit (main/detect *command-line-args*))}
-         run     {:requires ([gumshoe.main :as main])
+         run     {:override-builtin true
+                  :requires ([gumshoe.main :as main])
                   :task (System/exit (main/run *command-line-args*))}}}
 ```
 
-Run the front doors as tasks - `bb gumshoe`, `bb detect`, `bb run`. Pinning a
+Run the front doors as tasks - `bb gumshoe`, `bb detect`, `bb run`. `--list`
+on `bb gumshoe` or `bb run` prints every book's checkout-relative path, and
+either door runs a listed path verbatim. Pinning a
 released `:git/tag` (with its `:git/sha`) keeps the set reproducible and lets
 Renovate bump it. babashka resolves the dep once via tools.deps - which needs a
 JVM, which `@jdk25` in `.breto.edn` provides - and caches it under `~/.gitlibs`.
