@@ -30,13 +30,13 @@
             :destructive? true}
   ;; a pod may have started using the claim since it was offered
   :precondition (fn [{:keys [context target]}]
-                  (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+                  (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
                     (kubectl/pvc-unused? context namespace name)))
   :announce (fn [{:keys [target]}] (format "Delete unused PersistentVolumeClaim %s" target))
   :effect (fn [{:keys [context target]}]
-            (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               (effect/plan (effect/kubectl context (str "--namespace=" namespace)
                                            "delete" "persistentvolumeclaim" name))))
   :verify (fn [{:keys [context target]}]
-            (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               [(gone-check context namespace name target)]))})

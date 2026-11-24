@@ -52,8 +52,8 @@
   ;; reproducer replays the same command
   :derive (fn [_] {:timestamp (str (java.time.Instant/now))})
   :effect (fn [{:keys [context target timestamp]}]
-            (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               (flux/reset-effect context namespace name timestamp)))
   :verify (fn [{:keys [context target]}]
-            (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               [(ready-check context namespace name target)]))})

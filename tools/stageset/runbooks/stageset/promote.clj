@@ -35,11 +35,11 @@
   :select {:mode :namespaced :label "StageSet" :namespace-flag :namespace :name-flag :name
            :candidates stagesets}
   :derive (fn [{:keys [context target opts]}]
-            (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               {:stage (interact/choose-one "Stage" (stage-names context namespace name) (:stage opts))}))
   :confirm {:action "promote a StageSet stage"}
   :announce (fn [{:keys [target stage]}] (format "Promote stage %s of StageSet %s" stage target))
   :effect (fn [{:keys [target stage]}]
-            (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               (effect/plan (effect/cmd "stagesetctl" "promote" name "--stage" stage
                                        (str "--namespace=" namespace)))))})

@@ -62,10 +62,20 @@
       (str "Deployment/" (subs (:name owner) 0 (- (count (:name owner)) (inc (count hash)))))
       :else (str (:kind owner) "/" (:name owner)))))
 
-(defn split-namespace-name
+(defn namespace-name-map
+  "The map {:namespace .. :name ..} for a \"namespace/name\" string, split at
+   the first slash. It is a map, so destructure it by key:
+   (let [{:keys [namespace name]} (namespace-name-map target)] ..)."
   [namespace-name]
   (let [[namespace name] (str/split namespace-name #"/" 2)]
     {:namespace namespace :name name}))
+
+(defn split-namespace-name
+  "Deprecated alias of namespace-name-map: returns the map
+   {:namespace .. :name ..}, never a pair, so destructure it by key."
+  {:deprecated "2026.11 - use namespace-name-map"}
+  [namespace-name]
+  (namespace-name-map namespace-name))
 
 
 (defn taint->str

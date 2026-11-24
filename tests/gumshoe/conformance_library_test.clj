@@ -143,3 +143,36 @@
 
 (deftest roots-a-casebook-does-not-have-hold-no-files
   (is (= [] (conformance/clj-files ["does-not-exist"]))))
+
+(def ^:private pair-book
+  (str header
+       "(ns casebook.moodle.pair\n"
+       "  \"Destructures namespace-name-map as a pair inside an effect.\"\n"
+       "  (:require [gumshoe.kubectl :as kubectl]\n"
+       "            [gumshoe.mutation :as mutation]))\n\n"
+       "(mutation/book\n"
+       " {:description \"Pair\"\n"
+       "  :select {:mode :namespaced}\n"
+       "  :effect (fn [{:keys [target]}]\n"
+       "            (let [[ns name] (kubectl/split-namespace-name target)]\n"
+       "              [ns name]))})\n"))
+
+(def ^:private pair-library
+  (str header
+       "(ns casebook.targets\n"
+       "  \"Destructures namespace-name-map as a pair in a for :let, and by key.\"\n"
+       "  (:require [gumshoe.kubectl :as kubectl]))\n\n"
+       "(defn names [targets]\n"
+       "  (for [t targets :let [[_ n] (kubectl/namespace-name-map t)]] n))\n\n"
+       "(defn namespaces [targets]\n"
+       "  (for [t targets :let [{:keys [namespace]} (kubectl/namespace-name-map t)]] namespace))\n"))
+
+(deftest a-vector-binding-of-namespace-name-map-is-named
+  (let [root (casebook! {"runbooks/moodle/pair.clj" pair-book
+                         "libraries/casebook/targets.clj" pair-library})]
+    (try
+      (let [findings (conformance/findings-in (roots root))]
+        (is (= {"pair.clj" [:destructuring] "targets.clj" [:destructuring]} (by-file findings)))
+        (is (some #(str/includes? (:message %) "binds kubectl/split-namespace-name to the vector [ns name]") findings))
+        (is (some #(str/includes? (:message %) "{:namespace .. :name ..}") findings)))
+      (finally (fs/delete-tree root)))))

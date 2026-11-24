@@ -46,7 +46,7 @@
                                            (:namespace opts) (:service opts))]
     (if (nil? target)
       (do (stdout/error "no Thanos Query service selected - check --selector") false)
-      (let [{:keys [namespace name]} (kubectl/split-namespace-name target)
+      (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
             remote-port (kubectl/service-port-or-first (kubectl/find-item services target) (:port-name opts))
             local-port (:port opts)]
         (kubectl/with-port-forward {:context context

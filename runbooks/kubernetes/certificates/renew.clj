@@ -18,7 +18,7 @@
   [context selected]
   (apply effect/plan
          (for [certificate selected
-               :let [{:keys [namespace name]} (kubectl/split-namespace-name certificate)]]
+               :let [{:keys [namespace name]} (kubectl/namespace-name-map certificate)]]
            (effect/cmd "cmctl" "renew" name
                        (str "--context=" context)
                        (str "--namespace=" namespace)))))
@@ -26,7 +26,7 @@
 (defn ready-checks
   [context selected]
   (for [certificate selected
-        :let [{:keys [namespace name]} (kubectl/split-namespace-name certificate)]]
+        :let [{:keys [namespace name]} (kubectl/namespace-name-map certificate)]]
     {:description (format "certificate %s is Ready" certificate)
      :timeout 180 :interval 10
      :check (fn []

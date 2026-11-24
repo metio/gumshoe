@@ -30,7 +30,7 @@
         target (interact/choose-namespaced "Pod" pods (:namespace opts) (:pod opts))]
     (if (nil? target)
       (do (stdout/error "no etcd pod selected") false)
-      (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+      (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
         (stdout/print-section-marker)
         (etcd/etcdctl! context namespace name "endpoint" "health" "--write-out=table")))))
 

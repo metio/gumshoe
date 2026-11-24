@@ -20,7 +20,7 @@
   [context selected]
   (apply effect/plan
          (for [order selected
-               :let [{:keys [namespace name]} (kubectl/split-namespace-name order)]]
+               :let [{:keys [namespace name]} (kubectl/namespace-name-map order)]]
            (effect/kubectl context (str "--namespace=" namespace) "delete" order-type name))))
 
 (defn cleared-checks
@@ -28,7 +28,7 @@
    the invalid order being cleared - gone, or replaced by a non-invalid one."
   [context selected]
   (for [order selected
-        :let [{:keys [namespace name]} (kubectl/split-namespace-name order)]]
+        :let [{:keys [namespace name]} (kubectl/namespace-name-map order)]]
     {:description (format "invalid order %s is cleared" order)
      :timeout 60 :interval 5
      :check (fn []

@@ -50,7 +50,7 @@
       (do (stdout/error "no Database selected") false)
 
       :else
-      (let [{:keys [namespace name]} (kubectl/split-namespace-name target)
+      (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
             connection (postgres/database-connection context namespace name)]
         (if-not (postgres/connection-complete? connection)
           (do (stdout/error (format "could not resolve the credentials of %s" target)) false)

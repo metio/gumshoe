@@ -85,7 +85,7 @@
                                            (:namespace opts) (:name opts))]
     (if (nil? target)
       (do (stdout/error "no HelmRelease selected") false)
-      (let [{:keys [namespace name]} (kubectl/split-namespace-name target)
+      (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
             release (kubectl/get-namespaced-resource context namespace helmrelease-type name)
             ;; targetNamespace renames the release and moves its objects,
             ;; while Helm's records stay in the storage namespace

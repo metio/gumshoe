@@ -52,7 +52,7 @@
                                            (:namespace opts) (:cluster opts))]
     (if (nil? chosen)
       (do (stdout/error "no cluster selected") false)
-      (let [{:keys [namespace]} (kubectl/split-namespace-name chosen)
+      (let [{:keys [namespace]} (kubectl/namespace-name-map chosen)
             primary (-> (kubectl/find-item clusters chosen) :status :currentPrimary)
             window (:window opts)]
         (if (nil? primary)

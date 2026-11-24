@@ -73,7 +73,7 @@
         target (interact/choose-namespaced "StatefulSet" candidates (:namespace opts) (:statefulset opts))]
     (if (nil? target)
       (do (stdout/error "no StatefulSet selected") false)
-      (let [{:keys [namespace name]} (kubectl/split-namespace-name target)
+      (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
             statefulset (kubectl/get-namespaced-resource context namespace "statefulsets" name)
             templates (mapv #(-> % :metadata :name) (-> statefulset :spec :volumeClaimTemplates))
             template (interact/choose-one "Template" templates (:template opts))]

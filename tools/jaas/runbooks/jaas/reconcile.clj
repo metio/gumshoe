@@ -47,12 +47,12 @@
   :confirm {:action "request a JsonnetSnippet re-evaluation"}
   :announce (fn [{:keys [target]}] (format "Reconcile JsonnetSnippet %s" target))
   :effect (fn [{:keys [context target token]}]
-            (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               (effect/plan
                (effect/kubectl context (str "--namespace=" namespace)
                                "annotate" jaas/jsonnetsnippet-type name
                                (str reconcile-annotation "=" token)
                                "--overwrite"))))
   :verify (fn [{:keys [context target token]}]
-            (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               [(handled-check context namespace name target token)]))})

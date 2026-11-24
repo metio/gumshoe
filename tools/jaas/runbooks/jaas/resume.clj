@@ -39,11 +39,11 @@
   :confirm {:action "resume a JsonnetSnippet"}
   :announce (fn [{:keys [target]}] (format "Resume JsonnetSnippet %s" target))
   :effect (fn [{:keys [context target]}]
-            (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               (effect/plan
                (effect/kubectl context (str "--namespace=" namespace)
                                "patch" jaas/jsonnetsnippet-type name
                                "--type=merge" "--patch" "{\"spec\":{\"suspend\":false}}"))))
   :verify (fn [{:keys [context target]}]
-            (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               [(resumed-check context namespace name target)]))})

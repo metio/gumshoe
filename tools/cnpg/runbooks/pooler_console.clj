@@ -57,7 +57,7 @@
                                            (:namespace opts) (:pooler opts))]
     (if (nil? chosen)
       (do (stdout/error "no pooler selected") false)
-      (let [{:keys [namespace name]} (kubectl/split-namespace-name chosen)
+      (let [{:keys [namespace name]} (kubectl/namespace-name-map chosen)
             pooler (kubectl/find-item poolers chosen)
             pod (pod-of context namespace name)]
         (if (nil? pod)

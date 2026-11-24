@@ -10,7 +10,7 @@
 
 (defn- fetch
   [context target]
-  (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+  (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
     (kubectl/get-namespaced-resource context namespace "cronjobs" name)))
 
 (defn- candidates
@@ -34,14 +34,14 @@
   :derive (fn [{:keys [context target]}] {:cronjob (fetch context target)})
   :items (fn [{:keys [cronjob target]}]
            (if cronjob (workloads/suspend-items cronjob false) [(str "resume " target)]))
-  :pin (fn [{:keys [target]}] (assoc (kubectl/split-namespace-name target) :type "cronjobs"))
+  :pin (fn [{:keys [target]}] (assoc (kubectl/namespace-name-map target) :type "cronjobs"))
   :precondition (fn [{:keys [context target]}]
                   (let [why (workloads/suspend-refusal (fetch context target) false)]
                     (when why (println (str "refusing: " why)))
                     (nil? why)))
   :announce (fn [{:keys [target]}] (format "Resume CronJob %s" target))
   :effect (fn [{:keys [context target]}]
-            (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               (effect/plan (apply effect/kubectl context (workloads/suspend-args namespace name false)))))
   :verify (fn [{:keys [context target]}]
             [{:description (format "CronJob %s is resumed" target)
