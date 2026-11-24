@@ -4,7 +4,9 @@
 (ns gumshoe.helm-rollback-test
   (:require [clojure.test :refer [deftest is testing]]
             [gumshoe.helm-rollback :as rollback]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.select :as select]
+            [gumshoe.shell :as shell]))
 
 (defn- rev [version status & {:keys [release namespace] :or {release "shop" namespace "web"}}]
   {:namespace namespace :release release :status status :version version})
@@ -66,3 +68,17 @@
   (let [listing (kubectl/parse-helm-listing "web\tshop\tdeployed\t2\t\t1763553600\t2026-11-19T12:00:00Z\nweb\tshop\tsuperseded\t1\t1763553600\t1763550000\t2026-11-19T11:00:00Z\n")]
     (is (= ["web/shop"] (rollback/picks listing)))
     (is (= 1 (:version (rollback/rollback-target (rollback/history listing pick) nil))))))
+
+(deftest an-unanswered-release-listing-is-not-an-empty-one
+  (let [throttled (fn [& _] {:exit 1 :out "" :err "Error from server (TooManyRequests): the server has received too many requests"})
+        candidates (fn [context] (rollback/picks (kubectl/helm-releases context)))]
+    (with-redefs [shell/execute throttled]
+      (testing "a plain read still returns nil"
+        (is (nil? (kubectl/helm-releases "ctx"))))
+      (testing "the candidate listing reports the read instead of finding no release"
+        (let [{:keys [unread candidates]} (select/resolve-target {:mode :one :label "Release" :candidates candidates} {} "ctx")]
+          (is (nil? candidates))
+          (is (re-find #"TooManyRequests" (str unread))))))
+    (testing "a listing that answered with nothing is still empty under strict reads"
+      (with-redefs [shell/execute (fn [& _] {:exit 0 :out "" :err ""})]
+        (is (= [] (binding [kubectl/*strict-reads* true] (kubectl/helm-releases "ctx"))))))))
