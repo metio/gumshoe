@@ -13,7 +13,6 @@
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.loki :as loki]
-            [gumshoe.runbook :as runbook]
             [gumshoe.stdout :as stdout]))
 
 (def options
@@ -55,38 +54,39 @@
        (filter #(= "distributor" (get-in % [:metadata :labels (keyword "app.kubernetes.io/component")])))
        first))
 
-(defn- investigate
-  [opts _ctx]
-  (detective/when-to-run! "Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings.")
+(defn- with-distributor
+  "Resolves the Loki namespace and runs the collection with it as :namespace,
+   over a port-forward to the distributor when there is one, whose base URL
+   it hands on as :ring-url. The ring check is a bonus over the component
+   health: a missing distributor is already reported as a component, so it is
+   never a reason to fail the run on its own."
+  [opts run]
   (let [context (kubectl/current-context)
         selector (:selector opts)
         namespace (resolve-namespace context opts selector)]
     (if (str/blank? (str namespace))
       (do (stdout/error "no Loki namespace - set [:loki :namespace] in env.edn, pass --namespace, or check --selector")
           false)
-      (let [workload-evidence (loki/collect-workloads! {:context context :namespace namespace :selector selector})
-            report (fn [ring-evidence]
-                     (detective/report-and-offer!
-                      context
-                      loki-detectives/detectives
-                      (detective/run-detectives loki-detectives/detectives
-                                                (merge workload-evidence ring-evidence))
-                      (:output opts "text")))]
-        ;; the ring check is a bonus over the component health above: only when a
-        ;; distributor is there to forward to, and never a reason to fail the run
-        ;; on its own - a missing distributor is already reported as a component.
+      (let [opts (assoc opts :namespace namespace)]
         (if-let [service (distributor-service context namespace selector)]
           (kubectl/with-port-forward {:context context
                                       :namespace namespace
                                       :service (kubectl/name-of service)
                                       :local-port (:port opts)
                                       :remote-port (kubectl/service-port-or-first service (:port-name opts))}
-            (fn [] (report (loki/collect-rings! (str "http://localhost:" (:port opts))))))
-          (report {}))))))
+            (fn [] (run (assoc opts :ring-url (str "http://localhost:" (:port opts))))))
+          (run opts))))))
 
-(runbook/execute!
+(defn- collect
+  [{:keys [namespace selector ring-url]}]
+  (merge (loki/collect-workloads! {:context (kubectl/current-context) :namespace namespace :selector selector})
+         (when ring-url (loki/collect-rings! ring-url))))
+
+(detective/book
  {:description "Investigates a microservice-mode Loki: component discovery, health, and hash rings"
   :options options
   :prerequisites prerequisites
-  :announce? false
-  :action investigate})
+  :detectives loki-detectives/detectives
+  :when-to-run "Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings."
+  :around with-distributor
+  :collect collect})

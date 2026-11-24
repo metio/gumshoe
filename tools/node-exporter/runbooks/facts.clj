@@ -12,7 +12,6 @@
             [gumshoe.hosts :as hosts]
             [gumshoe.inputs :as inputs]
             [gumshoe.promql :as promql]
-            [gumshoe.runbook :as runbook]
             [gumshoe.stdout :as stdout]))
 
 (def options
@@ -45,9 +44,9 @@
 
 (def prerequisites {})
 
-(defn- facts
-  [{:keys [url flavor tenant host-label selector job declared output] :as opts} _ctx]
-  (detective/when-to-run! "Reach for this to count and size hosts from their metrics, or to find hosts that are declared but not scraped, and scraped but not declared.")
+(defn- collect
+  "Every host's facts, shown as a table in a text run."
+  [{:keys [url flavor tenant host-label selector job declared output] :as opts}]
   (when-not url
     (throw (ex-info "no query URL - pass --url or set :prometheus :url in env.edn" {})))
   (when (and declared (not (fs/exists? declared)))
@@ -60,8 +59,7 @@
                           "source" url
                           "hosts" rows
                           "failed" (hosts/failures answers)}
-                   declared (assoc "declared" (hosts/declared-hosts (slurp declared))))
-        checked (detective/mark-unread host-detectives/detectives evidence)]
+                   declared (assoc "declared" (hosts/declared-hosts (slurp declared))))]
     (when (= "text" (or output "text"))
       (stdout/print-section (format "🖥️  Hosts (%d)" (count rows)))
       (stdout/print-table [["HOST" :host] ["CORES" :cores]
@@ -69,12 +67,13 @@
                            ["KERNEL" :kernel] ["OS" #(str/trim (str (:os %) " " (:os-version %)))]
                            ["UP" #(case (:up %) true "yes" false "no" "?")]]
                           rows))
-    (detective/report! checked (detective/run-detectives checked evidence) (or output "text")
-                       {:source url :hosts rows})))
+    evidence))
 
-(runbook/execute!
+(detective/book
  {:description "Reads host facts from node_exporter through PromQL and compares them with declared hosts"
   :options options
   :prerequisites prerequisites
-  :announce? false
-  :action facts})
+  :detectives host-detectives/detectives
+  :when-to-run "Reach for this to count and size hosts from their metrics, or to find hosts that are declared but not scraped, and scraped but not declared."
+  :collect collect
+  :extra (fn [evidence] {:source (get evidence "source") :hosts (get evidence "hosts")})})

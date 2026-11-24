@@ -129,7 +129,7 @@
   "The plural.group types some registered detective reads already, so the
    generic condition fallback leaves them to it."
   []
-  (into #{} (filter #(re-find #"\." %)) (mapcat :requires (all))))
+  (into #{} (filter #(and (string? %) (re-find #"\." %))) (mapcat :requires (all))))
 
 ;; The covered types are computed when a scan collects, so a tool package a
 ;; casebook registers keeps its own types.

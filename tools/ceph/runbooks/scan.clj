@@ -7,7 +7,6 @@
   (:require [gumshoe.ceph :as ceph]
             [gumshoe.detective :as detective]
             [gumshoe.detectives.ceph :as ceph-detectives]
-            [gumshoe.runbook :as runbook]
             [gumshoe.ssh :as ssh]
             [gumshoe.stdout :as stdout]))
 
@@ -17,22 +16,18 @@
 (def prerequisites
   {:installed-tools ["ssh"]})
 
-(defn- investigate
-  [opts _ctx]
-  (detective/when-to-run! "Reach for this when storage is slow or degraded - the ceph cluster's own health, its OSDs, and placement-group state, straight from a mgr host.")
+(defn- collect
+  "The ceph evidence from the mgr host, or nil when it can not be reached."
+  [opts]
   (let [connection (ceph/connection opts)]
     (stdout/print-section "🔌 Connection")
-    (if-not (ssh/check-connection? connection)
-      false
-      (detective/report!
-       ceph-detectives/detectives
-       (detective/run-detectives ceph-detectives/detectives
-                                 (ceph/collect-evidence! connection))
-       (:output opts "text")))))
+    (when (ssh/check-connection? connection)
+      (ceph/collect-evidence! connection))))
 
-(runbook/execute!
+(detective/book
  {:description "Investigates a cephadm-managed ceph cluster over SSH"
   :options options
   :prerequisites prerequisites
-  :announce? false
-  :action investigate})
+  :detectives ceph-detectives/detectives
+  :when-to-run "Reach for this when storage is slow or degraded - the ceph cluster's own health, its OSDs, and placement-group state, straight from a mgr host."
+  :collect collect})

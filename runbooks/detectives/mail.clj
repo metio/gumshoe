@@ -9,8 +9,7 @@
             [gumshoe.detective :as detective]
             [gumshoe.detectives.mail :as mail-detectives]
             [gumshoe.inputs :as inputs]
-            [gumshoe.mail :as mail]
-            [gumshoe.runbook :as runbook]))
+            [gumshoe.mail :as mail]))
 
 (def options
   (merge {:domain {:desc "The mail domain (used for MX, SPF, DMARC, DKIM lookups)"
@@ -35,18 +34,10 @@
   {:installed-tools ["dig" "openssl"]
    :can-ping-using-ipv4 [:host]})
 
-(runbook/execute!
+(detective/book
  {:description "Investigates mail infrastructure: deliverability records and live SMTP/POP3/IMAP services"
   :options options
   :prerequisites prerequisites
-  :announce? false
-  :action (fn [opts _ctx]
-            (detective/when-to-run! "Reach for this when mail is bouncing or landing in spam - deliverability records (SPF/DKIM/DMARC/reverse DNS) and the live SMTP/POP3/IMAP services.")
-            (detective/report!
-             mail-detectives/detectives
-             (detective/run-detectives mail-detectives/detectives
-                                       (mail/collect-evidence! {:domain (:domain opts)
-                                                                :host (:host opts)
-                                                                :server (:server opts)
-                                                                :dkim-selectors (:dkim-selectors opts)}))
-             (:output opts "text")))})
+  :detectives mail-detectives/detectives
+  :when-to-run "Reach for this when mail is bouncing or landing in spam - deliverability records (SPF/DKIM/DMARC/reverse DNS) and the live SMTP/POP3/IMAP services."
+  :collect (fn [opts] (mail/collect-evidence! (select-keys opts [:domain :host :server :dkim-selectors])))})

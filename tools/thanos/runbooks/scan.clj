@@ -8,7 +8,6 @@
             [gumshoe.detectives.thanos :as thanos-detectives]
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.runbook :as runbook]
             [gumshoe.stdout :as stdout]
             [gumshoe.thanos :as thanos]))
 
@@ -37,9 +36,10 @@
    :cluster-capabilities []
    :kubectl-can-get ["services"]})
 
-(defn- investigate
-  [opts _ctx]
-  (detective/when-to-run! "Reach for this when long-range queries or recording rules misbehave - Thanos query readiness, its store endpoints, and rule health.")
+(defn- with-query
+  "Selects the Thanos Query service and runs the collection over a
+   port-forward to it, handing it the forwarded base URL as :query-url."
+  [opts run]
   (let [context (kubectl/current-context)
         services (kubectl/get-selected context "services" (:selector opts))
         target (interact/choose-namespaced "Thanos Query" (kubectl/namespaces-names services)
@@ -54,16 +54,13 @@
                                     :service name
                                     :local-port local-port
                                     :remote-port remote-port}
-          (fn []
-            (detective/report!
-             thanos-detectives/detectives
-             (detective/run-detectives thanos-detectives/detectives
-                                       (thanos/collect-evidence! (str "http://localhost:" local-port)))
-             (:output opts "text"))))))))
+          (fn [] (run (assoc opts :query-url (str "http://localhost:" local-port)))))))))
 
-(runbook/execute!
+(detective/book
  {:description "Investigates Thanos Query over a port-forward: readiness, stores, rules"
   :options options
   :prerequisites prerequisites
-  :announce? false
-  :action investigate})
+  :detectives thanos-detectives/detectives
+  :when-to-run "Reach for this when long-range queries or recording rules misbehave - Thanos query readiness, its store endpoints, and rule health."
+  :around with-query
+  :collect (fn [opts] (thanos/collect-evidence! (:query-url opts)))})

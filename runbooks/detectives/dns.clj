@@ -8,8 +8,7 @@
             [gumshoe.detective :as detective]
             [gumshoe.detectives.dns :as dns-detectives]
             [gumshoe.dns :as dns]
-            [gumshoe.inputs :as inputs]
-            [gumshoe.runbook :as runbook]))
+            [gumshoe.inputs :as inputs]))
 
 (def options
   (merge {:zone {:desc "The zone to investigate"
@@ -30,17 +29,10 @@
   {:installed-tools ["dig"]
    :can-ping-using-ipv4 [:server]})
 
-(runbook/execute!
+(detective/book
  {:description "Investigates the DNS setup: transports, nameservers, replication, answer consistency"
   :options options
   :prerequisites prerequisites
-  :announce? false
-  :action (fn [opts _ctx]
-            (detective/when-to-run! "Reach for this when names aren't resolving, mail is bouncing, or right after a nameserver change - transports, nameserver redundancy, SOA replication, and answer consistency across servers.")
-            (detective/report!
-             dns-detectives/detectives
-             (detective/run-detectives dns-detectives/detectives
-                                       (dns/collect-evidence! {:server (:server opts)
-                                                               :zone (:zone opts)
-                                                               :probes (:probes opts)}))
-             (:output opts "text")))})
+  :detectives dns-detectives/detectives
+  :when-to-run "Reach for this when names aren't resolving, mail is bouncing, or right after a nameserver change - transports, nameserver redundancy, SOA replication, and answer consistency across servers."
+  :collect (fn [opts] (dns/collect-evidence! (select-keys opts [:server :zone :probes])))})

@@ -417,29 +417,80 @@
           (doseq [label chosen
                   :let [subject (get by-label label)]
                   :when subject]
-            (investigation/investigate! context subject)))))))
+            (investigation/investigate! (force context) subject)))))))
 
 (defn report-and-offer!
   "Reports findings and, on a real terminal in text mode, offers to drill into
    them. The one call a detective runbook makes after gathering evidence, so
    every scan - the generic kubectl ones and the custom flows alike - ends with
-   the same drill-down. Returns true when nothing critical was found."
-  [context detectives findings output]
-  (let [healthy (report! detectives findings output)]
-    (when (= "text" output)
-      (offer-drill-down! context findings))
-    healthy))
+   the same drill-down. Returns true when nothing critical was found.
+
+   context may be a delay, forced only when the operator drills into a
+   finding, so a scan that never touched a cluster does not read the
+   kubeconfig. `extra` is handed to report!."
+  ([context detectives findings output]
+   (report-and-offer! context detectives findings output nil))
+  ([context detectives findings output extra]
+   (let [healthy (report! detectives findings output extra)]
+     (when (= "text" output)
+       (offer-drill-down! context findings))
+     healthy)))
+
+(defn scan!
+  "Collects evidence, marks the detectives that read nothing, runs them,
+   reports and offers the drill-down. The one flow every detective book runs,
+   whatever its evidence comes from.
+
+   :collect  (fn [opts]) -> the evidence map, or nil when it can not collect;
+             it prints why, and the scan fails without reporting
+   :around   (fn [opts run]) optional; wraps the collection, for a
+             port-forward or a connection check, and calls (run opts) with the
+             opts :collect receives - or returns false without calling it
+   :extra    (fn [evidence]) optional; a map the machine-readable report
+             carries beside the findings, such as the rows collected
+   :context  the kube context drill-down investigates in, or a delay of it
+
+   The parsed opts reach every detective as the \"options\" evidence. Returns
+   true when something was checked and nothing critical was found."
+  [{:keys [collect around extra context]} detectives opts]
+  (let [around (or around (fn [opts run] (run opts)))]
+    (around opts
+            (fn [collect-opts]
+              (if-let [evidence (collect collect-opts)]
+                (let [evidence (assoc evidence "options" (dissoc opts :output))
+                      checked (mark-unread detectives evidence)
+                      findings (run-detectives checked evidence)
+                      output (:output opts "text")]
+                  (if extra
+                    (report-and-offer! context checked findings output (extra evidence))
+                    (report-and-offer! context checked findings output)))
+                false)))))
 
 (defn investigate!
-  "Collects evidence, runs the detectives, reports, and - on a real terminal -
-   offers to drill straight into a finding. Returns true when nothing critical
-   was found."
+  "Collects evidence from the cluster, runs the detectives, reports, and - on a
+   real terminal - offers to drill straight into a finding. Returns true when
+   nothing critical was found."
   ([context detectives]
    (investigate! context detectives {}))
   ([context detectives opts]
-   (let [evidence (assoc (collect-evidence! context detectives) "options" (dissoc opts :output))
-         detectives (mark-unread detectives evidence)]
-     (report-and-offer! context detectives (run-detectives detectives evidence) (:output opts "text")))))
+   (scan! {:collect (fn [_] (collect-evidence! context detectives)) :context context}
+          detectives opts)))
+
+(defn check-step
+  "A playbook :check step that reads the evidence its detectives need from the
+   cluster and reports what they found. It stops the playbook when something
+   critical was found or nothing was checked, unless :blocking? is false, so
+   an advisory check before the confirmation only informs.
+
+   Spec: {:title \"...\" :prerequisites {..} :detectives [..] :blocking? true}"
+  [{:keys [title prerequisites detectives blocking?] :or {blocking? true}}]
+  {:title title
+   :prerequisites prerequisites
+   :check (fn [{:keys [context]}]
+            (let [evidence (collect-evidence! context detectives)
+                  checked (mark-unread detectives evidence)
+                  healthy (report! checked (run-detectives checked evidence) "text")]
+              (or (not blocking?) healthy)))})
 
 (defn no-detectives-message
   "Why a book found nothing to run. A scan with no detectives examines no
@@ -455,15 +506,23 @@
     "this book lists no detectives, so the scan checked nothing"))
 
 (defn book
-  "Builds a read-only detective runbook that investigates a fixed set of
-   detectives over the current cluster. The whole book is this one call: the
+  "Builds a read-only detective runbook. The whole book is this one call: the
    --output flag, the read-only harness wiring, and the investigate flow are
    all provided.
 
    Spec: {:description \"...\" :prerequisites {..}
           :detectives <vector> | :scope <keyword>   ; a fixed set, or a registry
           :options {..}                             ; babashka.cli spec (optional)
-          :when-to-run \"one-line orientation shown before the run\" (optional)}
+          :when-to-run \"one-line orientation shown before the run\" (optional)
+          :collect (fn [opts]) -> evidence | nil    ; optional, see scan!
+          :around (fn [opts run])                   ; optional, see scan!
+          :extra (fn [evidence]) -> map}            ; optional, see scan!
+
+   Without :collect the evidence is read from the current cluster, one read per
+   resource type the detectives require. With :collect the book gathers it
+   from anywhere - DNS, SSH, an HTTP API, a port-forward - and still marks the
+   checks that read nothing, so a collection that came back empty fails with
+   \"nothing was checked\" rather than passing.
 
    The parsed :options reach every detective as the \"options\" evidence, so
    a threshold a check reads is set on the command line while :detect stays
@@ -473,7 +532,7 @@
    so a plugin that registered detectives into that scope joins this scan. A
    scope that resolves to nothing fails rather than reporting a clean cluster;
    see no-detectives-message."
-  [{:keys [description detectives scope prerequisites when-to-run options]}]
+  [{:keys [description detectives scope prerequisites when-to-run options collect around extra]}]
   (runbook/execute!
    {:description description
     :options (merge options output-option)
@@ -484,4 +543,8 @@
                 (if (empty? resolved)
                   (do (stdout/error (no-detectives-message scope)) false)
                   (do (when-to-run! when-to-run)
-                      (investigate! (kubectl/current-context) resolved opts)))))}))
+                      (if collect
+                        (scan! {:collect collect :around around :extra extra
+                                :context (delay (kubectl/current-context))}
+                               resolved opts)
+                        (investigate! (kubectl/current-context) resolved opts))))))}))

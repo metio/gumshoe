@@ -8,7 +8,6 @@
   (:require [gumshoe.detective :as detective]
             [gumshoe.detectives.matrix :as matrix-detectives]
             [gumshoe.inputs :as inputs]
-            [gumshoe.runbook :as runbook]
             [gumshoe.secrets :as secrets]
             [gumshoe.synapse :as synapse]))
 
@@ -31,22 +30,16 @@
 (def prerequisites
   {:can-ping-using-ipv4 [:host]})
 
-(defn- investigate
-  [opts _ctx]
-  (detective/when-to-run! "Reach for this when federation or logins break - the client and federation APIs, signing-key expiry, and .well-known delegation.")
-  (let [admin-token (when-let [secret (:admin-secret opts)]
-                      (secrets/password secret))]
-    (detective/report!
-     matrix-detectives/detectives
-     (detective/run-detectives matrix-detectives/detectives
-                               (synapse/collect-evidence! {:domain (inputs/value :matrix-domain opts)
-                                                           :host (inputs/value :matrix-host opts)
-                                                           :admin-token admin-token}))
-     (:output opts "text"))))
+(defn- collect
+  [opts]
+  (synapse/collect-evidence! {:domain (inputs/value :matrix-domain opts)
+                              :host (inputs/value :matrix-host opts)
+                              :admin-token (some-> (:admin-secret opts) secrets/password)}))
 
-(runbook/execute!
+(detective/book
  {:description "Investigates a Matrix homeserver: client/federation APIs, signing keys, delegation, destinations"
   :options options
   :prerequisites prerequisites
-  :announce? false
-  :action investigate})
+  :detectives matrix-detectives/detectives
+  :when-to-run "Reach for this when federation or logins break - the client and federation APIs, signing-key expiry, and .well-known delegation."
+  :collect collect})
