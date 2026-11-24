@@ -26,6 +26,7 @@
                    [gumshoe.conformance-test]
                    [gumshoe.conformance-library-test]
                    [gumshoe.detectives-test]
+                   [gumshoe.collect-books-test]
                    [gumshoe.helm-releases-test]
                    [gumshoe.helm-rollback-test]
                    [gumshoe.detective-capabilities-test]
@@ -179,6 +180,7 @@
                                                          'gumshoe.conformance-test
                                                          'gumshoe.conformance-library-test
                                                          'gumshoe.detectives-test
+                                                         'gumshoe.collect-books-test
                                                          'gumshoe.helm-releases-test
                                                          'gumshoe.helm-rollback-test
                                                          'gumshoe.detective-capabilities-test
