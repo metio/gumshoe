@@ -52,7 +52,8 @@
    generation alone, so a controller reporting progress does not trip it. An
    object without a generation is compared by resourceVersion. A change that
    rests on something outside the spec - an annotation, a status field - names
-   it with :facts (fn [object] -> value), which must be equal too."
+   it with :facts (fn [object] -> value), which must be equal too. An object
+   that cannot be read when the confirmation is shown is refused as well."
   (:require [gumshoe.flow :as flow]
             [gumshoe.prerequisites :as prerequisites]
             [gumshoe.select :as select]
@@ -99,13 +100,19 @@
 
 (defn pinned-precondition
   "The book's precondition followed by the drift check. fetch is
-   (fn [ref] -> object); before is the fingerprint taken at confirmation."
+   (fn [ref] -> object); before is the fingerprint taken at confirmation.
+   With a ref but no before, the object was not read when the change was
+   confirmed - a read that did not answer looks the same as a missing
+   object - so nothing ties what the effect would act on to what the
+   operator confirmed, and the change is refused."
   [precondition ref before fetch]
   (if-not ref
     precondition
     (fn []
       (and (if precondition (precondition) true)
-           (let [why (drift before (fingerprint (fetch ref) (:facts ref)))]
+           (let [why (if before
+                       (drift before (fingerprint (fetch ref) (:facts ref)))
+                       "it could not be read when the change was confirmed")]
              (when why (println (str "refusing: " why)))
              (nil? why))))))
 
