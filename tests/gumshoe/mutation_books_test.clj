@@ -11,6 +11,10 @@
    A scenario names the objects the cluster holds, the pick and flags, and
    what happens between the confirmation and the precondition: nothing, a
    spec change (the generation moves), or a kubectl that stops answering.
+   Each book also keeps its surface: the options, prerequisites, selection,
+   messages and --help text its spec declares, and the candidates its select
+   offers over the permitted and the refused cluster.
+
    Regenerate the file after an intended change with
    (gumshoe.mutation-books-test/write-golden!) and review its diff."
   (:require [cheshire.core :as json]
@@ -124,6 +128,24 @@
                                                         :holds (attempt check)}
                                                  abort (assoc :abort (attempt abort)))))))))))))
 
+(defn surface
+  "What the book declares outside a run: its flags, prerequisites, selection,
+   messages and --help text, and the candidates its select offers over each
+   of clusters, a map of a name to the objects that cluster holds."
+  [spec clusters]
+  (normalise
+   {:description (:description spec)
+    :options (:options spec)
+    :prerequisites (:prerequisites spec)
+    :select (dissoc (:select spec) :candidates)
+    :empty-message (:empty-message spec)
+    :confirm (:confirm spec)
+    :details (vec (mutation/details spec))
+    :candidates (into (sorted-map)
+                      (for [[k objects] clusters]
+                        [k (with-redefs [shell/execute (fn [& argv] (answer {:objects objects :answering? true} (vec argv)))]
+                             (attempt #(vec ((:candidates (:select spec)) "ctx"))))]))}))
+
 ;; --- the books and their scenarios ---------------------------------------------------
 
 (defn- cronjob [suspend] {:metadata (meta-of "batch" "nightly") :spec {:suspend suspend :schedule "0 3 * * *"}})
@@ -157,6 +179,15 @@
    :status (cond-> {:sync {:status "OutOfSync"} :health {:status "Healthy"}}
              operation (assoc :operationState {:phase "Running"}))
    :operation (when operation {:sync {}})})
+
+(def ^:private scheduled-backup-type "scheduledbackups.postgresql.cnpg.io")
+(def ^:private schedule-type "schedules.velero.io")
+
+(defn- scheduled-backup
+  [suspend]
+  {:metadata (meta-of "db" "nightly") :spec {:suspend suspend :schedule "0 0 3 * * *" :cluster {:name "pg"}}})
+
+(defn- schedule [paused] {:metadata (meta-of "velero" "daily") :spec {:paused paused :schedule "0 2 * * *"}})
 
 (defn- standard
   "The scenarios every book runs: permitted, refused, absent, a spec change and
@@ -218,6 +249,24 @@
    (standard {:target "Kustomization flux-system/apps" :invalid "Bucket flux-system/apps"
               :permitted [[flux-type (kustomization true)]] :refused [[flux-type (kustomization false)]]})
 
+   "tools/cnpg/runbooks/suspend_scheduled_backup.clj"
+   (standard {:target "db/nightly" :invalid "nightly"
+              :permitted [[scheduled-backup-type (scheduled-backup false)]]
+              :refused [[scheduled-backup-type (scheduled-backup true)]]})
+
+   "tools/cnpg/runbooks/resume_scheduled_backup.clj"
+   (standard {:target "db/nightly" :invalid "nightly"
+              :permitted [[scheduled-backup-type (scheduled-backup true)]]
+              :refused [[scheduled-backup-type (scheduled-backup false)]]})
+
+   "tools/velero/runbooks/pause_schedule.clj"
+   (standard {:target "velero/daily" :invalid "daily"
+              :permitted [[schedule-type (schedule false)]] :refused [[schedule-type (schedule true)]]})
+
+   "tools/velero/runbooks/resume_schedule.clj"
+   (standard {:target "velero/daily" :invalid "daily"
+              :permitted [[schedule-type (schedule true)]] :refused [[schedule-type (schedule false)]]})
+
    "tools/argocd/runbooks/refresh.clj"
    (standard {:target "argocd/shop" :invalid "shop" :opts {:hard true}
               :permitted [[application-type (application)]]
@@ -228,12 +277,38 @@
               :permitted [[application-type (application)]]
               :refused [[application-type (application :operation true)]]})})
 
+(defn- placed
+  "[type object] moved to namespace/name, uid and all."
+  [[type object] namespace name]
+  [type (update object :metadata merge {:namespace namespace :name name :uid (str "uid-" name)})])
+
+(defn- mixed
+  "A cluster holding the objects of a permitted and a refused cluster several
+   times over, under names out of order, so the candidates show their order
+   and their filter."
+  [permitted refused]
+  (vec (concat (map #(placed % "zeta" "b") permitted)
+               (map #(placed % "alpha" "c") refused)
+               (map #(placed % "alpha" "a") permitted)
+               (map #(placed % "beta" "d") refused))))
+
+(def ^:private mixed-books
+  #{"runbooks/kubernetes/cronjobs/suspend.clj" "runbooks/kubernetes/cronjobs/resume.clj"
+    "runbooks/kubernetes/workloads/pause.clj" "runbooks/kubernetes/workloads/resume.clj"
+    "tools/flux/runbooks/flux/suspend.clj" "tools/flux/runbooks/flux/resume.clj"
+    "tools/cnpg/runbooks/suspend_scheduled_backup.clj" "tools/cnpg/runbooks/resume_scheduled_backup.clj"
+    "tools/velero/runbooks/pause_schedule.clj" "tools/velero/runbooks/resume_schedule.clj"})
+
 (defn transcripts
   []
   (into (sorted-map)
         (for [[path scenarios] books]
           (let [spec (load-spec path)]
-            [path (into (sorted-map) (for [[k scenario] scenarios] [k (transcript spec scenario)]))]))))
+            [path (assoc (into (sorted-map) (for [[k scenario] scenarios] [k (transcript spec scenario)]))
+                         :surface (surface spec (let [permitted (get-in scenarios [:permitted :objects])
+                                                      refused (get-in scenarios [:refused :objects])]
+                                                  (cond-> {:permitted permitted :refused refused}
+                                                    (mixed-books path) (assoc :mixed (mixed permitted refused))))))]))))
 
 (defn write-golden!
   []

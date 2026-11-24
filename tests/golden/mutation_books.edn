@@ -96,6 +96,47 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
+  :surface
+  {:description "Resumes a suspended CronJob on its schedule",
+   :options
+   {:namespace
+    {:desc
+     "The namespace of the CronJob - interactive selection when omitted",
+     :alias :n,
+     :coerce :string},
+    :job
+    {:desc
+     "The name of the CronJob - interactive selection when omitted",
+     :alias :j,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["cronjobs"],
+    :kubectl-can-patch ["cronjobs"]},
+   :select
+   {:mode :namespaced,
+    :label "CronJob",
+    :namespace-flag :namespace,
+    :name-flag :job},
+   :empty-message "no CronJob is suspended",
+   :confirm {:action "resume a CronJob"},
+   :details
+   ["What it does:"
+    "  picks one CronJob by namespace and name (--namespace and --job, or interactively)"
+    "  asks to confirm: resume a CronJob"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: cronjobs"
+    "  kubectl patch: cronjobs"],
+   :candidates
+   {:mixed ["zeta/b" "alpha/a"],
+    :permitted ["batch/nightly"],
+    :refused []}},
   :unanswered
   {:action "resume a CronJob",
    :destructive? false,
@@ -215,6 +256,47 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
+  :surface
+  {:description "Suspends a CronJob so no new Job starts",
+   :options
+   {:namespace
+    {:desc
+     "The namespace of the CronJob - interactive selection when omitted",
+     :alias :n,
+     :coerce :string},
+    :job
+    {:desc
+     "The name of the CronJob - interactive selection when omitted",
+     :alias :j,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["cronjobs"],
+    :kubectl-can-patch ["cronjobs"]},
+   :select
+   {:mode :namespaced,
+    :label "CronJob",
+    :namespace-flag :namespace,
+    :name-flag :job},
+   :empty-message "every CronJob is suspended already",
+   :confirm {:action "suspend a CronJob"},
+   :details
+   ["What it does:"
+    "  picks one CronJob by namespace and name (--namespace and --job, or interactively)"
+    "  asks to confirm: suspend a CronJob"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: cronjobs"
+    "  kubectl patch: cronjobs"],
+   :candidates
+   {:mixed ["zeta/b" "alpha/a"],
+    :permitted ["batch/nightly"],
+    :refused []}},
   :unanswered
   {:action "suspend a CronJob",
    :destructive? false,
@@ -353,6 +435,58 @@
      :timeout 60,
      :interval 5,
      :holds false}]},
+  :surface
+  {:description
+   "Deletes one namespaced object after a server-side dry run accepted it",
+   :options
+   {:pick
+    {:desc
+     "\"<type> <namespace>/<name>\" - interactive selection when omitted",
+     :alias :p,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get
+    ["deployments"
+     "statefulsets"
+     "daemonsets"
+     "jobs"
+     "cronjobs"
+     "pods"
+     "services"
+     "ingresses"
+     "configmaps"
+     "persistentvolumeclaims"],
+    :kubectl-can-delete
+    ["deployments"
+     "statefulsets"
+     "daemonsets"
+     "jobs"
+     "cronjobs"
+     "pods"
+     "services"
+     "ingresses"
+     "configmaps"
+     "persistentvolumeclaims"]},
+   :select {:mode :one, :label "Object", :flag :pick},
+   :empty-message "nothing to delete",
+   :confirm {:action "delete an object", :destructive? true},
+   :details
+   ["What it does:"
+    "  picks one Object (--pick, or interactively)"
+    "  asks to confirm: delete an object (destructive - type yes)"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: deployments, statefulsets, daemonsets, jobs, cronjobs, pods, services, ingresses, configmaps, persistentvolumeclaims"
+    "  kubectl delete: deployments, statefulsets, daemonsets, jobs, cronjobs, pods, services, ingresses, configmaps, persistentvolumeclaims"],
+   :candidates
+   {:permitted ["deployments shop/web"],
+    :refused ["deployments shop/web"]}},
   :unanswered
   {:action "delete an object",
    :destructive? true,
@@ -485,6 +619,39 @@
      :timeout 60,
      :interval 5,
      :holds false}]},
+  :surface
+  {:description
+   "Pauses a Deployment's rollouts, so pod template changes wait until it is resumed",
+   :options
+   {:pick
+    {:desc
+     "\"Deployment <namespace>/<name>\" - interactive selection when omitted",
+     :alias :p,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["deployments" "horizontalpodautoscalers"],
+    :kubectl-can-patch ["deployments"]},
+   :select {:mode :one, :label "Deployment", :flag :pick},
+   :empty-message "every Deployment is paused already",
+   :confirm {:action "pause a Deployment's rollouts"},
+   :details
+   ["What it does:"
+    "  picks one Deployment (--pick, or interactively)"
+    "  asks to confirm: pause a Deployment's rollouts"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: deployments, horizontalpodautoscalers"
+    "  kubectl patch: deployments"],
+   :candidates
+   {:mixed ["Deployment alpha/a" "Deployment zeta/b"],
+    :permitted ["Deployment shop/web"],
+    :refused []}},
   :unanswered
   {:action "pause a Deployment's rollouts",
    :destructive? false,
@@ -603,6 +770,38 @@
      :timeout 600,
      :interval 10,
      :holds false}]},
+  :surface
+  {:description
+   "Restarts the pods of a Deployment, StatefulSet or DaemonSet through a rollout",
+   :options
+   {:pick
+    {:desc
+     "\"<Kind> <namespace>/<name>\" - interactive selection when omitted",
+     :alias :p,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["deployments" "statefulsets" "daemonsets"],
+    :kubectl-can-patch ["deployments" "statefulsets" "daemonsets"]},
+   :select {:mode :one, :label "Workload", :flag :pick},
+   :empty-message "no workload runs pods that a rollout could restart",
+   :confirm
+   {:action
+    "restart every pod of the workload, one batch at a time as its update strategy allows - a workload with a single replica is unavailable while its pod restarts"},
+   :details
+   ["What it does:"
+    "  picks one Workload (--pick, or interactively)"
+    "  asks to confirm: restart every pod of the workload, one batch at a time as its update strategy allows - a workload with a single replica is unavailable while its pod restarts"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: deployments, statefulsets, daemonsets"
+    "  kubectl patch: deployments, statefulsets, daemonsets"],
+   :candidates {:permitted ["Deployment shop/web"], :refused []}},
   :unanswered
   {:action
    "restart every pod of the workload, one batch at a time as its update strategy allows - a workload with a single replica is unavailable while its pod restarts",
@@ -738,6 +937,41 @@
      :timeout 600,
      :interval 5,
      :holds false}]},
+  :surface
+  {:description
+   "Resumes a paused Deployment and waits for the rollout it releases",
+   :options
+   {:pick
+    {:desc
+     "\"Deployment <namespace>/<name>\" - interactive selection when omitted",
+     :alias :p,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["deployments" "horizontalpodautoscalers"],
+    :kubectl-can-patch ["deployments"]},
+   :select {:mode :one, :label "Deployment", :flag :pick},
+   :empty-message "no Deployment is paused",
+   :confirm
+   {:action
+    "resume a Deployment and roll out the changes made while it was paused"},
+   :details
+   ["What it does:"
+    "  picks one Deployment (--pick, or interactively)"
+    "  asks to confirm: resume a Deployment and roll out the changes made while it was paused"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: deployments, horizontalpodautoscalers"
+    "  kubectl patch: deployments"],
+   :candidates
+   {:mixed ["Deployment alpha/a" "Deployment zeta/b"],
+    :permitted ["Deployment shop/web"],
+    :refused []}},
   :unanswered
   {:action
    "resume a Deployment and roll out the changes made while it was paused",
@@ -864,6 +1098,45 @@
      :timeout 600,
      :interval 10,
      :holds false}]},
+  :surface
+  {:description
+   "Rolls a Deployment, StatefulSet or DaemonSet back to its previous revision, or to a named one",
+   :options
+   {:pick
+    {:desc
+     "\"<Kind> <namespace>/<name>\" - interactive selection when omitted",
+     :alias :p,
+     :coerce :string},
+    :to-revision
+    {:desc
+     "The revision to go back to - the previous one when omitted",
+     :coerce :long}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get
+    ["deployments"
+     "statefulsets"
+     "daemonsets"
+     "replicasets"
+     "controllerrevisions"],
+    :kubectl-can-patch ["deployments" "statefulsets" "daemonsets"]},
+   :select {:mode :one, :label "Workload", :flag :pick},
+   :empty-message "no workload has an earlier revision to go back to",
+   :confirm {:action "roll a workload back", :destructive? true},
+   :details
+   ["What it does:"
+    "  picks one Workload (--pick, or interactively)"
+    "  asks to confirm: roll a workload back (destructive - type yes)"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: deployments, statefulsets, daemonsets, replicasets, controllerrevisions"
+    "  kubectl patch: deployments, statefulsets, daemonsets"],
+   :candidates {:permitted ["Deployment shop/web"], :refused []}},
   :unanswered
   {:action "roll a workload back",
    :destructive? true,
@@ -995,6 +1268,41 @@
      :timeout 600,
      :interval 10,
      :holds false}]},
+  :surface
+  {:description
+   "Scales a Deployment or StatefulSet to a replica count",
+   :options
+   {:pick
+    {:desc
+     "\"<Kind> <namespace>/<name>\" - interactive selection when omitted",
+     :alias :p,
+     :coerce :string},
+    :replicas
+    {:desc "The replica count to scale to", :alias :r, :coerce :long}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get
+    ["deployments" "statefulsets" "horizontalpodautoscalers"],
+    :kubectl-can-patch ["deployments" "statefulsets"]},
+   :select {:mode :one, :label "Workload", :flag :pick},
+   :empty-message "no Deployment or StatefulSet to scale",
+   :confirm {:action "scale a workload"},
+   :details
+   ["What it does:"
+    "  picks one Workload (--pick, or interactively)"
+    "  asks to confirm: scale a workload"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: deployments, statefulsets, horizontalpodautoscalers"
+    "  kubectl patch: deployments, statefulsets"],
+   :candidates
+   {:permitted ["Deployment shop/web"],
+    :refused ["Deployment shop/web"]}},
   :unanswered
   {:action "scale a workload",
    :destructive? false,
@@ -1138,6 +1446,40 @@
      :timeout 300,
      :interval 5,
      :holds true}]},
+  :surface
+  {:description
+   "Refreshes an Argo CD Application, comparing it with its source again",
+   :options
+   {:application
+    {:desc
+     "\"<namespace>/<name>\" - interactive selection when omitted",
+     :alias :a,
+     :coerce :string},
+    :hard
+    {:desc
+     "Regenerate the manifests instead of reading the manifest cache",
+     :coerce :boolean}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["applications.argoproj.io"],
+    :kubectl-can-patch ["applications.argoproj.io"]},
+   :select {:mode :one, :label "Application", :flag :application},
+   :empty-message "every Application has a refresh pending",
+   :confirm {:action "refresh an Application"},
+   :details
+   ["What it does:"
+    "  picks one Application (--application, or interactively)"
+    "  asks to confirm: refresh an Application"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: applications.argoproj.io"
+    "  kubectl patch: applications.argoproj.io"],
+   :candidates {:permitted ["argocd/shop"], :refused []}},
   :unanswered
   {:action "refresh an Application",
    :destructive? false,
@@ -1300,6 +1642,42 @@
      :interval 10,
      :holds false,
      :abort nil}]},
+  :surface
+  {:description
+   "Syncs an Argo CD Application to its source and waits for the operation",
+   :options
+   {:application
+    {:desc
+     "\"<namespace>/<name>\" - interactive selection when omitted",
+     :alias :a,
+     :coerce :string},
+    :prune
+    {:desc "Delete resources that were removed from Git",
+     :coerce :boolean}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["applications.argoproj.io"],
+    :kubectl-can-patch ["applications.argoproj.io"]},
+   :select {:mode :one, :label "Application", :flag :application},
+   :empty-message "every Application is running an operation already",
+   :confirm
+   {:action
+    "sync an Application - the cluster is changed to match its source",
+    :destructive? true},
+   :details
+   ["What it does:"
+    "  picks one Application (--application, or interactively)"
+    "  asks to confirm: sync an Application - the cluster is changed to match its source (destructive - type yes)"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: applications.argoproj.io"
+    "  kubectl patch: applications.argoproj.io"],
+   :candidates {:permitted ["argocd/shop"], :refused []}},
   :unanswered
   {:action
    "sync an Application - the cluster is changed to match its source",
@@ -1329,6 +1707,359 @@
      :interval 10,
      :holds false,
      :abort nil}]}},
+ "tools/cnpg/runbooks/resume_scheduled_backup.clj"
+ {:absent
+  {:action "resume scheduled backups",
+   :destructive? false,
+   :items ["resume db/nightly"],
+   :step "resume scheduled backups",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "patch"
+     "scheduledbackups.postgresql.cnpg.io"
+     "nightly"
+     "--type=merge"
+     "--patch={\"spec\":{\"suspend\":false}}"]],
+   :precondition
+   {:result false,
+    :out "refusing: the ScheduledBackup no longer exists"},
+   :announce "Resume ScheduledBackup db/nightly",
+   :checks
+   [{:description "ScheduledBackup db/nightly is resumed",
+     :timeout 30,
+     :interval 3,
+     :holds true}]},
+  :invalid
+  {:action "resume scheduled backups",
+   :destructive? false,
+   :items ["resume nightly"],
+   :step "resume scheduled backups",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace="
+     "patch"
+     "scheduledbackups.postgresql.cnpg.io"
+     nil
+     "--type=merge"
+     "--patch={\"spec\":{\"suspend\":false}}"]],
+   :precondition
+   {:result false,
+    :out "refusing: the pick is not \"<namespace>/<name>\""},
+   :announce "Resume ScheduledBackup nightly",
+   :checks
+   [{:description "ScheduledBackup nightly is resumed",
+     :timeout 30,
+     :interval 3,
+     :holds true}]},
+  :permitted
+  {:action "resume scheduled backups",
+   :destructive? false,
+   :items
+   ["resume ScheduledBackup db/nightly - backups of cluster pg start again on its schedule 0 0 3 * * *"],
+   :step "resume scheduled backups",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "patch"
+     "scheduledbackups.postgresql.cnpg.io"
+     "nightly"
+     "--type=merge"
+     "--patch={\"spec\":{\"suspend\":false}}"]],
+   :precondition {:result true, :out ""},
+   :announce "Resume ScheduledBackup db/nightly",
+   :checks
+   [{:description "ScheduledBackup db/nightly is resumed",
+     :timeout 30,
+     :interval 3,
+     :holds false}]},
+  :refused
+  {:action "resume scheduled backups",
+   :destructive? false,
+   :items
+   ["resume ScheduledBackup db/nightly - backups of cluster pg start again on its schedule 0 0 3 * * *"],
+   :step "resume scheduled backups",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "patch"
+     "scheduledbackups.postgresql.cnpg.io"
+     "nightly"
+     "--type=merge"
+     "--patch={\"spec\":{\"suspend\":false}}"]],
+   :precondition {:result false, :out "refusing: it is not suspended"},
+   :announce "Resume ScheduledBackup db/nightly",
+   :checks
+   [{:description "ScheduledBackup db/nightly is resumed",
+     :timeout 30,
+     :interval 3,
+     :holds true}]},
+  :spec-changed
+  {:action "resume scheduled backups",
+   :destructive? false,
+   :items
+   ["resume ScheduledBackup db/nightly - backups of cluster pg start again on its schedule 0 0 3 * * *"],
+   :step "resume scheduled backups",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "patch"
+     "scheduledbackups.postgresql.cnpg.io"
+     "nightly"
+     "--type=merge"
+     "--patch={\"spec\":{\"suspend\":false}}"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
+   :announce "Resume ScheduledBackup db/nightly",
+   :checks
+   [{:description "ScheduledBackup db/nightly is resumed",
+     :timeout 30,
+     :interval 3,
+     :holds false}]},
+  :surface
+  {:description "Resumes a suspended CloudNativePG ScheduledBackup",
+   :options
+   {:scheduled-backup
+    {:desc
+     "\"<namespace>/<name>\" - interactive selection when omitted",
+     :alias :s,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["scheduledbackups.postgresql.cnpg.io"],
+    :kubectl-can-patch ["scheduledbackups.postgresql.cnpg.io"]},
+   :select
+   {:mode :one, :label "ScheduledBackup", :flag :scheduled-backup},
+   :empty-message "no ScheduledBackup is suspended",
+   :confirm {:action "resume scheduled backups"},
+   :details
+   ["What it does:"
+    "  picks one ScheduledBackup (--scheduled-backup, or interactively)"
+    "  asks to confirm: resume scheduled backups"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: scheduledbackups.postgresql.cnpg.io"
+    "  kubectl patch: scheduledbackups.postgresql.cnpg.io"],
+   :candidates
+   {:mixed ["alpha/a" "zeta/b"],
+    :permitted ["db/nightly"],
+    :refused []}},
+  :unanswered
+  {:action "resume scheduled backups",
+   :destructive? false,
+   :items
+   ["resume ScheduledBackup db/nightly - backups of cluster pg start again on its schedule 0 0 3 * * *"],
+   :step "resume scheduled backups",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "patch"
+     "scheduledbackups.postgresql.cnpg.io"
+     "nightly"
+     "--type=merge"
+     "--patch={\"spec\":{\"suspend\":false}}"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+   :announce "Resume ScheduledBackup db/nightly",
+   :checks
+   [{:description "ScheduledBackup db/nightly is resumed",
+     :timeout 30,
+     :interval 3,
+     :holds true}]}},
+ "tools/cnpg/runbooks/suspend_scheduled_backup.clj"
+ {:absent
+  {:action "suspend scheduled backups",
+   :destructive? false,
+   :items ["suspend db/nightly"],
+   :step "suspend scheduled backups",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "patch"
+     "scheduledbackups.postgresql.cnpg.io"
+     "nightly"
+     "--type=merge"
+     "--patch={\"spec\":{\"suspend\":true}}"]],
+   :precondition
+   {:result false,
+    :out "refusing: the ScheduledBackup no longer exists"},
+   :announce "Suspend ScheduledBackup db/nightly",
+   :checks
+   [{:description "ScheduledBackup db/nightly is suspended",
+     :timeout 30,
+     :interval 3,
+     :holds false}]},
+  :invalid
+  {:action "suspend scheduled backups",
+   :destructive? false,
+   :items ["suspend nightly"],
+   :step "suspend scheduled backups",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace="
+     "patch"
+     "scheduledbackups.postgresql.cnpg.io"
+     nil
+     "--type=merge"
+     "--patch={\"spec\":{\"suspend\":true}}"]],
+   :precondition
+   {:result false,
+    :out "refusing: the pick is not \"<namespace>/<name>\""},
+   :announce "Suspend ScheduledBackup nightly",
+   :checks
+   [{:description "ScheduledBackup nightly is suspended",
+     :timeout 30,
+     :interval 3,
+     :holds false}]},
+  :permitted
+  {:action "suspend scheduled backups",
+   :destructive? false,
+   :items
+   ["suspend ScheduledBackup db/nightly - no backup of cluster pg starts on its schedule 0 0 3 * * * until it is resumed"
+    "the cluster's newest recovery point ages from now on; WAL archiving continues"],
+   :step "suspend scheduled backups",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "patch"
+     "scheduledbackups.postgresql.cnpg.io"
+     "nightly"
+     "--type=merge"
+     "--patch={\"spec\":{\"suspend\":true}}"]],
+   :precondition {:result true, :out ""},
+   :announce "Suspend ScheduledBackup db/nightly",
+   :checks
+   [{:description "ScheduledBackup db/nightly is suspended",
+     :timeout 30,
+     :interval 3,
+     :holds false}]},
+  :refused
+  {:action "suspend scheduled backups",
+   :destructive? false,
+   :items
+   ["suspend ScheduledBackup db/nightly - no backup of cluster pg starts on its schedule 0 0 3 * * * until it is resumed"
+    "the cluster's newest recovery point ages from now on; WAL archiving continues"],
+   :step "suspend scheduled backups",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "patch"
+     "scheduledbackups.postgresql.cnpg.io"
+     "nightly"
+     "--type=merge"
+     "--patch={\"spec\":{\"suspend\":true}}"]],
+   :precondition
+   {:result false, :out "refusing: it is suspended already"},
+   :announce "Suspend ScheduledBackup db/nightly",
+   :checks
+   [{:description "ScheduledBackup db/nightly is suspended",
+     :timeout 30,
+     :interval 3,
+     :holds true}]},
+  :spec-changed
+  {:action "suspend scheduled backups",
+   :destructive? false,
+   :items
+   ["suspend ScheduledBackup db/nightly - no backup of cluster pg starts on its schedule 0 0 3 * * * until it is resumed"
+    "the cluster's newest recovery point ages from now on; WAL archiving continues"],
+   :step "suspend scheduled backups",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "patch"
+     "scheduledbackups.postgresql.cnpg.io"
+     "nightly"
+     "--type=merge"
+     "--patch={\"spec\":{\"suspend\":true}}"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
+   :announce "Suspend ScheduledBackup db/nightly",
+   :checks
+   [{:description "ScheduledBackup db/nightly is suspended",
+     :timeout 30,
+     :interval 3,
+     :holds false}]},
+  :surface
+  {:description "Suspends a CloudNativePG ScheduledBackup",
+   :options
+   {:scheduled-backup
+    {:desc
+     "\"<namespace>/<name>\" - interactive selection when omitted",
+     :alias :s,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["scheduledbackups.postgresql.cnpg.io"],
+    :kubectl-can-patch ["scheduledbackups.postgresql.cnpg.io"]},
+   :select
+   {:mode :one, :label "ScheduledBackup", :flag :scheduled-backup},
+   :empty-message "every ScheduledBackup is suspended already",
+   :confirm {:action "suspend scheduled backups"},
+   :details
+   ["What it does:"
+    "  picks one ScheduledBackup (--scheduled-backup, or interactively)"
+    "  asks to confirm: suspend scheduled backups"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: scheduledbackups.postgresql.cnpg.io"
+    "  kubectl patch: scheduledbackups.postgresql.cnpg.io"],
+   :candidates
+   {:mixed ["alpha/a" "zeta/b"],
+    :permitted ["db/nightly"],
+    :refused []}},
+  :unanswered
+  {:action "suspend scheduled backups",
+   :destructive? false,
+   :items
+   ["suspend ScheduledBackup db/nightly - no backup of cluster pg starts on its schedule 0 0 3 * * * until it is resumed"
+    "the cluster's newest recovery point ages from now on; WAL archiving continues"],
+   :step "suspend scheduled backups",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "patch"
+     "scheduledbackups.postgresql.cnpg.io"
+     "nightly"
+     "--type=merge"
+     "--patch={\"spec\":{\"suspend\":true}}"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+   :announce "Suspend ScheduledBackup db/nightly",
+   :checks
+   [{:description "ScheduledBackup db/nightly is suspended",
+     :timeout 30,
+     :interval 3,
+     :holds false}]}},
  "tools/flux/runbooks/flux/resume.clj"
  {:absent
   {:action "resume a Flux object",
@@ -1499,6 +2230,47 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
+  :surface
+  {:description
+   "Resumes a suspended Flux HelmRelease, Kustomization, GitRepository or OCIRepository",
+   :options
+   {:pick
+    {:desc
+     "\"<Kind> <namespace>/<name>\" - interactive selection when omitted",
+     :alias :p,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get
+    ["helmreleases.helm.toolkit.fluxcd.io"
+     "kustomizations.kustomize.toolkit.fluxcd.io"
+     "gitrepositories.source.toolkit.fluxcd.io"
+     "ocirepositories.source.toolkit.fluxcd.io"],
+    :kubectl-can-patch
+    ["helmreleases.helm.toolkit.fluxcd.io"
+     "kustomizations.kustomize.toolkit.fluxcd.io"
+     "gitrepositories.source.toolkit.fluxcd.io"
+     "ocirepositories.source.toolkit.fluxcd.io"]},
+   :select {:mode :one, :label "Resume", :flag :pick},
+   :empty-message "no Flux object is suspended",
+   :confirm {:action "resume a Flux object"},
+   :details
+   ["What it does:"
+    "  picks one Resume (--pick, or interactively)"
+    "  asks to confirm: resume a Flux object"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: helmreleases.helm.toolkit.fluxcd.io, kustomizations.kustomize.toolkit.fluxcd.io, gitrepositories.source.toolkit.fluxcd.io, ocirepositories.source.toolkit.fluxcd.io"
+    "  kubectl patch: helmreleases.helm.toolkit.fluxcd.io, kustomizations.kustomize.toolkit.fluxcd.io, gitrepositories.source.toolkit.fluxcd.io, ocirepositories.source.toolkit.fluxcd.io"],
+   :candidates
+   {:mixed ["Kustomization alpha/a" "Kustomization zeta/b"],
+    :permitted ["Kustomization flux-system/apps"],
+    :refused []}},
   :unanswered
   {:action "resume a Flux object",
    :destructive? false,
@@ -1660,6 +2432,47 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
+  :surface
+  {:description
+   "Suspends a Flux HelmRelease, Kustomization, GitRepository or OCIRepository",
+   :options
+   {:pick
+    {:desc
+     "\"<Kind> <namespace>/<name>\" - interactive selection when omitted",
+     :alias :p,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get
+    ["helmreleases.helm.toolkit.fluxcd.io"
+     "kustomizations.kustomize.toolkit.fluxcd.io"
+     "gitrepositories.source.toolkit.fluxcd.io"
+     "ocirepositories.source.toolkit.fluxcd.io"],
+    :kubectl-can-patch
+    ["helmreleases.helm.toolkit.fluxcd.io"
+     "kustomizations.kustomize.toolkit.fluxcd.io"
+     "gitrepositories.source.toolkit.fluxcd.io"
+     "ocirepositories.source.toolkit.fluxcd.io"]},
+   :select {:mode :one, :label "Suspend", :flag :pick},
+   :empty-message "every Flux object is suspended already",
+   :confirm {:action "suspend a Flux object"},
+   :details
+   ["What it does:"
+    "  picks one Suspend (--pick, or interactively)"
+    "  asks to confirm: suspend a Flux object"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: helmreleases.helm.toolkit.fluxcd.io, kustomizations.kustomize.toolkit.fluxcd.io, gitrepositories.source.toolkit.fluxcd.io, ocirepositories.source.toolkit.fluxcd.io"
+    "  kubectl patch: helmreleases.helm.toolkit.fluxcd.io, kustomizations.kustomize.toolkit.fluxcd.io, gitrepositories.source.toolkit.fluxcd.io, ocirepositories.source.toolkit.fluxcd.io"],
+   :candidates
+   {:mixed ["Kustomization alpha/a" "Kustomization zeta/b"],
+    :permitted ["Kustomization flux-system/apps"],
+    :refused []}},
   :unanswered
   {:action "suspend a Flux object",
    :destructive? false,
@@ -1686,4 +2499,357 @@
    [{:description "Kustomization flux-system/apps is suspended",
      :timeout 30,
      :interval 3,
-     :holds false}]}}}
+     :holds false}]}},
+ "tools/velero/runbooks/pause_schedule.clj"
+ {:absent
+  {:action "pause a backup schedule",
+   :destructive? false,
+   :items ["pause velero/daily"],
+   :step "pause a backup schedule",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=velero"
+     "patch"
+     "schedules.velero.io"
+     "daily"
+     "--type=merge"
+     "--patch={\"spec\":{\"paused\":true}}"]],
+   :precondition
+   {:result false, :out "refusing: the Schedule no longer exists"},
+   :announce "Pause Schedule velero/daily",
+   :checks
+   [{:description "Schedule velero/daily is paused",
+     :timeout 30,
+     :interval 3,
+     :holds false}]},
+  :invalid
+  {:action "pause a backup schedule",
+   :destructive? false,
+   :items ["pause daily"],
+   :step "pause a backup schedule",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace="
+     "patch"
+     "schedules.velero.io"
+     nil
+     "--type=merge"
+     "--patch={\"spec\":{\"paused\":true}}"]],
+   :precondition
+   {:result false,
+    :out "refusing: the pick is not \"<namespace>/<schedule>\""},
+   :announce "Pause Schedule daily",
+   :checks
+   [{:description "Schedule daily is paused",
+     :timeout 30,
+     :interval 3,
+     :holds false}]},
+  :permitted
+  {:action "pause a backup schedule",
+   :destructive? false,
+   :items
+   ["pause Schedule velero/daily - no backup starts on its schedule 0 2 * * * until it is resumed"
+    "the newest backup ages from now on, and the backup scan reports the schedule as paused"],
+   :step "pause a backup schedule",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=velero"
+     "patch"
+     "schedules.velero.io"
+     "daily"
+     "--type=merge"
+     "--patch={\"spec\":{\"paused\":true}}"]],
+   :precondition {:result true, :out ""},
+   :announce "Pause Schedule velero/daily",
+   :checks
+   [{:description "Schedule velero/daily is paused",
+     :timeout 30,
+     :interval 3,
+     :holds false}]},
+  :refused
+  {:action "pause a backup schedule",
+   :destructive? false,
+   :items
+   ["pause Schedule velero/daily - no backup starts on its schedule 0 2 * * * until it is resumed"
+    "the newest backup ages from now on, and the backup scan reports the schedule as paused"],
+   :step "pause a backup schedule",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=velero"
+     "patch"
+     "schedules.velero.io"
+     "daily"
+     "--type=merge"
+     "--patch={\"spec\":{\"paused\":true}}"]],
+   :precondition
+   {:result false, :out "refusing: it is paused already"},
+   :announce "Pause Schedule velero/daily",
+   :checks
+   [{:description "Schedule velero/daily is paused",
+     :timeout 30,
+     :interval 3,
+     :holds true}]},
+  :spec-changed
+  {:action "pause a backup schedule",
+   :destructive? false,
+   :items
+   ["pause Schedule velero/daily - no backup starts on its schedule 0 2 * * * until it is resumed"
+    "the newest backup ages from now on, and the backup scan reports the schedule as paused"],
+   :step "pause a backup schedule",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=velero"
+     "patch"
+     "schedules.velero.io"
+     "daily"
+     "--type=merge"
+     "--patch={\"spec\":{\"paused\":true}}"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
+   :announce "Pause Schedule velero/daily",
+   :checks
+   [{:description "Schedule velero/daily is paused",
+     :timeout 30,
+     :interval 3,
+     :holds false}]},
+  :surface
+  {:description "Pauses a Velero Schedule",
+   :options
+   {:schedule
+    {:desc
+     "\"<namespace>/<schedule>\" - interactive selection when omitted",
+     :alias :s,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["schedules.velero.io"],
+    :kubectl-can-patch ["schedules.velero.io"]},
+   :select {:mode :one, :label "Schedule", :flag :schedule},
+   :empty-message "every Schedule is paused already",
+   :confirm {:action "pause a backup schedule"},
+   :details
+   ["What it does:"
+    "  picks one Schedule (--schedule, or interactively)"
+    "  asks to confirm: pause a backup schedule"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: schedules.velero.io"
+    "  kubectl patch: schedules.velero.io"],
+   :candidates
+   {:mixed ["alpha/a" "zeta/b"],
+    :permitted ["velero/daily"],
+    :refused []}},
+  :unanswered
+  {:action "pause a backup schedule",
+   :destructive? false,
+   :items
+   ["pause Schedule velero/daily - no backup starts on its schedule 0 2 * * * until it is resumed"
+    "the newest backup ages from now on, and the backup scan reports the schedule as paused"],
+   :step "pause a backup schedule",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=velero"
+     "patch"
+     "schedules.velero.io"
+     "daily"
+     "--type=merge"
+     "--patch={\"spec\":{\"paused\":true}}"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+   :announce "Pause Schedule velero/daily",
+   :checks
+   [{:description "Schedule velero/daily is paused",
+     :timeout 30,
+     :interval 3,
+     :holds false}]}},
+ "tools/velero/runbooks/resume_schedule.clj"
+ {:absent
+  {:action "resume a backup schedule",
+   :destructive? false,
+   :items ["resume velero/daily"],
+   :step "resume a backup schedule",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=velero"
+     "patch"
+     "schedules.velero.io"
+     "daily"
+     "--type=merge"
+     "--patch={\"spec\":{\"paused\":false}}"]],
+   :precondition
+   {:result false, :out "refusing: the Schedule no longer exists"},
+   :announce "Resume Schedule velero/daily",
+   :checks
+   [{:description "Schedule velero/daily is resumed",
+     :timeout 30,
+     :interval 3,
+     :holds true}]},
+  :invalid
+  {:action "resume a backup schedule",
+   :destructive? false,
+   :items ["resume daily"],
+   :step "resume a backup schedule",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace="
+     "patch"
+     "schedules.velero.io"
+     nil
+     "--type=merge"
+     "--patch={\"spec\":{\"paused\":false}}"]],
+   :precondition
+   {:result false,
+    :out "refusing: the pick is not \"<namespace>/<schedule>\""},
+   :announce "Resume Schedule daily",
+   :checks
+   [{:description "Schedule daily is resumed",
+     :timeout 30,
+     :interval 3,
+     :holds true}]},
+  :permitted
+  {:action "resume a backup schedule",
+   :destructive? false,
+   :items
+   ["resume Schedule velero/daily - backups start again on its schedule 0 2 * * *"
+    "Velero counts the next run from the last backup, so a run missed while it was paused starts a backup at once; velero schedule unpause --skip-immediately resumes without it"],
+   :step "resume a backup schedule",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=velero"
+     "patch"
+     "schedules.velero.io"
+     "daily"
+     "--type=merge"
+     "--patch={\"spec\":{\"paused\":false}}"]],
+   :precondition {:result true, :out ""},
+   :announce "Resume Schedule velero/daily",
+   :checks
+   [{:description "Schedule velero/daily is resumed",
+     :timeout 30,
+     :interval 3,
+     :holds false}]},
+  :refused
+  {:action "resume a backup schedule",
+   :destructive? false,
+   :items
+   ["resume Schedule velero/daily - backups start again on its schedule 0 2 * * *"
+    "Velero counts the next run from the last backup, so a run missed while it was paused starts a backup at once; velero schedule unpause --skip-immediately resumes without it"],
+   :step "resume a backup schedule",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=velero"
+     "patch"
+     "schedules.velero.io"
+     "daily"
+     "--type=merge"
+     "--patch={\"spec\":{\"paused\":false}}"]],
+   :precondition {:result false, :out "refusing: it is not paused"},
+   :announce "Resume Schedule velero/daily",
+   :checks
+   [{:description "Schedule velero/daily is resumed",
+     :timeout 30,
+     :interval 3,
+     :holds true}]},
+  :spec-changed
+  {:action "resume a backup schedule",
+   :destructive? false,
+   :items
+   ["resume Schedule velero/daily - backups start again on its schedule 0 2 * * *"
+    "Velero counts the next run from the last backup, so a run missed while it was paused starts a backup at once; velero schedule unpause --skip-immediately resumes without it"],
+   :step "resume a backup schedule",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=velero"
+     "patch"
+     "schedules.velero.io"
+     "daily"
+     "--type=merge"
+     "--patch={\"spec\":{\"paused\":false}}"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
+   :announce "Resume Schedule velero/daily",
+   :checks
+   [{:description "Schedule velero/daily is resumed",
+     :timeout 30,
+     :interval 3,
+     :holds false}]},
+  :surface
+  {:description "Resumes a paused Velero Schedule",
+   :options
+   {:schedule
+    {:desc
+     "\"<namespace>/<schedule>\" - interactive selection when omitted",
+     :alias :s,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["schedules.velero.io"],
+    :kubectl-can-patch ["schedules.velero.io"]},
+   :select {:mode :one, :label "Schedule", :flag :schedule},
+   :empty-message "no Schedule is paused",
+   :confirm {:action "resume a backup schedule"},
+   :details
+   ["What it does:"
+    "  picks one Schedule (--schedule, or interactively)"
+    "  asks to confirm: resume a backup schedule"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: schedules.velero.io"
+    "  kubectl patch: schedules.velero.io"],
+   :candidates
+   {:mixed ["alpha/a" "zeta/b"],
+    :permitted ["velero/daily"],
+    :refused []}},
+  :unanswered
+  {:action "resume a backup schedule",
+   :destructive? false,
+   :items
+   ["resume Schedule velero/daily - backups start again on its schedule 0 2 * * *"
+    "Velero counts the next run from the last backup, so a run missed while it was paused starts a backup at once; velero schedule unpause --skip-immediately resumes without it"],
+   :step "resume a backup schedule",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=velero"
+     "patch"
+     "schedules.velero.io"
+     "daily"
+     "--type=merge"
+     "--patch={\"spec\":{\"paused\":false}}"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+   :announce "Resume Schedule velero/daily",
+   :checks
+   [{:description "Schedule velero/daily is resumed",
+     :timeout 30,
+     :interval 3,
+     :holds true}]}}}
