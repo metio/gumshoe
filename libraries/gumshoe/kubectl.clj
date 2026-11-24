@@ -335,7 +335,9 @@
    instead of returning nil or {:ok? false}. A read that answered that the
    object or the resource type does not exist still returns as it would
    unbound. select/resolve-target binds it while it lists candidates, so an
-   unreachable API is reported as such rather than as an empty list.
+   unreachable API is reported as such rather than as an empty list;
+   gumshoe.mutation binds it around :derive and :precondition, and
+   verify/eventually around every post-check.
 
    The strict readers are get-json, get-json-result, get-all, get-namespaced,
    get-namespaced-result, get-namespaced-resource, confirmed-absent? and

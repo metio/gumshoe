@@ -45,14 +45,15 @@
    each receive one context map, so a book destructures exactly what it needs:
      {:context .. :cluster .. :target <the pick(s)> :opts <parsed flags>}
 
-:derive runs under kubectl/*strict-reads*, as the candidate query of
-   :select does: a read in it that did not answer stops the change before the
-   confirmation, so neither the precondition nor the effect is computed from
-   a read that stood in for an object nobody could see. A read that answered
-   that its object or resource type does not exist still returns nil, which
-   the precondition judges. Only the gumshoe.kubectl readers that honour
-   *strict-reads* are strict here (see its docstring); a :precondition reads
-   lax and has to refuse a failed read itself.
+   :derive and :precondition run under kubectl/*strict-reads*, as the
+   candidate query of :select and every post-check do. A read in :derive that
+   did not answer stops the change before the confirmation, so neither the
+   precondition nor the effect is computed from a read that stood in for an
+   object nobody could see. A read in :precondition that did not answer
+   refuses the change with the reason. A read that answered that its object
+   or resource type does not exist still returns nil, which the precondition
+   judges. Only the gumshoe.kubectl readers that honour *strict-reads* are
+   strict here (see its docstring).
 
    Three entry points, same spec: `book` is a standalone runbook; `run!` selects
    the subject and runs it, returning a boolean; `run-on!` runs against a subject
@@ -148,6 +149,22 @@
     (catch clojure.lang.ExceptionInfo e
       (if (::kubectl/unread (ex-data e)) {:unread (ex-message e)} (throw e)))))
 
+(defn strict-precondition
+  "precondition as a thunk whose reads are strict: a read in it that did not
+   answer refuses with the reason instead of being judged as an absent
+   object."
+  [precondition]
+  (when precondition
+    (fn []
+      (try
+        (binding [kubectl/*strict-reads* true]
+          (boolean (precondition)))
+        (catch clojure.lang.ExceptionInfo e
+          (if (::kubectl/unread (ex-data e))
+            (do (println (str "refusing: could not read what the precondition rests on - " (ex-message e)))
+                false)
+            (throw e)))))))
+
 (defn run-on!
   "Runs a mutation spec against an ALREADY-CHOSEN `target`, skipping the spec's own
    selection, through derive -> confirm -> [precondition] -> announce -> execute
@@ -179,8 +196,9 @@
                                      :target cluster
                                      :items (if items-fn (items-fn ctx) (select/items (:mode select) target))
                                      :destructive? (:destructive? confirm)}
-                      :precondition (pinned-precondition (when precondition #(precondition ctx))
-                                                         ref before #(fetch-pinned context %))
+                      :precondition (strict-precondition
+                                     (pinned-precondition (when precondition #(precondition ctx))
+                                                          ref before #(fetch-pinned context %)))
                       :confirmed? (:confirmed? spec)
                       :announce! (when announce
                                    #(announce/announce! cluster announcement-data (announce ctx)))

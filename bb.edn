@@ -162,7 +162,8 @@
                    [gumshoe.promql-test]
                    [gumshoe.hosts-test]
                    [gumshoe.utils-test]
-                   [gumshoe.verify-test])
+                   [gumshoe.verify-test]
+                   [gumshoe.check-reads-test])
         :task (let [{:keys [fail error]} (test/run-tests 'gumshoe.apiserver-test
                                                          'gumshoe.apiversions-test
                                                          'gumshoe.backups-test
@@ -314,6 +315,7 @@
                                                          'gumshoe.promql-test
                                                          'gumshoe.hosts-test
                                                          'gumshoe.utils-test
-                                                         'gumshoe.verify-test)]
+                                                         'gumshoe.verify-test
+                                                         'gumshoe.check-reads-test)]
                 (when (pos? (+ fail error))
                   (System/exit 1)))}}}
