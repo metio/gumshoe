@@ -12,7 +12,10 @@
    A finding marked :cause (a reference to an object that does not exist,
    say) explains the other findings about its own object: a claim that is
    Pending because its StorageClass is missing, an autoscaler that cannot
-   scale a target that is gone. Those fold under it by the same severity rule."
+   scale a target that is gone. Those fold under it by the same severity rule.
+   A Deployment's current ReplicaSet counts as its own object here: when the
+   API server refuses that ReplicaSet's pods, the Deployment's missing
+   replicas and stuck rollout follow from the refusal."
   (:require [clojure.string :as str]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.subject :as subject]))
@@ -43,14 +46,43 @@
   [findings]
   (worst-by-subject (filter :cause findings)))
 
+(def ^:private revision-annotation :deployment.kubernetes.io/revision)
+
+(defn- owned-by?
+  [owner object]
+  (and (= (kubectl/namespace-of owner) (kubectl/namespace-of object))
+       (some #(and (= "Deployment" (:kind %))
+                   (if-let [uid (-> owner :metadata :uid)]
+                     (= uid (:uid %))
+                     (= (kubectl/name-of owner) (:name %))))
+             (-> object :metadata :ownerReferences))))
+
+(defn current-replicasets
+  "Each Deployment's subject mapped to the subject of the ReplicaSet holding
+   its current revision. Older ReplicaSets keep their own conditions, so only
+   the one whose revision annotation equals the Deployment's speaks for it."
+  [evidence]
+  (into {}
+        (for [deployment (kubectl/items-of (get evidence "deployments"))
+              :let [revision (-> deployment :metadata :annotations revision-annotation)]
+              :when revision
+              replicaset (kubectl/items-of (get evidence "replicasets"))
+              :when (and (owned-by? deployment replicaset)
+                         (= (str revision) (str (-> replicaset :metadata :annotations revision-annotation))))]
+          [(subject/subject "Deployment" (kubectl/namespace-of deployment) (kubectl/name-of deployment))
+           (subject/subject "ReplicaSet" (kubectl/namespace-of replicaset) (kubectl/name-of replicaset))])))
+
 (defn cause-of
-  "The subject whose cause finding explains this finding, or nil. A cause is
-   never folded under another cause."
-  [finding causes]
-  (when-not (:cause finding)
-    (when-let [s (subject/from-finding finding)]
-      (when (<= (get causes s 4) (severity-rank (:severity finding) 3))
-        s))))
+  "The subject whose cause finding explains this finding, or nil: its own
+   object first, then the object related maps it to. A cause is never folded
+   under another cause."
+  ([finding causes] (cause-of finding causes {}))
+  ([finding causes related]
+   (when-not (:cause finding)
+     (when-let [s (subject/from-finding finding)]
+       (let [rank (severity-rank (:severity finding) 3)]
+         (some #(when (and % (<= (get causes % 4) rank)) %)
+               [s (get related s)]))))))
 
 (defn parent-of
   "The subject a pod finding follows from, or nil."
@@ -70,9 +102,10 @@
   (let [pods (into {} (map (juxt (juxt kubectl/namespace-of kubectl/name-of) identity))
                    (kubectl/items-of (get evidence "pods")))
         worst (worst-by-subject findings)
-        causes (worst-cause-by-subject findings)]
+        causes (worst-cause-by-subject findings)
+        related (current-replicasets evidence)]
     (mapv (fn [finding]
-            (if-let [parent (or (parent-of finding pods worst) (cause-of finding causes))]
+            (if-let [parent (or (parent-of finding pods worst) (cause-of finding causes related))]
               (assoc finding :parent (subject/display parent))
               finding))
           findings)))

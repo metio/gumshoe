@@ -108,8 +108,12 @@ and outcome; the path is printed after the final banner.
 
 - `severity` is `critical`, `warning` or `info`. Start with critical.
 - `hint` is the book's suggestion for what to do next.
-- `parent` marks a finding that follows from a more severe one about its
-  workload or node. Fix the parent first.
+- `parent` marks a finding that follows from another at least as severe,
+  and names that finding's object as `Kind namespace/name`: a pod finding
+  under its workload or node, a finding under a cause on its own object (a
+  missing reference, or a controller whose pods the API server refuses), and
+  a Deployment's replica or rollout finding under the `pod-creation` refusal
+  of its current ReplicaSet. Fix the parent first.
 - `since` is when the problem began, where the API records it.
 - `checked` lists every detective that ran. An entry with `unread` read
   nothing, for example because the cluster does not serve that CRD or RBAC

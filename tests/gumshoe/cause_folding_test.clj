@@ -7,8 +7,10 @@
             [gumshoe.detective :as detective]
             [gumshoe.detectives.disruption :as disruption]
             [gumshoe.detectives.events]
+            [gumshoe.detectives.pod-creation :as pod-creation]
             [gumshoe.detectives.references :as references]
             [gumshoe.detectives.storage :as storage]
+            [gumshoe.detectives.workloads :as workloads]
             [gumshoe.subject :as subject]))
 
 (def ^:private claim-subject (subject/subject "PersistentVolumeClaim" "shop" "data"))
@@ -117,3 +119,151 @@
     (is (= 2 (count (by-summary "SyncLoadBalancerFailed seen 1x in the last hour"))) "objects of different kinds stay apart")
     (is (= #{(subject/subject "Service" "shop" "web") (subject/subject "Deployment" "shop" "web")}
            (set (map :subject (by-summary "SyncLoadBalancerFailed seen 1x in the last hour")))))))
+
+;; --- controllers whose pods the API server refuses ----------------------------
+
+(def ^:private refused-at "2026-11-24T08:00:00Z")
+
+(def ^:private pod-security-refusal
+  (str "pods \"etherpad-debugger-646675d5cb-x\" is forbidden: violates PodSecurity \"restricted:latest\":"
+       " allowPrivilegeEscalation != false"))
+
+(defn- deployment
+  [name revision & {:keys [replicas ready progress-deadline-exceeded]}]
+  {:apiVersion "apps/v1" :kind "Deployment"
+   :metadata {:namespace "lernraum-1" :name name :uid (str name "-uid")
+              :annotations {:deployment.kubernetes.io/revision (str revision)}}
+   :spec {:replicas replicas}
+   :status (cond-> {:readyReplicas ready}
+             progress-deadline-exceeded
+             (assoc :conditions [{:type "Progressing" :status "False" :reason "ProgressDeadlineExceeded"
+                                  :message "ReplicaSet has timed out progressing." :lastTransitionTime refused-at}]))})
+
+(defn- replicaset
+  [owner hash revision & {:keys [refusal]}]
+  {:apiVersion "apps/v1" :kind "ReplicaSet"
+   :metadata {:namespace "lernraum-1" :name (str owner "-" hash)
+              :annotations {:deployment.kubernetes.io/revision (str revision)}
+              :ownerReferences [{:apiVersion "apps/v1" :kind "Deployment" :name owner :uid (str owner "-uid")
+                                 :controller true}]}
+   :status (cond-> {}
+             refusal (assoc :conditions [{:type "ReplicaFailure" :status "True" :reason "FailedCreate"
+                                          :message refusal :lastTransitionTime refused-at}]))})
+
+(defn- controller-evidence
+  [& {:keys [deployments replicasets statefulsets daemonsets events pods]}]
+  {:now (java.time.Instant/parse "2026-11-24T08:30:00Z")
+   "deployments" {:items (vec deployments)}
+   "replicasets" {:items (vec replicasets)}
+   "statefulsets" {:items (vec statefulsets)}
+   "daemonsets" {:items (vec daemonsets)}
+   "events" {:items (vec events)}
+   "pods" {:items (vec pods)}
+   "services" {:items []}
+   "validatingwebhookconfigurations" {:items []}
+   "mutatingwebhookconfigurations" {:items []}})
+
+(defn- run-controllers
+  [evidence]
+  (detective/run-detectives (concat workloads/detectives pod-creation/detectives) evidence))
+
+(defn- by-summary
+  [findings pattern]
+  (first (filter #(re-find pattern (:summary %)) findings)))
+
+(deftest a-deployment-short-of-replicas-folds-under-its-replicaset-that-cannot-create-pods
+  (let [findings (run-controllers
+                  (controller-evidence
+                   :deployments [(deployment "etherpad-debugger" 3 :replicas 1 :ready 0)]
+                   :replicasets [(replicaset "etherpad-debugger" "7f6b8c9d4e" 2)
+                                 (replicaset "etherpad-debugger" "646675d5cb" 3 :refusal pod-security-refusal)]))
+        refusal (by-summary findings #"cannot create pods")
+        replicas (by-summary findings #"replicas ready")]
+    (is (= "Deployment has 0 of 1 replicas ready" (:summary replicas)))
+    (is (= "ReplicaSet lernraum-1/etherpad-debugger-646675d5cb" (:parent replicas)))
+    (is (nil? (:parent refusal)) "the refusal is the root")
+    (testing "the report shows the replica count under the refusal"
+      (is (= "follows from it: 1 finding - Deployment has 0 of 1 replicas ready"
+             (detective/folded-line [(subject/subject "ReplicaSet" "lernraum-1" "etherpad-debugger-646675d5cb")]
+                                    (correlation/children findings)))))))
+
+(deftest a-stuck-rollout-folds-under-its-replicaset-that-cannot-create-pods
+  (let [findings (run-controllers
+                  (controller-evidence
+                   :deployments [(deployment "etherpad-debugger" 3 :replicas 1 :ready 0 :progress-deadline-exceeded true)]
+                   :replicasets [(replicaset "etherpad-debugger" "646675d5cb" 3 :refusal pod-security-refusal)]))]
+    (is (= ["ReplicaSet lernraum-1/etherpad-debugger-646675d5cb" "ReplicaSet lernraum-1/etherpad-debugger-646675d5cb"]
+           (mapv :parent [(by-summary findings #"replicas ready") (by-summary findings #"rollout is stuck")])))))
+
+(deftest a-refusal-on-an-older-revision-is-not-the-parent
+  (let [findings (run-controllers
+                  (controller-evidence
+                   :deployments [(deployment "etherpad-debugger" 3 :replicas 1 :ready 0)]
+                   :replicasets [(replicaset "etherpad-debugger" "7f6b8c9d4e" 2 :refusal pod-security-refusal)
+                                 (replicaset "etherpad-debugger" "646675d5cb" 3)]))]
+    (is (some? (by-summary findings #"cannot create pods")))
+    (is (nil? (:parent (by-summary findings #"replicas ready"))))))
+
+(deftest a-replicaset-of-another-deployment-is-not-the-parent
+  (let [findings (run-controllers
+                  (controller-evidence
+                   :deployments [(deployment "etherpad-debugger" 3 :replicas 1 :ready 0)
+                                 (deployment "etherpad" 3 :replicas 1 :ready 1)]
+                   :replicasets [(replicaset "etherpad" "646675d5cb" 3 :refusal pod-security-refusal)]))]
+    (is (nil? (:parent (by-summary findings #"replicas ready"))))))
+
+(deftest a-deployment-without-a-refusal-has-no-parent
+  (let [findings (run-controllers
+                  (controller-evidence
+                   :deployments [(deployment "etherpad-debugger" 3 :replicas 1 :ready 0)]
+                   :replicasets [(replicaset "etherpad-debugger" "646675d5cb" 3)]))]
+    (is (= [nil] (mapv :parent findings)))))
+
+(deftest a-milder-refusal-never-hides-a-worse-replica-count
+  (let [findings (run-controllers
+                  (controller-evidence
+                   :deployments [(deployment "etherpad-debugger" 3 :replicas 1 :ready 0)]
+                   :replicasets [(replicaset "etherpad-debugger" "646675d5cb" 3 :refusal "something nobody has seen yet")]))]
+    (is (= :warning (:severity (by-summary findings #"cannot create pods"))))
+    (is (nil? (:parent (by-summary findings #"replicas ready"))))))
+
+(defn- failed-create
+  [kind name]
+  {:type "Warning" :reason "FailedCreate" :lastTimestamp "2026-11-24T08:20:00Z"
+   :message (str "create Pod " name "-0 in " kind " " name " failed error: " pod-security-refusal)
+   :involvedObject {:kind kind :namespace "lernraum-1" :name name}})
+
+(deftest statefulset-and-daemonset-findings-fold-under-their-own-refusal
+  (let [findings (run-controllers
+                  (controller-evidence
+                   :statefulsets [{:metadata {:namespace "lernraum-1" :name "db"} :spec {:replicas 1} :status {:readyReplicas 0}}]
+                   :daemonsets [{:metadata {:namespace "lernraum-1" :name "agent"}
+                                 :status {:desiredNumberScheduled 2 :currentNumberScheduled 0 :numberUnavailable 2}}]
+                   :events [(failed-create "StatefulSet" "db") (failed-create "DaemonSet" "agent")]))]
+    (is (= "StatefulSet lernraum-1/db" (:parent (by-summary findings #"StatefulSet has 0 of 1"))))
+    (is (= ["DaemonSet lernraum-1/agent" "DaemonSet lernraum-1/agent"]
+           (mapv :parent (filter #(= "daemonsets" (:detective %)) findings))))
+    (is (every? (comp nil? :parent) (filter #(= "pod-creation" (:detective %)) findings)))))
+
+(deftest a-pod-under-a-folded-deployment-still-shows-under-the-root
+  (let [pod {:metadata {:namespace "lernraum-1" :name "etherpad-debugger-7f6b8c9d4e-a"
+                        :labels {:pod-template-hash "7f6b8c9d4e"}
+                        :ownerReferences [{:kind "ReplicaSet" :name "etherpad-debugger-7f6b8c9d4e" :controller true}]}}
+        findings (correlation/correlate
+                  [{:severity :critical :detective "pod-creation" :component "lernraum-1/etherpad-debugger-646675d5cb"
+                    :subject (subject/subject "ReplicaSet" "lernraum-1" "etherpad-debugger-646675d5cb") :cause true
+                    :summary "ReplicaSet cannot create pods: the pod violates the namespace's PodSecurity level"}
+                   {:severity :critical :detective "deployments" :component "lernraum-1/etherpad-debugger"
+                    :summary "Deployment has 0 of 1 replicas ready"}
+                   {:severity :critical :detective "pods" :component "lernraum-1/etherpad-debugger-7f6b8c9d4e-a"
+                    :summary "container app keeps restarting"}]
+                  (controller-evidence
+                   :deployments [(deployment "etherpad-debugger" 3 :replicas 1 :ready 0)]
+                   :replicasets [(replicaset "etherpad-debugger" "7f6b8c9d4e" 2)
+                                 (replicaset "etherpad-debugger" "646675d5cb" 3 :refusal pod-security-refusal)]
+                   :pods [pod]))]
+    (is (= [nil "ReplicaSet lernraum-1/etherpad-debugger-646675d5cb" "Deployment lernraum-1/etherpad-debugger"]
+           (mapv :parent findings)))
+    (is (= "follows from it: 2 findings - Deployment has 0 of 1 replicas ready, container app keeps restarting"
+           (detective/folded-line [(subject/subject "ReplicaSet" "lernraum-1" "etherpad-debugger-646675d5cb")]
+                                  (correlation/children findings))))))
