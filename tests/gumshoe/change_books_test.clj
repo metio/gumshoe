@@ -9,8 +9,9 @@
    with gumshoe.shell/execute answering for ssh and kubectl, the fuzzy finder
    answering as an operator who picks nothing, and flow/change! captured. A
    transcript keeps the result, what was printed, the confirmation, the
-   plan, the announcement, and the post-checks judged after the effect and
-   against a host that stopped answering. The transcripts are kept in
+   plan, the announcement, what the precondition decides before the effect,
+   and the post-checks judged after the effect and against a host that
+   stopped answering. The transcripts are kept in
    tests/golden/change_books.edn.
 
    Regenerate the file after an intended change with
@@ -93,9 +94,10 @@
 
 (defn transcript
   "What the book does in one scenario: state is {:osds .. :objects ..
-   :answering?}, after is the state the effect leaves, and the book runs
-   with opts, or with what its options parse argv into."
-  [config {:keys [state after opts argv]}]
+   :answering?}, between is merged into it after the confirmation, after is
+   the state the effect leaves, and the book runs with opts, or with what
+   its options parse argv into."
+  [config {:keys [state between after opts argv]}]
   (let [opts (if argv (cli/parse-opts argv {:spec (:options config)}) opts)
         state (atom (merge {:answering? true} state))
         seen (atom nil)]
@@ -108,7 +110,9 @@
                     announce/announce! (fn [system _ message] [system message])
                     flow/change! (fn [config] (reset! seen config) true)]
         (let [{:keys [result out]} (capture #(attempt (fn [] ((:action config) opts {:announcement-data nil}))))
-              {:keys [confirmation announce! effect post-checks]} @seen
+              {:keys [confirmation precondition announce! effect post-checks]} @seen
+              _ (swap! state merge between)
+              decided (when precondition (capture precondition))
               judged (fn [answering?]
                        (swap! state merge after {:answering? answering?})
                        (vec (for [{:keys [description check]} post-checks]
@@ -119,6 +123,7 @@
                                           :destructive? (boolean (:destructive? confirmation))
                                           :items (vec (:items confirmation))
                                           :plan (vec effect)}
+                                   decided (assoc :precondition decided)
                                    announce! (assoc :announce (announce!))
                                    post-checks (assoc :checks {:after (judged true)
                                                                :unanswered (judged false)})))))))))
@@ -156,6 +161,10 @@
                 :argv ["--host" "mgr-1" "--osd" "3"]}
      :still-out {:state {:osds out-osd} :after {:osds out-osd}
                  :opts {:host "mgr-1" :osd "osd.3"}}
+     :brought-in-meanwhile {:state {:osds out-osd} :between {:osds [(osd 1 true) (osd 3 true)]}
+                            :opts {:host "mgr-1" :osd "osd.3"}}
+     :unanswered-meanwhile {:state {:osds out-osd} :between {:answering? false}
+                            :opts {:host "mgr-1" :osd "osd.3"}}
      :all-in {:state {:osds [(osd 1 true) (osd 3 true)]} :opts {:host "mgr-1" :osd "osd.3"}}
      :unpicked {:state {:osds out-osd} :opts {:host "mgr-1" :osd "osd.9"}}
      :unreachable {:state {:osds out-osd :answering? false} :opts {:host "mgr-1" :osd "osd.3"}}}}
