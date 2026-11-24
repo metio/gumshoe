@@ -5,7 +5,8 @@
   (:require [clojure.test :refer [deftest is testing]]
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.mutation :as mutation]))
+            [gumshoe.mutation :as mutation]
+            [gumshoe.outcome :as outcome]))
 
 (deftest run-on-uses-the-given-target-test
   (testing "run-on! runs the spec against the provided target, skipping selection"
@@ -127,3 +128,18 @@
         (binding [*out* (java.io.StringWriter.) *err* (java.io.StringWriter.)]
           (is (false? (mutation/run-on! spec "web/moodle" {} nil)))))
       (is (= [] @reached)))))
+
+(deftest a-standalone-change-records-its-recovery-when-it-fails
+  (with-redefs [kubectl/current-context (constantly "ctx")
+                kubectl/current-cluster (constantly "cluster")
+                interact/confirm! (constantly true)]
+    (let [record (outcome/fresh)
+          spec {:select {:mode :one :label "Namespace"}
+                :confirm {:action "do a thing"}
+                :derive (fn [_] {:observed :parked})
+                :effect (fn [_] [[:note "first"] [:cmd "this-binary-truly-does-not-exist-xyz"]])
+                :recovery (fn [{:keys [target observed applied]}] (format "%s is %s after %d" target (name observed) applied))}]
+      (binding [*err* (java.io.StringWriter.) *out* (java.io.StringWriter.) outcome/*record* record]
+        (is (false? (mutation/run-on! spec "ns-1" {} nil))))
+      (is (= {:text "ns-1 is parked after 1"} (:recovery @record))
+          "rendered with the derived values and the effects applied"))))

@@ -362,6 +362,13 @@ the playbook into segments: without a terminal it stops at a pause and names
 the `--from-segment` that continues it, and `playbook/run-segment!` takes one
 segment across a batch of subjects.
 
+A run stops at the first step that fails and keeps what the steps before it
+applied, so a step whose failure leaves a system parked or half-owned carries
+`:recovery`: a string, or a function of the step's context that can read the
+state the failure left. The run prints it under the `FAILED` banner when it
+stops at that step. The playbook's own `:recovery` covers its steps without
+one once something changed, and a mutation book takes `:recovery` as well.
+
 `--help` of a playbook or a mutation book describes it from its spec: what it
 picks, every step in order with where the confirmation and the pauses fall,
 what it verifies, and the tools and permissions it needs.

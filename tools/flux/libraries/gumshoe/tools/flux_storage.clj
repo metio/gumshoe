@@ -27,6 +27,10 @@
    values: the HelmRelease's spec.timeout and spec.interval and the owner's
    reconcile interval.
 
+   Every step from the owner's suspension to its resume, and the playbook
+   for a caller's steps, carries `recovery`: a failure prints which of the
+   HelmRelease and its owner stay suspended and how to resume them.
+
    A release can own objects Helm never stamped, which the steps cannot find.
    A casebook adds its own steps for them at one of `positions`, named for the
    step they follow, through (steps extra) or (playbook-with extra)."
@@ -277,6 +281,58 @@
 (defn- object-lines [objects]
   (map (fn [{:keys [type namespace name]}] (format "%s %s/%s" type namespace name)) objects))
 
+;; --- recovery ------------------------------------------------------------------------
+
+(defn- resume-line
+  "One suspended object and the command that resumes it, as the steps do."
+  [context {:keys [kind type namespace name]}]
+  (format "  %s %s/%s - resume: kubectl --context=%s -n %s %s"
+          kind namespace name context namespace
+          (if (= "ResourceSet" kind)
+            (format "annotate %s %s --overwrite fluxcd.controlplane.io/reconcile=enabled" type name)
+            (format "patch %s %s --type=merge --patch='{\"spec\":{\"suspend\":false}}'" type name))))
+
+(defn recovery-text
+  "What a failed step leaves behind, from an observation taken at the
+   failure: which of the HelmRelease and its owner are still suspended, the
+   command that resumes each, and the order to resume them in."
+  [context target {:keys [release owner unread]}]
+  (let [suspended (concat
+                   (when (true? (-> release :spec :suspend))
+                     [{:kind "HelmRelease" :type flux/helmrelease-type
+                       :namespace (kubectl/namespace-of release) :name (kubectl/name-of release)}])
+                   (when (and owner (owner-suspended? (:kind owner) (:object owner)))
+                     [owner]))]
+    (cond
+      unread
+      (str "The cluster did not answer (" unread "), so whether HelmRelease " target
+           " and its owner are still suspended is unknown. Read both before leaving them:"
+           " while either is suspended, Flux does not reconcile the release.")
+
+      (nil? release)
+      (str "HelmRelease " target " cannot be read. Check whether the Kustomization or ResourceSet"
+           " that rendered it is still suspended.")
+
+      (empty? suspended)
+      (str "Neither HelmRelease " target " nor its owner is suspended; Flux reconciles the release again.")
+
+      :else
+      (str/join "\n"
+                (concat
+                 [(str "Flux does not reconcile HelmRelease " target " while these stay suspended:")]
+                 (map #(resume-line context %) suspended)
+                 ["The release's workloads, volumes and Helm storage stay as the steps before this one left them."
+                  "Resume the HelmRelease once its Helm storage no longer holds the revision that blocked it, then the owner."
+                  "Running this playbook again repeats every step, but no longer finds the claims a StatefulSet it"
+                  "already deleted made from its volumeClaimTemplates; delete those by hand."])))))
+
+(defn recovery
+  "The :recovery of every step from the owner's suspension to its resume, and
+   of the playbook: it reads the HelmRelease and its owner again at the
+   failure."
+  [{:keys [context target]}]
+  (recovery-text context target (observe context target)))
+
 ;; --- the steps ---------------------------------------------------------------------
 
 (defn- deriver
@@ -368,6 +424,7 @@
       :prerequisites {:kubectl-can-patch [flux/kustomization-type]}
       :confirm {:action "suspend the owner that renders the HelmRelease"}
       :derive derive-step
+      :recovery recovery
       :precondition (fn [{:keys [observed]}] (readable? observed))
       :items (unless-unread
               (fn [{:keys [observed]}]
@@ -389,6 +446,7 @@
       :prerequisites {:kubectl-can-patch [flux/helmrelease-type]}
       :confirm {:action "suspend the HelmRelease"}
       :derive derive-step
+      :recovery recovery
       :pin release-pin
       :precondition (fn [{:keys [observed]}] (readable? observed))
       :items (unless-unread
@@ -412,6 +470,7 @@
       :prerequisites {:kubectl-can-delete workload-types}
       :confirm {:action "delete the release's workloads" :destructive? true}
       :derive derive-step
+      :recovery recovery
       :precondition (fn [{:keys [context observed]}] (and (readable? observed) (quiet? context observed)))
       :items (unless-unread
               (fn [{:keys [observed]}]
@@ -427,6 +486,7 @@
       :prerequisites {:kubectl-can-delete ["persistentvolumeclaims"]}
       :confirm {:action "delete the release's volumes - their data is lost" :destructive? true :separately? true}
       :derive derive-step
+      :recovery recovery
       :precondition (fn [{:keys [context observed]}] (and (readable? observed) (quiet? context observed)))
       :items (unless-unread
               (fn [{:keys [observed]}]
@@ -442,6 +502,7 @@
       :prerequisites {:kubectl-can-delete ["secrets"]}
       :confirm {:action "delete the release's Helm storage" :destructive? true}
       :derive derive-step
+      :recovery recovery
       :precondition (fn [{:keys [context observed]}] (and (readable? observed) (quiet? context observed)))
       :items (unless-unread
               (fn [{:keys [observed]}]
@@ -461,6 +522,7 @@
       {:title "▶  Resume the HelmRelease, which installs"
       :confirm {:action "resume the HelmRelease"}
       :derive derive-step
+      :recovery recovery
       :precondition (fn [{:keys [observed]}] (readable? observed))
       :items (fn [{:keys [target]}] [(format "resume HelmRelease %s and request a reconcile, which installs it" target)])
       :effect (fn [{:keys [context observed timestamp]}]
@@ -482,6 +544,7 @@
       {:title "▶  Resume the owner (Kustomization or ResourceSet)"
       :confirm {:action "resume the owner that renders the HelmRelease"}
       :derive derive-step
+      :recovery recovery
       :precondition (fn [{:keys [observed]}] (or (some? (:known-owner observed)) (readable? observed)))
       :items (fn [{:keys [observed]}]
                [(if-let [{:keys [kind namespace name]} (:known-owner observed)]
@@ -567,6 +630,7 @@
             :candidates helmrelease-picks}
    :confirm {:action "suspend its owner, delete the release's workloads, volumes and Helm storage, then resume it to install afresh"
              :destructive? true}
+   :recovery recovery
    :steps (steps)})
 
 (defn playbook-with

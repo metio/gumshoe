@@ -108,3 +108,36 @@
   (is (= {:tone :ok :text "DONE - nothing critical; read the findings above"}
          (outcome/banner {:changes? false :outcome :ok :findings? true} {:applied 0})))
   (is (= "DONE - no findings" (:text (outcome/banner {:changes? false :outcome :ok} {:applied 0})))))
+
+(deftest recovery-guidance-is-recorded-once-per-run
+  (testing "a string is recorded as written"
+    (is (= {:text "resume the owner"}
+           (:recovery (recorded #(outcome/recovery! "resume the owner" {:target "w-1"}))))))
+  (testing "a function renders against the step's context and the effects applied so far"
+    (is (= {:text "w-1 after 2"}
+           (:recovery (recorded #(do (outcome/applied!) (outcome/applied!)
+                                     (outcome/recovery! (fn [{:keys [target applied]}] (str target " after " applied))
+                                                        {:target "w-1"})))))))
+  (testing "the guidance of the step the run stopped at wins over a later one"
+    (is (= {:text "first"}
+           (:recovery (recorded #(do (outcome/recovery! "first" {}) (outcome/recovery! "second" {})))))))
+  (testing "a function that throws records why, so the failure it explains stays readable"
+    (is (= {:error "boom"}
+           (:recovery (recorded #(outcome/recovery! (fn [_] (throw (ex-info "boom" {}))) {}))))))
+  (testing "no guidance, blank guidance and nil from a function record nothing"
+    (is (not (contains? (recorded #(outcome/recovery! nil {})) :recovery)))
+    (is (not (contains? (recorded #(outcome/recovery! "  " {})) :recovery)))
+    (is (not (contains? (recorded #(outcome/recovery! (constantly nil) {})) :recovery))))
+  (testing "outside a run nothing is rendered"
+    (let [called (atom false)]
+      (outcome/recovery! (fn [_] (reset! called true) "x") {})
+      (is (false? @called)))))
+
+(deftest recovery-lines-follow-only-a-failed-banner
+  (is (= ["Recovery:" "  resume the owner" "  then the HelmRelease"]
+         (outcome/recovery-lines :error {:recovery {:text "resume the owner\nthen the HelmRelease"}})))
+  (is (= ["Recovery: the guidance for the step the run stopped at could not be rendered - boom"]
+         (outcome/recovery-lines :error {:recovery {:error "boom"}})))
+  (is (nil? (outcome/recovery-lines :error {:applied 1 :stopped "x"})) "no guidance, no lines")
+  (is (nil? (outcome/recovery-lines :neutral {:recovery {:text "x"}})) "a pause or a clean abort prints none")
+  (is (nil? (outcome/recovery-lines :ok {:recovery {:text "x"}}))))

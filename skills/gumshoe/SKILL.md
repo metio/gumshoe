@@ -192,7 +192,10 @@ and current list.
    final banner says what the run did: `DONE - applied and verified` is the
    only one that promises its post-checks held, `DONE - applied; this book has
    no post-checks` verified nothing, and a `FAILED after N effects` banner
-   names where it stopped while the effects before it stay applied.
+   names where it stopped while the effects before it stay applied. Lines
+   under a failed banner headed `Recovery:` are the stopped step's guidance:
+   what the half-applied state means and how to bring the system back. Read
+   them to the human before anything else is run.
 
 A book whose change cannot be expressed as a plan says under `--dry-run` that
 it does not support a dry run, and runs nothing. Interactive sessions
@@ -230,6 +233,19 @@ mostly data:
 - a playbook is `(playbook/book {:select … :confirm … :steps […]})`, whose
   steps are mutation specs, checks and pauses; it derives its prerequisites
   and options from the steps and asks for one confirmation;
+- any step whose failure leaves a system parked or half-owned - a controller
+  suspended, a finalizer stripped, an owner removed before its replacement
+  exists - carries `:recovery`, a string or `(fn [ctx] …)` returning one,
+  which the run prints under the `FAILED` banner when it stops at that step.
+  A function receives the step's context with `:applied`, runs at the
+  failure, and can read the cluster to say what is still suspended and give
+  the commands that undo it; one that throws leaves the banner intact and
+  says the guidance could not be rendered. The playbook's own `:recovery`
+  covers its steps without one once the run changed something, which reaches
+  a caller's steps added at positions; a mutation book carries `:recovery`
+  the same way. `gumshoe.tools.flux-storage/recovery` is the example: it
+  names which of the HelmRelease and its owner stay suspended. A rollback
+  step at the end never runs, because the run stops at the first failure;
 - a dispatcher is `(dispatch/book {:select … :classify (fn [ctx target] key)
   :routes {key {:playbook …}}})`, one front door that runs the playbook a
   subject's kind routes to;
