@@ -33,17 +33,9 @@
       (.toInstant (java.time.OffsetDateTime/parse (str date "T" time fraction hours ":" minutes)))
       (catch Exception _ nil))))
 
-(defn- instant
-  "A condition time as clj-yaml reads it: a Date when unquoted, else a string."
-  [value]
-  (cond
-    (instance? java.util.Date value) (.toInstant ^java.util.Date value)
-    (string? value) (try (java.time.Instant/parse value) (catch Exception _ nil))
-    :else nil))
-
 (defn- since
   [finding value]
-  (onset/since finding (some-> (instant value) str)))
+  (onset/since finding (some-> (onset/instant value) str)))
 
 (defn parse-status
   "data.status as a map, or nil when it is absent or not the structured

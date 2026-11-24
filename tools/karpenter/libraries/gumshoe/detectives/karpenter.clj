@@ -7,6 +7,7 @@
    and NodeClaims that never become a Ready node or stay Drifted because
    their replacement is blocked."
   (:require [clojure.string :as str]
+            [gumshoe.conditions :as conditions]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]
             [gumshoe.quantity :as quantity]))
@@ -27,15 +28,6 @@
 (def ^:private launch-steps
   "The conditions a NodeClaim passes on its way to Ready, in order."
   ["Launched" "Registered" "Initialized"])
-
-(defn- conditions
-  [object]
-  (into {} (map (juxt :type identity)) (-> object :status :conditions)))
-
-(defn- minutes-since
-  [value now]
-  (when-let [at (try (some-> value java.time.Instant/parse) (catch Exception _ nil))]
-    (when now (.toMinutes (java.time.Duration/between at ^java.time.Instant now)))))
 
 (defn- reason-text
   [{:keys [reason message]}]
@@ -64,7 +56,7 @@
 
 (defn nodepool-findings
   [nodepool]
-  (let [by-type (conditions nodepool)
+  (let [by-type (conditions/by-type nodepool)
         component (kubectl/name-of nodepool)
         ready (get by-type "Ready")
         registration (get by-type "NodeRegistrationHealthy")
@@ -95,11 +87,11 @@
 
 (defn nodeclaim-findings
   [nodeclaim now]
-  (let [by-type (conditions nodeclaim)
+  (let [by-type (conditions/by-type nodeclaim)
         component (kubectl/name-of nodeclaim)
-        age (minutes-since (-> nodeclaim :metadata :creationTimestamp) now)
+        age (conditions/minutes-since (-> nodeclaim :metadata :creationTimestamp) now)
         drifted (get by-type "Drifted")
-        drifted-minutes (minutes-since (:lastTransitionTime drifted) now)
+        drifted-minutes (conditions/minutes-since (:lastTransitionTime drifted) now)
         deleting? (some? (-> nodeclaim :metadata :deletionTimestamp))]
     (remove nil?
             [(when (and (not deleting?) (not= "True" (:status (get by-type "Ready")))

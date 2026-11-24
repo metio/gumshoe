@@ -7,6 +7,7 @@
    reach, Machines that failed, never finish provisioning or never finish
    deleting, and MachineHealthChecks whose remediation is blocked."
   (:require [clojure.string :as str]
+            [gumshoe.conditions :as conditions]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
@@ -26,32 +27,15 @@
 (def machine-causes
   ["BootstrapConfigReady" "InfrastructureReady" "NodeHealthy"])
 
-(defn- conditions
-  [object]
-  (into {} (map (juxt :type identity)) (-> object :status :conditions)))
-
-(defn- minutes-since
-  [value now]
-  (when-let [at (try (some-> value java.time.Instant/parse) (catch Exception _ nil))]
-    (when now (.toMinutes (java.time.Duration/between at ^java.time.Instant now)))))
-
-(defn- first-false
-  [by-type types]
-  (first (keep #(let [c (get by-type %)] (when (= "False" (:status c)) c)) types)))
-
-(defn- first-line
-  [text]
-  (some-> text str str/split-lines first str/trim not-empty))
-
 (defn- explain
   [condition]
-  (str/join " - " (remove nil? [(:reason condition) (first-line (:message condition))])))
+  (str/join " - " (remove nil? [(:reason condition) (conditions/first-line (:message condition))])))
 
 (defn cluster-findings
   [cluster now]
-  (let [by-type (conditions cluster)
+  (let [by-type (conditions/by-type cluster)
         available (get by-type "Available")
-        cause (first-false by-type cluster-causes)
+        cause (conditions/first-false cluster cluster-causes)
         component (kubectl/namespace-name-of cluster)]
     (cond
       (or (true? (-> cluster :spec :paused)) (= "True" (:status (get by-type "Paused"))))
@@ -69,7 +53,7 @@
         :hint (or (some-> cause explain not-empty) "its conditions say which part failed")}]
 
       (and (= "False" (:status available))
-           (some-> (minutes-since (:lastTransitionTime available) now) (>= settle-minutes)))
+           (some-> (conditions/minutes-since (:lastTransitionTime available) now) (>= settle-minutes)))
       [(onset/since
         {:severity :critical
          :component component
@@ -87,13 +71,13 @@
 
 (defn machine-findings
   [machine now]
-  (let [by-type (conditions machine)
+  (let [by-type (conditions/by-type machine)
         {:keys [phase deletion]} (:status machine)
         component (kubectl/namespace-name-of machine)
-        age (minutes-since (-> machine :metadata :creationTimestamp) now)
+        age (conditions/minutes-since (-> machine :metadata :creationTimestamp) now)
         deleting-since (-> machine :metadata :deletionTimestamp)
-        deleting (minutes-since deleting-since now)
-        cause (first-false by-type machine-causes)
+        deleting (conditions/minutes-since deleting-since now)
+        cause (conditions/first-false machine machine-causes)
         health (get by-type "HealthCheckSucceeded")]
     (remove nil?
             [(when (= "Failed" phase)
@@ -137,13 +121,13 @@
 
 (defn healthcheck-finding
   [healthcheck]
-  (let [allowed (get (conditions healthcheck) "RemediationAllowed")]
+  (let [allowed (get (conditions/by-type healthcheck) "RemediationAllowed")]
     (when (= "False" (:status allowed))
       (onset/since
        {:severity :critical
         :component (kubectl/namespace-name-of healthcheck)
         :summary (format "MachineHealthCheck may not remediate (%s)" (or (:reason allowed) "no reason"))
-        :hint (str (some-> (first-line (:message allowed)) (str " - "))
+        :hint (str (some-> (conditions/first-line (:message allowed)) (str " - "))
                    "unhealthy Machines stay as they are until fewer are unhealthy than its unhealthyLessThanOrEqualTo limit")}
        (:lastTransitionTime allowed)))))
 

@@ -4,7 +4,8 @@
 (ns runbooks.stageset.reconcile
   "Triggers a StageSet reconciliation via stagesetctl, optionally overriding the
    update window so a held revision rolls now."
-  (:require [gumshoe.effect :as effect]
+  (:require [gumshoe.conditions :as conditions]
+            [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
             [gumshoe.tools.stageset :as stageset]))
@@ -15,13 +16,10 @@
 
 (defn ready-check
   [context namespace name target]
-  {:description (format "StageSet %s is Ready" target)
-   :timeout 120 :interval 10
-   :check (fn []
-            (->> (-> (kubectl/get-namespaced-resource context namespace stageset/stageset-type name)
-                     :status :conditions)
-                 (some #(and (= "Ready" (:type %)) (= "True" (:status %))))
-                 boolean))})
+  (conditions/ready-check
+   {:description (format "StageSet %s is Ready" target)
+    :timeout 120 :interval 10
+    :fetch #(kubectl/get-namespaced-resource context namespace stageset/stageset-type name)}))
 
 (mutation/book
  {:description "Triggers a StageSet reconciliation via stagesetctl"

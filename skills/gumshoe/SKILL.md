@@ -387,6 +387,14 @@ mostly data:
   `reconcile` waits for `status.lastHandledReconcileAt` to equal the token
   it stamped;
 - a bespoke book calls `runbook/execute!` with its own `:action`;
+- status conditions are read through `gumshoe.conditions`, never by hand:
+  `(conditions/condition o "Ready")`, `by-type`, `holds?` (True), `status?`
+  (`(status? o "Ready" "False")` for an explicit failure), `ready?`,
+  `first-false`, `stale?` (generation not yet observed), a tolerant
+  `minutes-since` and `first-line`. A missing condition is neither True nor
+  False, and the first of a repeated type counts. A post-check that waits for
+  Ready is `(conditions/ready-check {:description … :timeout … :interval …
+  :fetch #(kubectl/get-namespaced-resource …)})`;
 - an option naming a checkout or another directory the book reads goes in
   `:prerequisites {:existing-paths [:fahrplan {:option :k8s-deployments
   :writable true}]}`: a keyword requires an existing directory, the map form

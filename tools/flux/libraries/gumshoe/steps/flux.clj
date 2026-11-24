@@ -15,7 +15,8 @@
    :recovery (see gumshoe.playbook). The object comes from a function of the
    step's context, so a step acts on whatever its :derive observed; a step
    whose object is nil plans a note and checks nothing."
-  (:require [gumshoe.effect :as effect]
+  (:require [gumshoe.conditions :as conditions]
+            [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.tools.flux :as flux]))
 
@@ -51,7 +52,7 @@
 (defn ready?
   "Whether the object's Ready condition is True."
   [object]
-  (boolean (some #(and (= "Ready" (:type %)) (= "True" (:status %))) (-> object :status :conditions))))
+  (conditions/ready? object))
 
 (defn fetch
   "The object as the cluster holds it now."

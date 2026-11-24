@@ -5,7 +5,8 @@
   "Detectives for Flagger (flagger.app): Canaries whose analysis failed and
    rolled back, analyses that are failing checks right now, Canaries that
    never finish initializing, and rollouts held at a confirmation gate."
-  (:require [gumshoe.kubectl :as kubectl]
+  (:require [gumshoe.conditions :as conditions]
+            [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
 (def canary-type "canaries.flagger.app")
@@ -13,14 +14,9 @@
 (def ^:private initializing-minutes 15)
 (def ^:private gate-minutes 60)
 
-(defn- minutes-since
-  [value now]
-  (when-let [at (try (some-> value java.time.Instant/parse) (catch Exception _ nil))]
-    (when now (.toMinutes (java.time.Duration/between at ^java.time.Instant now)))))
-
 (defn- promoted
   [canary]
-  (first (filter #(= "Promoted" (:type %)) (-> canary :status :conditions))))
+  (conditions/condition canary "Promoted"))
 
 (defn- target
   [canary]
@@ -33,7 +29,7 @@
         threshold (-> canary :spec :analysis :threshold)
         condition (promoted canary)
         component (kubectl/namespace-name-of canary)
-        since (minutes-since lastTransitionTime now)
+        since (conditions/minutes-since lastTransitionTime now)
         message (not-empty (:message condition))]
     (cond
       (-> canary :spec :suspend) nil

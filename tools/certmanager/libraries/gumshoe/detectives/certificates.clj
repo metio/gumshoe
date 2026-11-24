@@ -4,7 +4,8 @@
 (ns gumshoe.detectives.certificates
   "Detectives for cert-manager: certificates that are not ready, whose
    renewal keeps failing, or that expire soon, and ACME orders that went sour."
-  (:require [gumshoe.kubectl :as kubectl]
+  (:require [gumshoe.conditions :as conditions]
+            [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
 (def certificate-type "certificates.cert-manager.io")
@@ -12,22 +13,10 @@
 
 (def ^:private expiry-warning-days 14)
 
-(defn- ready-condition
-  [resource]
-  (first (filter #(= "Ready" (:type %)) (-> resource :status :conditions))))
-
 (defn expires-within?
   [now days not-after]
   (.isBefore (java.time.Instant/parse not-after)
              (.plus now (java.time.Duration/ofDays days))))
-
-(defn- condition
-  [resource type]
-  (first (filter #(= type (:type %)) (-> resource :status :conditions))))
-
-(defn- instant
-  [value]
-  (try (some-> value java.time.Instant/parse) (catch Exception _ nil)))
 
 (defn failing-renewal
   "The renewal failure of a certificate that is still Ready, or nil: cert-manager
@@ -36,14 +25,13 @@
    until notAfter, so the not-ready check cannot see this."
   [certificate now]
   (let [{:keys [failedIssuanceAttempts lastFailureTime renewalTime notBefore notAfter]} (:status certificate)
-        ready (condition certificate "Ready")
-        issuing (condition certificate "Issuing")
-        renewal (instant renewalTime) failure (instant lastFailureTime)
-        before (instant notBefore) after (instant notAfter)]
+        ready (conditions/condition certificate "Ready")
+        issuing (conditions/condition certificate "Issuing")
+        renewal (onset/instant renewalTime) failure (onset/instant lastFailureTime)
+        before (onset/instant notBefore) after (onset/instant notAfter)]
     (when (and (pos? (or failedIssuanceAttempts 0))
                (= "True" (:status ready))
-               (or (nil? (:observedGeneration ready))
-                   (= (:observedGeneration ready) (-> certificate :metadata :generation)))
+               (not (conditions/stale? certificate ready))
                issuing renewal failure after now
                (or (nil? before) (not (.isAfter ^java.time.Instant before renewal)))
                (.isBefore ^java.time.Instant renewal after)
@@ -75,7 +63,7 @@
         certificates (kubectl/items-of (get evidence certificate-type))]
     (concat
      (for [certificate certificates
-           :let [ready (ready-condition certificate)]
+           :let [ready (conditions/condition certificate "Ready")]
            :when (= "False" (:status ready))]
        {:severity :critical
         :component (kubectl/namespace-name-of certificate)

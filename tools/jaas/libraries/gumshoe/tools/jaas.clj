@@ -14,7 +14,8 @@
    there the flux package's back-pointer edge walks on to whoever consumes that
    artifact. A stalled delivery and the snippet that failed to render for it sit
    on one chain you can follow object by object."
-  (:require [gumshoe.kubectl :as kubectl]
+  (:require [gumshoe.conditions :as conditions]
+            [gumshoe.kubectl :as kubectl]
             [gumshoe.plugin :as plugin]
             [gumshoe.subject :as subject]))
 
@@ -44,17 +45,14 @@
    "Pending" :info
    "Suspended" :info})
 
-(defn- ready-condition
-  [resource]
-  (first (filter #(= "Ready" (:type %)) (-> resource :status :conditions))))
-
 (defn ready-reason
   "The Ready condition's reason on a live snippet - what the suspend and resume
    books post-check against, so the two books share the read instead of one
    reaching into the other."
   [context namespace name]
-  (:reason (ready-condition
-            (kubectl/get-namespaced-resource context namespace jsonnetsnippet-type name))))
+  (:reason (conditions/condition
+            (kubectl/get-namespaced-resource context namespace jsonnetsnippet-type name)
+            "Ready")))
 
 (defn- snippet-subject
   [snippet]
@@ -75,7 +73,7 @@
 (defn detect-snippet-problems
   [evidence]
   (for [snippet (kubectl/items-of (get evidence jsonnetsnippet-type))
-        :let [ready (ready-condition snippet)]
+        :let [ready (conditions/condition snippet "Ready")]
         :when (= "False" (:status ready))]
     {:severity (get reason-severity (:reason ready) :warning)
      :component (kubectl/namespace-name-of snippet)

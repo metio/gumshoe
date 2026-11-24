@@ -15,8 +15,10 @@
    a storage phase and a ready count that look survivable."
   (:require [clojure.string :as str]
             [gumshoe.cnpg.instances :as inst]
+            [gumshoe.conditions :as conditions]
             [gumshoe.cron :as cron]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.onset :as onset]))
 
 (def cluster-type "clusters.postgresql.cnpg.io")
 (def backup-type "backups.postgresql.cnpg.io")
@@ -25,15 +27,7 @@
 (def ^:private healthy-phase "Cluster in healthy state")
 (def ^:private healthy-bucket "healthy")
 
-(defn- condition
-  [resource type]
-  (first (filter #(= type (:type %)) (-> resource :status :conditions))))
-
 (def ^:private stuck-after (java.time.Duration/ofHours 1))
-
-(defn- instant
-  [value]
-  (when value (try (java.time.Instant/parse value) (catch Exception _ nil))))
 
 (defn- describe-duration
   [^java.time.Duration d]
@@ -78,8 +72,8 @@
                 (format "a switchover to %s is under way; if it does not complete, nothing accepts writes"
                         target))})
      (for [cluster clusters
-           :let [ready (condition cluster "Ready")
-                 since (instant (:lastTransitionTime ready))
+           :let [ready (conditions/condition cluster "Ready")
+                 since (onset/instant (:lastTransitionTime ready))
                  age (when (and now since) (java.time.Duration/between since now))]
            :when (and (= "False" (:status ready)) age (pos? (.compareTo age stuck-after)))]
        {:severity :critical
@@ -158,7 +152,7 @@
         :component (kubectl/namespace-name-of cluster)
         :summary (format "only %d of %d instances are ready" ready instances)})
      (for [cluster clusters
-           :let [archiving (condition cluster "ContinuousArchiving")]
+           :let [archiving (conditions/condition cluster "ContinuousArchiving")]
            :when (= "False" (:status archiving))]
        {:severity :critical
         :component (kubectl/namespace-name-of cluster)
@@ -266,8 +260,8 @@
     (for [scheduled (kubectl/items-of (get evidence scheduled-backup-type))
           :when (not (true? (-> scheduled :spec :suspend)))
           :let [interval (schedule-interval (-> scheduled :spec :schedule))
-                last-run (instant (-> scheduled :status :lastScheduleTime))
-                reference (or last-run (instant (-> scheduled :metadata :creationTimestamp)))
+                last-run (onset/instant (-> scheduled :status :lastScheduleTime))
+                reference (or last-run (onset/instant (-> scheduled :metadata :creationTimestamp)))
                 allowed (when interval (let [twice (.multipliedBy ^java.time.Duration interval 2)]
                                          (if (neg? (.compareTo twice (java.time.Duration/ofHours 2)))
                                            (java.time.Duration/ofHours 2) twice)))]

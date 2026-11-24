@@ -11,6 +11,7 @@
    chart has always set to the same value, is neither: Helm patches only what
    changed between manifests, so an upgrade never corrects it."
   (:require [clojure.string :as str]
+            [gumshoe.conditions :as conditions]
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.runbook :as runbook]
@@ -33,8 +34,7 @@
 
 (defn drifted?
   [release]
-  (boolean (some #(and (= "Drifted" (:type %)) (= "True" (:status %)))
-                 (-> release :status :conditions))))
+  (conditions/holds? release "Drifted"))
 
 (defn drifted-first
   "Releases reporting Drifted first, so the interesting ones head the picker."
@@ -45,10 +45,7 @@
 
 (defn drift-message
   [release]
-  (->> (-> release :status :conditions)
-       (filter #(= "Drifted" (:type %)))
-       (keep :message)
-       first))
+  (:message (conditions/condition release "Drifted")))
 
 (def ^:private reading
   ["a field only one side writes is drift: force a re-apply with"

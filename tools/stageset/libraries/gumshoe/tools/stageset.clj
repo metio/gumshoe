@@ -14,6 +14,7 @@
    rollout that stalled leads to the artifact behind the stage that stalled it,
    and on to whatever produced that artifact."
   (:require [clojure.string :as str]
+            [gumshoe.conditions :as conditions]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.plugin :as plugin]
             [gumshoe.subject :as subject]))
@@ -43,10 +44,6 @@
    "AwaitingPromotion" :info
    "Soaking" :info})
 
-(defn- ready-condition
-  [resource]
-  (first (filter #(= "Ready" (:type %)) (-> resource :status :conditions))))
-
 (defn- stageset-subject
   [stageset]
   (subject/subject "StageSet" (kubectl/namespace-of stageset) (kubectl/name-of stageset)))
@@ -54,7 +51,7 @@
 (defn detect-stageset-problems
   [evidence]
   (for [stageset (kubectl/items-of (get evidence stageset-type))
-        :let [ready (ready-condition stageset)]
+        :let [ready (conditions/condition stageset "Ready")]
         :when (= "False" (:status ready))]
     {:severity (get reason-severity (:reason ready) :warning)
      :component (kubectl/namespace-name-of stageset)

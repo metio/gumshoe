@@ -11,6 +11,7 @@
   (:require [cheshire.core :as json]
             [clojure.string :as str]
             [gumshoe.cnpg.instances :as instances]
+            [gumshoe.conditions :as conditions]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.pick :as pick]))
 
@@ -23,10 +24,6 @@
 (defn- annotation
   [object key]
   (get-in object [:metadata :annotations (keyword key)]))
-
-(defn- condition
-  [object type]
-  (first (filter #(= type (:type %)) (-> object :status :conditions))))
 
 (def parse-pick
   "\"<namespace>/<name>\" as {:namespace :name}, or nil."
@@ -48,7 +45,7 @@
 (defn hibernated?
   "The operator reports every instance pod gone."
   [cluster]
-  (= "True" (:status (condition cluster hibernation-condition))))
+  (= "True" (:status (conditions/condition cluster hibernation-condition))))
 
 (defn hibernation-refusal
   [cluster wanted]
@@ -80,7 +77,7 @@
   [cluster wanted]
   (if wanted
     (hibernated? cluster)
-    (boolean (and (nil? (condition cluster hibernation-condition)) (healthy? cluster)))))
+    (boolean (and (nil? (conditions/condition cluster hibernation-condition)) (healthy? cluster)))))
 
 ;; --- restart and reload ----------------------------------------------------------
 

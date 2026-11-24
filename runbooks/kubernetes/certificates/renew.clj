@@ -4,6 +4,7 @@
 (ns runbooks.kubernetes.certificates.renew
   "Renews certificates managed by cert-manager."
   (:require [clojure.string :as str]
+            [gumshoe.conditions :as conditions]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]))
@@ -27,13 +28,10 @@
   [context selected]
   (for [certificate selected
         :let [{:keys [namespace name]} (kubectl/namespace-name-map certificate)]]
-    {:description (format "certificate %s is Ready" certificate)
-     :timeout 180 :interval 10
-     :check (fn []
-              (->> (-> (kubectl/get-namespaced-resource context namespace certificate-type name)
-                       :status :conditions)
-                   (some #(and (= "Ready" (:type %)) (= "True" (:status %))))
-                   boolean))}))
+    (conditions/ready-check
+     {:description (format "certificate %s is Ready" certificate)
+      :timeout 180 :interval 10
+      :fetch #(kubectl/get-namespaced-resource context namespace certificate-type name)})))
 
 (mutation/book
  {:description "Renews certificates managed by cert-manager"

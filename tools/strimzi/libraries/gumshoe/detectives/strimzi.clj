@@ -9,7 +9,7 @@
    The cluster and user operators report a failure as a NotReady condition
    that is True, the topic operator as a Ready condition that is False; both
    count here. A NotReady with reason Creating is a new cluster deploying."
-  (:require [clojure.string :as str]
+  (:require [gumshoe.conditions :as conditions]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
@@ -39,28 +39,18 @@
 (def ^:private settle-minutes 10)
 (def ^:private creating-minutes 30)
 
-(defn- minutes-since
-  [value now]
-  (when-let [at (try (some-> value java.time.Instant/parse) (catch Exception _ nil))]
-    (when now (.toMinutes (java.time.Duration/between at ^java.time.Instant now)))))
-
 (defn failure
   "The condition that says a resource failed, or nil: NotReady True, else
    Ready False."
   [resource]
-  (let [conditions (-> resource :status :conditions)]
-    (or (first (filter #(and (= "NotReady" (:type %)) (= "True" (:status %))) conditions))
-        (first (filter #(and (= "Ready" (:type %)) (= "False" (:status %))) conditions)))))
-
-(defn- first-line
-  [text]
-  (some-> text str str/split-lines first str/trim not-empty))
+  (or (when (conditions/holds? resource "NotReady") (conditions/condition resource "NotReady"))
+      (when (conditions/status? resource "Ready" "False") (conditions/condition resource "Ready"))))
 
 (defn resource-findings
   [kind severity resource now]
   (let [component (kubectl/namespace-name-of resource)
         failed (failure resource)
-        age (minutes-since (:lastTransitionTime failed) now)
+        age (conditions/minutes-since (:lastTransitionTime failed) now)
         grace (if (= "Creating" (:reason failed)) creating-minutes settle-minutes)]
     (concat
      (when (and failed (not (-> resource :metadata :deletionTimestamp))
@@ -69,7 +59,7 @@
          {:severity severity
           :component component
           :summary (format "%s is not ready (%s)" kind (or (:reason failed) "no reason"))
-          :hint (str (some-> (first-line (:message failed)) (str " - "))
+          :hint (str (some-> (conditions/first-line (:message failed)) (str " - "))
                      "the Strimzi operator could not reconcile it - its logs carry the full error")}
          (:lastTransitionTime failed))])
      (for [{:keys [type status reason message]} (-> resource :status :conditions)
@@ -80,7 +70,7 @@
                    (format "%s reports a warning (%s)" kind (or reason "no reason"))
                    (format "%s reconciliation is paused" kind))
         :hint (if (= "Warning" type)
-                (first-line message)
+                (conditions/first-line message)
                 "the operator ignores changes to it until the strimzi.io/pause-reconciliation annotation is removed")}))))
 
 (defn connector-findings
@@ -101,13 +91,13 @@
                {:severity :critical
                 :component component
                 :summary "KafkaConnector's connector is FAILED"
-                :hint (str (or (first-line (:trace connector)) "no trace") restart-note)})
+                :hint (str (or (conditions/first-line (:trace connector)) "no trace") restart-note)})
              (when (seq failed-tasks)
                {:severity :critical
                 :component component
                 :summary (format "KafkaConnector has %d of %d tasks FAILED" (count failed-tasks) (count tasks))
                 :hint (str "task " (:id (first failed-tasks)) ": "
-                           (or (first-line (:trace (first failed-tasks))) "no trace")
+                           (or (conditions/first-line (:trace (first failed-tasks))) "no trace")
                            restart-note
                            " - the strimzi.io/restart-task annotation restarts one, spec.autoRestart restarts them on its own")})])))
 

@@ -8,7 +8,7 @@
    Provider stops every managed resource it reconciles and a broken Function
    every composition that calls it, so these come before the managed
    resources the generic condition fallback reports one by one."
-  (:require [clojure.string :as str]
+  (:require [gumshoe.conditions :as conditions]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
@@ -30,27 +30,14 @@
   "The health conditions read, in order; the first that is False is reported."
   ["Healthy" "RevisionHealthy" "RuntimeHealthy"])
 
-(defn- conditions
-  [object]
-  (into {} (map (juxt :type identity)) (-> object :status :conditions)))
-
-(defn- minutes-since
-  [value now]
-  (when-let [at (try (some-> value java.time.Instant/parse) (catch Exception _ nil))]
-    (when now (.toMinutes (java.time.Duration/between at ^java.time.Instant now)))))
-
-(defn- first-line
-  [text]
-  (some-> text str str/split-lines first str/trim not-empty))
-
 (defn package-findings
   [kind consequence package now]
-  (let [by-type (conditions package)
+  (let [by-type (conditions/by-type package)
         installed (get by-type "Installed")
         unhealthy (first (keep #(let [c (get by-type %)] (when (= "False" (:status c)) c)) health-types))
         component (kubectl/name-of package)
         image (-> package :spec :package)
-        detail (fn [condition] (some-> (first-line (:message condition)) (str " - ")))]
+        detail (fn [condition] (some-> (conditions/first-line (:message condition)) (str " - ")))]
     (remove nil?
             [(when (= "False" (:status installed))
                (case (:reason installed)
@@ -64,7 +51,7 @@
                   (:lastTransitionTime installed))
 
                  "UnpackingPackage"
-                 (when (some-> (minutes-since (:lastTransitionTime installed) now) (>= unpacking-minutes))
+                 (when (some-> (conditions/minutes-since (:lastTransitionTime installed) now) (>= unpacking-minutes))
                    (onset/since
                     {:severity :critical
                      :component component

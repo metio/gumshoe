@@ -5,28 +5,25 @@
   "Detectives for the monitoring stack as managed by the prometheus-operator:
    Prometheus, Alertmanager, and ThanosRuler instances that are not available
    or reconciling."
-  (:require [gumshoe.kubectl :as kubectl]))
+  (:require [gumshoe.conditions :as conditions]
+            [gumshoe.kubectl :as kubectl]))
 
 (def prometheus-type "prometheuses.monitoring.coreos.com")
 (def alertmanager-type "alertmanagers.monitoring.coreos.com")
 (def thanosruler-type "thanosrulers.monitoring.coreos.com")
 
-(defn- condition
-  [resource type]
-  (first (filter #(= type (:type %)) (-> resource :status :conditions))))
-
 (defn operator-findings
   [resources kind]
   (concat
    (for [resource resources
-         :let [available (condition resource "Available")]
+         :let [available (conditions/condition resource "Available")]
          :when (contains? #{"False" "Degraded"} (:status available))]
      {:severity :critical
       :component (kubectl/namespace-name-of resource)
       :summary (format "%s is not Available (%s)" kind (or (:reason available) (:status available)))
       :hint (:message available)})
    (for [resource resources
-         :let [reconciled (condition resource "Reconciled")]
+         :let [reconciled (conditions/condition resource "Reconciled")]
          :when (= "False" (:status reconciled))]
      {:severity :warning
       :component (kubectl/namespace-name-of resource)
