@@ -243,7 +243,13 @@ mostly data:
 - a cluster read no `gumshoe.kubectl` function wraps goes through
   `(kubectl/get-json context "namespaces" "--selector=…")`, nil when the read
   fails, or `get-json-result`, whose `:ok?` tells a failed read from an empty
-  one before a gate trusts an absence.
+  one before a gate trusts an absence. Both are strict readers: while a
+  `:select` lists candidates, `kubectl/*strict-reads*` is bound and a read
+  that did not answer throws `::kubectl/unread`, which the book reports as
+  "could not list the … candidates" instead of "nothing to do". A
+  `NotFound` answer is not a failure there. `secret-names`, `tls-secrets`,
+  `get-raw` and `raw-text` ignore the binding, so a candidate fn that must
+  not mistake a failed read for an empty one avoids them.
 
 A plugin calls `gumshoe.plugin/provide!` once with any of the seams:
 announcers, detectives, capabilities, tools, pre- and post-hooks, secrets,

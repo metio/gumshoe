@@ -4,7 +4,8 @@
 (ns gumshoe.kubectl-test
   (:require [clojure.test :refer [deftest is testing]]
             [gumshoe.shell :as shell]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.select :as select]))
 
 (def nodes
   {:items [{:metadata {:name "worker-1"}
@@ -216,6 +217,40 @@
   (testing "kubectl answered with output that does not parse"
     (with-redefs [shell/execute (fn [& _] {:exit 0 :out "{\"items\":[{"})]
       (is (= {:ok? false :doc nil} (kubectl/get-json-result "ctx" "namespaces"))))))
+
+(deftest get-json-result-honours-strict-reads-test
+  (let [unreachable (fn [& _] {:exit 1 :out "" :err "Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"})]
+    (testing "a plain read that did not answer is not ok?"
+      (with-redefs [shell/execute unreachable]
+        (is (= {:ok? false :doc nil} (kubectl/get-json-result "ctx" "namespaces")))))
+    (testing "a strict read that did not answer throws ::unread with kubectl's reason"
+      (with-redefs [shell/execute unreachable]
+        (let [e (try (binding [kubectl/*strict-reads* true] (kubectl/get-json-result "ctx" "namespaces"))
+                     (catch clojure.lang.ExceptionInfo e e))]
+          (is (instance? clojure.lang.ExceptionInfo e))
+          (is (::kubectl/unread (ex-data e)))
+          (is (re-find #"Unable to connect" (ex-message e))))))
+    (testing "a strict read whose output does not parse did not answer either"
+      (with-redefs [shell/execute (fn [& _] {:exit 0 :out "{\"items\":[{" :err ""})]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"did not answer"
+                              (binding [kubectl/*strict-reads* true] (kubectl/get-json-result "ctx" "namespaces"))))))
+    (testing "a strict read that answered NotFound is not ok?, and does not throw"
+      (with-redefs [shell/execute (fn [& _] {:exit 1 :out "" :err "Error from server (NotFound): namespaces \"web\" not found"})]
+        (is (= {:ok? false :doc nil}
+               (binding [kubectl/*strict-reads* true] (kubectl/get-json-result "ctx" "namespaces" "web"))))))
+    (testing "a strict read that answered is returned as it is"
+      (with-redefs [shell/execute (fn [& _] {:exit 0 :out "{\"items\":[]}" :err ""})]
+        (is (= {:ok? true :doc {:items []}}
+               (binding [kubectl/*strict-reads* true] (kubectl/get-json-result "ctx" "namespaces"))))))))
+
+(deftest a-candidate-fn-built-on-get-json-result-reports-an-unanswered-read-test
+  (let [candidates (fn [context]
+                     (let [{:keys [doc]} (kubectl/get-json-result context "namespaces")]
+                       (kubectl/names-of doc)))]
+    (with-redefs [shell/execute (fn [& _] {:exit 1 :out "" :err "Error from server (TooManyRequests): the server has received too many requests"})]
+      (let [{:keys [unread candidates]} (select/resolve-target {:mode :one :label "Namespace" :candidates candidates} {} "ctx")]
+        (is (nil? candidates) "an unanswered read is not an empty candidate list")
+        (is (re-find #"TooManyRequests" (str unread)))))))
 
 (deftest a-claim-counts-as-unused-only-when-the-pods-were-read
   (let [pvcs {:items [{:metadata {:namespace "db" :name "data"}}
