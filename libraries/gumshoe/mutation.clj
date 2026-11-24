@@ -46,6 +46,12 @@
       :recovery \"...\" or (fn [ctx] -> string)   ; optional, printed under the
                                     ; FAILED banner when this change fails,
                                     ; see gumshoe.playbook
+      :connect  (fn [opts] -> {:context .. :cluster .. :announce-as ..} or nil)
+                                    ; optional, what the change acts on when that
+                                    ; is not the kube context, see below
+      :announce? false  ; optional, handed to the runbook harness; a book that
+                        ; changes nothing anyone else needs to hear of (a debug
+                        ; session) runs as a read-only book does
       :confirmed? true}  ; set by a playbook whose confirmation covered this step
 
    The :refusal, :precondition, :announce, :effect, :verify, :derive and :items
@@ -82,6 +88,17 @@
    or resource type does not exist still returns nil, which the precondition
    judges. Only the gumshoe.kubectl readers that honour *strict-reads* are
    strict here (see its docstring).
+
+   :connect names what the change acts on when that is not the cluster of
+   the kube context: an SSH host, a storage cluster's API. It receives the
+   parsed flags and returns :context, which the candidate query, every
+   callback and the effect receive in place of the kube context; :cluster,
+   the name the confirmation shows the change acting on; and :announce-as,
+   the system the changelog names, defaulting to :cluster. It returns nil
+   when what it names cannot be reached, having said why, and the change
+   stops before anything is listed. Without :connect the context is the
+   current kube context and :cluster its cluster. :subject and :pin read
+   their object with kubectl, so a spec with :connect takes neither.
 
    Three entry points, same spec: `book` is a standalone runbook; `run!` selects
    the subject and runs it, returning a boolean; `run-on!` runs against a subject
@@ -263,21 +280,25 @@
                         {:ref pinned :before (fingerprint object (:facts pinned))})
     :else nil))
 
-(defn run-on!
-  "Runs a mutation spec against an ALREADY-CHOSEN `target`, skipping the spec's own
-   selection, through derive -> confirm -> [precondition] -> announce -> execute
-   -> verify. Returns true/false, false without asking for a confirmation when a
-   read in :derive did not answer. This is what a playbook calls per step after picking its
-   subject once (e.g. via gumshoe.select/pick), so the operator is not re-prompted
-   for every step. `run!` is this plus selection.
+(defn- connect
+  "{:context :cluster :announce-as} for the spec: what its :connect returns
+   for opts, or nil when that could not be reached; the kube context and its
+   cluster without :connect."
+  [{:keys [connect subject pin]} opts]
+  (if connect
+    (do (when (or subject pin)
+          (throw (ex-info "a :subject or :pin reads its object with kubectl, so a spec with :connect takes neither"
+                          {:subject subject})))
+        (when-let [connection (connect opts)]
+          (update connection :announce-as #(or % (:cluster connection)))))
+    (let [context (kubectl/current-context)
+          cluster (kubectl/current-cluster)]
+      {:context context :cluster cluster :announce-as cluster})))
 
-   `opts` is the parsed CLI flags; `announcement-data` is the value the runbook
-   action receives in its ctx (nil when the book does not announce)."
+(defn- run-connected!
   [{:keys [select confirm announce effect verify] :as spec}
-   target opts announcement-data]
-  (let [context (kubectl/current-context)
-        cluster (kubectl/current-cluster)
-        base {:context context :cluster cluster :target target
+   {:keys [context cluster announce-as]} target opts announcement-data]
+  (let [base {:context context :cluster cluster :target target
               :opts opts :announcement-data announcement-data}
         {:keys [values unread]} (derived (subject-derive spec) base)]
     (if unread
@@ -298,7 +319,7 @@
                                                           ref before #(fetch-pinned context %)))
                       :confirmed? (:confirmed? spec)
                       :announce! (when announce
-                                   #(announce/announce! cluster announcement-data (announce ctx)))
+                                   #(announce/announce! announce-as announcement-data (announce ctx)))
                       :effect (effect ctx)
                       :step (or (:title spec) (:action confirm))
                       :post-checks (when verify (verify ctx))}))
@@ -306,27 +327,44 @@
         (when-not ok? (failed!))
         ok?))))
 
+(defn run-on!
+  "Runs a mutation spec against an ALREADY-CHOSEN `target`, skipping the spec's own
+   selection, through derive -> confirm -> [precondition] -> announce -> execute
+   -> verify. Returns true/false, false without asking for a confirmation when a
+   read in :derive did not answer. This is what a playbook calls per step after picking its
+   subject once (e.g. via gumshoe.select/pick), so the operator is not re-prompted
+   for every step. `run!` is this plus selection.
+
+   `opts` is the parsed CLI flags; `announcement-data` is the value the runbook
+   action receives in its ctx (nil when the book does not announce)."
+  [spec target opts announcement-data]
+  (if-let [connection (connect spec opts)]
+    (run-connected! spec connection target opts announcement-data)
+    false))
+
 (defn run!
   "Selects the spec's subject (interactive, honouring the CLI flags) and runs it
    through run-on!. Returns true when there is nothing to select (its
-   :empty-message is shown), false when the candidates could not be read or
-   the operator picks nothing, otherwise the
+   :empty-message is shown), false when what :connect names could not be
+   reached, the candidates could not be read or the operator picks nothing,
+   otherwise the
    change's result. Use run! for a single confirmed step; use run-on! to compose
    several steps against one already-picked subject."
   [{:keys [select empty-message] :as spec} opts announcement-data]
-  (let [context (kubectl/current-context)
-        {:keys [candidates target unread]} (select/resolve-target select opts context)]
-    (cond
-      unread (select/unread! select unread)
+  (if-let [connection (connect spec opts)]
+    (let [{:keys [candidates target unread]} (select/resolve-target select opts (:context connection))]
+      (cond
+        unread (select/unread! select unread)
 
-      (empty? candidates)
-      (do (stdout/ok (or empty-message "nothing to do")) true)
+        (empty? candidates)
+        (do (stdout/ok (or empty-message "nothing to do")) true)
 
-      (select/nothing-selected? (:mode select) target)
-      (do (stdout/error (format "no %s selected" (:label select))) false)
+        (select/nothing-selected? (:mode select) target)
+        (do (stdout/error (format "no %s selected" (:label select))) false)
 
-      :else
-      (run-on! spec target opts announcement-data))))
+        :else
+        (run-connected! spec connection target opts announcement-data)))
+    false))
 
 (defn picks
   "How a select spec chooses its subject, in the words --help shows."
@@ -365,8 +403,9 @@
    step's spec and call `run!` per step from a bespoke runbook/execute! :action."
   [{:keys [description options prerequisites] :as spec}]
   (runbook/execute!
-   {:description description
-    :options (or options {})
-    :prerequisites prerequisites
-    :details (details spec)
-    :action (fn [opts {:keys [announcement-data]}] (run! spec opts announcement-data))}))
+   (cond-> {:description description
+            :options (or options {})
+            :prerequisites prerequisites
+            :details (details spec)
+            :action (fn [opts {:keys [announcement-data]}] (run! spec opts announcement-data))}
+     (contains? spec :announce?) (assoc :announce? (:announce? spec)))))
