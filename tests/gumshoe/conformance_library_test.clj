@@ -92,6 +92,66 @@
   (update-vals (group-by #(str (fs/file-name (:file %))) findings)
                #(vec (sort (map :check %)))))
 
+(def ^:private reset-library
+  (str header
+       "(ns casebook.reset\n"
+       "  \"What the casebook still defines after gumshoe took over action-in-flight?.\")\n\n"
+       "(defn release-name [target] (second (re-find #\"/(.*)\" target)))\n"))
+
+(def ^:private unresolved-book
+  (str header
+       "(ns casebook.moodle.reset\n"
+       "  \"Calls a function its library no longer defines, inside the action.\"\n"
+       "  (:require [casebook.reset :as reset]\n"
+       "            [gumshoe.runbook :as runbook]))\n\n"
+       "(runbook/execute!\n"
+       " {:description \"Reset\"\n"
+       "  :action (fn [_ _] (reset/action-in-flight? (reset/release-name \"apps/moodle\")))})\n"))
+
+(defn- marker-book
+  "A book whose action writes `marker`, so a run of it leaves a trace."
+  [marker]
+  (str header
+       "(ns casebook.marker\n"
+       "  \"Writes a marker file when it runs.\"\n"
+       "  (:require [casebook.reset :as reset]\n"
+       "            [gumshoe.runbook :as runbook]))\n\n"
+       "(runbook/execute!\n"
+       " {:description \"Marker\"\n"
+       "  :action (fn [_ _] (spit " (pr-str marker) " (reset/release-name \"apps/ran\")) true)})\n"))
+
+(deftest a-book-that-parses-but-does-not-load-is-named-with-its-symbol
+  (let [root (casebook! {"libraries/casebook/reset.clj" reset-library
+                         "runbooks/moodle/reset.clj" unresolved-book
+                         "runbooks/hello/ok.clj" good-book})]
+    (try
+      (let [findings (conformance/findings-in (roots root))
+            [finding] findings]
+        (is (= {"reset.clj" [:load]} (by-file findings))
+            "only the book that cannot load, and nothing for the library it requires")
+        (is (str/ends-with? (:file finding) "runbooks/moodle/reset.clj"))
+        (is (str/includes? (:message finding) "reset/action-in-flight?") (:message finding)))
+      (testing "verify! fails and names the book"
+        (let [err (java.io.StringWriter.)
+              e (binding [*out* (java.io.StringWriter.) *err* err]
+                  (try (conformance/verify! (roots root)) nil
+                       (catch clojure.lang.ExceptionInfo e e)))]
+          (is (= 1 (:babashka/exit (ex-data e))))
+          (is (str/includes? (str err) "runbooks/moodle/reset.clj"))
+          (is (str/includes? (str err) "reset/action-in-flight?"))))
+      (testing ":load? false leaves loading to the caller"
+        (is (= [] (conformance/findings-in (assoc (roots root) :load? false)))))
+      (finally (fs/delete-tree root)))))
+
+(deftest loading-a-book-does-not-run-it
+  (let [marker (str (fs/path (fs/create-temp-dir {:prefix "marker"}) "ran"))
+        root (casebook! {"libraries/casebook/reset.clj" reset-library
+                         "runbooks/marker.clj" (marker-book marker)})]
+    (try
+      (is (= [] (conformance/findings-in (roots root))))
+      (is (not (fs/exists? marker)) "the book's action never ran")
+      (finally (fs/delete-tree root) (fs/delete-tree (fs/parent marker))))))
+
 (deftest a-casebook-that-follows-every-rule-has-no-findings
   (let [root (casebook! {"runbooks/hello/ok.clj" good-book
                          "libraries/casebook/spec.clj" spec-library})]
@@ -127,7 +187,7 @@
     (try
       (let [findings (conformance/findings-in (roots root))
             messages (map :message (filter #(= "sloppy.clj" (str (fs/file-name (:file %)))) findings))]
-        (is (= {"sloppy.clj" [:description :license :namespace-docstring :options :options :options]
+        (is (= {"sloppy.clj" [:description :license :load :namespace-docstring :options :options :options]
                 "twice.clj" [:harness]}
                (by-file findings)))
         (is (some #(str/includes? % "option :name has no :desc") messages))

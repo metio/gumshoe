@@ -14,13 +14,18 @@
              :requires ([gumshoe.conformance :as conformance])
              :task (conformance/verify! {})}
 
+   Each book is also loaded without running, so a symbol it names that
+   resolves to nothing fails the gate instead of the run.
+
    Every check returns findings, {:file :check :message}, rather than
    asserting, so a caller decides how to report them. A file that does not
    parse is reported once as :unparseable and skipped by the structural
    checks, which could only misjudge it."
-  (:require [babashka.fs :as fs]
+  (:require [babashka.classpath :as classpath]
+            [babashka.fs :as fs]
             [clojure.string :as str]
-            [edamame.core :as edamame]))
+            [edamame.core :as edamame]
+            [gumshoe.runbook :as runbook]))
 
 ;; --- files ------------------------------------------------------------------
 
@@ -141,6 +146,36 @@
         :when error]
     (finding file :unparseable (str "does not parse: " error))))
 
+(defn- load-error
+  "Why a book does not load, with the line it stopped at when the reader or
+   analyser says."
+  [e]
+  (let [{:keys [line column]} (ex-data e)
+        message (or (ex-message e) (str e))]
+    (if line
+      (format "does not load: %s (line %d%s)" message line (if column (str ", column " column) ""))
+      (str "does not load: " message))))
+
+(defn unloadable
+  "Every book that does not load. Each is loaded in this process with
+   runbook/*loading* bound, so the harness hands back the book's config
+   instead of running it, and an unresolvable symbol, a missing namespace or
+   a failing top-level form is reported with the book named. `:classpath`
+   lists directories added to the classpath first, such as a casebook's
+   libraries when the caller's classpath lacks them."
+  ([books] (unloadable books {}))
+  ([books {:keys [classpath]}]
+   (when (seq classpath)
+     (classpath/add-classpath (str/join java.io.File/pathSeparator (map str classpath))))
+   (vec (for [file books
+              :let [error (try
+                            (binding [runbook/*loading* true]
+                              (load-file file))
+                            nil
+                            (catch Throwable e (load-error e)))]
+              :when error]
+          (finding file :load error)))))
+
 ;; REUSE-IgnoreStart -- the tag every file must carry, not a declaration of this one.
 (defn missing-license
   "A file without an SPDX license identifier, or without `license` when given."
@@ -258,8 +293,9 @@
 (defn findings
   "Every finding for the book and library files, unparseable ones first.
    `license` names the SPDX identifier every file must carry; without it any
-   identifier will do."
-  [{:keys [books libraries license]}]
+   identifier will do. Every book that parses is also loaded (see
+   unloadable, which takes :classpath) unless `load?` is false."
+  [{:keys [books libraries license load?] :as opts}]
   (let [parsed-books (mapv parse books)
         parsed-libraries (mapv parse libraries)
         parsed (concat parsed-books parsed-libraries)]
@@ -269,7 +305,10 @@
                  (map-destructured-as-vector parsed)
                  (harness-entries parsed-books)
                  (undescribed-books parsed-books)
-                 (option-problems parsed-books)))))
+                 (option-problems parsed-books)
+                 (when-not (false? load?)
+                   (unloadable (keep #(when (:forms %) (:file %)) parsed-books)
+                               (select-keys opts [:classpath])))))))
 
 (defn files-in
   "{:books [...] :libraries [...]}: the .clj files below the roots of :books
@@ -279,10 +318,16 @@
   {:books (clj-files (or books (:books default-paths)))
    :libraries (clj-files (or libraries (:libraries default-paths)))})
 
+(defn- with-library-classpath
+  "opts with the library roots on :classpath, so a book loads the casebook's
+   libraries even where the caller's classpath lacks them."
+  [{:keys [libraries] :as opts}]
+  (update opts :classpath #(vec (concat % (or libraries (:libraries default-paths))))))
+
 (defn findings-in
   "findings for the files below the roots (see files-in)."
   [opts]
-  (findings (merge opts (files-in opts))))
+  (findings (merge (with-library-classpath opts) (files-in opts))))
 
 (defn format-finding
   [{:keys [file check message]}]
@@ -297,7 +342,7 @@
      {:books [\"runbooks\"] :libraries [\"libraries\"] :license \"0BSD\"}"
   [opts]
   (let [{:keys [books libraries] :as files} (files-in opts)
-        found (findings (merge opts files))]
+        found (findings (merge (with-library-classpath opts) files))]
     (binding [*out* *err*]
       (doseq [f found] (println (format-finding f))))
     (when (seq found)

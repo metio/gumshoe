@@ -550,8 +550,9 @@ The pure logic - resource transformations, detectives, message rendering, plans
 and validations - is covered by unit tests. On top of that, a conformance suite
 parses every book and enforces the repository contract by machine: license
 headers, namespace docstrings, exactly one harness entry point per book, a
-description on every book, a description on every option, and no colliding
-option aliases. The rules live in `gumshoe.conformance`, so a casebook runs
+description on every book, a description on every option, no colliding
+option aliases, and every book loading (without running) so a symbol that
+resolves to nothing fails the suite. The rules live in `gumshoe.conformance`, so a casebook runs
 the same checks against its own books and libraries with `bb verify` (see
 `casebook-example/bb.edn`).
 

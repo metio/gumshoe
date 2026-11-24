@@ -80,3 +80,10 @@
       (is (= 1 (count items)) "no built-in or plugin handles this key, so it is unknown")
       (is (false? (:ok? ((second (first items)))))
           "the unknown key blocks the book instead of being silently dropped"))))
+
+(deftest a-book-loaded-for-checking-is-not-run
+  (let [ran (atom false)
+        config {:description "Would run" :action (fn [_ _] (reset! ran true) true)}]
+    (is (= config (binding [runbook/*loading* true] (runbook/execute! config)))
+        "execute! hands back the config it was given")
+    (is (false? @ran))))
