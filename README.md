@@ -605,7 +605,10 @@ the same machine-enforced contract:
   the post-checks; the select → confirm → announce → execute → verify → banner
   flow is provided once and tested once. A change to one object declares it as
   `:subject` and says why it must not run with `:refusal`; the engine parses
-  the pick, reads and pins the object, and prints the refusal. A spec a playbook shares lives in a
+  the pick, reads and pins the object, and prints the refusal. A suspend/resume
+  or pause/resume pair is one `gumshoe.toggle/pair` declaration whose `:on` and
+  `:off` specs differ only in the wanted state and their words
+  (`gumshoe.steps.workloads/cronjob-suspending`). A spec a playbook shares lives in a
   library, and the runbook names its description beside it:
   `(mutation/book (merge nodes/cordon {:description "…"}))`, so the catalog
   reads it without loading the book.

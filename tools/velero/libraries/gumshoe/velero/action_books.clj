@@ -3,11 +3,12 @@
 
 (ns gumshoe.velero.action-books
   "The mutation-book specs of the Velero actions. Each book file merges one of
-   these with its own :description, so pause and resume share one spec that
-   differs only in the wanted state. The decisions live in gumshoe.velero.actions."
+   these with its own :description; pause and resume are the two sides of one
+   gumshoe.toggle declaration. The decisions live in gumshoe.velero.actions."
   (:require [gumshoe.detectives.velero :as velero]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.toggle :as toggle]
             [gumshoe.velero.actions :as actions]))
 
 (def ^:private request-type "deletebackuprequests.velero.io")
@@ -36,34 +37,34 @@
 (def ^:private schedule-option
   {:schedule {:desc "\"<namespace>/<schedule>\" - interactive selection when omitted" :alias :s :coerce :string}})
 
+(def schedule-pausing
+  "The pause and resume books of a Schedule, as {:on :off} (see gumshoe.toggle)."
+  (toggle/pair
+   {:spec {:options schedule-option
+           :prerequisites {:installed-tools ["kubectl" "fzf"]
+                           :cluster-capabilities []
+                           :kubectl-can-get [velero/schedule-type]
+                           :kubectl-can-patch [velero/schedule-type]}
+           :select {:mode :one :label "Schedule" :flag :schedule}
+           :subject {:type velero/schedule-type
+                     :parse actions/parse-pick
+                     :invalid "the pick is not \"<namespace>/<schedule>\""}}
+    :refusal actions/pause-refusal
+    :items (fn [{:keys [object]} wanted] (actions/pause-items object wanted))
+    :patch actions/pause-patch
+    :applied? (fn [schedule wanted] (= wanted (actions/paused? schedule)))
+    :verify {:timeout 30 :interval 3}
+    :on {:verb "pause" :empty-message "every Schedule is paused already"
+         :confirm {:action "pause a backup schedule"}
+         :announce "Pause Schedule %s" :verified "Schedule %s is paused"}
+    :off {:verb "resume" :empty-message "no Schedule is paused"
+          :confirm {:action "resume a backup schedule"}
+          :announce "Resume Schedule %s" :verified "Schedule %s is resumed"}}))
+
 (defn schedule-pause
+  "The book that pauses a Schedule when wanted, else the one that resumes it."
   [wanted]
-  {:options schedule-option
-   :prerequisites {:installed-tools ["kubectl" "fzf"]
-                   :cluster-capabilities []
-                   :kubectl-can-get [velero/schedule-type]
-                   :kubectl-can-patch [velero/schedule-type]}
-   :select {:mode :one :label "Schedule" :flag :schedule
-            :candidates (fn [context] (picks context velero/schedule-type (fn [_ s] (actions/pause-refusal s wanted))))}
-   :empty-message (if wanted "every Schedule is paused already" "no Schedule is paused")
-   :confirm {:action (if wanted "pause a backup schedule" "resume a backup schedule")}
-   :derive (fn [{:keys [context target]}]
-             (let [pick (actions/parse-pick target)]
-               {:pick pick :schedule (when pick (fetch context velero/schedule-type pick))}))
-   :items (fn [{:keys [schedule target]}]
-            (if schedule (actions/pause-items schedule wanted) [(str (if wanted "pause " "resume ") target)]))
-   :pin (fn [{:keys [pick]}] (when pick {:type velero/schedule-type :namespace (:namespace pick) :name (:name pick)}))
-   :precondition (fn [{:keys [context pick]}]
-                   (refuse (if pick (actions/pause-refusal (fetch context velero/schedule-type pick) wanted)
-                               "the pick is not \"<namespace>/<schedule>\"")))
-   :announce (fn [{:keys [target]}] (format "%s Schedule %s" (if wanted "Pause" "Resume") target))
-   :effect (fn [{:keys [context pick]}]
-             (effect/plan (effect/kubectl context (str "--namespace=" (:namespace pick)) "patch" velero/schedule-type (:name pick)
-                                          "--type=merge" (str "--patch=" (actions/pause-patch wanted)))))
-   :verify (fn [{:keys [context pick target]}]
-             [{:description (format "Schedule %s is %s" target (if wanted "paused" "resumed"))
-               :timeout 30 :interval 3
-               :check #(= wanted (actions/paused? (fetch context velero/schedule-type pick)))}])})
+  ((if wanted :on :off) schedule-pausing))
 
 (def backup
   {:options schedule-option

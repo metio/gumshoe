@@ -3,13 +3,15 @@
 
 (ns gumshoe.cnpg.action-books
   "The mutation-book specs of the CloudNativePG actions. Each book file merges
-   one of these with its own :description, so the paired books (hibernate and
-   rehydrate, suspend and resume) share a single spec that differs only in the
-   wanted state. The decisions live in gumshoe.cnpg.actions."
+   one of these with its own :description, so the paired books share a single
+   spec that differs only in the wanted state: hibernate and rehydrate through
+   cluster-annotation-book, suspend and resume as the two sides of one
+   gumshoe.toggle declaration. The decisions live in gumshoe.cnpg.actions."
   (:require [gumshoe.cnpg.actions :as actions]
             [gumshoe.detectives.cnpg :as cnpg]
             [gumshoe.effect :as effect]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.toggle :as toggle]))
 
 (defn- fetch
   [context type {:keys [namespace name]}]
@@ -145,31 +147,30 @@
                  :abort #(first (actions/backup-signals (current)))
                  :check #(actions/backup-completed? (current))}]))})
 
+(def scheduled-backup-suspending
+  "The suspend and resume books of a ScheduledBackup, as {:on :off} (see
+   gumshoe.toggle)."
+  (toggle/pair
+   {:spec {:options {:scheduled-backup {:desc "\"<namespace>/<name>\" - interactive selection when omitted" :alias :s :coerce :string}}
+           :prerequisites (prerequisites cnpg/scheduled-backup-type)
+           :select {:mode :one :label "ScheduledBackup" :flag :scheduled-backup}
+           :subject {:type cnpg/scheduled-backup-type
+                     :parse actions/parse-pick
+                     :invalid "the pick is not \"<namespace>/<name>\""}}
+    :refusal actions/suspend-refusal
+    :items (fn [{:keys [object]} wanted] (actions/suspend-items object wanted))
+    :patch actions/suspend-patch
+    :applied? (fn [scheduled-backup wanted] (= wanted (actions/suspended? scheduled-backup)))
+    :verify {:timeout 30 :interval 3}
+    :on {:verb "suspend" :empty-message "every ScheduledBackup is suspended already"
+         :confirm {:action "suspend scheduled backups"}
+         :announce "Suspend ScheduledBackup %s" :verified "ScheduledBackup %s is suspended"}
+    :off {:verb "resume" :empty-message "no ScheduledBackup is suspended"
+          :confirm {:action "resume scheduled backups"}
+          :announce "Resume ScheduledBackup %s" :verified "ScheduledBackup %s is resumed"}}))
+
 (defn scheduled-backup-suspension
+  "The book that suspends a ScheduledBackup when wanted, else the one that
+   resumes it."
   [wanted]
-  (let [type cnpg/scheduled-backup-type]
-    {:options {:scheduled-backup {:desc "\"<namespace>/<name>\" - interactive selection when omitted" :alias :s :coerce :string}}
-     :prerequisites (prerequisites type)
-     :select {:mode :one :label "ScheduledBackup" :flag :scheduled-backup
-              :candidates (fn [context]
-                            (vec (for [sb (sort-by kubectl/namespace-name-of (kubectl/items-of (kubectl/get-all context type)))
-                                       :when (nil? (actions/suspend-refusal sb wanted))]
-                                   (kubectl/namespace-name-of sb))))}
-     :empty-message (if wanted "every ScheduledBackup is suspended already" "no ScheduledBackup is suspended")
-     :confirm {:action (if wanted "suspend scheduled backups" "resume scheduled backups")}
-     :derive (fn [{:keys [context target]}]
-               (let [pick (actions/parse-pick target)]
-                 {:pick pick :scheduled-backup (when pick (fetch context type pick))}))
-     :items (fn [{:keys [scheduled-backup target]}]
-              (if scheduled-backup (actions/suspend-items scheduled-backup wanted) [(str (if wanted "suspend " "resume ") target)]))
-     :pin (fn [{:keys [pick]}] (when pick {:type type :namespace (:namespace pick) :name (:name pick)}))
-     :precondition (fn [{:keys [context pick]}]
-                     (refuse (if pick (actions/suspend-refusal (fetch context type pick) wanted) "the pick is not \"<namespace>/<name>\"")))
-     :announce (fn [{:keys [target]}] (format "%s ScheduledBackup %s" (if wanted "Suspend" "Resume") target))
-     :effect (fn [{:keys [context pick]}]
-               (effect/plan (effect/kubectl context (str "--namespace=" (:namespace pick)) "patch" type (:name pick)
-                                            "--type=merge" (str "--patch=" (actions/suspend-patch wanted)))))
-     :verify (fn [{:keys [context pick target]}]
-               [{:description (format "ScheduledBackup %s is %s" target (if wanted "suspended" "resumed"))
-                 :timeout 30 :interval 3
-                 :check #(= wanted (actions/suspended? (fetch context type pick)))}])}))
+  ((if wanted :on :off) scheduled-backup-suspending))
