@@ -467,3 +467,11 @@
             [scenario transcript] scenarios]
       (testing (str path " " scenario)
         (is (= (get-in golden [path scenario]) transcript))))))
+
+(deftest restart-refuses-a-pick-that-does-not-parse
+  (let [{:keys [stopped precondition plan]}
+        (transcript (load-spec "runbooks/kubernetes/workloads/restart.clj")
+                    {:objects [["deployments" (deployment)]] :target "Deployment web"})]
+    (is (nil? stopped) "the book shows its confirmation instead of throwing")
+    (is (= {:result false :out "refusing: the pick is not \"<Kind> <namespace>/<name>\""} precondition))
+    (is (not-any? #(= :kubectl (first %)) plan) "the plan restarts nothing")))

@@ -1079,7 +1079,23 @@
      :timeout 600,
      :interval 10,
      :holds false}]},
-  :invalid {:stopped "threw: java.lang.NullPointerException nil"},
+  :invalid
+  {:action
+   "restart every pod of the workload, one batch at a time as its update strategy allows - a workload with a single replica is unavailable while its pod restarts",
+   :destructive? false,
+   :items ["Deployment web"],
+   :step
+   "restart every pod of the workload, one batch at a time as its update strategy allows - a workload with a single replica is unavailable while its pod restarts",
+   :plan [[:note "nothing to restart - the precondition says why"]],
+   :precondition
+   {:result false,
+    :out "refusing: the pick is not \"<Kind> <namespace>/<name>\""},
+   :announce "Restart Deployment web",
+   :checks
+   [{:description "Deployment web rolled out",
+     :timeout 600,
+     :interval 10,
+     :holds false}]},
   :permitted
   {:action
    "restart every pod of the workload, one batch at a time as its update strategy allows - a workload with a single replica is unavailable while its pod restarts",
