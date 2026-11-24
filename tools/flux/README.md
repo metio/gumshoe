@@ -45,7 +45,11 @@ about Flux, in one place, registered through a single `plugin/provide!` in
   deleted, refuses while a Helm action is running, deletes workloads before
   volumes, confirms the storage is empty, then resumes the release and its
   owner, with every wait taken from the release's `spec.timeout` and
-  `spec.interval` and the owner's interval).
+  `spec.interval` and the owner's interval). A casebook whose release owns
+  objects without Helm's annotations adds its own steps at a named position,
+  `(storage/playbook-with {:after-volumes [step]})`; the positions are
+  `storage/positions`, and none but `:after-resume` lies after the release
+  resumes, which refuses a destructive step.
 
 ## Use
 

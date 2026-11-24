@@ -233,6 +233,12 @@ mostly data:
 - a dispatcher is `(dispatch/book {:select … :classify (fn [ctx target] key)
   :routes {key {:playbook …}}})`, one front door that runs the playbook a
   subject's kind routes to;
+- a library playbook that takes a caller's steps does so at named
+  positions, never by matching a title: `gumshoe.tools.flux-storage` builds
+  `(playbook-with {:after-volumes [step]})` from `positions`
+  (`:after-suspend`, `:after-workloads`, `:after-volumes`, `:after-storage`,
+  `:after-resume`); an unknown position, or a destructive step at
+  `:after-resume`, throws as the book loads;
 - a step a runbook and a playbook share lives in a library, and the runbook
   names its description beside it, `(mutation/book (merge nodes/cordon
   {:description "…"}))`, so `./run --list` reads it without loading the book;
