@@ -322,6 +322,385 @@
      :timeout 30,
      :interval 3,
      :holds false}]}},
+ "runbooks/kubernetes/finalizers/remove.clj"
+ {:absent
+  {:action
+   "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
+   :destructive? true,
+   :items ["deployments shop/web example.com/cleanup"],
+   :step
+   "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=shop"
+     "patch"
+     "deployments"
+     "web"
+     "--type=json"
+     "--patch=[{\"op\":\"test\",\"path\":\"/metadata/uid\",\"value\":null},{\"op\":\"test\",\"path\":\"/metadata/finalizers/-1\",\"value\":\"example.com/cleanup\"},{\"op\":\"remove\",\"path\":\"/metadata/finalizers/-1\"}]"]],
+   :precondition
+   {:result false, :out "refusing: the object no longer exists"},
+   :announce
+   "Remove finalizer from deployments shop/web example.com/cleanup",
+   :checks
+   [{:description
+     "deployments shop/web example.com/cleanup no longer waits on that finalizer",
+     :timeout 60,
+     :interval 5,
+     :holds true}]},
+  :invalid
+  {:action
+   "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
+   :destructive? true,
+   :items ["deployments shop/web"],
+   :step
+   "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
+   :plan
+   [[:kubectl
+     "ctx"
+     "patch"
+     nil
+     nil
+     "--type=json"
+     "--patch=[{\"op\":\"test\",\"path\":\"/metadata/uid\",\"value\":null},{\"op\":\"test\",\"path\":\"/metadata/finalizers/-1\",\"value\":null},{\"op\":\"remove\",\"path\":\"/metadata/finalizers/-1\"}]"]],
+   :precondition
+   {:result false,
+    :out "refusing: the pick is not \"<type> <object> <finalizer>\""},
+   :announce "Remove finalizer from deployments shop/web",
+   :checks
+   [{:description
+     "deployments shop/web no longer waits on that finalizer",
+     :timeout 60,
+     :interval 5,
+     :holds "threw: "}]},
+  :permitted
+  {:action
+   "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
+   :destructive? true,
+   :items ["deployments shop/web example.com/cleanup"],
+   :step
+   "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=shop"
+     "patch"
+     "deployments"
+     "web"
+     "--type=json"
+     "--patch=[{\"op\":\"test\",\"path\":\"/metadata/uid\",\"value\":\"uid-web\"},{\"op\":\"test\",\"path\":\"/metadata/finalizers/0\",\"value\":\"example.com/cleanup\"},{\"op\":\"remove\",\"path\":\"/metadata/finalizers/0\"}]"]],
+   :precondition {:result true, :out ""},
+   :announce
+   "Remove finalizer from deployments shop/web example.com/cleanup",
+   :checks
+   [{:description
+     "deployments shop/web example.com/cleanup no longer waits on that finalizer",
+     :timeout 60,
+     :interval 5,
+     :holds false}]},
+  :refused
+  {:action
+   "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
+   :destructive? true,
+   :items ["deployments shop/web example.com/cleanup"],
+   :step
+   "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=shop"
+     "patch"
+     "deployments"
+     "web"
+     "--type=json"
+     "--patch=[{\"op\":\"test\",\"path\":\"/metadata/uid\",\"value\":\"uid-web\"},{\"op\":\"test\",\"path\":\"/metadata/finalizers/0\",\"value\":\"example.com/cleanup\"},{\"op\":\"remove\",\"path\":\"/metadata/finalizers/0\"}]"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: the object is not being deleted - its finalizer is doing its job"},
+   :announce
+   "Remove finalizer from deployments shop/web example.com/cleanup",
+   :checks
+   [{:description
+     "deployments shop/web example.com/cleanup no longer waits on that finalizer",
+     :timeout 60,
+     :interval 5,
+     :holds false}]},
+  :spec-changed
+  {:action
+   "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
+   :destructive? true,
+   :items ["deployments shop/web example.com/cleanup"],
+   :step
+   "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=shop"
+     "patch"
+     "deployments"
+     "web"
+     "--type=json"
+     "--patch=[{\"op\":\"test\",\"path\":\"/metadata/uid\",\"value\":\"uid-web\"},{\"op\":\"test\",\"path\":\"/metadata/finalizers/0\",\"value\":\"example.com/cleanup\"},{\"op\":\"remove\",\"path\":\"/metadata/finalizers/0\"}]"]],
+   :precondition {:result true, :out ""},
+   :announce
+   "Remove finalizer from deployments shop/web example.com/cleanup",
+   :checks
+   [{:description
+     "deployments shop/web example.com/cleanup no longer waits on that finalizer",
+     :timeout 60,
+     :interval 5,
+     :holds false}]},
+  :surface
+  {:description
+   "Removes one controller finalizer from an object stuck terminating",
+   :options
+   {:pick
+    {:desc
+     "\"<type> <namespace>/<name> <finalizer>\" - interactive selection when omitted",
+     :alias :p,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get
+    ["deployments"
+     "statefulsets"
+     "daemonsets"
+     "replicasets"
+     "jobs"
+     "cronjobs"
+     "services"
+     "ingresses"
+     "configmaps"
+     "persistentvolumeclaims"
+     "persistentvolumes"],
+    :kubectl-can-patch
+    ["deployments"
+     "statefulsets"
+     "daemonsets"
+     "replicasets"
+     "jobs"
+     "cronjobs"
+     "services"
+     "ingresses"
+     "configmaps"
+     "persistentvolumeclaims"
+     "persistentvolumes"]},
+   :select {:mode :one, :label "Finalizer", :flag :pick},
+   :empty-message
+   "no object being deleted carries a controller finalizer",
+   :confirm
+   {:action
+    "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
+    :destructive? true},
+   :details
+   ["What it does:"
+    "  picks one Finalizer (--pick, or interactively)"
+    "  asks to confirm: remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone (destructive - type yes)"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: deployments, statefulsets, daemonsets, replicasets, jobs, cronjobs, services, ingresses, configmaps, persistentvolumeclaims, persistentvolumes"
+    "  kubectl patch: deployments, statefulsets, daemonsets, replicasets, jobs, cronjobs, services, ingresses, configmaps, persistentvolumeclaims, persistentvolumes"],
+   :candidates
+   {:permitted ["deployments shop/web example.com/cleanup"],
+    :refused []}},
+  :unanswered
+  {:action
+   "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
+   :destructive? true,
+   :items ["deployments shop/web example.com/cleanup"],
+   :step
+   "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=shop"
+     "patch"
+     "deployments"
+     "web"
+     "--type=json"
+     "--patch=[{\"op\":\"test\",\"path\":\"/metadata/uid\",\"value\":\"uid-web\"},{\"op\":\"test\",\"path\":\"/metadata/finalizers/0\",\"value\":\"example.com/cleanup\"},{\"op\":\"remove\",\"path\":\"/metadata/finalizers/0\"}]"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+   :announce
+   "Remove finalizer from deployments shop/web example.com/cleanup",
+   :checks
+   [{:description
+     "deployments shop/web example.com/cleanup no longer waits on that finalizer",
+     :timeout 60,
+     :interval 5,
+     :holds false}]}},
+ "runbooks/kubernetes/helm/rollback.clj"
+ {:absent
+  {:action "roll a Helm release back",
+   :destructive? true,
+   :items ["roll shop/web back"],
+   :step "roll a Helm release back",
+   :plan
+   [[:note "nothing to roll back to - the precondition says why"]],
+   :precondition
+   {:result false, :out "refusing: the release no longer exists"},
+   :announce "Roll Helm release shop/web back to revision null",
+   :checks
+   [{:description "shop/web has a newer revision deployed",
+     :timeout 600,
+     :interval 10,
+     :holds false}]},
+  :invalid
+  {:action "roll a Helm release back",
+   :destructive? true,
+   :items ["roll web back"],
+   :step "roll a Helm release back",
+   :plan
+   [[:note "nothing to roll back to - the precondition says why"]],
+   :precondition
+   {:result false,
+    :out "refusing: the pick is not \"<namespace>/<release>\""},
+   :announce "Roll Helm release web back to revision null",
+   :checks
+   [{:description "web has a newer revision deployed",
+     :timeout 600,
+     :interval 10,
+     :holds false}]},
+  :permitted
+  {:action "roll a Helm release back",
+   :destructive? true,
+   :items
+   ["roll Helm release shop/web back from revision 2 (deployed) to revision 1 (superseded)"
+    "helm records the rollback as revision 3; its status says the manifests were applied, not that the pods are ready"
+    "the release's source (Git, a pipeline) still holds the newer chart or values and will upgrade it again"],
+   :step "roll a Helm release back",
+   :plan
+   [[:cmd
+     "helm"
+     "rollback"
+     "web"
+     "1"
+     "--namespace=shop"
+     "--kube-context=ctx"]],
+   :precondition {:result true, :out ""},
+   :announce "Roll Helm release shop/web back to revision 1",
+   :checks
+   [{:description "shop/web has a newer revision deployed",
+     :timeout 600,
+     :interval 10,
+     :holds false}]},
+  :refused
+  {:action "roll a Helm release back",
+   :destructive? true,
+   :items
+   ["roll Helm release shop/web back from revision 2 (pending-upgrade) to revision 1 (superseded)"
+    "helm records the rollback as revision 3; its status says the manifests were applied, not that the pods are ready"
+    "the release's source (Git, a pipeline) still holds the newer chart or values and will upgrade it again"],
+   :step "roll a Helm release back",
+   :plan
+   [[:cmd
+     "helm"
+     "rollback"
+     "web"
+     "1"
+     "--namespace=shop"
+     "--kube-context=ctx"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: revision 2 is pending-upgrade - another helm operation is in progress, or was interrupted and needs fixing first"},
+   :announce "Roll Helm release shop/web back to revision 1",
+   :checks
+   [{:description "shop/web has a newer revision deployed",
+     :timeout 600,
+     :interval 10,
+     :holds false}]},
+  :spec-changed
+  {:action "roll a Helm release back",
+   :destructive? true,
+   :items
+   ["roll Helm release shop/web back from revision 2 (deployed) to revision 1 (superseded)"
+    "helm records the rollback as revision 3; its status says the manifests were applied, not that the pods are ready"
+    "the release's source (Git, a pipeline) still holds the newer chart or values and will upgrade it again"],
+   :step "roll a Helm release back",
+   :plan
+   [[:cmd
+     "helm"
+     "rollback"
+     "web"
+     "1"
+     "--namespace=shop"
+     "--kube-context=ctx"]],
+   :precondition {:result true, :out ""},
+   :announce "Roll Helm release shop/web back to revision 1",
+   :checks
+   [{:description "shop/web has a newer revision deployed",
+     :timeout 600,
+     :interval 10,
+     :holds false}]},
+  :surface
+  {:description
+   "Rolls a Helm release back to its newest earlier deployed revision, or to a named one",
+   :options
+   {:release
+    {:desc
+     "\"<namespace>/<release>\" - interactive selection when omitted",
+     :alias :r,
+     :coerce :string},
+    :to-revision
+    {:desc
+     "The revision to go back to - the newest earlier deployed one when omitted",
+     :coerce :long}},
+   :prerequisites
+   {:installed-tools ["kubectl" "helm" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["secrets"]},
+   :select {:mode :one, :label "Release", :flag :release},
+   :empty-message
+   "no Helm release has an earlier deployed revision to go back to",
+   :confirm {:action "roll a Helm release back", :destructive? true},
+   :details
+   ["What it does:"
+    "  picks one Release (--release, or interactively)"
+    "  asks to confirm: roll a Helm release back (destructive - type yes)"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, helm, fzf"
+    "  kubectl get: secrets"],
+   :candidates {:permitted ["shop/web"], :refused []}},
+  :unanswered
+  {:action "roll a Helm release back",
+   :destructive? true,
+   :items
+   ["roll Helm release shop/web back from revision 2 (deployed) to revision 1 (superseded)"
+    "helm records the rollback as revision 3; its status says the manifests were applied, not that the pods are ready"
+    "the release's source (Git, a pipeline) still holds the newer chart or values and will upgrade it again"],
+   :step "roll a Helm release back",
+   :plan
+   [[:cmd
+     "helm"
+     "rollback"
+     "web"
+     "1"
+     "--namespace=shop"
+     "--kube-context=ctx"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+   :announce "Roll Helm release shop/web back to revision 1",
+   :checks
+   [{:description "shop/web has a newer revision deployed",
+     :timeout 600,
+     :interval 10,
+     :holds false}]}},
  "runbooks/kubernetes/objects/delete.clj"
  {:absent
   {:action "delete an object",
@@ -1707,6 +2086,1091 @@
      :interval 10,
      :holds false,
      :abort nil}]}},
+ "tools/cnpg/runbooks/backup.clj"
+ {:absent
+  {:action "start an on-demand backup",
+   :destructive? false,
+   :items ["back up db/pg"],
+   :step "start an on-demand backup",
+   :plan [[:note "nothing to back up - the precondition says why"]],
+   :precondition
+   {:result false, :out "refusing: the cluster no longer exists"},
+   :announce "Back up db/pg as null",
+   :checks
+   [{:description "Backup db/null completed",
+     :timeout 3600,
+     :interval 15,
+     :holds false,
+     :abort nil}]},
+  :invalid
+  {:action "start an on-demand backup",
+   :destructive? false,
+   :items ["back up pg"],
+   :step "start an on-demand backup",
+   :plan [[:note "nothing to back up - the precondition says why"]],
+   :precondition
+   {:result false,
+    :out "refusing: the pick is not \"<namespace>/<cluster>\""},
+   :announce "Back up pg as null",
+   :checks
+   [{:description "Backup null/null completed",
+     :timeout 3600,
+     :interval 15,
+     :holds false,
+     :abort nil}]},
+  :permitted
+  {:action "start an on-demand backup",
+   :destructive? false,
+   :items
+   ["start Backup db/pg-<stamp> of cluster pg with method barmanObjectStore"
+    "it runs where spec.backup.target says (prefer-standby, the default - a standby when one is ready)"],
+   :step "start an on-demand backup",
+   :plan
+   [[:kubectl-stdin
+     "ctx"
+     "{\"apiVersion\":\"postgresql.cnpg.io/v1\",\"kind\":\"Backup\",\"metadata\":{\"namespace\":\"db\",\"name\":\"pg-<stamp>\",\"labels\":{\"cnpg.io/cluster\":\"pg\"}},\"spec\":{\"cluster\":{\"name\":\"pg\"},\"method\":\"barmanObjectStore\"}}"
+     "create"
+     "-f"
+     "-"]],
+   :precondition {:result true, :out ""},
+   :announce "Back up db/pg as pg-<stamp>",
+   :checks
+   [{:description "Backup db/pg-<stamp> completed",
+     :timeout 3600,
+     :interval 15,
+     :holds false,
+     :abort nil}]},
+  :refused
+  {:action "start an on-demand backup",
+   :destructive? false,
+   :items
+   ["start Backup db/pg-<stamp> of cluster pg with method null"
+    "it runs where spec.backup.target says (prefer-standby, the default - a standby when one is ready)"],
+   :step "start an on-demand backup",
+   :plan
+   [[:kubectl-stdin
+     "ctx"
+     "{\"apiVersion\":\"postgresql.cnpg.io/v1\",\"kind\":\"Backup\",\"metadata\":{\"namespace\":\"db\",\"name\":\"pg-<stamp>\",\"labels\":{\"cnpg.io/cluster\":\"pg\"}},\"spec\":{\"cluster\":{\"name\":\"pg\"},\"method\":null}}"
+     "create"
+     "-f"
+     "-"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: the cluster configures no backup destination - neither a barmanObjectStore, a WAL-archiving plugin, nor volume snapshots"},
+   :announce "Back up db/pg as pg-<stamp>",
+   :checks
+   [{:description "Backup db/pg-<stamp> completed",
+     :timeout 3600,
+     :interval 15,
+     :holds false,
+     :abort nil}]},
+  :spec-changed
+  {:action "start an on-demand backup",
+   :destructive? false,
+   :items
+   ["start Backup db/pg-<stamp> of cluster pg with method barmanObjectStore"
+    "it runs where spec.backup.target says (prefer-standby, the default - a standby when one is ready)"],
+   :step "start an on-demand backup",
+   :plan
+   [[:kubectl-stdin
+     "ctx"
+     "{\"apiVersion\":\"postgresql.cnpg.io/v1\",\"kind\":\"Backup\",\"metadata\":{\"namespace\":\"db\",\"name\":\"pg-<stamp>\",\"labels\":{\"cnpg.io/cluster\":\"pg\"}},\"spec\":{\"cluster\":{\"name\":\"pg\"},\"method\":\"barmanObjectStore\"}}"
+     "create"
+     "-f"
+     "-"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
+   :announce "Back up db/pg as pg-<stamp>",
+   :checks
+   [{:description "Backup db/pg-<stamp> completed",
+     :timeout 3600,
+     :interval 15,
+     :holds false,
+     :abort nil}]},
+  :surface
+  {:description "Takes an on-demand backup of a CloudNativePG cluster",
+   :options
+   {:cluster
+    {:desc
+     "\"<namespace>/<cluster>\" - interactive selection when omitted",
+     :alias :c,
+     :coerce :string},
+    :method
+    {:desc
+     "barmanObjectStore, plugin or volumeSnapshot - the first the cluster configures when omitted",
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get
+    ["clusters.postgresql.cnpg.io" "backups.postgresql.cnpg.io"],
+    :kubectl-can-create ["backups.postgresql.cnpg.io"]},
+   :select {:mode :one, :label "Cluster", :flag :cluster},
+   :empty-message "no healthy cluster configures a backup destination",
+   :confirm {:action "start an on-demand backup"},
+   :details
+   ["What it does:"
+    "  picks one Cluster (--cluster, or interactively)"
+    "  asks to confirm: start an on-demand backup"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: clusters.postgresql.cnpg.io, backups.postgresql.cnpg.io"
+    "  kubectl create: backups.postgresql.cnpg.io"],
+   :candidates {:permitted ["db/pg"], :refused []}},
+  :unanswered
+  {:action "start an on-demand backup",
+   :destructive? false,
+   :items
+   ["start Backup db/pg-<stamp> of cluster pg with method barmanObjectStore"
+    "it runs where spec.backup.target says (prefer-standby, the default - a standby when one is ready)"],
+   :step "start an on-demand backup",
+   :plan
+   [[:kubectl-stdin
+     "ctx"
+     "{\"apiVersion\":\"postgresql.cnpg.io/v1\",\"kind\":\"Backup\",\"metadata\":{\"namespace\":\"db\",\"name\":\"pg-<stamp>\",\"labels\":{\"cnpg.io/cluster\":\"pg\"}},\"spec\":{\"cluster\":{\"name\":\"pg\"},\"method\":\"barmanObjectStore\"}}"
+     "create"
+     "-f"
+     "-"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+   :announce "Back up db/pg as pg-<stamp>",
+   :checks
+   [{:description "Backup db/pg-<stamp> completed",
+     :timeout 3600,
+     :interval 15,
+     :holds false,
+     :abort nil}]}},
+ "tools/cnpg/runbooks/fence.clj"
+ {:absent
+  {:action
+   "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
+   :destructive? true,
+   :items ["db/pg pg-2"],
+   :step
+   "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace"
+     "db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/fencedInstances=[\"pg-2\"]"]],
+   :precondition
+   {:result false, :out "refusing: the cluster no longer exists"},
+   :announce "Fence pg-2 in db/pg",
+   :checks
+   [{:description "pg-2 is fenced",
+     :timeout 60,
+     :interval 5,
+     :holds false}]},
+  :invalid
+  {:action
+   "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
+   :destructive? true,
+   :items ["db/pg"],
+   :step
+   "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace"
+     nil
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     nil
+     "--overwrite"
+     "cnpg.io/fencedInstances=[null]"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: the pick is not \"<namespace>/<cluster> <instance>\""},
+   :announce "Fence null in null/null",
+   :checks
+   [{:description "null is fenced",
+     :timeout 60,
+     :interval 5,
+     :holds false}]},
+  :permitted
+  {:action
+   "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
+   :destructive? true,
+   :items ["db/pg pg-2"],
+   :step
+   "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace"
+     "db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/fencedInstances=[\"pg-2\"]"]],
+   :precondition {:result true, :out ""},
+   :announce "Fence pg-2 in db/pg",
+   :checks
+   [{:description "pg-2 is fenced",
+     :timeout 60,
+     :interval 5,
+     :holds false}]},
+  :refused
+  {:action
+   "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
+   :destructive? true,
+   :items ["db/pg pg-2"],
+   :step
+   "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace"
+     "db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/fencedInstances=[\"pg-2\"]"]],
+   :precondition
+   {:result false, :out "refusing: pg-2 is fenced already"},
+   :announce "Fence pg-2 in db/pg",
+   :checks
+   [{:description "pg-2 is fenced",
+     :timeout 60,
+     :interval 5,
+     :holds true}]},
+  :spec-changed
+  {:action
+   "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
+   :destructive? true,
+   :items ["db/pg pg-2"],
+   :step
+   "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace"
+     "db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/fencedInstances=[\"pg-2\"]"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
+   :announce "Fence pg-2 in db/pg",
+   :checks
+   [{:description "pg-2 is fenced",
+     :timeout 60,
+     :interval 5,
+     :holds false}]},
+  :surface
+  {:description
+   "Fences a CloudNativePG instance, or every instance with *",
+   :options
+   {:pick
+    {:desc
+     "\"<namespace>/<cluster> <instance>\" (by name, by number, or *) - interactive selection when omitted",
+     :alias :p,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["clusters.postgresql.cnpg.io"],
+    :kubectl-can-patch ["clusters.postgresql.cnpg.io"]},
+   :select {:mode :one, :label "Fence", :flag :pick},
+   :empty-message "no cluster has an instance left to fence",
+   :confirm
+   {:action
+    "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
+    :destructive? true},
+   :details
+   ["What it does:"
+    "  picks one Fence (--pick, or interactively)"
+    "  asks to confirm: fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes (destructive - type yes)"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: clusters.postgresql.cnpg.io"
+    "  kubectl patch: clusters.postgresql.cnpg.io"],
+   :candidates
+   {:permitted ["db/pg pg-1" "db/pg pg-2" "db/pg *"],
+    :refused ["db/pg pg-1" "db/pg *"]}},
+  :unanswered
+  {:action
+   "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
+   :destructive? true,
+   :items ["db/pg pg-2"],
+   :step
+   "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace"
+     "db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/fencedInstances=[\"pg-2\"]"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+   :announce "Fence pg-2 in db/pg",
+   :checks
+   [{:description "pg-2 is fenced",
+     :timeout 60,
+     :interval 5,
+     :holds false}]}},
+ "tools/cnpg/runbooks/hibernate.clj"
+ {:absent
+  {:action
+   "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
+   :destructive? true,
+   :items ["Hibernate db/pg"],
+   :step
+   "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/hibernation=on"]],
+   :precondition
+   {:result false, :out "refusing: the cluster no longer exists"},
+   :announce "Hibernate db/pg",
+   :checks
+   [{:description "db/pg is hibernated",
+     :timeout 300,
+     :interval 10,
+     :holds false}]},
+  :invalid
+  {:action
+   "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
+   :destructive? true,
+   :items ["Hibernate pg"],
+   :step
+   "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace="
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     nil
+     "--overwrite"
+     "cnpg.io/hibernation=on"]],
+   :precondition
+   {:result false,
+    :out "refusing: the pick is not \"<namespace>/<cluster>\""},
+   :announce "Hibernate pg",
+   :checks
+   [{:description "pg is hibernated",
+     :timeout 300,
+     :interval 10,
+     :holds false}]},
+  :permitted
+  {:action
+   "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
+   :destructive? true,
+   :items
+   ["hibernate cluster db/pg - the operator deletes its 2 instance pod(s), the primary first, and keeps their volumes"
+    "no instance runs until it is rehydrated, so nothing accepts connections, archives WAL or takes a backup"],
+   :step
+   "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/hibernation=on"]],
+   :precondition {:result true, :out ""},
+   :announce "Hibernate db/pg",
+   :checks
+   [{:description "db/pg is hibernated",
+     :timeout 300,
+     :interval 10,
+     :holds false}]},
+  :refused
+  {:action
+   "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
+   :destructive? true,
+   :items
+   ["hibernate cluster db/pg - the operator deletes its 2 instance pod(s), the primary first, and keeps their volumes"
+    "no instance runs until it is rehydrated, so nothing accepts connections, archives WAL or takes a backup"],
+   :step
+   "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/hibernation=on"]],
+   :precondition
+   {:result false, :out "refusing: hibernation is requested already"},
+   :announce "Hibernate db/pg",
+   :checks
+   [{:description "db/pg is hibernated",
+     :timeout 300,
+     :interval 10,
+     :holds true}]},
+  :spec-changed
+  {:action
+   "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
+   :destructive? true,
+   :items
+   ["hibernate cluster db/pg - the operator deletes its 2 instance pod(s), the primary first, and keeps their volumes"
+    "no instance runs until it is rehydrated, so nothing accepts connections, archives WAL or takes a backup"],
+   :step
+   "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/hibernation=on"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
+   :announce "Hibernate db/pg",
+   :checks
+   [{:description "db/pg is hibernated",
+     :timeout 300,
+     :interval 10,
+     :holds false}]},
+  :surface
+  {:description
+   "Hibernates a CloudNativePG cluster, keeping its volumes",
+   :options
+   {:cluster
+    {:desc
+     "\"<namespace>/<cluster>\" - interactive selection when omitted",
+     :alias :c,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["clusters.postgresql.cnpg.io"],
+    :kubectl-can-patch ["clusters.postgresql.cnpg.io"]},
+   :select {:mode :one, :label "Cluster", :flag :cluster},
+   :empty-message "no healthy cluster to hibernate",
+   :confirm
+   {:action
+    "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
+    :destructive? true},
+   :details
+   ["What it does:"
+    "  picks one Cluster (--cluster, or interactively)"
+    "  asks to confirm: hibernate a cluster - every instance pod is deleted and nothing accepts connections (destructive - type yes)"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: clusters.postgresql.cnpg.io"
+    "  kubectl patch: clusters.postgresql.cnpg.io"],
+   :candidates {:permitted ["db/pg"], :refused []}},
+  :unanswered
+  {:action
+   "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
+   :destructive? true,
+   :items
+   ["hibernate cluster db/pg - the operator deletes its 2 instance pod(s), the primary first, and keeps their volumes"
+    "no instance runs until it is rehydrated, so nothing accepts connections, archives WAL or takes a backup"],
+   :step
+   "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/hibernation=on"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+   :announce "Hibernate db/pg",
+   :checks
+   [{:description "db/pg is hibernated",
+     :timeout 300,
+     :interval 10,
+     :holds false}]}},
+ "tools/cnpg/runbooks/rehydrate.clj"
+ {:absent
+  {:action "rehydrate a cluster",
+   :destructive? false,
+   :items ["Rehydrate db/pg"],
+   :step "rehydrate a cluster",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/hibernation=off"]],
+   :precondition
+   {:result false, :out "refusing: the cluster no longer exists"},
+   :announce "Rehydrate db/pg",
+   :checks
+   [{:description "db/pg is rehydrated and healthy",
+     :timeout 900,
+     :interval 10,
+     :holds false}]},
+  :invalid
+  {:action "rehydrate a cluster",
+   :destructive? false,
+   :items ["Rehydrate pg"],
+   :step "rehydrate a cluster",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace="
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     nil
+     "--overwrite"
+     "cnpg.io/hibernation=off"]],
+   :precondition
+   {:result false,
+    :out "refusing: the pick is not \"<namespace>/<cluster>\""},
+   :announce "Rehydrate pg",
+   :checks
+   [{:description "pg is rehydrated and healthy",
+     :timeout 900,
+     :interval 10,
+     :holds false}]},
+  :permitted
+  {:action "rehydrate a cluster",
+   :destructive? false,
+   :items
+   ["rehydrate cluster db/pg - the operator recreates its instance pods on the kept volumes"],
+   :step "rehydrate a cluster",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/hibernation=off"]],
+   :precondition {:result true, :out ""},
+   :announce "Rehydrate db/pg",
+   :checks
+   [{:description "db/pg is rehydrated and healthy",
+     :timeout 900,
+     :interval 10,
+     :holds false}]},
+  :refused
+  {:action "rehydrate a cluster",
+   :destructive? false,
+   :items
+   ["rehydrate cluster db/pg - the operator recreates its instance pods on the kept volumes"],
+   :step "rehydrate a cluster",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/hibernation=off"]],
+   :precondition
+   {:result false, :out "refusing: the cluster is not hibernated"},
+   :announce "Rehydrate db/pg",
+   :checks
+   [{:description "db/pg is rehydrated and healthy",
+     :timeout 900,
+     :interval 10,
+     :holds true}]},
+  :spec-changed
+  {:action "rehydrate a cluster",
+   :destructive? false,
+   :items
+   ["rehydrate cluster db/pg - the operator recreates its instance pods on the kept volumes"],
+   :step "rehydrate a cluster",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/hibernation=off"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
+   :announce "Rehydrate db/pg",
+   :checks
+   [{:description "db/pg is rehydrated and healthy",
+     :timeout 900,
+     :interval 10,
+     :holds false}]},
+  :surface
+  {:description "Rehydrates a hibernated CloudNativePG cluster",
+   :options
+   {:cluster
+    {:desc
+     "\"<namespace>/<cluster>\" - interactive selection when omitted",
+     :alias :c,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["clusters.postgresql.cnpg.io"],
+    :kubectl-can-patch ["clusters.postgresql.cnpg.io"]},
+   :select {:mode :one, :label "Cluster", :flag :cluster},
+   :empty-message "no cluster is hibernated",
+   :confirm {:action "rehydrate a cluster"},
+   :details
+   ["What it does:"
+    "  picks one Cluster (--cluster, or interactively)"
+    "  asks to confirm: rehydrate a cluster"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: clusters.postgresql.cnpg.io"
+    "  kubectl patch: clusters.postgresql.cnpg.io"],
+   :candidates {:permitted ["db/pg"], :refused []}},
+  :unanswered
+  {:action "rehydrate a cluster",
+   :destructive? false,
+   :items
+   ["rehydrate cluster db/pg - the operator recreates its instance pods on the kept volumes"],
+   :step "rehydrate a cluster",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/hibernation=off"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+   :announce "Rehydrate db/pg",
+   :checks
+   [{:description "db/pg is rehydrated and healthy",
+     :timeout 900,
+     :interval 10,
+     :holds false}]}},
+ "tools/cnpg/runbooks/reload.clj"
+ {:absent
+  {:action "reload a cluster's configuration",
+   :destructive? false,
+   :items ["Reload db/pg"],
+   :step "reload a cluster's configuration",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/reloadedAt=<instant>"]],
+   :precondition
+   {:result false, :out "refusing: the cluster no longer exists"},
+   :announce "Reload db/pg",
+   :checks
+   [{:description "db/pg took the reload and is healthy",
+     :timeout 600,
+     :interval 10,
+     :holds false}]},
+  :invalid
+  {:action "reload a cluster's configuration",
+   :destructive? false,
+   :items ["Reload pg"],
+   :step "reload a cluster's configuration",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace="
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     nil
+     "--overwrite"
+     "cnpg.io/reloadedAt=<instant>"]],
+   :precondition
+   {:result false,
+    :out "refusing: the pick is not \"<namespace>/<cluster>\""},
+   :announce "Reload pg",
+   :checks
+   [{:description "pg took the reload and is healthy",
+     :timeout 600,
+     :interval 10,
+     :holds false}]},
+  :permitted
+  {:action "reload a cluster's configuration",
+   :destructive? false,
+   :items
+   ["reload cluster db/pg - the operator reconciles every instance again and rolls out configuration that changed, such as a renewed Secret or ConfigMap"],
+   :step "reload a cluster's configuration",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/reloadedAt=<instant>"]],
+   :precondition {:result true, :out ""},
+   :announce "Reload db/pg",
+   :checks
+   [{:description "db/pg took the reload and is healthy",
+     :timeout 600,
+     :interval 10,
+     :holds false}]},
+  :refused
+  {:action "reload a cluster's configuration",
+   :destructive? false,
+   :items
+   ["reload cluster db/pg - the operator reconciles every instance again and rolls out configuration that changed, such as a renewed Secret or ConfigMap"],
+   :step "reload a cluster's configuration",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/reloadedAt=<instant>"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: the cluster is hibernated, so no instance runs - rehydrate it first"},
+   :announce "Reload db/pg",
+   :checks
+   [{:description "db/pg took the reload and is healthy",
+     :timeout 600,
+     :interval 10,
+     :holds false}]},
+  :spec-changed
+  {:action "reload a cluster's configuration",
+   :destructive? false,
+   :items
+   ["reload cluster db/pg - the operator reconciles every instance again and rolls out configuration that changed, such as a renewed Secret or ConfigMap"],
+   :step "reload a cluster's configuration",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/reloadedAt=<instant>"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
+   :announce "Reload db/pg",
+   :checks
+   [{:description "db/pg took the reload and is healthy",
+     :timeout 600,
+     :interval 10,
+     :holds false}]},
+  :surface
+  {:description
+   "Reloads a CloudNativePG cluster, rolling out changed configuration",
+   :options
+   {:cluster
+    {:desc
+     "\"<namespace>/<cluster>\" - interactive selection when omitted",
+     :alias :c,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["clusters.postgresql.cnpg.io"],
+    :kubectl-can-patch ["clusters.postgresql.cnpg.io"]},
+   :select {:mode :one, :label "Cluster", :flag :cluster},
+   :empty-message "no healthy cluster to reload",
+   :confirm {:action "reload a cluster's configuration"},
+   :details
+   ["What it does:"
+    "  picks one Cluster (--cluster, or interactively)"
+    "  asks to confirm: reload a cluster's configuration"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: clusters.postgresql.cnpg.io"
+    "  kubectl patch: clusters.postgresql.cnpg.io"],
+   :candidates {:permitted ["db/pg"], :refused []}},
+  :unanswered
+  {:action "reload a cluster's configuration",
+   :destructive? false,
+   :items
+   ["reload cluster db/pg - the operator reconciles every instance again and rolls out configuration that changed, such as a renewed Secret or ConfigMap"],
+   :step "reload a cluster's configuration",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/reloadedAt=<instant>"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+   :announce "Reload db/pg",
+   :checks
+   [{:description "db/pg took the reload and is healthy",
+     :timeout 600,
+     :interval 10,
+     :holds false}]}},
+ "tools/cnpg/runbooks/restart.clj"
+ {:absent
+  {:action
+   "restart every instance of a cluster - each is briefly unavailable, the primary included",
+   :destructive? true,
+   :items ["Restart db/pg"],
+   :step
+   "restart every instance of a cluster - each is briefly unavailable, the primary included",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "kubectl.kubernetes.io/restartedAt=<instant>"]],
+   :precondition
+   {:result false, :out "refusing: the cluster no longer exists"},
+   :announce "Restart db/pg",
+   :checks
+   [{:description
+     "every instance of db/pg restarted and the cluster is healthy",
+     :timeout 1200,
+     :interval 10,
+     :holds false}]},
+  :invalid
+  {:action
+   "restart every instance of a cluster - each is briefly unavailable, the primary included",
+   :destructive? true,
+   :items ["Restart pg"],
+   :step
+   "restart every instance of a cluster - each is briefly unavailable, the primary included",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace="
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     nil
+     "--overwrite"
+     "kubectl.kubernetes.io/restartedAt=<instant>"]],
+   :precondition
+   {:result false,
+    :out "refusing: the pick is not \"<namespace>/<cluster>\""},
+   :announce "Restart pg",
+   :checks
+   [{:description
+     "every instance of pg restarted and the cluster is healthy",
+     :timeout 1200,
+     :interval 10,
+     :holds false}]},
+  :permitted
+  {:action
+   "restart every instance of a cluster - each is briefly unavailable, the primary included",
+   :destructive? true,
+   :items
+   ["restart every instance of cluster db/pg, one at a time, replicas first"
+    "then the primary in place (primaryUpdateMethod restart) - it accepts no writes while it restarts"],
+   :step
+   "restart every instance of a cluster - each is briefly unavailable, the primary included",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "kubectl.kubernetes.io/restartedAt=<instant>"]],
+   :precondition {:result true, :out ""},
+   :announce "Restart db/pg",
+   :checks
+   [{:description
+     "every instance of db/pg restarted and the cluster is healthy",
+     :timeout 1200,
+     :interval 10,
+     :holds false}]},
+  :refused
+  {:action
+   "restart every instance of a cluster - each is briefly unavailable, the primary included",
+   :destructive? true,
+   :items
+   ["restart every instance of cluster db/pg, one at a time, replicas first"
+    "then the primary in place (primaryUpdateMethod restart) - it accepts no writes while it restarts"],
+   :step
+   "restart every instance of a cluster - each is briefly unavailable, the primary included",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "kubectl.kubernetes.io/restartedAt=<instant>"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: the cluster is not healthy (Setting up primary) - wait until it is, or investigate first"},
+   :announce "Restart db/pg",
+   :checks
+   [{:description
+     "every instance of db/pg restarted and the cluster is healthy",
+     :timeout 1200,
+     :interval 10,
+     :holds false}]},
+  :spec-changed
+  {:action
+   "restart every instance of a cluster - each is briefly unavailable, the primary included",
+   :destructive? true,
+   :items
+   ["restart every instance of cluster db/pg, one at a time, replicas first"
+    "then the primary in place (primaryUpdateMethod restart) - it accepts no writes while it restarts"],
+   :step
+   "restart every instance of a cluster - each is briefly unavailable, the primary included",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "kubectl.kubernetes.io/restartedAt=<instant>"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
+   :announce "Restart db/pg",
+   :checks
+   [{:description
+     "every instance of db/pg restarted and the cluster is healthy",
+     :timeout 1200,
+     :interval 10,
+     :holds false}]},
+  :surface
+  {:description
+   "Restarts every instance of a CloudNativePG cluster, one at a time",
+   :options
+   {:cluster
+    {:desc
+     "\"<namespace>/<cluster>\" - interactive selection when omitted",
+     :alias :c,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["clusters.postgresql.cnpg.io" "pods"],
+    :kubectl-can-patch ["clusters.postgresql.cnpg.io"]},
+   :select {:mode :one, :label "Cluster", :flag :cluster},
+   :empty-message "no healthy cluster to restart",
+   :confirm
+   {:action
+    "restart every instance of a cluster - each is briefly unavailable, the primary included",
+    :destructive? true},
+   :details
+   ["What it does:"
+    "  picks one Cluster (--cluster, or interactively)"
+    "  asks to confirm: restart every instance of a cluster - each is briefly unavailable, the primary included (destructive - type yes)"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: clusters.postgresql.cnpg.io, pods"
+    "  kubectl patch: clusters.postgresql.cnpg.io"],
+   :candidates {:permitted ["db/pg"], :refused []}},
+  :unanswered
+  {:action
+   "restart every instance of a cluster - each is briefly unavailable, the primary included",
+   :destructive? true,
+   :items
+   ["restart every instance of cluster db/pg, one at a time, replicas first"
+    "then the primary in place (primaryUpdateMethod restart) - it accepts no writes while it restarts"],
+   :step
+   "restart every instance of a cluster - each is briefly unavailable, the primary included",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "kubectl.kubernetes.io/restartedAt=<instant>"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+   :announce "Restart db/pg",
+   :checks
+   [{:description
+     "every instance of db/pg restarted and the cluster is healthy",
+     :timeout 1200,
+     :interval 10,
+     :holds false}]}},
  "tools/cnpg/runbooks/resume_scheduled_backup.clj"
  {:absent
   {:action "resume scheduled backups",
@@ -2060,6 +3524,368 @@
      :timeout 30,
      :interval 3,
      :holds false}]}},
+ "tools/cnpg/runbooks/switchover.clj"
+ {:absent
+  {:action
+   "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
+   :destructive? true,
+   :items ["db/pg 2"],
+   :step
+   "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
+   :plan
+   [[:cmd
+     "kubectl-cnpg"
+     "promote"
+     "pg"
+     "pg-2"
+     "--context=ctx"
+     "--namespace=db"]],
+   :precondition
+   {:result false, :out "refusing: the cluster no longer exists"},
+   :announce "Promote pg-2 in db/pg",
+   :checks
+   [{:description "pg-2 is the primary",
+     :timeout 300,
+     :interval 10,
+     :holds false}]},
+  :invalid
+  {:action
+   "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
+   :destructive? true,
+   :items ["pg 2"],
+   :step
+   "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
+   :plan
+   [[:cmd
+     "kubectl-cnpg"
+     "promote"
+     nil
+     nil
+     "--context=ctx"
+     "--namespace="]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: the pick is not \"<namespace>/<cluster> <instance>\""},
+   :announce "Promote null in null/null",
+   :checks
+   [{:description "null is the primary",
+     :timeout 300,
+     :interval 10,
+     :holds true}]},
+  :permitted
+  {:action
+   "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
+   :destructive? true,
+   :items ["db/pg 2"],
+   :step
+   "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
+   :plan
+   [[:cmd
+     "kubectl-cnpg"
+     "promote"
+     "pg"
+     "pg-2"
+     "--context=ctx"
+     "--namespace=db"]],
+   :precondition {:result true, :out ""},
+   :announce "Promote pg-2 in db/pg",
+   :checks
+   [{:description "pg-2 is the primary",
+     :timeout 300,
+     :interval 10,
+     :holds false}]},
+  :refused
+  {:action
+   "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
+   :destructive? true,
+   :items ["db/pg 2"],
+   :step
+   "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
+   :plan
+   [[:cmd
+     "kubectl-cnpg"
+     "promote"
+     "pg"
+     "pg-2"
+     "--context=ctx"
+     "--namespace=db"]],
+   :precondition
+   {:result false,
+    :out "refusing: a switchover to pg-2 is under way already"},
+   :announce "Promote pg-2 in db/pg",
+   :checks
+   [{:description "pg-2 is the primary",
+     :timeout 300,
+     :interval 10,
+     :holds false}]},
+  :spec-changed
+  {:action
+   "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
+   :destructive? true,
+   :items ["db/pg 2"],
+   :step
+   "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
+   :plan
+   [[:cmd
+     "kubectl-cnpg"
+     "promote"
+     "pg"
+     "pg-2"
+     "--context=ctx"
+     "--namespace=db"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
+   :announce "Promote pg-2 in db/pg",
+   :checks
+   [{:description "pg-2 is the primary",
+     :timeout 300,
+     :interval 10,
+     :holds false}]},
+  :surface
+  {:description
+   "Switches a CloudNativePG cluster over to one of its healthy replicas",
+   :options
+   {:pick
+    {:desc
+     "\"<namespace>/<cluster> <instance>\" (the instance by name or number) - interactive selection when omitted",
+     :alias :p,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "kubectl-cnpg" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["clusters.postgresql.cnpg.io"],
+    :kubectl-can-patch ["clusters.postgresql.cnpg.io"]},
+   :select {:mode :one, :label "New primary", :flag :pick},
+   :empty-message
+   "no cluster has a healthy, unfenced replica to switch over to",
+   :confirm
+   {:action
+    "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
+    :destructive? true},
+   :details
+   ["What it does:"
+    "  picks one New primary (--pick, or interactively)"
+    "  asks to confirm: switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect (destructive - type yes)"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, kubectl-cnpg, fzf"
+    "  kubectl get: clusters.postgresql.cnpg.io"
+    "  kubectl patch: clusters.postgresql.cnpg.io"],
+   :candidates {:permitted ["db/pg pg-2"], :refused []}},
+  :unanswered
+  {:action
+   "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
+   :destructive? true,
+   :items ["db/pg 2"],
+   :step
+   "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
+   :plan
+   [[:cmd
+     "kubectl-cnpg"
+     "promote"
+     "pg"
+     "pg-2"
+     "--context=ctx"
+     "--namespace=db"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+   :announce "Promote pg-2 in db/pg",
+   :checks
+   [{:description "pg-2 is the primary",
+     :timeout 300,
+     :interval 10,
+     :holds false}]}},
+ "tools/cnpg/runbooks/unfence.clj"
+ {:absent
+  {:action
+   "lift the fence - the operator takes the instance back into service",
+   :destructive? true,
+   :items ["db/pg pg-2"],
+   :step
+   "lift the fence - the operator takes the instance back into service",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace"
+     "db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/fencedInstances-"]],
+   :precondition
+   {:result false, :out "refusing: the cluster no longer exists"},
+   :announce "Unfence pg-2 in db/pg",
+   :checks
+   [{:description "pg-2 is no longer fenced",
+     :timeout 60,
+     :interval 5,
+     :holds true}]},
+  :invalid
+  {:action
+   "lift the fence - the operator takes the instance back into service",
+   :destructive? true,
+   :items ["db/pg"],
+   :step
+   "lift the fence - the operator takes the instance back into service",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace"
+     nil
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     nil
+     "--overwrite"
+     "cnpg.io/fencedInstances-"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: the pick is not \"<namespace>/<cluster> <instance>\""},
+   :announce "Unfence null in null/null",
+   :checks
+   [{:description "null is no longer fenced",
+     :timeout 60,
+     :interval 5,
+     :holds true}]},
+  :permitted
+  {:action
+   "lift the fence - the operator takes the instance back into service",
+   :destructive? true,
+   :items ["db/pg pg-2"],
+   :step
+   "lift the fence - the operator takes the instance back into service",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace"
+     "db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/fencedInstances-"]],
+   :precondition {:result true, :out ""},
+   :announce "Unfence pg-2 in db/pg",
+   :checks
+   [{:description "pg-2 is no longer fenced",
+     :timeout 60,
+     :interval 5,
+     :holds false}]},
+  :refused
+  {:action
+   "lift the fence - the operator takes the instance back into service",
+   :destructive? true,
+   :items ["db/pg pg-2"],
+   :step
+   "lift the fence - the operator takes the instance back into service",
+   :plan
+   [[:note "nothing can be written - the precondition says why"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: every instance is fenced with \"*\" - lift the fence on all of them, then fence the others again"},
+   :announce "Unfence pg-2 in db/pg",
+   :checks
+   [{:description "pg-2 is no longer fenced",
+     :timeout 60,
+     :interval 5,
+     :holds true}]},
+  :spec-changed
+  {:action
+   "lift the fence - the operator takes the instance back into service",
+   :destructive? true,
+   :items ["db/pg pg-2"],
+   :step
+   "lift the fence - the operator takes the instance back into service",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace"
+     "db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/fencedInstances-"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
+   :announce "Unfence pg-2 in db/pg",
+   :checks
+   [{:description "pg-2 is no longer fenced",
+     :timeout 60,
+     :interval 5,
+     :holds false}]},
+  :surface
+  {:description
+   "Lifts the fence on a CloudNativePG instance, or on every instance with *",
+   :options
+   {:pick
+    {:desc
+     "\"<namespace>/<cluster> <instance>\" (by name, by number, or *) - interactive selection when omitted",
+     :alias :p,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["clusters.postgresql.cnpg.io"],
+    :kubectl-can-patch ["clusters.postgresql.cnpg.io"]},
+   :select {:mode :one, :label "Unfence", :flag :pick},
+   :empty-message "no cluster has a fenced instance",
+   :confirm
+   {:action
+    "lift the fence - the operator takes the instance back into service",
+    :destructive? true},
+   :details
+   ["What it does:"
+    "  picks one Unfence (--pick, or interactively)"
+    "  asks to confirm: lift the fence - the operator takes the instance back into service (destructive - type yes)"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: clusters.postgresql.cnpg.io"
+    "  kubectl patch: clusters.postgresql.cnpg.io"],
+   :candidates {:permitted ["db/pg pg-2"], :refused ["db/pg *"]}},
+  :unanswered
+  {:action
+   "lift the fence - the operator takes the instance back into service",
+   :destructive? true,
+   :items ["db/pg pg-2"],
+   :step
+   "lift the fence - the operator takes the instance back into service",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace"
+     "db"
+     "annotate"
+     "clusters.postgresql.cnpg.io"
+     "pg"
+     "--overwrite"
+     "cnpg.io/fencedInstances-"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+   :announce "Unfence pg-2 in db/pg",
+   :checks
+   [{:description "pg-2 is no longer fenced",
+     :timeout 60,
+     :interval 5,
+     :holds true}]}},
  "tools/flux/runbooks/flux/resume.clj"
  {:absent
   {:action "resume a Flux object",
@@ -2252,7 +4078,7 @@
      "kustomizations.kustomize.toolkit.fluxcd.io"
      "gitrepositories.source.toolkit.fluxcd.io"
      "ocirepositories.source.toolkit.fluxcd.io"]},
-   :select {:mode :one, :label "Resume", :flag :pick},
+   :select {:mode :one, :flag :pick, :label "Resume"},
    :empty-message "no Flux object is suspended",
    :confirm {:action "resume a Flux object"},
    :details
@@ -2454,7 +4280,7 @@
      "kustomizations.kustomize.toolkit.fluxcd.io"
      "gitrepositories.source.toolkit.fluxcd.io"
      "ocirepositories.source.toolkit.fluxcd.io"]},
-   :select {:mode :one, :label "Suspend", :flag :pick},
+   :select {:mode :one, :flag :pick, :label "Suspend"},
    :empty-message "every Flux object is suspended already",
    :confirm {:action "suspend a Flux object"},
    :details
@@ -2500,6 +4326,341 @@
      :timeout 30,
      :interval 3,
      :holds false}]}},
+ "tools/velero/runbooks/backup.clj"
+ {:absent
+  {:action "start a backup from a schedule's template",
+   :destructive? false,
+   :items ["back up from velero/daily"],
+   :step "start a backup from a schedule's template",
+   :plan [[:note "nothing to back up - the precondition says why"]],
+   :precondition
+   {:result false, :out "refusing: the Schedule no longer exists"},
+   :announce "Back up from Schedule velero/daily as null",
+   :checks
+   [{:description "Backup velero/null completed",
+     :timeout 3600,
+     :interval 15,
+     :holds false,
+     :abort nil}]},
+  :invalid
+  {:action "start a backup from a schedule's template",
+   :destructive? false,
+   :items ["back up from daily"],
+   :step "start a backup from a schedule's template",
+   :plan [[:note "nothing to back up - the precondition says why"]],
+   :precondition
+   {:result false,
+    :out "refusing: the pick is not \"<namespace>/<schedule>\""},
+   :announce "Back up from Schedule daily as null",
+   :checks
+   [{:description "Backup null/null completed",
+     :timeout 3600,
+     :interval 15,
+     :holds false,
+     :abort nil}]},
+  :permitted
+  {:action "start a backup from a schedule's template",
+   :destructive? false,
+   :items
+   ["start Backup velero/daily-<stamp> from Schedule daily's template"
+    "it covers shop and writes to default"
+    "it carries the label velero.io/schedule-name=daily, so it counts as one of the schedule's backups and expires after 720h0m0s"],
+   :step "start a backup from a schedule's template",
+   :plan
+   [[:kubectl-stdin
+     "ctx"
+     "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Backup\",\"metadata\":{\"namespace\":\"velero\",\"name\":\"daily-<stamp>\",\"labels\":{\"velero.io/schedule-name\":\"daily\"}},\"spec\":{\"storageLocation\":\"default\",\"includedNamespaces\":[\"shop\"],\"ttl\":\"720h0m0s\"}}"
+     "create"
+     "-f"
+     "-"]],
+   :precondition {:result true, :out ""},
+   :announce "Back up from Schedule velero/daily as daily-<stamp>",
+   :checks
+   [{:description "Backup velero/daily-<stamp> completed",
+     :timeout 3600,
+     :interval 15,
+     :holds false,
+     :abort nil}]},
+  :refused
+  {:action "start a backup from a schedule's template",
+   :destructive? false,
+   :items
+   ["start Backup velero/daily-<stamp> from Schedule daily's template"
+    "it covers shop and writes to default"
+    "it carries the label velero.io/schedule-name=daily, so it counts as one of the schedule's backups and expires after 720h0m0s"],
+   :step "start a backup from a schedule's template",
+   :plan
+   [[:kubectl-stdin
+     "ctx"
+     "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Backup\",\"metadata\":{\"namespace\":\"velero\",\"name\":\"daily-<stamp>\",\"labels\":{\"velero.io/schedule-name\":\"daily\"}},\"spec\":{\"storageLocation\":\"default\",\"includedNamespaces\":[\"shop\"],\"ttl\":\"720h0m0s\"}}"
+     "create"
+     "-f"
+     "-"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: BackupStorageLocation default is Unavailable, so the backup cannot be written"},
+   :announce "Back up from Schedule velero/daily as daily-<stamp>",
+   :checks
+   [{:description "Backup velero/daily-<stamp> completed",
+     :timeout 3600,
+     :interval 15,
+     :holds false,
+     :abort nil}]},
+  :spec-changed
+  {:action "start a backup from a schedule's template",
+   :destructive? false,
+   :items
+   ["start Backup velero/daily-<stamp> from Schedule daily's template"
+    "it covers shop and writes to default"
+    "it carries the label velero.io/schedule-name=daily, so it counts as one of the schedule's backups and expires after 720h0m0s"],
+   :step "start a backup from a schedule's template",
+   :plan
+   [[:kubectl-stdin
+     "ctx"
+     "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Backup\",\"metadata\":{\"namespace\":\"velero\",\"name\":\"daily-<stamp>\",\"labels\":{\"velero.io/schedule-name\":\"daily\"}},\"spec\":{\"storageLocation\":\"default\",\"includedNamespaces\":[\"shop\"],\"ttl\":\"720h0m0s\"}}"
+     "create"
+     "-f"
+     "-"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
+   :announce "Back up from Schedule velero/daily as daily-<stamp>",
+   :checks
+   [{:description "Backup velero/daily-<stamp> completed",
+     :timeout 3600,
+     :interval 15,
+     :holds false,
+     :abort nil}]},
+  :surface
+  {:description
+   "Starts a Velero backup now from a Schedule's template",
+   :options
+   {:schedule
+    {:desc
+     "\"<namespace>/<schedule>\" - interactive selection when omitted",
+     :alias :s,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get
+    ["schedules.velero.io"
+     "backupstoragelocations.velero.io"
+     "backups.velero.io"],
+    :kubectl-can-create ["backups.velero.io"]},
+   :select {:mode :one, :label "Schedule", :flag :schedule},
+   :empty-message
+   "no Schedule can take a backup now - every one failed validation or writes to an unavailable location",
+   :confirm {:action "start a backup from a schedule's template"},
+   :details
+   ["What it does:"
+    "  picks one Schedule (--schedule, or interactively)"
+    "  asks to confirm: start a backup from a schedule's template"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: schedules.velero.io, backupstoragelocations.velero.io, backups.velero.io"
+    "  kubectl create: backups.velero.io"],
+   :candidates {:permitted ["velero/daily"], :refused []}},
+  :unanswered
+  {:action "start a backup from a schedule's template",
+   :destructive? false,
+   :items
+   ["start Backup velero/daily-<stamp> from Schedule daily's template"
+    "it covers shop and writes to default"
+    "it carries the label velero.io/schedule-name=daily, so it counts as one of the schedule's backups and expires after 720h0m0s"],
+   :step "start a backup from a schedule's template",
+   :plan
+   [[:kubectl-stdin
+     "ctx"
+     "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Backup\",\"metadata\":{\"namespace\":\"velero\",\"name\":\"daily-<stamp>\",\"labels\":{\"velero.io/schedule-name\":\"daily\"}},\"spec\":{\"storageLocation\":\"default\",\"includedNamespaces\":[\"shop\"],\"ttl\":\"720h0m0s\"}}"
+     "create"
+     "-f"
+     "-"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+   :announce "Back up from Schedule velero/daily as daily-<stamp>",
+   :checks
+   [{:description "Backup velero/daily-<stamp> completed",
+     :timeout 3600,
+     :interval 15,
+     :holds false,
+     :abort nil}]}},
+ "tools/velero/runbooks/delete_backup.clj"
+ {:absent
+  {:action "delete a backup and its data",
+   :destructive? true,
+   :items ["delete velero/daily-1"],
+   :step "delete a backup and its data",
+   :plan [[:note "nothing to delete - the precondition says why"]],
+   :precondition
+   {:result false, :out "refusing: the Backup no longer exists"},
+   :announce "Delete Backup velero/daily-1",
+   :checks
+   [{:description "Backup velero/daily-1 and its data are deleted",
+     :timeout 1800,
+     :interval 10,
+     :holds true,
+     :abort nil}]},
+  :invalid
+  {:action "delete a backup and its data",
+   :destructive? true,
+   :items ["delete daily-1"],
+   :step "delete a backup and its data",
+   :plan [[:note "nothing to delete - the precondition says why"]],
+   :precondition
+   {:result false,
+    :out "refusing: the pick is not \"<namespace>/<backup>\""},
+   :announce "Delete Backup daily-1",
+   :checks
+   [{:description "Backup daily-1 and its data are deleted",
+     :timeout 1800,
+     :interval 10,
+     :holds false,
+     :abort nil}]},
+  :permitted
+  {:action "delete a backup and its data",
+   :destructive? true,
+   :items
+   ["delete Backup velero/daily-1 - its files in BackupStorageLocation default, its volume snapshots, file-system backups and data-mover copies are removed"
+    "nothing restores from it afterwards; this cannot be undone"
+    "its Restores are deleted with it: daily-1-restore"],
+   :step "delete a backup and its data",
+   :plan
+   [[:kubectl-stdin
+     "ctx"
+     "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"DeleteBackupRequest\",\"metadata\":{\"namespace\":\"velero\",\"generateName\":\"daily-1-\",\"labels\":{\"velero.io/backup-name\":\"daily-1\",\"velero.io/backup-uid\":\"uid-daily-1\"}},\"spec\":{\"backupName\":\"daily-1\"}}"
+     "create"
+     "-f"
+     "-"]],
+   :precondition {:result true, :out ""},
+   :announce "Delete Backup velero/daily-1",
+   :checks
+   [{:description "Backup velero/daily-1 and its data are deleted",
+     :timeout 1800,
+     :interval 10,
+     :holds false,
+     :abort nil}]},
+  :refused
+  {:action "delete a backup and its data",
+   :destructive? true,
+   :items
+   ["delete Backup velero/daily-1 - its files in BackupStorageLocation default, its volume snapshots, file-system backups and data-mover copies are removed"
+    "nothing restores from it afterwards; this cannot be undone"],
+   :step "delete a backup and its data",
+   :plan
+   [[:kubectl-stdin
+     "ctx"
+     "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"DeleteBackupRequest\",\"metadata\":{\"namespace\":\"velero\",\"generateName\":\"daily-1-\",\"labels\":{\"velero.io/backup-name\":\"daily-1\",\"velero.io/backup-uid\":\"uid-daily-1\"}},\"spec\":{\"backupName\":\"daily-1\"}}"
+     "create"
+     "-f"
+     "-"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: it is still running (InProgress) - wait for it to finish"},
+   :announce "Delete Backup velero/daily-1",
+   :checks
+   [{:description "Backup velero/daily-1 and its data are deleted",
+     :timeout 1800,
+     :interval 10,
+     :holds false,
+     :abort nil}]},
+  :spec-changed
+  {:action "delete a backup and its data",
+   :destructive? true,
+   :items
+   ["delete Backup velero/daily-1 - its files in BackupStorageLocation default, its volume snapshots, file-system backups and data-mover copies are removed"
+    "nothing restores from it afterwards; this cannot be undone"
+    "its Restores are deleted with it: daily-1-restore"],
+   :step "delete a backup and its data",
+   :plan
+   [[:kubectl-stdin
+     "ctx"
+     "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"DeleteBackupRequest\",\"metadata\":{\"namespace\":\"velero\",\"generateName\":\"daily-1-\",\"labels\":{\"velero.io/backup-name\":\"daily-1\",\"velero.io/backup-uid\":\"uid-daily-1\"}},\"spec\":{\"backupName\":\"daily-1\"}}"
+     "create"
+     "-f"
+     "-"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
+   :announce "Delete Backup velero/daily-1",
+   :checks
+   [{:description "Backup velero/daily-1 and its data are deleted",
+     :timeout 1800,
+     :interval 10,
+     :holds false,
+     :abort nil}]},
+  :surface
+  {:description
+   "Deletes a Velero backup and its data through a DeleteBackupRequest",
+   :options
+   {:backup
+    {:desc
+     "\"<namespace>/<backup>\" - interactive selection when omitted",
+     :alias :b,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get
+    ["backups.velero.io"
+     "backupstoragelocations.velero.io"
+     "restores.velero.io"
+     "deletebackuprequests.velero.io"],
+    :kubectl-can-create ["deletebackuprequests.velero.io"]},
+   :select {:mode :one, :label "Backup", :flag :backup},
+   :empty-message
+   "no Backup can be deleted - each is running, being deleted, or stored where Velero cannot delete",
+   :confirm
+   {:action "delete a backup and its data", :destructive? true},
+   :details
+   ["What it does:"
+    "  picks one Backup (--backup, or interactively)"
+    "  asks to confirm: delete a backup and its data (destructive - type yes)"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: backups.velero.io, backupstoragelocations.velero.io, restores.velero.io, deletebackuprequests.velero.io"
+    "  kubectl create: deletebackuprequests.velero.io"],
+   :candidates {:permitted ["velero/daily-1"], :refused []}},
+  :unanswered
+  {:action "delete a backup and its data",
+   :destructive? true,
+   :items
+   ["delete Backup velero/daily-1 - its files in BackupStorageLocation default, its volume snapshots, file-system backups and data-mover copies are removed"
+    "nothing restores from it afterwards; this cannot be undone"
+    "its Restores are deleted with it: daily-1-restore"],
+   :step "delete a backup and its data",
+   :plan
+   [[:kubectl-stdin
+     "ctx"
+     "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"DeleteBackupRequest\",\"metadata\":{\"namespace\":\"velero\",\"generateName\":\"daily-1-\",\"labels\":{\"velero.io/backup-name\":\"daily-1\",\"velero.io/backup-uid\":\"uid-daily-1\"}},\"spec\":{\"backupName\":\"daily-1\"}}"
+     "create"
+     "-f"
+     "-"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+   :announce "Delete Backup velero/daily-1",
+   :checks
+   [{:description "Backup velero/daily-1 and its data are deleted",
+     :timeout 1800,
+     :interval 10,
+     :holds true,
+     :abort nil}]}},
  "tools/velero/runbooks/pause_schedule.clj"
  {:absent
   {:action "pause a backup schedule",

@@ -47,6 +47,19 @@
   [argv prefix]
   (some #(when (str/starts-with? % prefix) (subs % (count prefix))) argv))
 
+(defn- helm-listing
+  "The lines kubectl prints for helm-releases' jsonpath over the Secrets of
+   objects that match and, when the selector names one, belong to that
+   release."
+  [objects matches argv]
+  (let [release (some->> (arg-value argv "--selector=") (re-find #"name=([^,]+)") second)]
+    (str/join "\n" (for [[t o] objects
+                         :when (matches [t o])
+                         :let [{:keys [namespace labels creationTimestamp]} (:metadata o)]
+                         :when (or (nil? release) (= release (:name labels)))]
+                     (str/join "\t" [namespace (:name labels) (:status labels) (:version labels)
+                                     (:modifiedAt labels) (:createdAt labels) creationTimestamp])))))
+
 (defn- answer
   "What kubectl answers for argv against state {:objects [[type object]..]
    :answering? :dry-run}."
@@ -61,6 +74,8 @@
       (not answering?) unanswered
       (some #{"--dry-run=server"} argv) (or dry-run {:exit 0 :out "deleted (server dry run)" :err ""})
       (not (some #{"get"} argv)) {:exit 0 :out "" :err ""}
+      (and (= "secrets" type) (arg-value argv "--output=jsonpath="))
+      {:exit 0 :out (helm-listing objects matches argv) :err ""}
       (some #{"--output=name"} argv)
       {:exit 0 :out (str/join "\n" (for [[t o] objects :when (matches [t o])] (str t "/" (-> o :metadata :name)))) :err ""}
       name (if-let [[_ o] (first (filter matches objects))]
@@ -81,9 +96,12 @@
     (load-file path)))
 
 (defn- normalise
-  "x with every instant replaced, so a transcript does not depend on the clock."
+  "x with every instant and every yyyyMMddHHmmss stamp replaced, so a
+   transcript does not depend on the clock."
   [x]
-  (edn/read-string (str/replace (pr-str x) #"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z" "<instant>")))
+  (edn/read-string (-> (pr-str x)
+                       (str/replace #"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z" "<instant>")
+                       (str/replace #"\d{14}" "<stamp>"))))
 
 (defn- capture
   [thunk]
@@ -189,6 +207,67 @@
 
 (defn- schedule [paused] {:metadata (meta-of "velero" "daily") :spec {:paused paused :schedule "0 2 * * *"}})
 
+;; CloudNativePG: a Cluster db/pg of two instances, its pods, and Velero
+;; Schedules, Backups and storage locations.
+
+(def ^:private pg-type "clusters.postgresql.cnpg.io")
+(def ^:private velero-backup-type "backups.velero.io")
+(def ^:private location-type "backupstoragelocations.velero.io")
+(def ^:private restore-type "restores.velero.io")
+
+(defn- pg-cluster
+  [& {:keys [phase fenced hibernation primary target backup?]
+      :or {phase "Cluster in healthy state" primary "pg-1"}}]
+  {:metadata (assoc (meta-of "db" "pg")
+                    :annotations (cond-> {}
+                                   fenced (assoc :cnpg.io/fencedInstances fenced)
+                                   hibernation (assoc :cnpg.io/hibernation hibernation)))
+   :spec (cond-> {:instances 2}
+           backup? (assoc :backup {:barmanObjectStore {:destinationPath "s3://backups/pg"}}))
+   :status (cond-> {:phase phase :readyInstances 2 :currentPrimary primary :targetPrimary (or target primary)
+                    :instancesStatus {:healthy ["pg-1" "pg-2"]}}
+             (= "on" hibernation) (assoc :conditions [{:type "cnpg.io/hibernation" :status "True"}]))})
+
+(defn- pg-pod
+  [name]
+  {:metadata {:namespace "db" :name name :uid (str "uid-" name)
+              :labels {:cnpg.io/cluster "pg" :cnpg.io/podRole "instance"}
+              :annotations {:kubectl.kubernetes.io/restartedAt "2026-01-01T00:00:00Z"}}})
+
+(defn- velero-schedule
+  [& {:keys [phase] :or {phase "Enabled"}}]
+  {:metadata (meta-of "velero" "daily")
+   :spec {:schedule "0 2 * * *" :template {:storageLocation "default" :includedNamespaces ["shop"] :ttl "720h0m0s"}}
+   :status {:phase phase}})
+
+(defn- location
+  [phase]
+  {:metadata (meta-of "velero" "default") :spec {:default true :accessMode "ReadWrite"} :status {:phase phase}})
+
+(defn- velero-backup
+  [phase]
+  {:metadata (meta-of "velero" "daily-1") :spec {:storageLocation "default"} :status {:phase phase}})
+
+(def ^:private restore
+  {:metadata (meta-of "velero" "daily-1-restore") :spec {:backupName "daily-1"}})
+
+;; A Deployment stuck terminating on a controller's finalizer.
+
+(defn- terminating
+  [& {:keys [deleting?] :or {deleting? true}}]
+  (update (deployment) :metadata merge
+          (cond-> {:finalizers ["example.com/cleanup" "foregroundDeletion"]}
+            deleting? (assoc :deletionTimestamp "2026-01-01T00:00:00Z"))))
+
+;; Helm keeps each revision of release shop/web as a Secret, read from its labels.
+
+(defn- helm-revision
+  [version status]
+  {:metadata {:namespace "shop" :name (str "sh.helm.release.v1.web.v" version) :uid (str "uid-web-v" version)
+              :creationTimestamp "2026-01-01T00:00:00Z"
+              :labels {:owner "helm" :name "web" :status status :version (str version)
+                       :modifiedAt "1767225600" :createdAt "1767225600"}}})
+
 (defn- standard
   "The scenarios every book runs: permitted, refused, absent, a spec change and
    an unanswered read between confirmation and precondition, and a pick that
@@ -275,7 +354,68 @@
    "tools/argocd/runbooks/sync.clj"
    (standard {:target "argocd/shop" :invalid "shop" :opts {:prune true}
               :permitted [[application-type (application)]]
-              :refused [[application-type (application :operation true)]]})})
+              :refused [[application-type (application :operation true)]]})
+
+   "tools/cnpg/runbooks/fence.clj"
+   (standard {:target "db/pg pg-2" :invalid "db/pg"
+              :permitted [[pg-type (pg-cluster)]]
+              :refused [[pg-type (pg-cluster :fenced "[\"pg-2\"]")]]})
+
+   "tools/cnpg/runbooks/unfence.clj"
+   (standard {:target "db/pg pg-2" :invalid "db/pg"
+              :permitted [[pg-type (pg-cluster :fenced "[\"pg-2\"]")]]
+              :refused [[pg-type (pg-cluster :fenced "[\"*\"]")]]})
+
+   "tools/cnpg/runbooks/switchover.clj"
+   (standard {:target "db/pg 2" :invalid "pg 2"
+              :permitted [[pg-type (pg-cluster)]]
+              :refused [[pg-type (pg-cluster :primary "pg-1" :target "pg-2")]]})
+
+   "tools/cnpg/runbooks/hibernate.clj"
+   (standard {:target "db/pg" :invalid "pg"
+              :permitted [[pg-type (pg-cluster)]]
+              :refused [[pg-type (pg-cluster :hibernation "on")]]})
+
+   "tools/cnpg/runbooks/rehydrate.clj"
+   (standard {:target "db/pg" :invalid "pg"
+              :permitted [[pg-type (pg-cluster :hibernation "on")]]
+              :refused [[pg-type (pg-cluster)]]})
+
+   "tools/cnpg/runbooks/restart.clj"
+   (standard {:target "db/pg" :invalid "pg"
+              :permitted [[pg-type (pg-cluster)] ["pods" (pg-pod "pg-1")] ["pods" (pg-pod "pg-2")]]
+              :refused [[pg-type (pg-cluster :phase "Setting up primary")]]})
+
+   "tools/cnpg/runbooks/reload.clj"
+   (standard {:target "db/pg" :invalid "pg"
+              :permitted [[pg-type (pg-cluster)]]
+              :refused [[pg-type (pg-cluster :hibernation "on")]]})
+
+   "tools/cnpg/runbooks/backup.clj"
+   (standard {:target "db/pg" :invalid "pg"
+              :permitted [[pg-type (pg-cluster :backup? true)]]
+              :refused [[pg-type (pg-cluster)]]})
+
+   "tools/velero/runbooks/backup.clj"
+   (standard {:target "velero/daily" :invalid "daily"
+              :permitted [[schedule-type (velero-schedule)] [location-type (location "Available")]]
+              :refused [[schedule-type (velero-schedule)] [location-type (location "Unavailable")]]})
+
+   "tools/velero/runbooks/delete_backup.clj"
+   (standard {:target "velero/daily-1" :invalid "daily-1"
+              :permitted [[velero-backup-type (velero-backup "Completed")] [location-type (location "Available")]
+                          [restore-type restore]]
+              :refused [[velero-backup-type (velero-backup "InProgress")] [location-type (location "Available")]]})
+
+   "runbooks/kubernetes/finalizers/remove.clj"
+   (standard {:target "deployments shop/web example.com/cleanup" :invalid "deployments shop/web"
+              :permitted [["deployments" (terminating)]]
+              :refused [["deployments" (terminating :deleting? false)]]})
+
+   "runbooks/kubernetes/helm/rollback.clj"
+   (standard {:target "shop/web" :invalid "web"
+              :permitted [["secrets" (helm-revision 1 "superseded")] ["secrets" (helm-revision 2 "deployed")]]
+              :refused [["secrets" (helm-revision 1 "superseded")] ["secrets" (helm-revision 2 "pending-upgrade")]]})})
 
 (defn- placed
   "[type object] moved to namespace/name, uid and all."
