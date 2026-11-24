@@ -141,7 +141,7 @@ The detectives compose from one domain to the whole cluster:
 | `runbooks/detectives/observability.clj` | Prometheus, Alertmanager, ThanosRuler |
 | `runbooks/detectives/dns.clj` | nameservers, SOA replication, answer consistency |
 | `runbooks/detectives/mail.clj` | MX, SPF, DKIM, DMARC, rDNS, live SMTP/POP3/IMAP with TLS |
-| `runbooks/detectives/fabric.clj` | EVPN-VXLAN MAC ownership, over SSH |
+| `runbooks/detectives/fabric.clj` | EVPN-VXLAN MAC ownership, over SSH; each `evpn-fdb-conflict` finding carries `local-uptime`, `bgp-route` (`present`/`absent`/`unread`) and `classification` (`live-misadvertisement`/`orphan`/`unknown`) |
 
 Posture findings describe risks that may be deliberate choices, so they run
 only when posture is asked for.
