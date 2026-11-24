@@ -311,6 +311,21 @@ mostly data:
   reading through the nil ref (`runbooks/kubernetes/workloads/restart.clj`).
   A change whose subject is no single object, such as a Helm release kept
   as many Secrets, uses `:refusal` alone (`runbooks/kubernetes/helm/rollback.clj`);
+- a change that acts on several objects at once - an adoption stamping a
+  volume claim, a database and the host's routes - declares them as
+  `:subjects (fn [ctx] -> refs)`, each ref `{:type :name :namespace?}` with
+  optional `:facts` and `:optional? true` for an object that may be absent.
+  The function sees the pick as `:target` (and `:ref`/`:object` with a
+  `:subject`), and a `:many` select may declare it. The engine reads every
+  object strictly before `:derive`, hands the callbacks `:refs` and
+  `:objects` in the declared order (nil for an absent optional one), reads
+  them all again before `:refusal` and `:precondition`, and pins each, so
+  the change is refused naming the object that moved, as "refusing:
+  databases.kinda.rocks moodle/moodle: its spec changed after the
+  confirmation (generation 1, now 2)". A required object that did not exist
+  at the confirmation refuses, and so does an optional one that appeared
+  after it. It composes with `:subject` and `:pin`; a post-check reads the
+  set with `(mutation/read-subjects context refs)`;
 - a change that acts on something other than the cluster of the kube context
   - an SSH host, a storage cluster - names it with `:connect (fn [opts] …)`,
   which checks the connection and returns `{:context … :cluster …
@@ -319,8 +334,8 @@ mostly data:
   confirmation names `:cluster`, and the changelog names `:announce-as`,
   defaulting to `:cluster`; nil stops the book before anything is listed.
   `gumshoe.ceph/connect` is the ceph one (`tools/ceph/runbooks/osd_in.clj`).
-  `:subject` and `:pin` read with kubectl, so a spec with `:connect` takes
-  neither and re-checks its object in `:precondition`. A change nobody else
+  `:subject`, `:subjects` and `:pin` read with kubectl, so a spec with
+  `:connect` takes none of them and re-checks its object in `:precondition`. A change nobody else
   needs to hear of, such as a netshoot debug session, sets `:announce?
   false` and runs as a read-only book does (`runbooks/kubernetes/netshoot/node.clj`);
 - a pair of books that set one boolean state and set it back - suspend and

@@ -56,6 +56,7 @@
                    [gumshoe.change-books-test]
                    [gumshoe.mutation-connect-test]
                    [gumshoe.mutation-subject-test]
+                   [gumshoe.mutation-subjects-test]
                    [gumshoe.pick-test]
                    [gumshoe.deletion-test]
                    [gumshoe.workloads-ops-test]
@@ -221,6 +222,7 @@
                                                          'gumshoe.change-books-test
                                                          'gumshoe.mutation-connect-test
                                                          'gumshoe.mutation-subject-test
+                                                         'gumshoe.mutation-subjects-test
                                                          'gumshoe.pick-test
                                                          'gumshoe.deletion-test
                                                          'gumshoe.workloads-ops-test
