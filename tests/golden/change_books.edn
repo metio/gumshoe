@@ -80,6 +80,29 @@
   {:result true,
    :out
    "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n✅ every OSD is already in"},
+  :brought-in-meanwhile
+  {:result true,
+   :out
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n▸ OSD: osd.3\n────────────────────────────────────────────────────────────────────────────────\nhost : mgr-1\nosd  : osd.3\nup   : yes",
+   :change
+   {:action "bring an OSD back in - data migrates back onto it",
+    :target "mgr-1",
+    :destructive? false,
+    :items ["osd.3"],
+    :plan
+    [[:ssh
+      {:host "mgr-1",
+       :user nil,
+       :cephadm-shell? false,
+       :needs-sudo? false}
+      "ceph"
+      "osd"
+      "in"
+      "3"]],
+    :announce ["ceph (mgr-1)" "Bring osd.3 back in"],
+    :checks
+    {:after [["osd.3 is marked in" true]],
+     :unanswered [["osd.3 is marked in" false]]}}},
   :cephadm
   {:result true,
    :out
@@ -201,6 +224,29 @@
    :announce? true,
    :details [],
    :parsed {:host "mgr-1", :osd "3"}},
+  :unanswered-meanwhile
+  {:result true,
+   :out
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n▸ OSD: osd.3\n────────────────────────────────────────────────────────────────────────────────\nhost : mgr-1\nosd  : osd.3\nup   : yes",
+   :change
+   {:action "bring an OSD back in - data migrates back onto it",
+    :target "mgr-1",
+    :destructive? false,
+    :items ["osd.3"],
+    :plan
+    [[:ssh
+      {:host "mgr-1",
+       :user nil,
+       :cephadm-shell? false,
+       :needs-sudo? false}
+      "ceph"
+      "osd"
+      "in"
+      "3"]],
+    :announce ["ceph (mgr-1)" "Bring osd.3 back in"],
+    :checks
+    {:after [["osd.3 is marked in" false]],
+     :unanswered [["osd.3 is marked in" false]]}}},
   :unpicked
   {:result false,
    :out
