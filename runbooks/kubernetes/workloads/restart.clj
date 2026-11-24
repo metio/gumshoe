@@ -29,7 +29,9 @@
   :refusal (fn [{:keys [ref object]}] (workloads/restart-refusal (:kind ref) object))
   :announce (fn [{:keys [target]}] (format "Restart %s" target))
   :effect (fn [{:keys [context ref]}]
-            (effect/plan (apply effect/kubectl context (workloads/restart-args ref))))
+            (if ref
+              (effect/plan (apply effect/kubectl context (workloads/restart-args ref)))
+              (effect/plan (effect/note "nothing to restart - the precondition says why"))))
   :verify (fn [{:keys [ref target] :as ctx}]
             [{:description (format "%s rolled out" target)
               :timeout 600 :interval 10
