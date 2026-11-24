@@ -64,5 +64,5 @@
 (def detectives
   [{:name "upload-limits"
     :description "The nginx + php-fpm file-upload limit chain is coherent"
-    :requires ["pods"]
+    :requires [:nginx-body-size :upload-max :post-max]
     :detect analyze}])

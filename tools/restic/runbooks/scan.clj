@@ -9,7 +9,6 @@
             [gumshoe.detectives.restic :as restic-detectives]
             [gumshoe.secrets :as secrets]
             [gumshoe.restic :as restic]
-            [gumshoe.runbook :as runbook]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
@@ -38,30 +37,28 @@
     (secrets/password secret)
     (System/getenv "RESTIC_PASSWORD")))
 
-(defn- investigate
-  [opts _ctx]
-  (detective/when-to-run! "Reach for this when you need to trust the backups - that each restic repository is readable, actually populated, and has a recent enough snapshot.")
+(defn- collect
+  "Every repository's evidence, or nil when the thresholds or the password
+   rule the read out."
+  [opts]
   (let [password (resolve-password (:password-secret opts))]
     (cond
       (>= (:warn-days opts) (:critical-days opts))
-      (do (stdout/error "--warn-days must be smaller than --critical-days") false)
+      (do (stdout/error "--warn-days must be smaller than --critical-days") nil)
 
       (empty? password)
-      (do (stdout/error "no repository password: pass --password-secret or set RESTIC_PASSWORD") false)
+      (do (stdout/error "no repository password: pass --password-secret or set RESTIC_PASSWORD") nil)
 
       :else
-      (detective/report!
-       restic-detectives/detectives
-       (detective/run-detectives restic-detectives/detectives
-                                 (restic/collect-evidence! {:repositories (:repository opts)
-                                                            :password password
-                                                            :warn-days (:warn-days opts)
-                                                            :critical-days (:critical-days opts)}))
-       (:output opts "text")))))
+      (restic/collect-evidence! {:repositories (:repository opts)
+                                 :password password
+                                 :warn-days (:warn-days opts)
+                                 :critical-days (:critical-days opts)}))))
 
-(runbook/execute!
+(detective/book
  {:description "Investigates restic backups: repositories readable, populated, and current"
   :options options
   :prerequisites prerequisites
-  :announce? false
-  :action investigate})
+  :detectives restic-detectives/detectives
+  :when-to-run "Reach for this when you need to trust the backups - that each restic repository is readable, actually populated, and has a recent enough snapshot."
+  :collect collect})

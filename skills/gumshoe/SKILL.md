@@ -249,7 +249,16 @@ depends on a pinned gumshoe release and puts its own `runbooks`, `playbooks`
 and `firebooks` on `:paths`; `casebook-example/` is a template. Books are
 mostly data:
 
-- a detective book is `(detective/book {:description … :detectives …})`;
+- a detective book is `(detective/book {:description … :detectives …})`.
+  Evidence from outside the cluster's resources comes from `:collect (fn
+  [opts] evidence)`, returning nil when it can not collect after printing
+  why; `:around (fn [opts run] …)` wraps it in a port-forward or connection
+  check and calls `(run opts)`, and `:extra (fn [evidence] map)` adds rows to
+  the json/edn report. Checks whose `:requires` all came back nil are marked
+  unread, so a collection that read nothing fails with "nothing was
+  checked". `:requires` must name the evidence keys as the collection
+  returns them, keywords or strings. `(detective/check-step {:title …
+  :detectives … :blocking? false})` is the playbook step for the same;
 - a uniform change is `(mutation/book {:select … :confirm … :effect …
   :verify …})`, whose effect plan (`[[:kubectl "cordon" node]]`) runs,
   dry-runs, or is collected in a test. An `:effect` returning one effect,

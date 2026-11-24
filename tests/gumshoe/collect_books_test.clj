@@ -229,3 +229,35 @@
           (testing (str book " / " scenario)
             (is (= expected (get-in actual [book scenario])))))
         (is (= (set (keys golden)) (set (keys actual))) "every book has a golden entry")))))
+
+(deftest a-scan-whose-collection-read-nothing-checked-nothing
+  ;; The upload scan refuses before its detectives run when no container
+  ;; answered, so its collection never reaches a report empty.
+  (doseq [[book {:keys [path opts stubs evidence]}] (dissoc scenarios "upload")
+          :let [unread (update-vals evidence (constantly nil))
+                {:keys [result stdout]} (run-book path (assoc opts :output "edn")
+                                                  (merge (stubs unread)
+                                                         {#'config/active-config (constantly nil)})
+                                                  [])]]
+    (testing book
+      (is (false? result) "a scan that judged nothing fails")
+      (is (true? (:nothing-checked stdout)))
+      (is (every? :unread (:checked stdout)) "every check is reported as having read nothing"))))
+
+(defn- disruption-check-of-node-maintenance
+  []
+  (load-book "playbooks/kubernetes/node_maintenance.clj")
+  @(resolve 'playbooks.kubernetes.node-maintenance/disruption-check))
+
+(deftest node-maintenance-reports-blocking-budgets-before-the-confirmation
+  (let [{:keys [check]} (disruption-check-of-node-maintenance)
+        budget {:metadata {:name "web" :namespace "shop"}
+                :spec {:maxUnavailable 0}
+                :status {:disruptionsAllowed 0 :currentHealthy 1 :desiredHealthy 1 :expectedPods 1}}
+        out (with-redefs-fn {#'detective/collect-evidence!
+                             (fn [_ _] {:now (java.time.Instant/now) "pods" {:items []}
+                                        "poddisruptionbudgets" {:items [budget]}})}
+              (fn [] (binding [*err* (java.io.StringWriter.)]
+                       (with-out-str (is (true? (check {:context "ctx"}))
+                                         "an advisory check never stops the playbook")))))]
+    (is (str/includes? (stdout/strip-colors out) "shop/web") "the blocking budget is named")))

@@ -10,8 +10,7 @@
             [gumshoe.detectives.external-dns :as external-dns-detectives]
             [gumshoe.external-dns :as external-dns]
             [gumshoe.inputs :as inputs]
-            [gumshoe.kubectl :as kubectl]
-            [gumshoe.runbook :as runbook]))
+            [gumshoe.kubectl :as kubectl]))
 
 (def options
   (merge {:server {:desc "The DNS server the records must exist on"
@@ -26,16 +25,10 @@
    :kubectl-can-get ["ingresses"]
    :can-ping-using-ipv4 [:server]})
 
-(runbook/execute!
+(detective/book
  {:description "Investigates external-dns: cluster-declared hostnames must resolve in DNS"
   :options options
   :prerequisites prerequisites
-  :announce? false
-  :action (fn [opts _ctx]
-            (detective/when-to-run! "Reach for this when a hostname points nowhere - it checks that every hostname your ingresses and routes declare actually resolves in DNS.")
-            (detective/report!
-             external-dns-detectives/detectives
-             (detective/run-detectives external-dns-detectives/detectives
-                                       (external-dns/collect-evidence! (kubectl/current-context)
-                                                                       (:server opts)))
-             (:output opts "text")))})
+  :detectives external-dns-detectives/detectives
+  :when-to-run "Reach for this when a hostname points nowhere - it checks that every hostname your ingresses and routes declare actually resolves in DNS."
+  :collect (fn [opts] (external-dns/collect-evidence! (kubectl/current-context) (:server opts)))})

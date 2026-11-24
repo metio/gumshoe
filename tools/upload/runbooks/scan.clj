@@ -11,7 +11,6 @@
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.phpstack :as phpstack]
-            [gumshoe.runbook :as runbook]
             [gumshoe.stdout :as stdout]))
 
 (def options
@@ -26,34 +25,30 @@
    :kubectl-can-get ["pods"]
    :kubectl-can-exec ["pods"]})
 
-(defn- investigate
-  [opts _ctx]
-  (detective/when-to-run! "Reach for this when a Moodle/Nextcloud upload fails at a size limit - the nginx client_max_body_size and php-fpm post/upload limits along the whole chain.")
+(defn- collect
+  "The upload limits the app's containers report, or nil when no namespace was
+   chosen or neither an nginx nor a php-fpm container answered."
+  [opts]
   (let [context (kubectl/current-context)
         namespaces (kubectl/names-of (kubectl/get-all context "namespaces"))
         namespace (interact/choose-one "Namespace" namespaces (:namespace opts))]
     (if (nil? namespace)
-      (do (stdout/error "no namespace selected") false)
+      (do (stdout/error "no namespace selected") nil)
       (let [evidence (phpstack/collect-evidence! context namespace)]
-        (cond
-          (not (or (:found-nginx? evidence) (:found-php? evidence)))
+        (if-not (or (:found-nginx? evidence) (:found-php? evidence))
           (do (stdout/error (format "found no nginx or php-fpm container in %s - is this an nginx+php-fpm app?" namespace))
-              false)
-
-          :else
+              nil)
           (do
             (when-not (:found-nginx? evidence)
               (stdout/warn "no nginx container answered 'nginx -T' - reporting the PHP side only"))
             (when-not (:found-php? evidence)
               (stdout/warn "no php container answered 'php -i' - reporting the nginx side only"))
-            (detective/report!
-             upload/detectives
-             (detective/run-detectives upload/detectives evidence)
-             (:output opts "text"))))))))
+            evidence))))))
 
-(runbook/execute!
+(detective/book
  {:description "Investigates the nginx + php-fpm file-upload limit chain of an app"
   :options options
   :prerequisites prerequisites
-  :announce? false
-  :action investigate})
+  :detectives upload/detectives
+  :when-to-run "Reach for this when a Moodle/Nextcloud upload fails at a size limit - the nginx client_max_body_size and php-fpm post/upload limits along the whole chain."
+  :collect collect})

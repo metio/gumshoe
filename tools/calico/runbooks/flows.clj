@@ -9,7 +9,6 @@
             [gumshoe.detective :as detective]
             [gumshoe.detectives.flows :as flow-detectives]
             [gumshoe.inputs :as inputs]
-            [gumshoe.runbook :as runbook]
             [gumshoe.secrets :as secrets]))
 
 (def options
@@ -39,22 +38,18 @@
                (some #(secrets/field secret %) ["login" "user" "username"]))
      :password (secrets/password secret)}))
 
-(defn- investigate
-  [opts _ctx]
-  (detective/when-to-run! "Reach for this when traffic is being dropped and you want the verdict rather than another probe - which policy denied a path, what a staged policy would change, and which denials look like timeouts. Also run it before enforcing a staged default-deny.")
+(defn- collect
+  [opts]
   (let [url (inputs/value :whisker-url opts)
         {:keys [user password]} (credentials opts url)]
-    (detective/report!
-     flow-detectives/detectives
-     (detective/run-detectives flow-detectives/detectives
-                               (flows/collect-evidence! {:url url
-                                                         :user user
-                                                         :password password
-                                                         :window (:window opts 3600)}))
-     (:output opts "text"))))
+    (flows/collect-evidence! {:url url
+                              :user user
+                              :password password
+                              :window (:window opts 3600)})))
 
-(runbook/execute!
+(detective/book
  {:description "Investigates Calico flow logs through Whisker: denials, the deciding policy, staged disagreement"
   :options options
-  :announce? false
-  :action investigate})
+  :detectives flow-detectives/detectives
+  :when-to-run "Reach for this when traffic is being dropped and you want the verdict rather than another probe - which policy denied a path, what a staged policy would change, and which denials look like timeouts. Also run it before enforcing a staged default-deny."
+  :collect collect})

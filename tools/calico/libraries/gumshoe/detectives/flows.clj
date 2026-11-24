@@ -110,13 +110,13 @@
 (def detectives
   [{:name "calico-flows-api"
     :description "The Whisker flow API answers"
-    :requires ["url"]
+    :requires [:url]
     :detect detect-api-unreachable}
    {:name "calico-denied-flows"
     :description "Flows denied over the window, grouped by path, with the deciding policy"
-    :requires ["flows"]
+    :requires [:flows]
     :detect detect-denied-flows}
    {:name "calico-staged-disagreement"
     :description "Flows a staged policy would decide differently"
-    :requires ["flows"]
+    :requires [:flows]
     :detect detect-staged-disagreement}])

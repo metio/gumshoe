@@ -614,17 +614,17 @@
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings.\n",
    :calls
-   [[:collect-workloads
-     {:context "ctx",
-      :namespace "loki",
-      :selector "app.kubernetes.io/name=loki"}]
-    [:get-selected "ctx" "services" "app.kubernetes.io/name=loki"]
+   [[:get-selected "ctx" "services" "app.kubernetes.io/name=loki"]
     [:port-forward
      {:context "ctx",
       :namespace "loki",
       :service "loki-distributor",
       :local-port 13100,
       :remote-port 3100}]
+    [:collect-workloads
+     {:context "ctx",
+      :namespace "loki",
+      :selector "app.kubernetes.io/name=loki"}]
     [:collect-rings "http://localhost:13100"]
     [:detectives
      ["loki-mode" "loki-components" "loki-health" "loki-rings"]
@@ -639,17 +639,17 @@
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 4 checks passed\n",
    :calls
-   [[:collect-workloads
-     {:context "ctx",
-      :namespace "loki",
-      :selector "app.kubernetes.io/name=loki"}]
-    [:get-selected "ctx" "services" "app.kubernetes.io/name=loki"]
+   [[:get-selected "ctx" "services" "app.kubernetes.io/name=loki"]
     [:port-forward
      {:context "ctx",
       :namespace "loki",
       :service "loki-distributor",
       :local-port 13100,
       :remote-port 3100}]
+    [:collect-workloads
+     {:context "ctx",
+      :namespace "loki",
+      :selector "app.kubernetes.io/name=loki"}]
     [:collect-rings "http://localhost:13100"]
     [:detectives
      ["loki-mode" "loki-components" "loki-health" "loki-rings"]
@@ -681,17 +681,17 @@
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings.\n",
    :calls
-   [[:collect-workloads
-     {:context "ctx",
-      :namespace "loki",
-      :selector "app.kubernetes.io/name=loki"}]
-    [:get-selected "ctx" "services" "app.kubernetes.io/name=loki"]
+   [[:get-selected "ctx" "services" "app.kubernetes.io/name=loki"]
     [:port-forward
      {:context "ctx",
       :namespace "loki",
       :service "loki-distributor",
       :local-port 13100,
       :remote-port 3100}]
+    [:collect-workloads
+     {:context "ctx",
+      :namespace "loki",
+      :selector "app.kubernetes.io/name=loki"}]
     [:collect-rings "http://localhost:13100"]
     [:detectives
      ["loki-mode" "loki-components" "loki-health" "loki-rings"]
@@ -706,17 +706,17 @@
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
    :calls
-   [[:collect-workloads
-     {:context "ctx",
-      :namespace "loki",
-      :selector "app.kubernetes.io/name=loki"}]
-    [:get-selected "ctx" "services" "app.kubernetes.io/name=loki"]
+   [[:get-selected "ctx" "services" "app.kubernetes.io/name=loki"]
     [:port-forward
      {:context "ctx",
       :namespace "loki",
       :service "loki-distributor",
       :local-port 13100,
       :remote-port 3100}]
+    [:collect-workloads
+     {:context "ctx",
+      :namespace "loki",
+      :selector "app.kubernetes.io/name=loki"}]
     [:collect-rings "http://localhost:13100"]
     [:detectives
      ["loki-mode" "loki-components" "loki-health" "loki-rings"]
@@ -727,15 +727,15 @@
   "no distributor"
   {:result true,
    :stdout
-   "  ✓ Loki runs in microservice mode with components present\n  ✓ Every essential Loki component (distributor, ingester, querier, query-frontend) exists\n  ✓ Every Loki component has all its replicas ready\n  ✓ Every reachable component hash ring is fully ACTIVE\n",
+   "  ✓ Loki runs in microservice mode with components present\n  ✓ Every essential Loki component (distributor, ingester, querier, query-frontend) exists\n  ✓ Every Loki component has all its replicas ready\n▸ 1 check read nothing on this cluster - other (loki-rings); what they read is not served, not readable, or not gathered by this scan\n",
    :stderr
-   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 4 checks passed\n",
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 3 checks passed\n",
    :calls
-   [[:collect-workloads
+   [[:get-selected "ctx" "services" "app.kubernetes.io/name=loki"]
+    [:collect-workloads
      {:context "ctx",
       :namespace "loki",
       :selector "app.kubernetes.io/name=loki"}]
-    [:get-selected "ctx" "services" "app.kubernetes.io/name=loki"]
     [:detectives
      ["loki-mode" "loki-components" "loki-health" "loki-rings"]
      {"namespace" "loki", "workloads" []}]]},

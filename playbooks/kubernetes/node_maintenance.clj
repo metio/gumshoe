@@ -21,14 +21,12 @@
             [gumshoe.steps.nodes :as nodes]))
 
 (def disruption-check
-  {:title "🔬 Disruption check"
-   :prerequisites {:installed-tools ["kubectl"]
-                   :kubectl-can-get ["pods" "poddisruptionbudgets"]}
-   :check (fn [{:keys [context]}]
-            (detective/print-report!
-             (detective/run-detectives disruption/detectives
-                                       (detective/collect-evidence! context disruption/detectives)))
-            true)})
+  (detective/check-step
+   {:title "🔬 Disruption check"
+    :prerequisites {:installed-tools ["kubectl"]
+                    :kubectl-can-get ["pods" "poddisruptionbudgets"]}
+    :detectives disruption/detectives
+    :blocking? false}))
 
 (def health-check
   {:title "🔬 Verification"

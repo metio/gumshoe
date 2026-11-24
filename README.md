@@ -594,7 +594,14 @@ the same machine-enforced contract:
 
 - **A detective** is `(detective/book {:description … :detectives …
   :prerequisites …})` - it names a set of detectives and gets the whole
-  read-only investigation, `--output`, and reporting for free.
+  read-only investigation, `--output`, and reporting for free. A scan whose
+  evidence comes from somewhere other than the cluster's resources - DNS,
+  SSH, an HTTP API - adds `:collect (fn [opts] evidence)`, and `:around (fn
+  [opts run] …)` when the collection needs a port-forward or a connection
+  check around it. Its checks that read nothing are still marked, so a
+  collection that came back empty fails with "nothing was checked". A
+  playbook gates on a set of detectives with `(detective/check-step {:title …
+  :detectives …})`.
 - **A uniform mutation** is `(mutation/book {:select … :confirm … :effect …
   :verify …})` - it declares what to list and pick, the effect plan to run, and
   the post-checks; the select → confirm → announce → execute → verify → banner
