@@ -321,10 +321,17 @@
 (def ^:private request-timeout "--request-timeout=30s")
 
 (def ^:dynamic *strict-reads*
-  "When true, a plain read that did not answer throws an ex-info carrying
-   ::unread instead of returning nil. select/resolve-target binds it while it
-   lists candidates, so an unreachable API is reported as such rather than as
-   an empty list - every candidate fn built on these readers inherits it."
+  "When true, a read that did not answer throws an ex-info carrying ::unread
+   instead of returning nil or {:ok? false}. A read that answered that the
+   object or the resource type does not exist still returns as it would
+   unbound. select/resolve-target binds it while it lists candidates, so an
+   unreachable API is reported as such rather than as an empty list.
+
+   The strict readers are get-json, get-json-result, get-all, get-namespaced,
+   get-namespaced-result, get-namespaced-resource, confirmed-absent? and
+   helm-releases, and every function built on them inherits it. The other
+   readers here (secret-names, tls-secrets, get-raw, raw-text, any-matching?,
+   resource-kinds) ignore it."
   false)
 
 (defn- answered-empty?
@@ -341,18 +348,27 @@
                    (or (not-empty (str/trim (str err))) (str "exit " exit)))
            {::unread true}))
 
+(defn- read-result
+  "{:ok? <the read answered> :doc <the parsed document>} of a kubectl get.
+   :ok? is true only when kubectl exited cleanly and its output parsed. Under
+   *strict-reads* a read that is not ok? and did not answer that its object
+   or resource type is absent throws."
+  [& argv]
+  (let [{:keys [exit out err]} (apply shell/execute argv)
+        doc (parse-json out)
+        ok? (and (zero? exit) (some? doc))]
+    (when (and *strict-reads* (not ok?) (not (answered-empty? err)))
+      (throw (did-not-answer exit err)))
+    {:ok? ok? :doc doc}))
+
 (defn- read-json
   "The parsed output of a kubectl get, nil when it failed or did not parse.
-   Under *strict-reads* the exit status is kept, and a read that did not
-   answer throws."
+   Under *strict-reads* a read that did not answer throws."
   [& argv]
   (if-not *strict-reads*
     (parse-json (apply shell/stdout-of argv))
-    (let [{:keys [exit out err]} (apply shell/execute argv)
-          doc (when (zero? exit) (parse-json (str/trim (str out))))]
-      (when (and (nil? doc) (not (answered-empty? err)))
-        (throw (did-not-answer exit err)))
-      doc)))
+    (let [{:keys [ok? doc]} (apply read-result argv)]
+      (when ok? doc))))
 
 (defn get-json
   "Runs `kubectl get` with `args` - a type, names, selectors, a namespace, any
@@ -370,12 +386,11 @@
    :ok? is true only when kubectl exited cleanly and its output parsed, so a
    gate on an absence can require that the read answered before it trusts an
    empty result: a throttled API or a missing CRD is not ok?, where get-json
-   would have returned the same nil as a failed parse."
+   would have returned the same nil as a failed parse. Under *strict-reads*
+   a read that did not answer throws instead of returning {:ok? false}."
   [context & args]
-  (let [{:keys [exit out]} (apply shell/execute "kubectl" (str "--context=" context) request-timeout
-                                  "get" (concat args ["--output=json"]))
-        doc (parse-json out)]
-    {:ok? (and (zero? exit) (some? doc)) :doc doc}))
+  (apply read-result "kubectl" (str "--context=" context) request-timeout
+         "get" (concat args ["--output=json"])))
 
 (defn get-all
   [context type]
