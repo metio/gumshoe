@@ -77,3 +77,53 @@
                     gumshoe.shell/execute (fn [& _] {:exit 1 :out "" :err "error: the server doesn't have a resource type \"widgets\""})]
         (binding [*out* (java.io.StringWriter.) *err* (java.io.StringWriter.)]
           (is (true? (mutation/run! spec {} {}))))))))
+
+(defn- derived-release-spec
+  "A book that derives the HelmRelease its precondition gates on, recording
+   what each later stage was reached with."
+  [reached]
+  {:select {:mode :namespaced :label "HelmRelease"}
+   :confirm {:action "reset the release" :destructive? true}
+   :derive (fn [{:keys [context target]}]
+             (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+               {:release (kubectl/get-namespaced-resource context namespace "helmreleases" name)
+                :pods (vec (kubectl/items-of (kubectl/get-namespaced context namespace "pods")))}))
+   :precondition (fn [{:keys [release]}]
+                   (swap! reached conj [:precondition release])
+                   (not (get-in release [:status :inFlight])))
+   :effect (fn [_] (swap! reached conj :effect) [])})
+
+(deftest a-derive-read-that-did-not-answer-never-reaches-the-precondition
+  (let [reached (atom [])
+        out (java.io.StringWriter.)]
+    (with-redefs [kubectl/current-context (constantly "ctx")
+                  kubectl/current-cluster (constantly "cluster")
+                  interact/confirm! (fn [& _] (swap! reached conj :confirm) true)
+                  gumshoe.shell/execute (fn [& _] {:exit 1 :out "" :err "Error from server (TooManyRequests): the server has received too many requests"})]
+      (binding [*out* out *err* out]
+        (is (false? (mutation/run-on! (derived-release-spec reached) "web/moodle" {} nil)))))
+    (is (= [] @reached) "neither the confirmation, the precondition nor the effect ran")
+    (is (re-find #"TooManyRequests" (str out)) "the reason the read failed is reported")))
+
+(deftest a-derive-read-that-answered-reaches-the-precondition
+  (testing "an object that answered NotFound is derived as nil, as a lax read would"
+    (let [reached (atom [])]
+      (with-redefs [kubectl/current-context (constantly "ctx")
+                    kubectl/current-cluster (constantly "cluster")
+                    interact/confirm! (constantly true)
+                    gumshoe.shell/execute (fn [& _] {:exit 1 :out "" :err "Error from server (NotFound): helmreleases.helm.toolkit.fluxcd.io \"moodle\" not found"})]
+        (binding [*out* (java.io.StringWriter.) *err* (java.io.StringWriter.)]
+          (is (true? (mutation/run-on! (derived-release-spec reached) "web/moodle" {} nil)))))
+      (is (some #{[:precondition nil]} @reached) "the precondition saw the absent release")))
+  (testing "a derive that reads lazily is realized while the reads are strict"
+    (let [reached (atom [])
+          spec (assoc (derived-release-spec reached)
+                      :derive (fn [{:keys [context]}]
+                                {:names (map kubectl/name-of (kubectl/items-of (kubectl/get-all context "pods")))}))]
+      (with-redefs [kubectl/current-context (constantly "ctx")
+                    kubectl/current-cluster (constantly "cluster")
+                    interact/confirm! (constantly true)
+                    gumshoe.shell/execute (fn [& _] {:exit 1 :out "" :err "Unable to connect to the server"})]
+        (binding [*out* (java.io.StringWriter.) *err* (java.io.StringWriter.)]
+          (is (false? (mutation/run-on! spec "web/moodle" {} nil)))))
+      (is (= [] @reached)))))
