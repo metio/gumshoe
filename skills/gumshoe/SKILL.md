@@ -35,23 +35,41 @@ instead.
 
 ```sh
 ./run --list                 # in a gumshoe clone
-bb run --list                # in a casebook
+bb run --list                # in a casebook with a run task
+bb gumshoe --list            # in any casebook with the gumshoe task
 ```
 
-Each line is a book's absolute path, a tab, and its description, for every
-book on the classpath: gumshoe's built-ins, every tool package the project
-depends on, and the casebook's own books.
+Each line is a book's path, a tab, and its description, for every book on
+the classpath: gumshoe's built-ins, every tool package the project depends
+on, and the casebook's own books. The path is relative to the checkout the
+book comes from (`runbooks/detectives/fabric.clj`,
+`tools/flux/runbooks/gitops.clj`), the same in a gumshoe clone, in a casebook,
+and for every gumshoe pin, so a listed path runs as printed:
+
+```sh
+bb run runbooks/detectives/fabric.clj --help
+bb gumshoe runbooks/detectives/fabric.clj --help
+```
+
+Either door resolves the path to the casebook's own file of that path first
+and to the classpath book listed under it otherwise, so a casebook overrides
+an upstream book by placing a file at the same path; the listing then shows
+the casebook's book only. A path that names no book exits 1 and prints the
+closest listed paths. An absolute path runs as given.
 
 `bb run` in a casebook is a task of its `bb.edn`, and babashka's own `run`
-answers when the task is missing. Check `bb tasks` first; a casebook without
-`run` and `detect` needs them, as in `casebook-example/bb.edn`:
+answers when the task is missing. Check `bb tasks` first; the `gumshoe` task
+needs no override and offers `--list` and paths too. A casebook without the
+tasks needs them, as in `casebook-example/bb.edn`:
 
 ```clojure
-:tasks {detect {:requires ([gumshoe.main :as main])
-                :task (System/exit (main/detect *command-line-args*))}
-        run    {:override-builtin true
-                :requires ([gumshoe.main :as main])
-                :task (System/exit (main/run *command-line-args*))}}
+:tasks {gumshoe {:requires ([gumshoe.main :as main])
+                 :task (System/exit (main/front-door *command-line-args*))}
+        detect  {:requires ([gumshoe.main :as main])
+                 :task (System/exit (main/detect *command-line-args*))}
+        run     {:override-builtin true
+                 :requires ([gumshoe.main :as main])
+                 :task (System/exit (main/run *command-line-args*))}}
 ```
 
 `System/exit` carries the book's exit code to the shell, and
@@ -61,8 +79,8 @@ its built-in `run`.
 Filter the list with `grep`, then read the book's options:
 
 ```sh
-./run --list | grep -i velero
-bb <path> --help
+bb run --list | grep -i velero
+bb run <path> --help
 ```
 
 `--help` lists every option with a description. Prefer this over guessing

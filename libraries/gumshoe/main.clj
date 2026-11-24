@@ -11,9 +11,12 @@
              run     {:requires ([gumshoe.main :as main])
                       :task (System/exit (main/run *command-line-args*))}}
 
-   Every book is named by a book-dir-relative suffix and resolved through the
-   catalog, so a door launches the same book whether it lives under the working
-   directory (the monorepo) or under ~/.gitlibs (a casebook's dependency). Each
+   Every book is named by its path relative to its checkout
+   (runbooks/detectives/fabric.clj) and resolved through the catalog, so a door
+   launches the same book whether it lives under the working directory (the
+   monorepo, or a casebook's own book, which wins) or under ~/.gitlibs (a
+   casebook's dependency). `--list` prints that path, and either door runs it:
+   `bb run <path> [flags]` or `bb gumshoe <path> [flags]`. Each
    function returns an exit code; the caller decides whether to System/exit.
    A task wired with (exec 'gumshoe.main/run) still receives the raw flags, but
    babashka drops the returned exit code, so a casebook passes it to System/exit."
@@ -35,6 +38,25 @@
   "Runs a book by its catalog-resolved path, forwarding extra flags."
   [suffix & extra]
   (apply shell/run-with-output "bb" (catalog/resolve-path suffix) extra))
+
+(defn- book-path?
+  "Whether a first argument names a book file rather than search terms."
+  [arg]
+  (and (string? arg) (str/ends-with? arg ".clj")))
+
+(defn- launch-path
+  "Runs the book a listed or local path names, forwarding the flags after it, or
+   reports the near matches and returns 1 when the path names no book."
+  [path extra]
+  (let [{book :path :keys [error near]} (catalog/resolve-book path (catalog/books) (catalog/casebook-root))]
+    (if book
+      (apply shell/run-with-output "bb" book extra)
+      (do (stdout/error error)
+          (when (seq near)
+            (stdout/err-println "did you mean:")
+            (run! #(stdout/err-println (str "  " %)) near))
+          (stdout/err-println "list every book with --list")
+          1))))
 
 (defn- books-under
   "Every catalog book whose path sits under a book-root dir (playbooks, firebooks)
@@ -86,12 +108,13 @@
                (System/exit 1))})
 
 (defn catalog-lines
-  "One line per book, its runnable path and its description separated by a tab,
+  "One line per book, its stable path and its description separated by a tab,
    so a script or an agent without a terminal can find the book it needs and run
-   it with `bb <path>`. A book without a literal description keeps an empty
-   second column."
+   it with `bb run <path>` or `bb gumshoe <path>`. The path is the book's :id,
+   the same for every gumshoe pin; a book without one prints its file path. A
+   book without a literal description keeps an empty second column."
   [books]
-  (map (fn [{:keys [path description]}] (str path "\t" (or description ""))) books))
+  (map (fn [{:keys [id path description]}] (str (or id path) "\t" (or description ""))) books))
 
 (defn- passthrough
   [opts]
@@ -105,12 +128,17 @@
    :back so the caller can step up a level."
   ([args] (run args false))
   ([args back?]
-   (let [{:keys [opts args]} (cli/parse-args (raw-args args) run-spec)]
+   (let [raw (raw-args args)
+         {:keys [opts args]} (when-not (book-path? (first raw)) (cli/parse-args raw run-spec))]
      (when (:no-color opts) (stdout/disable-colors!))
      (cond
+       (book-path? (first raw))
+       (launch-path (first raw) (rest raw))
+
        (:help opts)
        (do (stdout/err-println (stdout/bold "run - launch any single book by fuzzy search"))
            (stdout/err-println "  [search terms] [--dry-run] [--no-color]")
+           (stdout/err-println "  <path> [flags]  run the book at a listed path, e.g. runbooks/detectives/fabric.clj")
            (stdout/err-println "  --list  print every book as path, tab, description")
            0)
 
@@ -267,6 +295,7 @@
           :pod {:desc "Drill down from a pod (namespace/name)" :coerce :string}
           :node {:desc "Drill down from a node" :coerce :string}
           :namespace {:desc "Drill down from a namespace" :alias :n :coerce :string}
+          :list {:desc "Print every book as path, tab, description instead of asking" :coerce :boolean}
           :help {:desc "Show this help message" :alias :h :coerce :boolean}}
    :restrict true
    :error-fn (fn [{:keys [msg]}]
@@ -324,14 +353,19 @@
 (defn front-door
   "The guided menu, a lead shortcut, or a fuzzy book search - the one door."
   [args]
-  (let [{:keys [opts args]} (cli/parse-args (raw-args args) gumshoe-spec)]
+  (let [raw (raw-args args)
+        {:keys [opts args]} (when-not (book-path? (first raw)) (cli/parse-args raw gumshoe-spec))]
     (cond
+      (book-path? (first raw)) (launch-path (first raw) (rest raw))
       (:help opts)
       (do (stdout/err-println (stdout/bold "gumshoe - the SRE detective"))
           (stdout/err-println "  gumshoe                     the guided menu")
           (stdout/err-println "  gumshoe --host <hostname>   drill down from a lead (also --pod/--node/--namespace)")
           (stdout/err-println "  gumshoe <search terms>      fuzzy-launch a book by name")
+          (stdout/err-println "  gumshoe <path> [flags]      run the book at a listed path")
+          (stdout/err-println "  gumshoe --list              print every book as path, tab, description")
           0)
+      (:list opts) (do (run! println (catalog-lines (catalog/books))) 0)
       (some opts [:host :pod :node :namespace]) (investigate (lead-args opts))
       (seq args) (run args)
       :else (guided))))

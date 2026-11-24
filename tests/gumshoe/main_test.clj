@@ -2,10 +2,14 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.main-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [babashka.fs :as fs]
+            [babashka.process :as process]
+            [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [gumshoe.catalog]
             [gumshoe.fuzzy-finder :as fuzzy]
-            [gumshoe.main :as main]))
+            [gumshoe.main :as main]
+            [gumshoe.shell :as shell]))
 
 (def ^:private guided #'main/guided)
 
@@ -64,3 +68,101 @@
       (with-redefs [gumshoe.catalog/books (fn [] [{:path "/b/runbooks/a.clj" :name "a" :description "A"}])]
         (is (= "/b/runbooks/a.clj\tA\n"
                (with-out-str (is (zero? (main/run {:list true}))))))))))
+
+(deftest catalog-lines-print-the-stable-path-test
+  (is (= ["runbooks/detectives/fabric.clj\tFabric"]
+         (main/catalog-lines [{:path "/gitlibs/libs/io.github.metio/gumshoe/abc/runbooks/detectives/fabric.clj"
+                               :id "runbooks/detectives/fabric.clj"
+                               :name "detectives/fabric"
+                               :description "Fabric"}]))))
+
+(def ^:private fake-catalog
+  [{:path "/pin/runbooks/detectives/fabric.clj" :id "runbooks/detectives/fabric.clj"
+    :name "detectives/fabric" :description "Fabric"}])
+
+(defmacro ^:private with-fake-catalog
+  [launched & body]
+  `(with-redefs [gumshoe.catalog/books (fn [& _#] fake-catalog)
+                 gumshoe.catalog/casebook-root (fn [] "/nonexistent-casebook")
+                 shell/run-with-output (fn [& args#] (reset! ~launched (vec args#)) 0)]
+     ~@body))
+
+(deftest a-listed-path-launches-its-book-test
+  (let [launched (atom nil)]
+    (with-fake-catalog launched
+      (testing "the run door launches a path with the flags after it"
+        (is (zero? (main/run ["runbooks/detectives/fabric.clj" "--vni" "4208"])))
+        (is (= ["bb" "/pin/runbooks/detectives/fabric.clj" "--vni" "4208"] @launched)))
+      (testing "the front door does the same"
+        (reset! launched nil)
+        (is (zero? (main/front-door ["runbooks/detectives/fabric.clj" "--help"])))
+        (is (= ["bb" "/pin/runbooks/detectives/fabric.clj" "--help"] @launched)))
+      (testing "an unknown path launches nothing and names the near matches"
+        (reset! launched nil)
+        (let [err (java.io.StringWriter.)]
+          (is (= 1 (binding [*err* err] (main/run ["runbooks/detectives/fabrik.clj"]))))
+          (is (nil? @launched))
+          (is (str/includes? (str err) "runbooks/detectives/fabric.clj")))))))
+
+(deftest the-front-door-lists-books-test
+  (with-redefs [gumshoe.catalog/books (fn [& _] fake-catalog)]
+    (is (= "runbooks/detectives/fabric.clj\tFabric\n"
+           (with-out-str (is (zero? (main/front-door ["--list"]))))))))
+
+(def ^:private door-tasks
+  "{run     {:override-builtin true
+            :requires ([gumshoe.main :as main])
+            :task (System/exit (main/run *command-line-args*))}
+    gumshoe {:requires ([gumshoe.main :as main])
+             :task (System/exit (main/front-door *command-line-args*))}}")
+
+(defn- casebook-edn!
+  "A casebook whose :paths reach gumshoe's libraries and a pinned upstream's
+   books. babashka accepts only relative :paths, so both are written relative
+   to the casebook."
+  [casebook upstream]
+  (let [relative #(str (fs/relativize (fs/canonicalize casebook) (fs/canonicalize %)))]
+    (spit (str (fs/path casebook "bb.edn"))
+          (format "{:paths [%s \"runbooks\" %s]\n :tasks %s}"
+                  (pr-str (relative "libraries"))
+                  (pr-str (relative (fs/path upstream "runbooks")))
+                  door-tasks))))
+
+(defn- echo-book!
+  [root says]
+  (let [file (fs/path root "runbooks" "up" "echo.clj")]
+    (fs/create-dirs (fs/parent file))
+    (spit (str file) (format "(println %s)\n" (pr-str says)))))
+
+(defn- bb-in
+  [dir & args]
+  (let [{:keys [out err exit]} (apply process/shell {:dir (str dir) :out :string :err :string :continue true}
+                                      "bb" args)]
+    {:out (str/trim out) :err err :exit exit}))
+
+(deftest a-casebook-runs-a-listed-upstream-book-verbatim-test
+  (fs/with-temp-dir [tmp {}]
+    (let [casebook (fs/path tmp "casebook")
+          pin (fn [c] (fs/path tmp "gitlibs" "libs" "io.github.metio" "gumshoe" (apply str (repeat 40 c))))]
+      (fs/create-dirs (fs/path casebook "runbooks"))
+      (echo-book! (pin "a") "upstream at a")
+      (echo-book! (pin "b") "upstream at b")
+      (casebook-edn! casebook (pin "a"))
+      (let [listed (->> (str/split-lines (:out (bb-in casebook "run" "--list")))
+                        (map #(first (str/split % #"\t")))
+                        (set))]
+        (is (= #{"runbooks/up/echo.clj"} listed) "the listing names the book by its stable path")
+        (is (= listed (->> (str/split-lines (:out (bb-in casebook "gumshoe" "--list")))
+                           (map #(first (str/split % #"\t")))
+                           (set)))))
+      (is (= "upstream at a" (:out (bb-in casebook "run" "runbooks/up/echo.clj"))))
+      (is (= "upstream at a" (:out (bb-in casebook "gumshoe" "runbooks/up/echo.clj"))))
+      (casebook-edn! casebook (pin "b"))
+      (is (= "upstream at b" (:out (bb-in casebook "run" "runbooks/up/echo.clj")))
+          "the same line runs after the pin moves")
+      (echo-book! casebook "ours")
+      (is (= "ours" (:out (bb-in casebook "run" "runbooks/up/echo.clj")))
+          "the casebook's own book of that path wins")
+      (let [{:keys [exit err]} (bb-in casebook "run" "runbooks/up/ecko.clj")]
+        (is (= 1 exit))
+        (is (str/includes? err "runbooks/up/echo.clj"))))))

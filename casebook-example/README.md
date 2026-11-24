@@ -21,6 +21,8 @@ A template for a **casebook** - a team's own books and plugins on the
 bb gumshoe      # front door; your books sit beside gumshoe's built-ins
 bb detect       # scan for symptoms
 bb run cordon   # launch a book by name
+bb run --list   # every book as path, tab, description
+bb run runbooks/detectives/fabric.clj --help   # run a listed path as printed
 bb verify       # check your books and libraries; run it in CI
 ```
 
