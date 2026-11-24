@@ -25,7 +25,11 @@
    this release's meta.helm.sh annotations, plus the claims a released
    StatefulSet made from its volumeClaimTemplates. Every wait derives from live
    values: the HelmRelease's spec.timeout and spec.interval and the owner's
-   reconcile interval."
+   reconcile interval.
+
+   A release can own objects Helm never stamped, which the steps cannot find.
+   A casebook adds its own steps for them at one of `positions`, named for the
+   step they follow, through (steps extra) or (playbook-with extra)."
   (:require [clojure.string :as str]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
@@ -348,16 +352,19 @@
    :kubectl-can-get (into [flux/helmrelease-type flux/kustomization-type "secrets" "persistentvolumeclaims"]
                           workload-types)})
 
-(defn steps
-  "The playbook's steps, in the order they must run."
+(defn- anchored-steps
+  "The playbook's steps in the order they must run, each paired with the
+   position a caller's steps take right after it, or nil where none may go."
   []
   (let [observe! (observer)
         derive-step (deriver observe!)]
-    [{:title "🔬 Read the HelmRelease, its owner and its storage"
+    [[nil
+      {:title "🔬 Read the HelmRelease, its owner and its storage"
       :prerequisites reads
-      :check (fn [{:keys [context target]}] (report! context (observe! context target)))}
+      :check (fn [{:keys [context target]}] (report! context (observe! context target)))}]
 
-     {:title "⏸  Suspend the owner (Kustomization or ResourceSet) that renders the HelmRelease"
+     [nil
+      {:title "⏸  Suspend the owner (Kustomization or ResourceSet) that renders the HelmRelease"
       :prerequisites {:kubectl-can-patch [flux/kustomization-type]}
       :confirm {:action "suspend the owner that renders the HelmRelease"}
       :derive derive-step
@@ -375,9 +382,10 @@
                 (when-let [owner (:owner observed)]
                   [{:description (format "%s %s/%s is suspended" (:kind owner) (:namespace owner) (:name owner))
                     :timeout (:deletion (waits observed)) :interval 5
-                    :check #(owner-suspended? (:kind owner) (fetch-owner context owner))}]))}
+                    :check #(owner-suspended? (:kind owner) (fetch-owner context owner))}]))}]
 
-     {:title "⏸  Suspend the HelmRelease and wait for a running action to finish"
+     [:after-suspend
+      {:title "⏸  Suspend the HelmRelease and wait for a running action to finish"
       :prerequisites {:kubectl-can-patch [flux/helmrelease-type]}
       :confirm {:action "suspend the HelmRelease"}
       :derive derive-step
@@ -397,9 +405,10 @@
                 [{:description "the HelmRelease is suspended and no Helm action is running"
                   :timeout (:in-flight (waits observed)) :interval 5
                   :check #(and (true? (-> (fetch-release context observed) :spec :suspend))
-                               (quiet? context observed))}])}
+                               (quiet? context observed))}])}]
 
-     {:title "🗑  Delete the release's workloads"
+     [:after-workloads
+      {:title "🗑  Delete the release's workloads"
       :prerequisites {:kubectl-can-delete workload-types}
       :confirm {:action "delete the release's workloads" :destructive? true}
       :derive derive-step
@@ -411,9 +420,10 @@
       :effect (fn [{:keys [context observed]}]
                 (delete-effect context (:workloads observed) "the release has no workloads"))
       :verify (fn [{:keys [context observed]}]
-                (gone-checks context (:workloads observed) (:deletion (waits observed))))}
+                (gone-checks context (:workloads observed) (:deletion (waits observed))))}]
 
-     {:title "🗑  Delete the release's volumes"
+     [:after-volumes
+      {:title "🗑  Delete the release's volumes"
       :prerequisites {:kubectl-can-delete ["persistentvolumeclaims"]}
       :confirm {:action "delete the release's volumes - their data is lost" :destructive? true :separately? true}
       :derive derive-step
@@ -425,9 +435,10 @@
       :effect (fn [{:keys [context observed]}]
                 (delete-effect context (:volumes observed) "the release has no volumes"))
       :verify (fn [{:keys [context observed]}]
-                (gone-checks context (:volumes observed) (:deletion (waits observed))))}
+                (gone-checks context (:volumes observed) (:deletion (waits observed))))}]
 
-     {:title "🗑  Delete the Helm storage and confirm it is empty"
+     [:after-storage
+      {:title "🗑  Delete the Helm storage and confirm it is empty"
       :prerequisites {:kubectl-can-delete ["secrets"]}
       :confirm {:action "delete the release's Helm storage" :destructive? true}
       :derive derive-step
@@ -444,9 +455,10 @@
       :verify (fn [{:keys [context observed]}]
                 [{:description "the release's Helm storage is empty"
                   :timeout (:deletion (waits observed)) :interval 5
-                  :check #(= [] (revisions context observed))}])}
+                  :check #(= [] (revisions context observed))}])}]
 
-     {:title "▶  Resume the HelmRelease, which installs"
+     [nil
+      {:title "▶  Resume the HelmRelease, which installs"
       :confirm {:action "resume the HelmRelease"}
       :derive derive-step
       :precondition (fn [{:keys [observed]}] (readable? observed))
@@ -464,9 +476,10 @@
                                (let [rows (revisions context observed)]
                                  (and (= 1 (count rows))
                                       (= 1 (:version (first rows)))
-                                      (= "deployed" (:status (first rows))))))}])}
+                                      (= "deployed" (:status (first rows))))))}])}]
 
-     {:title "▶  Resume the owner (Kustomization or ResourceSet)"
+     [:after-resume
+      {:title "▶  Resume the owner (Kustomization or ResourceSet)"
       :confirm {:action "resume the owner that renders the HelmRelease"}
       :derive derive-step
       :precondition (fn [{:keys [observed]}] (or (some? (:known-owner observed)) (readable? observed)))
@@ -483,7 +496,62 @@
                   [{:description (format "%s %s/%s is resumed and Ready" (:kind owner) (:namespace owner) (:name owner))
                     :timeout (:owner-ready (waits (assoc observed :owner owner))) :interval 15
                     :check #(let [o (fetch-owner context owner)]
-                              (and (not (owner-suspended? (:kind owner) o)) (ready? o)))}]))}]))
+                              (and (not (owner-suspended? (:kind owner) o)) (ready? o)))}]))}]]))
+
+(def positions
+  "Where a caller's steps may go, in run order, each named for the step it
+   follows: the HelmRelease is suspended, its workloads are deleted, its
+   volumes are deleted, its storage is deleted and confirmed empty, the owner
+   is resumed. Every position but :after-resume lies before the HelmRelease
+   resumes, so a step there runs while nothing can act on the release."
+  [:after-suspend :after-workloads :after-volumes :after-storage :after-resume])
+
+(defn- destructive?
+  [step]
+  (true? (get-in step [:confirm :destructive?])))
+
+(defn- check-extra!
+  "Throws when `extra` names a position that does not exist, holds anything
+   but a sequence of steps, or puts a destructive step after the resume, where
+   it would act on the fresh install."
+  [extra]
+  (when-not (or (nil? extra) (map? extra))
+    (throw (ex-info "the extra steps must be a map of position -> steps"
+                    {:extra extra :positions positions})))
+  (doseq [[position added] extra]
+    (when-not (some #{position} positions)
+      (throw (ex-info (format "%s is not a position of the flux-storage steps; the positions are %s"
+                              (pr-str position) (pr-str positions))
+                      {:position position :positions positions})))
+    (when-not (and (sequential? added) (every? map? added))
+      (throw (ex-info (format "the steps for %s must be a vector of step maps" (pr-str position))
+                      {:position position :steps added})))
+    (when (= :after-resume position)
+      (when-let [step (first (filter destructive? added))]
+        (throw (ex-info (format "a destructive step cannot go at :after-resume, after the HelmRelease installed afresh: %s"
+                                (pr-str (:title step)))
+                        {:position position :step (:title step)}))))))
+
+(defn insert-at
+  "The steps of `anchored`, a vector of [position step], with the steps
+   `extra` holds for a position right after the step that position names.
+   Only the position names are read, never a title."
+  [anchored extra]
+  (vec (mapcat (fn [[position step]] (cons step (get extra position))) anchored)))
+
+(defn steps
+  "The playbook's steps, in the order they must run. `extra` maps a name from
+   `positions` to the steps a caller adds there, such as objects of the
+   release that carry no meta.helm.sh annotations:
+
+     (steps {:after-volumes [delete-database-step]})
+
+   An unknown position, or a destructive step at :after-resume, throws when
+   the steps are built, so a book that asks for one fails as it loads."
+  ([] (steps nil))
+  ([extra]
+   (check-extra! extra)
+   (insert-at (anchored-steps) extra)))
 
 (defn helmrelease-picks
   [context]
@@ -500,3 +568,9 @@
    :confirm {:action "suspend its owner, delete the release's workloads, volumes and Helm storage, then resume it to install afresh"
              :destructive? true}
    :steps (steps)})
+
+(defn playbook-with
+  "The playbook with the caller's steps at named positions, as `steps` takes
+   them: (playbook-with {:after-volumes [delete-database-step]})."
+  [extra]
+  (assoc playbook :steps (steps extra)))

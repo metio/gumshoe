@@ -279,3 +279,85 @@
                 :when (re-find #"Delete" (:title step))]
           (is (false? (quietly #((:precondition step) (step-ctx step))))
               (str (:title step) " refuses when " type " cannot be listed")))))))
+
+;; --- caller-supplied steps --------------------------------------------------------
+
+(def ^:private database-type "database.kinda.rocks")
+
+(def ^:private db-operator-step
+  "A casebook's step, shaped like infra.run's moodle reset: db-operator's
+   Database CR and the Secret and ConfigMap it renders from the CR's
+   credentials.templates carry no meta.helm.sh annotations, so the playbook
+   cannot discover them, and they must go after the volumes and before the
+   storage."
+  {:title "🗑  Delete the db-operator objects Helm never stamped"
+   :prerequisites {:kubectl-can-delete [database-type "secrets" "configmaps"]}
+   :confirm {:action "delete the Database and the credentials db-operator rendered from it"
+             :destructive? true}
+   :items (fn [_] ["delete the Database moodle, secret/moodle-database, configmap/moodle-database"])
+   :effect (fn [{:keys [context]}]
+             [[ "kubectl" "--context" context "-n" "apps" "delete" database-type "moodle" "--ignore-not-found"]
+              [ "kubectl" "--context" context "-n" "apps" "delete" "secret" "moodle-database" "--ignore-not-found"]
+              [ "kubectl" "--context" context "-n" "apps" "delete" "configmap" "moodle-database" "--ignore-not-found"]])})
+
+(defn- index-of-plan
+  "The index of the first step whose plan mentions s."
+  [steps s]
+  (first (keep-indexed (fn [i step]
+                         (when (and (:effect step)
+                                    (some #(and (string? %) (str/includes? % s)) (plan-of step)))
+                           i))
+                       steps)))
+
+(deftest a-casebook-step-lands-between-the-volumes-and-the-storage-by-position-name
+  (let [steps (storage/steps {:after-volumes [db-operator-step]})
+        at (.indexOf steps db-operator-step)]
+    (is (= (inc (count (storage/steps))) (count steps)))
+    (is (= (inc (index-of-plan steps "persistentvolumeclaims")) at)
+        "right after the step that deletes the volumes")
+    (is (= (inc at) (index-of-plan steps "owner=helm"))
+        "right before the step that deletes the storage")
+    (is (< at (index-of-plan steps "\"suspend\":false"))
+        "before anything resumes")))
+
+(deftest the-playbook-takes-the-same-positions
+  (let [book (storage/playbook-with {:after-volumes [db-operator-step]})]
+    (is (= (dissoc storage/playbook :steps) (dissoc book :steps)))
+    (is (= (inc (index-of-plan (:steps book) "persistentvolumeclaims"))
+           (.indexOf (:steps book) db-operator-step)))))
+
+(deftest every-position-sits-where-its-name-says
+  (let [base (storage/steps)
+        markers (into {} (for [p storage/positions :when (not= :after-resume p)]
+                           [p {:title (str "marker " p) :items (fn [_] []) :effect (fn [_] [])}]))
+        steps (storage/steps (update-vals markers vector))
+        at #(.indexOf steps (markers %))]
+    (is (= (+ (count base) 4) (count steps)))
+    (is (< (index-of-plan steps "\"suspend\":true") (index-of-plan steps flux/helmrelease-type) (at :after-suspend) (index-of-plan steps "deployments")))
+    (is (< (index-of-plan steps "deployments") (at :after-workloads) (index-of-plan steps "persistentvolumeclaims")))
+    (is (< (index-of-plan steps "persistentvolumeclaims") (at :after-volumes) (index-of-plan steps "owner=helm")))
+    (is (< (index-of-plan steps "owner=helm") (at :after-storage) (index-of-plan steps "\"suspend\":false")))))
+
+(deftest a-step-after-the-resume-must-not-be-destructive
+  (let [note {:title "📋 What to do once the install has written the credentials"
+              :confirm {:action "print the follow-up"} :items (fn [_] ["print it"]) :effect (fn [_] [])}]
+    (is (= note (last (storage/steps {:after-resume [note]})))
+        "a step that changes nothing may follow the resume")
+    (let [e (try (storage/steps {:after-resume [db-operator-step]}) nil
+                 (catch clojure.lang.ExceptionInfo e e))]
+      (is (some? e) "a destructive step after the resume is refused when the steps are built")
+      (is (re-find #"after-resume" (str (ex-message e)))))))
+
+(deftest an-unknown-position-is-refused-when-the-steps-are-built
+  (let [e (try (storage/steps {:before-storage [db-operator-step]}) nil
+               (catch clojure.lang.ExceptionInfo e e))]
+    (is (some? e))
+    (is (re-find #":before-storage" (str (ex-message e))))
+    (is (= storage/positions (:positions (ex-data e))) "the error names the positions there are")))
+
+(deftest insertion-reads-no-titles
+  (let [anchored [[nil {:id 1}] [:after-volumes {:id 2}] [nil {:id 3}]]
+        extra {:id :x}]
+    (is (= [{:id 1} {:id 2} {:id :x} {:id 3}]
+           (storage/insert-at anchored {:after-volumes [extra]}))
+        "steps without any title splice by position name alone")))
