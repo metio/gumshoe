@@ -6,7 +6,8 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.detectives.terminating :as terminating]
-            [gumshoe.finalizers :as finalizers]))
+            [gumshoe.finalizers :as finalizers]
+            [gumshoe.shell :as shell]))
 
 (deftest kubernetes-own-finalizers-are-protected
   (doseq [finalizer ["kubernetes.io/pvc-protection" "kubernetes.io/pv-protection" "foregroundDeletion" "orphan"
@@ -83,3 +84,23 @@
   (is (empty? (terminating/detect-stuck-terminating
                {:now now "configmaps" {:items [(assoc-in deleting [:metadata :deletionTimestamp] "2026-11-18T11:55:00Z")
                                                (assoc-in deleting [:metadata :finalizers] [])]}}))))
+
+(deftest released-needs-a-read-that-answered
+  (let [pick {:type "certificates.cert-manager.io" :namespace "web" :name "tls" :finalizer "example.com/cleanup"}
+        answering (fn [object] (fn [& argv]
+                                 (cond
+                                   (some #{"--ignore-not-found"} argv) {:exit 0 :out (if object "certificate/tls" "") :err ""}
+                                   object {:exit 0 :out (json/encode object) :err ""}
+                                   :else {:exit 1 :out "" :err "Error from server (NotFound): certificates \"tls\" not found"})))]
+    (testing "the finalizer is gone from the object"
+      (with-redefs [shell/execute (answering {:metadata {:name "tls" :finalizers ["other"]}})]
+        (is (true? (finalizers/released? "ctx" pick)))))
+    (testing "the object still carries it"
+      (with-redefs [shell/execute (answering {:metadata {:name "tls" :finalizers ["example.com/cleanup"]}})]
+        (is (false? (finalizers/released? "ctx" pick)))))
+    (testing "the object is gone"
+      (with-redefs [shell/execute (answering nil)]
+        (is (true? (finalizers/released? "ctx" pick)))))
+    (testing "a read that did not answer proves nothing"
+      (with-redefs [shell/execute (fn [& _] {:exit 1 :out "" :err "Unable to connect to the server"})]
+        (is (false? (finalizers/released? "ctx" pick)))))))

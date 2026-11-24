@@ -45,6 +45,4 @@
   :verify (fn [{:keys [context pick target]}]
             [{:description (format "%s no longer waits on that finalizer" target)
               :timeout 60 :interval 5
-              :check (fn [] (let [object (fetch context pick)]
-                              (or (nil? object)
-                                  (not (some #{(:finalizer pick)} (-> object :metadata :finalizers))))))}])})
+              :check #(finalizers/released? context pick)}])})
