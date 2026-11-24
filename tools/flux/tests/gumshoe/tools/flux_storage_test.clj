@@ -263,3 +263,19 @@
         (is (str/includes? plan "flux-system") plan)
         (is (str/includes? plan "\"suspend\":false") plan)
         (is (true? (if-let [precondition (:precondition resume)] (precondition ctx) true)))))))
+
+(deftest an-unanswered-workload-or-claim-read-is-not-read-as-none
+  (doseq [type ["statefulsets" "deployments" "persistentvolumeclaims"]]
+    (let [state (atom (assoc (cluster-state)
+                             flux/kustomization-type [owning-kustomization]
+                             storage/resourceset-type []
+                             "secrets" []
+                             type :fail))
+          steps (storage/steps)]
+      (with-redefs [shell/execute (fake-cluster state)]
+        (is (false? (quietly #((:check (first steps)) {:context "ctx" :target "apps/podinfo"})))
+            (str "the report refuses when " type " cannot be listed"))
+        (doseq [step (filter :effect steps)
+                :when (re-find #"Delete" (:title step))]
+          (is (false? (quietly #((:precondition step) (step-ctx step))))
+              (str (:title step) " refuses when " type " cannot be listed")))))))

@@ -160,8 +160,9 @@
 (defn observe
   "Everything the steps decide on, read once per step: the HelmRelease, its
    owners, the release's workloads and volumes. nil when the HelmRelease
-   cannot be read, {:unread <reason>} when a read the decision rests on did
-   not answer.
+   does not exist, {:unread <reason>} when any read did not answer. Every
+   read runs strict, because each step decides on an absence - no workload,
+   no claim, no owner - and an unanswered read must not stand in for one.
 
    `seen` holds the release's StatefulSets an earlier step found. A claim made
    from a volumeClaimTemplate carries no Helm annotation, so once the workloads
@@ -169,26 +170,28 @@
   ([context target] (observe context target nil))
   ([context target seen]
    (try
-     (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
-       (when-let [release (kubectl/get-namespaced-resource context namespace flux/helmrelease-type name)]
-         (let [release-name (flux/release-name release)
-               release-namespace (flux/release-namespace release)
-               lists (into {} (for [type workload-types]
-                                [type (kubectl/items-of (kubectl/get-namespaced context release-namespace type))]))
-               workloads (release-workloads release-name release-namespace lists)
-               live (map :object (filter #(= "statefulsets" (:type %)) workloads))
-               statefulsets (vec (vals (merge (by-name seen) (by-name live))))
-               pvcs (kubectl/items-of (kubectl/get-namespaced context release-namespace "persistentvolumeclaims"))
-               found (owners release (strict #(owner-candidates context)))]
-           {:release release
-            :release-name release-name
-            :release-namespace release-namespace
-            :storage-namespace (flux/storage-namespace release)
-            :owners found
-            :owner (when (= 1 (count found)) (first found))
-            :workloads (mapv #(dissoc % :object) workloads)
-            :statefulsets statefulsets
-            :volumes (release-volumes release-name release-namespace pvcs statefulsets)})))
+     (strict
+      (fn []
+        (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+          (when-let [release (kubectl/get-namespaced-resource context namespace flux/helmrelease-type name)]
+            (let [release-name (flux/release-name release)
+                  release-namespace (flux/release-namespace release)
+                  lists (into {} (for [type workload-types]
+                                   [type (kubectl/items-of (kubectl/get-namespaced context release-namespace type))]))
+                  workloads (release-workloads release-name release-namespace lists)
+                  live (map :object (filter #(= "statefulsets" (:type %)) workloads))
+                  statefulsets (vec (vals (merge (by-name seen) (by-name live))))
+                  pvcs (kubectl/items-of (kubectl/get-namespaced context release-namespace "persistentvolumeclaims"))
+                  found (owners release (owner-candidates context))]
+              {:release release
+               :release-name release-name
+               :release-namespace release-namespace
+               :storage-namespace (flux/storage-namespace release)
+               :owners found
+               :owner (when (= 1 (count found)) (first found))
+               :workloads (mapv #(dissoc % :object) workloads)
+               :statefulsets statefulsets
+               :volumes (release-volumes release-name release-namespace pvcs statefulsets)})))))
      (catch clojure.lang.ExceptionInfo e
        (if (::kubectl/unread (ex-data e))
          {:unread (ex-message e)}
