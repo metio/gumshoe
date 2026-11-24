@@ -28,6 +28,9 @@
                  :parse pick/namespaced          ; optional, the pick as a ref
                  :invalid \"...\"                 ; optional, why a pick that does not parse is refused
                  :facts (fn [object] -> value)}  ; optional, joins the pin
+      :subjects (fn [ctx] -> seq of {:type :name :namespace? :facts? :optional?})
+                                                  ; optional, the several objects the
+                                                  ; change acts on, see below
       :refusal  (fn [ctx] -> reason or nil)       ; optional, re-checked after confirm;
                                                   ; a reason is printed as \"refusing: <reason>\"
       :precondition (fn [ctx] -> bool)            ; optional, re-checked after confirm
@@ -58,7 +61,8 @@
    callbacks each receive one context map, so a book destructures exactly what
    it needs:
      {:context .. :cluster .. :target <the pick(s)> :opts <parsed flags>
-      :ref .. :object ..}   ; with a :subject
+      :ref .. :object ..     ; with a :subject
+      :refs .. :objects ..}  ; with :subjects
 
    :subject declares the one object a change acts on. :parse turns the pick
    into a ref {:type :namespace :name}, plus whatever else the pick carries
@@ -74,12 +78,32 @@
    :ref and :object nil for the callbacks that run before the refusal.
    read-subject reads the object again, for a post-check.
 
+   :subjects declares the several objects one change acts on, for a change
+   whose confirmation rests on a set (the volume, the database and the routes
+   an adoption stamps). It receives the context the subject read made - the
+   pick as :target, plus :ref and :object with a :subject - and returns refs
+   {:type :name :namespace?}, each optionally with :facts (fn [object] ->
+   value), which joins that object's pin, and :optional? true for an object
+   that may not exist. A :many select may declare :subjects; its :target is
+   the picked names. The engine does for each of them what it does for a
+   :subject: reads every one strictly before :derive and hands the callbacks
+   :refs, the refs in the order declared, and :objects, the objects in the
+   same order (nil for an optional object that does not exist); reads every
+   one again right before :refusal and :precondition, which see those as
+   :objects; and pins every one, so the change is refused when one was
+   replaced, its spec changed, its :facts moved, an optional one appeared, or
+   one that is not optional did not exist when the change was confirmed. The
+   refusal names the object, as \"refusing: <type> <namespace>/<name>:
+   <why>\". :subjects composes with :subject and :pin; each is pinned.
+   read-subjects reads them again, for a post-check.
+
    :refusal returns why the change must not run, or nil. The engine prints
    the reason as \"refusing: <reason>\" and stops, and only a change no
    refusal stopped reaches :precondition.
 
    The subject read, :derive, :refusal and :precondition run under
-   kubectl/*strict-reads*, as the
+   kubectl/*strict-reads* (the :subjects reads and the :subjects function
+   too), as the
    candidate query of :select and every post-check do. A read in :derive that
    did not answer stops the change before the confirmation, so neither the
    precondition nor the effect is computed from a read that stood in for an
@@ -97,8 +121,9 @@
    the system the changelog names, defaulting to :cluster. It returns nil
    when what it names cannot be reached, having said why, and the change
    stops before anything is listed. Without :connect the context is the
-   current kube context and :cluster its cluster. :subject and :pin read
-   their object with kubectl, so a spec with :connect takes neither.
+   current kube context and :cluster its cluster. :subject, :subjects and
+   :pin read their objects with kubectl, so a spec with :connect takes none
+   of them.
 
    A change without :recovery that fails after applying an effect - a later
    effect failed, its post-check did not hold, or an error stopped it - is
@@ -243,33 +268,99 @@
   [{:keys [context ref]}]
   (when ref (fetch-pinned context ref)))
 
+(defn describe-ref
+  "A ref as a refusal names it: \"<type> <namespace>/<name>\", or
+   \"<type> <name>\" for a cluster-scoped object."
+  [{:keys [type namespace name]}]
+  (str type " " (when namespace (str namespace "/")) name))
+
+(defn subjects-of
+  "The refs the :subjects of a spec returns for ctx, as a vector, or nil
+   without :subjects. A ref without a :type and a :name is a mistake in the
+   spec and throws."
+  [{:keys [subjects]} ctx]
+  (when subjects
+    (let [refs (vec (subjects ctx))]
+      (doseq [ref refs]
+        (when-not (and (:type ref) (:name ref))
+          (throw (ex-info "a :subjects ref needs a :type and a :name" {:ref ref}))))
+      refs)))
+
+(defn read-subjects
+  "The objects the refs name, read now, in the same order - nil for an
+   object that does not exist. Every read of the :subjects of a change goes
+   through here, one call per phase with the whole set, so the phase is the
+   unit a cache or a concurrent read would work on. Under
+   kubectl/*strict-reads* a read that did not answer throws. A post-check
+   calls it with the :refs of ctx to see the objects after the change."
+  [context refs]
+  (mapv #(fetch-pinned context %) refs))
+
+(defn subjects-fingerprints
+  "The fingerprint of each object, with the :facts of its ref."
+  [refs objects]
+  (mapv (fn [ref object] (fingerprint object (:facts ref))) refs objects))
+
+(defn subjects-drift
+  "Why the first of the refs no longer is the object confirmed, named as
+   \"<ref>: <why>\", or nil. before and after are the fingerprints taken at
+   the confirmation and right before the effect, in the order of refs. A ref
+   without :optional? must have existed at the confirmation; an optional one
+   that did not must not exist now either."
+  [refs before after]
+  (some (fn [[ref b a]]
+          (when-let [why (cond
+                           (and (nil? b) (not (:optional? ref))) "it did not exist when the change was confirmed"
+                           (nil? b) (when a "it was created after the confirmation")
+                           :else (drift b a))]
+            (str (describe-ref ref) ": " why)))
+        (map vector refs before after)))
+
+(defn- subjects-precondition
+  "precondition followed by the drift check of every subject, or
+   precondition unchanged without subjects. read is (fn [refs] -> objects)."
+  [precondition refs before read]
+  (if (empty? refs)
+    precondition
+    (fn []
+      (and (if precondition (precondition) true)
+           (let [why (subjects-drift refs before (subjects-fingerprints refs (read refs)))]
+             (if why (refuse! why) true))))))
+
 (defn- invalid-pick
   [{:keys [invalid]} select target]
   (or invalid (format "the pick %s does not name a %s" (pr-str target) (:label select))))
 
 (defn- subject-derive
-  "derive preceded by the subject read, as one function of the base context:
-   {:ref :object} merged with what derive returns for the context holding
-   them. nil when the spec has neither."
-  [{:keys [subject select derive]}]
-  (cond
-    subject (fn [{:keys [target] :as base}]
-              (let [ref (subject-ref subject select target)
-                    values {:ref ref :object (read-subject (assoc base :ref ref))}]
-                (merge values (when derive (derive (merge base values))))))
-    derive derive
-    :else nil))
+  "derive preceded by the subject and subjects reads, as one function of
+   the base context: {:ref :object} and {:refs :objects} merged with what
+   derive returns for the context holding them. nil when the spec has none
+   of them."
+  [{:keys [subject subjects select derive] :as spec}]
+  (if (or subject subjects)
+    (fn [{:keys [target context] :as base}]
+      (let [values (when subject
+                     (let [ref (subject-ref subject select target)]
+                       {:ref ref :object (read-subject (assoc base :ref ref))}))
+            values (if subjects
+                     (let [refs (subjects-of spec (merge base values))]
+                       (assoc values :refs refs :objects (read-subjects context refs)))
+                     values)]
+        (merge values (when derive (derive (merge base values))))))
+    derive))
 
 (defn- judged-precondition
   "The :refusal and :precondition of a spec as one thunk over ctx, or nil
    when the spec has neither and no :subject. With a :subject, a pick that
-   does not parse is refused, and both judge the object read again."
+   does not parse is refused, and both judge the object read again; with
+   :subjects, both judge every object read again."
   [{:keys [subject select refusal precondition]} ctx]
   (when (or subject refusal precondition)
     (fn []
-      (let [{:keys [ref target]} ctx
+      (let [{:keys [ref refs target context]} ctx
             judge? (or refusal precondition)
             ctx (if (and subject ref judge?) (assoc ctx :object (read-subject ctx)) ctx)
+            ctx (if (and (seq refs) judge?) (assoc ctx :objects (read-subjects context refs)) ctx)
             why (cond
                   (and subject (nil? ref)) (invalid-pick subject select target)
                   refusal (refusal ctx))]
@@ -294,10 +385,10 @@
   "{:context :cluster :announce-as} for the spec: what its :connect returns
    for opts, or nil when that could not be reached; the kube context and its
    cluster without :connect."
-  [{:keys [connect subject pin]} opts]
+  [{:keys [connect subject subjects pin]} opts]
   (if connect
-    (do (when (or subject pin)
-          (throw (ex-info "a :subject or :pin reads its object with kubectl, so a spec with :connect takes neither"
+    (do (when (or subject subjects pin)
+          (throw (ex-info "a :subject, :subjects or :pin reads its objects with kubectl, so a spec with :connect takes neither"
                           {:subject subject})))
         (when-let [connection (connect opts)]
           (update connection :announce-as #(or % (:cluster connection)))))
@@ -370,6 +461,8 @@
                            (outcome/fallback! guidance ctx))))
             ok? (try
                   (let [{:keys [ref before]} (pin-of spec ctx)
+                        refs (:refs ctx)
+                        subjects-before (subjects-fingerprints refs (:objects ctx))
                         items-fn (:items spec)]
                     (flow/change!
                      {:confirmation {:action (:action confirm)
@@ -377,8 +470,10 @@
                                      :items (if items-fn (items-fn ctx) (select/items (:mode select) target))
                                      :destructive? (:destructive? confirm)}
                       :precondition (strict-precondition
-                                     (pinned-precondition (judged-precondition spec ctx)
-                                                          ref before #(fetch-pinned context %)))
+                                     (subjects-precondition
+                                      (pinned-precondition (judged-precondition spec ctx)
+                                                           ref before #(fetch-pinned context %))
+                                      refs subjects-before #(read-subjects context %)))
                       :confirmed? (:confirmed? spec)
                       :announce! (when announce
                                    #(announce/announce! announce-as announcement-data (announce ctx)))
@@ -445,13 +540,13 @@
 
 (defn details
   "What --help says a mutation book does, generated from its spec."
-  [{:keys [select confirm precondition refusal subject announce verify pin prerequisites]}]
+  [{:keys [select confirm precondition refusal subject subjects announce verify pin prerequisites]}]
   (concat
    ["What it does:"
     (str "  picks " (picks select))
     (str "  asks to confirm: " (:action confirm)
          (when (:destructive? confirm) " (destructive - type yes)"))]
-   (when (or precondition refusal subject pin)
+   (when (or precondition refusal subject subjects pin)
      ["  checks again right before acting that what was confirmed still holds"])
    (when announce ["  announces the change to the changelog"])
    [(if verify
