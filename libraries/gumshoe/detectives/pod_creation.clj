@@ -8,7 +8,8 @@
    ReplicaSet, a ReplicaFailure condition. The refusal message names the cause -
    an admission webhook, a quota, PodSecurity, a LimitRange, a missing
    ServiceAccount or RBAC - and for a webhook the detective looks up the
-   webhook's configuration and backend."
+   webhook's configuration and backend. A refusal is the cause of the
+   controller's other findings: its missing replicas follow from it."
   (:require [clojure.string :as str]
             [gumshoe.detectives.services :as services]
             [gumshoe.kubectl :as kubectl]
@@ -125,7 +126,8 @@
      :summary (format "%s cannot create pods: %s" kind explain)
      :hint (str/join " - " (remove nil? [webhook (advice cause)
                                          (str/replace (str message) #"\s+" " ")]))
-     :subject (subject/subject kind namespace name)}))
+     :subject (subject/subject kind namespace name)
+     :cause true}))
 
 (def detectives
   [{:name "pod-creation"

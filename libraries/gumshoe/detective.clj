@@ -198,11 +198,26 @@
    recognise the pattern without scrolling past it."
   4)
 
+(defn- folded-under
+  "The findings folded under these subjects, and under theirs in turn: a
+   folded finding is no root of its own, so whatever follows from it is shown
+   with the root it leads to."
+  [subjects children]
+  (loop [pending (map subject/display subjects) seen #{} folded []]
+    (if-let [parent (first pending)]
+      (if (seen parent)
+        (recur (rest pending) seen folded)
+        (let [found (get children parent)]
+          (recur (concat (rest pending) (keep #(some-> (subject/from-finding %) subject/display) found))
+                 (conj seen parent)
+                 (into folded found))))
+      folded)))
+
 (defn folded-line
   "The line naming the findings that follow from an entry's objects, or nil
    when none do: their count and each distinct summary with its count."
   [subjects children]
-  (let [folded (mapcat #(get children (subject/display %)) subjects)]
+  (let [folded (folded-under subjects children)]
     (when (seq folded)
       (format "follows from it: %d finding%s - %s"
               (count folded) (if (= 1 (count folded)) "" "s")
