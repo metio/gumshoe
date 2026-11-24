@@ -9,10 +9,6 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]))
 
-(defn- fetch
-  [context {:keys [namespace cluster]}]
-  (kubectl/get-namespaced-resource context namespace cnpg/cluster-type cluster))
-
 (mutation/book
  {:description "Lifts the fence on a CloudNativePG instance, or on every instance with *"
   :options {:pick {:desc "\"<namespace>/<cluster> <instance>\" (by name, by number, or *) - interactive selection when omitted"
@@ -26,23 +22,17 @@
   :empty-message "no cluster has a fenced instance"
   :confirm {:action "lift the fence - the operator takes the instance back into service"
             :destructive? true}
-  :derive (fn [{:keys [target]}] {:pick (operations/parse-pick target)})
-  :pin (fn [{:keys [pick]}]
-         (when pick {:type cnpg/cluster-type :namespace (:namespace pick) :name (:cluster pick)
-                     :facts operations/fenced}))
-  :precondition (fn [{:keys [context pick]}]
-                  (let [why (if pick
-                              (operations/unfence-refusal (fetch context pick) (:instance pick))
-                              "the pick is not \"<namespace>/<cluster> <instance>\"")]
-                    (when why (println (str "refusing: " why)))
-                    (nil? why)))
-  :announce (fn [{:keys [pick]}] (format "Unfence %s in %s/%s" (:instance pick) (:namespace pick) (:cluster pick)))
-  :effect (fn [{:keys [context pick]}]
-            (if-let [change (operations/fence-change :unfence (fetch context pick) (:instance pick))]
-              (effect/plan (effect/kubectl context "--namespace" (:namespace pick) "annotate" cnpg/cluster-type
-                                           (:cluster pick) "--overwrite" change))
+  :subject {:type cnpg/cluster-type :parse operations/parse-pick
+            :invalid "the pick is not \"<namespace>/<cluster> <instance>\""
+            :facts operations/fenced}
+  :refusal (fn [{:keys [ref object]}] (operations/unfence-refusal object (:instance ref)))
+  :announce (fn [{:keys [ref]}] (format "Unfence %s in %s/%s" (:instance ref) (:namespace ref) (:cluster ref)))
+  :effect (fn [{:keys [context ref object]}]
+            (if-let [change (operations/fence-change :unfence object (:instance ref))]
+              (effect/plan (effect/kubectl context "--namespace" (:namespace ref) "annotate" cnpg/cluster-type
+                                           (:cluster ref) "--overwrite" change))
               (effect/plan (effect/note "nothing can be written - the precondition says why"))))
-  :verify (fn [{:keys [context pick]}]
-            [{:description (format "%s is no longer fenced" (:instance pick))
+  :verify (fn [{:keys [ref] :as ctx}]
+            [{:description (format "%s is no longer fenced" (:instance ref))
               :timeout 60 :interval 5
-              :check (fn [] (let [cluster (fetch context pick)] (not (contains? (or (operations/fenced cluster) #{}) (:instance pick)))))}])})
+              :check (fn [] (not (contains? (or (operations/fenced (mutation/read-subject ctx)) #{}) (:instance ref))))}])})

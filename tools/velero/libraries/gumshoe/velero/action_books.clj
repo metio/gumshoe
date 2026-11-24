@@ -8,14 +8,11 @@
   (:require [gumshoe.detectives.velero :as velero]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.mutation :as mutation]
             [gumshoe.toggle :as toggle]
             [gumshoe.velero.actions :as actions]))
 
 (def ^:private request-type "deletebackuprequests.velero.io")
-
-(defn- fetch
-  [context type {:keys [namespace name]}]
-  (kubectl/get-namespaced-resource context namespace type name))
 
 (defn- picks
   "The objects of a type nothing refuses, as \"<namespace>/<name>\". refusal takes
@@ -28,11 +25,6 @@
 (defn- locations
   [context namespace]
   (kubectl/get-namespaced context namespace velero/location-type))
-
-(defn- refuse
-  [why]
-  (when why (println (str "refusing: " why)))
-  (nil? why))
 
 (def ^:private schedule-option
   {:schedule {:desc "\"<namespace>/<schedule>\" - interactive selection when omitted" :alias :s :coerce :string}})
@@ -79,27 +71,23 @@
                                    (fn [_ s] (actions/backup-refusal s (in (kubectl/namespace-of s)))))))}
    :empty-message "no Schedule can take a backup now - every one failed validation or writes to an unavailable location"
    :confirm {:action "start a backup from a schedule's template"}
-   :derive (fn [{:keys [context target]}]
-             (let [pick (actions/parse-pick target)
-                   schedule (when pick (fetch context velero/schedule-type pick))]
-               {:pick pick :schedule schedule
-                :backup-name (when schedule (actions/backup-name schedule (java.time.Instant/now)))}))
-   :items (fn [{:keys [schedule backup-name target]}]
-            (if schedule (actions/backup-items schedule backup-name) [(str "back up from " target)]))
-   :pin (fn [{:keys [pick]}] (when pick {:type velero/schedule-type :namespace (:namespace pick) :name (:name pick)}))
-   :precondition (fn [{:keys [context pick]}]
-                   (refuse (if pick
-                             (actions/backup-refusal (fetch context velero/schedule-type pick) (locations context (:namespace pick)))
-                             "the pick is not \"<namespace>/<schedule>\"")))
+   :subject {:type velero/schedule-type :parse actions/parse-pick
+             :invalid "the pick is not \"<namespace>/<schedule>\""}
+   :derive (fn [{:keys [object]}]
+             {:backup-name (when object (actions/backup-name object (java.time.Instant/now)))})
+   :items (fn [{:keys [object backup-name target]}]
+            (if object (actions/backup-items object backup-name) [(str "back up from " target)]))
+   :refusal (fn [{:keys [context ref object]}]
+              (actions/backup-refusal object (locations context (:namespace ref))))
    :announce (fn [{:keys [target backup-name]}] (format "Back up from Schedule %s as %s" target backup-name))
-   :effect (fn [{:keys [context schedule backup-name]}]
-             (if schedule
-               (effect/plan (effect/kubectl-stdin context (actions/to-json (actions/backup-manifest schedule backup-name))
+   :effect (fn [{:keys [context object backup-name]}]
+             (if object
+               (effect/plan (effect/kubectl-stdin context (actions/to-json (actions/backup-manifest object backup-name))
                                                   "create" "-f" "-"))
                (effect/plan (effect/note "nothing to back up - the precondition says why"))))
-   :verify (fn [{:keys [context pick backup-name]}]
-             (let [current #(fetch context velero/backup-type {:namespace (:namespace pick) :name backup-name})]
-               [{:description (format "Backup %s/%s completed" (:namespace pick) backup-name)
+   :verify (fn [{:keys [context ref backup-name]}]
+             (let [current #(kubectl/get-namespaced-resource context (:namespace ref) velero/backup-type backup-name)]
+               [{:description (format "Backup %s/%s completed" (:namespace ref) backup-name)
                  :timeout 3600 :interval 15
                  :abort #(first (actions/backup-signals (current)))
                  :check #(actions/backup-completed? (current))}]))})
@@ -117,27 +105,23 @@
                                    (fn [_ b] (actions/delete-refusal b (in (kubectl/namespace-of b)))))))}
    :empty-message "no Backup can be deleted - each is running, being deleted, or stored where Velero cannot delete"
    :confirm {:action "delete a backup and its data" :destructive? true}
-   :derive (fn [{:keys [context target]}]
-             (let [pick (actions/parse-pick target)
-                   backup (when pick (fetch context velero/backup-type pick))]
-               {:pick pick :backup backup
-                :uid (-> backup :metadata :uid)
-                :restores (when backup (kubectl/get-namespaced context (:namespace pick) velero/restore-type))}))
-   :items (fn [{:keys [backup restores target]}]
-            (if backup (actions/delete-items backup restores) [(str "delete " target)]))
-   :pin (fn [{:keys [pick]}] (when pick {:type velero/backup-type :namespace (:namespace pick) :name (:name pick)}))
-   :precondition (fn [{:keys [context pick]}]
-                   (refuse (if pick
-                             (actions/delete-refusal (fetch context velero/backup-type pick) (locations context (:namespace pick)))
-                             "the pick is not \"<namespace>/<backup>\"")))
+   :subject {:type velero/backup-type :parse actions/parse-pick
+             :invalid "the pick is not \"<namespace>/<backup>\""}
+   :derive (fn [{:keys [context ref object]}]
+             {:uid (-> object :metadata :uid)
+              :restores (when object (kubectl/get-namespaced context (:namespace ref) velero/restore-type))})
+   :items (fn [{:keys [object restores target]}]
+            (if object (actions/delete-items object restores) [(str "delete " target)]))
+   :refusal (fn [{:keys [context ref object]}]
+              (actions/delete-refusal object (locations context (:namespace ref))))
    :announce (fn [{:keys [target]}] (format "Delete Backup %s" target))
-   :effect (fn [{:keys [context backup]}]
-             (if backup
-               (effect/plan (effect/kubectl-stdin context (actions/to-json (actions/delete-request-manifest backup))
+   :effect (fn [{:keys [context object]}]
+             (if object
+               (effect/plan (effect/kubectl-stdin context (actions/to-json (actions/delete-request-manifest object))
                                                   "create" "-f" "-"))
                (effect/plan (effect/note "nothing to delete - the precondition says why"))))
-   :verify (fn [{:keys [context pick target uid]}]
+   :verify (fn [{:keys [context ref target uid] :as ctx}]
              [{:description (format "Backup %s and its data are deleted" target)
                :timeout 1800 :interval 10
-               :abort #(first (actions/delete-signals (kubectl/get-namespaced context (:namespace pick) request-type) uid))
-               :check #(nil? (fetch context velero/backup-type pick))}])})
+               :abort #(first (actions/delete-signals (kubectl/get-namespaced context (:namespace ref) request-type) uid))
+               :check #(boolean (and ref (nil? (mutation/read-subject ctx))))}])})

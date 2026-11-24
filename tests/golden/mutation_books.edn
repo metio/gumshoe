@@ -443,7 +443,10 @@
      "web"
      "--type=json"
      "--patch=[{\"op\":\"test\",\"path\":\"/metadata/uid\",\"value\":\"uid-web\"},{\"op\":\"test\",\"path\":\"/metadata/finalizers/0\",\"value\":\"example.com/cleanup\"},{\"op\":\"remove\",\"path\":\"/metadata/finalizers/0\"}]"]],
-   :precondition {:result true, :out ""},
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
    :announce
    "Remove finalizer from deployments shop/web example.com/cleanup",
    :checks

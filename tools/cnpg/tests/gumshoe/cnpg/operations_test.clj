@@ -51,9 +51,9 @@
 ;; --- picks --------------------------------------------------------------------------
 
 (deftest picks-parse-like-the-plugin
-  (is (= {:namespace "db" :cluster "pg" :instance "pg-2"} (operations/parse-pick "db/pg pg-2")))
-  (is (= {:namespace "db" :cluster "pg" :instance "pg-2"} (operations/parse-pick " db/pg 2 ")) "a bare number")
-  (is (= {:namespace "db" :cluster "pg" :instance "*"} (operations/parse-pick "db/pg *")))
+  (is (= {:namespace "db" :cluster "pg" :name "pg" :instance "pg-2"} (operations/parse-pick "db/pg pg-2")))
+  (is (= {:namespace "db" :cluster "pg" :name "pg" :instance "pg-2"} (operations/parse-pick " db/pg 2 ")) "a bare number")
+  (is (= {:namespace "db" :cluster "pg" :name "pg" :instance "*"} (operations/parse-pick "db/pg *")))
   (doseq [bad [nil "" "pg pg-2" "db/pg" "db/pg pg-2 extra"]]
     (is (nil? (operations/parse-pick bad)) (pr-str bad))))
 

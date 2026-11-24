@@ -290,7 +290,8 @@ mostly data:
 - a change that acts on one object declares it as `:subject {:type
   "cronjobs"}`, with `:parse` for a pick of another shape (`gumshoe.pick`
   has `namespaced`, `cluster-scoped`, `(kinded kind->type)` and `(typed
-  types)`; a parser may name the `:type` itself), `:invalid` for the reason
+  types)`; a parser may name the `:type` itself, and whatever else it
+  returns, such as a finalizer or an instance, stays on the ref), `:invalid` for the reason
   a pick that does not parse is refused, and `:facts` for what outside the
   spec the change rests on. The engine reads the object strictly before
   `:derive`, hands every callback `:ref` and `:object`, pins the ref, and
@@ -298,7 +299,13 @@ mostly data:
   whose reason it prints as "refusing: …"; a post-check reads it with
   `(mutation/read-subject ctx)`. So the book writes no fetch, pin or refusal
   printer of its own, and keeps `:precondition` for any other check
-  (`tools/argocd/runbooks/refresh.clj` is the short example);
+  (`tools/argocd/runbooks/refresh.clj` is the short example). The
+  confirmation items, the plan and the post-checks are built before the
+  refusal runs, so they also run for a pick that does not parse, with
+  `:ref` and `:object` nil: make the plan a note in that case instead of
+  reading through the nil ref (`runbooks/kubernetes/workloads/restart.clj`).
+  A change whose subject is no single object, such as a Helm release kept
+  as many Secrets, uses `:refusal` alone (`runbooks/kubernetes/helm/rollback.clj`);
 - a pair of books that set one boolean state and set it back - suspend and
   resume, pause and resume - is one `(toggle/pair {…})` declaration from
   `gumshoe.toggle`, returning `{:on <spec> :off <spec>}`: the shared spec

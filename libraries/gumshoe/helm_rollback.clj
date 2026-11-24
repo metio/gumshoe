@@ -7,15 +7,16 @@
    default goes back one revision whatever its status; this goes back to the
    newest earlier revision that was deployed, and passes that revision to
    helm, so the confirmation names exactly what runs."
-  (:require [clojure.string :as str]))
+  (:require [clojure.set :as set]
+            [clojure.string :as str]
+            [gumshoe.pick :as pick]))
 
 (def ^:private deployed-statuses #{"deployed" "superseded"})
 
 (defn parse-pick
   "\"<namespace>/<release>\" as {:namespace :release}, or nil."
   [pick]
-  (when-let [[_ namespace release] (re-matches #"\s*([^/\s]+)/([^/\s]+)\s*" (str pick))]
-    {:namespace namespace :release release}))
+  (some-> (pick/namespaced pick) (set/rename-keys {:name :release})))
 
 (defn history
   "One release's revisions, newest first."

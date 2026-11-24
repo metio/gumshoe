@@ -50,7 +50,8 @@
 (defn parse-pick
   "A pick reads \"<type> <namespace>/<name> <finalizer>\", or \"<type> <name>
    <finalizer>\" for a cluster-scoped object. The finalizer may itself hold a
-   slash, so it is the rest of the line."
+   slash, so it is the rest of the line. The map is the ref of the object a
+   mutation spec's :subject reads, carrying the finalizer along."
   [pick]
   (let [[type object finalizer] (str/split (str/trim (str pick)) #"\s+" 3)
         [namespace name] (if (str/includes? (str object) "/") (str/split object #"/" 2) [nil object])]
