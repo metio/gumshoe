@@ -127,12 +127,36 @@
                                   (if (seq caps) (str/join "/" (map name caps)) "other")
                                   (str/join ", " (map :name ds)))))))))
 
+(defn- evidence-base
+  "The evidence every investigation carries besides what its detectives
+   require: the time it was read, the cluster, and the operator's expectations,
+   so a detective can tell an intended state from a surprising one (e.g. which
+   cluster-admins are known) while staying pure over the map."
+  [cluster]
+  {:now (java.time.Instant/now)
+   "cluster" cluster
+   "config" (config/active-config {:kubernetes-cluster cluster})})
+
+(defn- required-keys
+  [detectives]
+  (vec (into (sorted-set) (mapcat :requires detectives))))
+
+(defn read-evidence
+  "The evidence the detectives require, read one key after another without
+   printing anything, for a check that reads it again and again. Unlike
+   collect-evidence! it lets a collector's exception through, so a strict read
+   that did not answer reaches the caller instead of reading as no evidence."
+  [context cluster detectives]
+  (into (evidence-base cluster)
+        (for [key (required-keys detectives)]
+          [key ((registry/collector-for key) context key)])))
+
 (defn collect-evidence!
   "Fetches every resource type required by the given detectives exactly once,
    all types in parallel. A type the cluster does not know (missing CRD)
    yields no evidence, so the corresponding detectives simply report nothing."
   [context detectives]
-  (let [types (vec (into (sorted-set) (mapcat :requires detectives)))
+  (let [types (required-keys detectives)
         cluster (try (kubectl/current-cluster) (catch Exception _ nil))]
     (stdout/print-section "🔍 Evidence")
     ;; every resource type is fetched in parallel and shown on a live task list
@@ -149,13 +173,7 @@
                                               (catch Exception _ nil)))])
                          types)
           results (progress/watch-futures! labelled)]
-      (into {:now (java.time.Instant/now)
-             ;; operator expectations travel with the evidence, so a detective
-             ;; can tell an intended state from a surprising one (e.g. which
-             ;; cluster-admins are known) while staying pure over the map.
-             "cluster" cluster
-             "config" (config/active-config {:kubernetes-cluster cluster})}
-            (map vector types results)))))
+      (into (evidence-base cluster) (map vector types results)))))
 
 (defn- severity-tag
   [severity]

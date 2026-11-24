@@ -3,44 +3,22 @@
 
 (ns firebooks.kubernetes.pending-pvc
   "Firebook: creates a PersistentVolumeClaim with a storage class that does
-   not exist, so it hangs in Pending for the team to find during a drill."
-  (:require [gumshoe.firebook :as firebook]
-            [gumshoe.flow :as flow]
-            [gumshoe.kubectl :as kubectl]
-            [gumshoe.announce :as announce]
-            [gumshoe.runbook :as runbook]))
+   not exist, so it hangs in Pending for the team to find during a drill.
 
-(def options
-  {:extinguish {:desc "Put out the fire: delete the fire-drill namespace"
-                :alias :e
-                :coerce :boolean}})
+   The storage detective reports a claim only once it has been Pending for
+   five minutes, so the burning check waits longer than that."
+  (:require [gumshoe.detectives.storage :as storage]
+            [gumshoe.firebook :as firebook]))
 
-(def prerequisites
-  {:installed-tools ["kubectl"]
-   :cluster-capabilities []
-   :kubectl-can-create ["namespaces" "persistentvolumeclaims"]
-   :kubectl-can-delete ["namespaces"]})
-
-(defn- pending-pvc
-  [opts {:keys [announcement-data]}]
-  (let [context (kubectl/current-context)
-        cluster (kubectl/current-cluster)]
-    (if (:extinguish opts)
-      (firebook/extinguish! context)
-      (flow/change!
-       {:confirmation {:action "start a fire drill: a PersistentVolumeClaim that can never bind"
-                       :target cluster
-                       :items [(str firebook/drill-namespace "/pending-pvc")]}
-        :announce! #(announce/announce! cluster announcement-data
-                                                     "Fire drill started: pending-pvc")
-        :execute! #(firebook/ignite! context
-                                     [(firebook/pvc-manifest
-                                       {:name "pending-pvc"
-                                        :storage-class "this-storage-class-does-not-exist"})])
-        :post-checks [(firebook/burning-check context "persistentvolumeclaims" "pending-pvc")]}))))
-
-(runbook/execute!
+(firebook/book
  {:description "Firebook: creates a PersistentVolumeClaim that can never bind"
-  :options options
-  :prerequisites prerequisites
-  :action pending-pvc})
+  :drill "pending-pvc"
+  :fire "a PersistentVolumeClaim that can never bind"
+  :manifests [(firebook/pvc-manifest
+               {:name "pending-pvc"
+                :storage-class "this-storage-class-does-not-exist"})]
+  :prerequisites {:kubectl-can-create ["persistentvolumeclaims"]}
+  :expect {:detectives storage/detectives
+           :fire? (fn [{:keys [summary]} _] (= "PersistentVolumeClaim is Pending" summary))
+           :timeout 420
+           :interval 15}})

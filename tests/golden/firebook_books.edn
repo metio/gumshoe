@@ -11,13 +11,20 @@
    :announcements [],
    :calls
    ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
     "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 bridge fdb show"],
-   :checks [{:description "the drill entry is gone", :timeout 30}],
+   :checks
+   [{:description
+     "the fire is out: the evpn-static-fdb detective no longer reports it",
+     :timeout 30,
+     :interval 5}],
    :record {:applied 1, :verified true},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: the drill entry is gone"]},
+    "✅ verified: the fire is out: the evpn-static-fdb detective no longer reports it"]},
   :extinguish-dry-run
   {:result true,
    :confirmations [],
@@ -32,6 +39,29 @@
     "This will put out the fire: remove the drill's fdb entry on 'hv1 lo.4208':"
     "  - 02:00:cb:00:71:01"
     "  would run: ssh hv1 -- sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"]},
+  :extinguish-fdb-unread
+  {:result true,
+   :confirmations
+   [{:action "put out the fire: remove the drill's fdb entry",
+     :target "hv1 lo.4208",
+     :items ["02:00:cb:00:71:01"]}],
+   :announcements [],
+   :calls
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 bridge fdb show"],
+   :checks
+   [{:description
+     "the fire is out: the evpn-static-fdb detective no longer reports it",
+     :timeout 30,
+     :interval 5}],
+   :record {:applied 1, :verified true},
+   :out
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
+    "✅ verified: the fire is out: the evpn-static-fdb detective no longer reports it"]},
   :extinguish-still-burning
   {:result false,
    :confirmations
@@ -41,15 +71,27 @@
    :announcements [],
    :calls
    ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
     "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 bridge fdb show"],
-   :checks [{:description "the drill entry is gone", :timeout 30}],
-   :record {:applied 1, :verified false},
+   :checks
+   [{:description
+     "the fire is out: the evpn-static-fdb detective no longer reports it",
+     :timeout 30,
+     :interval 5}],
+   :record
+   {:applied 1,
+    :verified false,
+    :recovery
+    {:text
+     "the drill's static entry 02:00:cb:00:71:01 may still be in hv1's table on lo.4208.\nCheck:  ssh hv1 -- bridge fdb show dev lo.4208\nRemove: ssh hv1 -- sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the drill entry is gone"]},
+    "❌ NOT verified within 0s: the fire is out: the evpn-static-fdb detective no longer reports it"]},
   :extinguish-unanswered
-  {:result true,
+  {:result false,
    :confirmations
    [{:action "put out the fire: remove the drill's fdb entry",
      :target "hv1 lo.4208",
@@ -57,13 +99,22 @@
    :announcements [],
    :calls
    ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 bridge fdb show"],
-   :checks [{:description "the drill entry is gone", :timeout 30}],
-   :record {:applied 1, :verified true},
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"],
+   :checks
+   [{:description
+     "the fire is out: the evpn-static-fdb detective no longer reports it",
+     :timeout 30,
+     :interval 5}],
+   :record
+   {:applied 1,
+    :verified false,
+    :recovery
+    {:text
+     "the drill's static entry 02:00:cb:00:71:01 may still be in hv1's table on lo.4208.\nCheck:  ssh hv1 -- bridge fdb show dev lo.4208\nRemove: ssh hv1 -- sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: the drill entry is gone"]},
+    "❌ NOT verified within 0s: the fire is out: the evpn-static-fdb detective no longer reports it - the last read did not answer: hv1: host is not reachable over ssh"]},
   :extinguish-unpin-fails
   {:result false,
    :confirmations
@@ -77,7 +128,10 @@
    :record
    {:applied 0,
     :stopped
-    "ssh hv1 -- sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"},
+    "ssh hv1 -- sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208",
+    :recovery
+    {:text
+     "the drill's static entry 02:00:cb:00:71:01 may still be in hv1's table on lo.4208.\nCheck:  ssh hv1 -- bridge fdb show dev lo.4208\nRemove: ssh hv1 -- sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"]},
   :ignite
@@ -90,16 +144,20 @@
    :announcements [["hv1" "Fire drill started: stale fdb entry"]],
    :calls
    ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo bridge fdb replace 02:00:cb:00:71:01 dev lo.4208 dst 192.0.2.1 self static"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
     "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 bridge fdb show"],
    :checks
    [{:description
-     "the fire is burning: a static entry is in the table",
-     :timeout 30}],
+     "the fire is burning: the evpn-static-fdb detective reports it",
+     :timeout 30,
+     :interval 5}],
    :record {:applied 1, :verified true},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: the fire is burning: a static entry is in the table"
+    "✅ verified: the fire is burning: the evpn-static-fdb detective reports it"
     "🔶 the fire is lit - find it with 'bb run runbooks/detectives/fabric.clj --vni 4208', and put it out with --extinguish"]},
   :ignite-declined
   {:result false,
@@ -111,7 +169,12 @@
    :announcements [],
    :calls [],
    :checks [],
-   :record {:applied 0, :aborted "declined at the confirmation"},
+   :record
+   {:applied 0,
+    :aborted "declined at the confirmation",
+    :recovery
+    {:text
+     "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out [""]},
   :ignite-dry-run
   {:result true,
@@ -126,8 +189,7 @@
     "────────────────────────────────────────────────────────────────────────────────"
     "This will start a fire drill: a static fdb entry that outranks EVPN on 'hv1 lo.4208':"
     "  - 02:00:cb:00:71:01 -> 192.0.2.1"
-    "  would run: ssh hv1 -- sudo bridge fdb replace 02:00:cb:00:71:01 dev lo.4208 dst 192.0.2.1 self static"
-    "🔶 the fire is lit - find it with 'bb run runbooks/detectives/fabric.clj --vni 4208', and put it out with --extinguish"]},
+    "  would run: ssh hv1 -- sudo bridge fdb replace 02:00:cb:00:71:01 dev lo.4208 dst 192.0.2.1 self static"]},
   :ignite-pin-fails
   {:result false,
    :confirmations
@@ -142,7 +204,10 @@
    :record
    {:applied 0,
     :stopped
-    "ssh hv1 -- sudo bridge fdb replace 02:00:cb:00:71:01 dev lo.4208 dst 192.0.2.1 self static"},
+    "ssh hv1 -- sudo bridge fdb replace 02:00:cb:00:71:01 dev lo.4208 dst 192.0.2.1 self static",
+    :recovery
+    {:text
+     "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"]},
   :ignite-unseen
@@ -155,16 +220,25 @@
    :announcements [["hv1" "Fire drill started: stale fdb entry"]],
    :calls
    ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo bridge fdb replace 02:00:cb:00:71:01 dev lo.4208 dst 192.0.2.1 self static"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
     "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 bridge fdb show"],
    :checks
    [{:description
-     "the fire is burning: a static entry is in the table",
-     :timeout 30}],
-   :record {:applied 1, :verified false},
+     "the fire is burning: the evpn-static-fdb detective reports it",
+     :timeout 30,
+     :interval 5}],
+   :record
+   {:applied 1,
+    :verified false,
+    :recovery
+    {:text
+     "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire is burning: a static entry is in the table"]},
+    "❌ NOT verified within 0s: the fire is burning: the evpn-static-fdb detective reports it"]},
   :surface
   {:description
    "Firebook: pins a static fdb entry for the team to find",
@@ -191,79 +265,121 @@
  "firebooks/kubernetes/crash_loop.clj"
  {:extinguish
   {:result true,
-   :confirmations [],
+   :confirmations
+   [{:action "put out the fire: delete the fire-drill namespace",
+     :target "cluster",
+     :items ["namespace fire-drill and everything in it"]}],
    :announcements [],
    :calls
    ["kubectl --context=ctx delete namespace fire-drill --ignore-not-found"
-    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"],
+    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"
+    "kubectl --context=ctx --request-timeout=30s get pods --all-namespaces --output=json"],
    :checks
    [{:description "the fire-drill namespace is gone",
      :timeout 180,
+     :interval 10}
+    {:description
+     "the fire is out: the pods, stuck-pods detectives no longer report it",
+     :timeout 60,
      :interval 10}],
-   :record {:applied 0, :verified true},
+   :record {:applied 1, :verified true},
    :out
-   ["✅ fire extinguished, drill namespace deleted"
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: the fire-drill namespace is gone"]},
+    "✅ verified: the fire-drill namespace is gone"
+    "✅ verified: the fire is out: the pods, stuck-pods detectives no longer report it"]},
   :extinguish-delete-fails
   {:result false,
-   :confirmations [],
+   :confirmations
+   [{:action "put out the fire: delete the fire-drill namespace",
+     :target "cluster",
+     :items ["namespace fire-drill and everything in it"]}],
    :announcements [],
    :calls
    ["kubectl --context=ctx delete namespace fire-drill --ignore-not-found"],
    :checks [],
+   :record
+   {:applied 0,
+    :stopped "kubectl delete namespace fire-drill --ignore-not-found",
+    :recovery
+    {:text
+     "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
+   :out
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"]},
+  :extinguish-dry-run
+  {:result true,
+   :confirmations [],
+   :announcements [],
+   :calls [],
+   :checks [],
    :record {:applied 0},
    :out
-   ["❌ could not extinguish the fire:"
-    "Error from server (Forbidden): refused"]},
-  :extinguish-dry-run
-  {:result false,
-   :confirmations [],
-   :announcements [],
-   :calls
-   ["kubectl --context=ctx delete namespace fire-drill --ignore-not-found"
-    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"],
-   :checks
-   [{:description "the fire-drill namespace is gone",
-     :timeout 180,
-     :interval 10}],
-   :record {:applied 0, :verified false},
-   :out
-   ["✅ fire extinguished, drill namespace deleted"
-    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire-drill namespace is gone"]},
+   ["────────────────────────────────────────────────────────────────────────────────"
+    "  🔍 DRY RUN - nothing will be changed"
+    "────────────────────────────────────────────────────────────────────────────────"
+    "This will put out the fire: delete the fire-drill namespace on 'cluster':"
+    "  - namespace fire-drill and everything in it"
+    "  would run: kubectl delete namespace fire-drill --ignore-not-found"]},
   :extinguish-still-burning
   {:result false,
-   :confirmations [],
+   :confirmations
+   [{:action "put out the fire: delete the fire-drill namespace",
+     :target "cluster",
+     :items ["namespace fire-drill and everything in it"]}],
    :announcements [],
    :calls
    ["kubectl --context=ctx delete namespace fire-drill --ignore-not-found"
-    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"],
+    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"
+    "kubectl --context=ctx --request-timeout=30s get pods --all-namespaces --output=json"],
    :checks
    [{:description "the fire-drill namespace is gone",
      :timeout 180,
+     :interval 10}
+    {:description
+     "the fire is out: the pods, stuck-pods detectives no longer report it",
+     :timeout 60,
      :interval 10}],
-   :record {:applied 0, :verified false},
+   :record
+   {:applied 1,
+    :verified false,
+    :recovery
+    {:text
+     "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
    :out
-   ["✅ fire extinguished, drill namespace deleted"
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire-drill namespace is gone"]},
+    "❌ NOT verified within 0s: the fire-drill namespace is gone"
+    "❌ NOT verified within 0s: the fire is out: the pods, stuck-pods detectives no longer report it"]},
   :extinguish-unanswered
   {:result false,
-   :confirmations [],
+   :confirmations
+   [{:action "put out the fire: delete the fire-drill namespace",
+     :target "cluster",
+     :items ["namespace fire-drill and everything in it"]}],
    :announcements [],
    :calls
    ["kubectl --context=ctx delete namespace fire-drill --ignore-not-found"
-    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"],
+    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"
+    "kubectl --context=ctx --request-timeout=30s get pods --all-namespaces --output=json"],
    :checks
    [{:description "the fire-drill namespace is gone",
      :timeout 180,
+     :interval 10}
+    {:description
+     "the fire is out: the pods, stuck-pods detectives no longer report it",
+     :timeout 60,
      :interval 10}],
-   :record {:applied 0, :verified false},
+   :record
+   {:applied 1,
+    :verified false,
+    :recovery
+    {:text
+     "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
    :out
-   ["✅ fire extinguished, drill namespace deleted"
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire-drill namespace is gone"]},
+    "❌ NOT verified within 0s: the fire-drill namespace is gone"
+    "❌ NOT verified within 0s: the fire is out: the pods, stuck-pods detectives no longer report it - the last read did not answer: kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"]},
   :ignite
   {:result true,
    :confirmations
@@ -273,21 +389,22 @@
    :announcements [["cluster" "Fire drill started: crash-loop"]],
    :calls
    ["kubectl --context=ctx apply --filename - <stdin 2 items>"
-    "kubectl --context=ctx --namespace=fire-drill --request-timeout=30s get deployments crash-loop --output=json"],
+    "kubectl --context=ctx --request-timeout=30s get pods --all-namespaces --output=json"],
    :checks
    [{:description
-     "deployments fire-drill/crash-loop exists - the fire is burning",
-     :timeout 30}],
-   :record {:applied 0, :thunk :ok, :verified true},
+     "the fire is burning: the pods, stuck-pods detectives report it",
+     :timeout 180,
+     :interval 10}],
+   :record {:applied 1, :verified true},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
+    "✅ verified: the fire is burning: the pods, stuck-pods detectives report it"
     "✅ fire started in namespace fire-drill"
     "🔥 Let the team find it with the detectives, e.g.:"
     "   bb run runbooks/detectives/cluster.clj"
     "   The drill is over when the findings are green again."
-    "   Extinguish with --extinguish once you are done."
-    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: deployments fire-drill/crash-loop exists - the fire is burning"]},
+    "   Extinguish with --extinguish once you are done."]},
   :ignite-apply-fails
   {:result false,
    :confirmations
@@ -297,11 +414,15 @@
    :announcements [["cluster" "Fire drill started: crash-loop"]],
    :calls ["kubectl --context=ctx apply --filename - <stdin 2 items>"],
    :checks [],
-   :record {:applied 0, :thunk :failed},
+   :record
+   {:applied 0,
+    :stopped "kubectl apply --filename - (with stdin)",
+    :recovery
+    {:text
+     "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "❌ could not start the fire:"
-    "Error from server (Forbidden): refused"]},
+    "❌ Error from server (Forbidden): refused"]},
   :ignite-declined
   {:result false,
    :confirmations
@@ -311,7 +432,12 @@
    :announcements [],
    :calls [],
    :checks [],
-   :record {:applied 0, :aborted "declined at the confirmation"},
+   :record
+   {:applied 0,
+    :aborted "declined at the confirmation",
+    :recovery
+    {:text
+     "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out [""]},
   :ignite-dry-run
   {:result true,
@@ -326,10 +452,9 @@
     "────────────────────────────────────────────────────────────────────────────────"
     "This will start a fire drill: a crash-looping deployment on 'cluster':"
     "  - fire-drill/crash-loop"
-    "🔶 this book does not support --dry-run yet - it declares an :execute! thunk, not an :effect plan"
-    "🔶 nothing was run"]},
+    "  would run: kubectl apply --filename - (with stdin)"]},
   :ignite-unseen
-  {:result true,
+  {:result false,
    :confirmations
    [{:action "start a fire drill: a crash-looping deployment",
      :target "cluster",
@@ -337,21 +462,22 @@
    :announcements [["cluster" "Fire drill started: crash-loop"]],
    :calls
    ["kubectl --context=ctx apply --filename - <stdin 2 items>"
-    "kubectl --context=ctx --namespace=fire-drill --request-timeout=30s get deployments crash-loop --output=json"],
+    "kubectl --context=ctx --request-timeout=30s get pods --all-namespaces --output=json"],
    :checks
    [{:description
-     "deployments fire-drill/crash-loop exists - the fire is burning",
-     :timeout 30}],
-   :record {:applied 0, :thunk :ok, :verified true},
+     "the fire is burning: the pods, stuck-pods detectives report it",
+     :timeout 180,
+     :interval 10}],
+   :record
+   {:applied 1,
+    :verified false,
+    :recovery
+    {:text
+     "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "✅ fire started in namespace fire-drill"
-    "🔥 Let the team find it with the detectives, e.g.:"
-    "   bb run runbooks/detectives/cluster.clj"
-    "   The drill is over when the findings are green again."
-    "   Extinguish with --extinguish once you are done."
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: deployments fire-drill/crash-loop exists - the fire is burning"]},
+    "❌ NOT verified within 0s: the fire is burning: the pods, stuck-pods detectives report it"]},
   :surface
   {:description
    "Firebook: starts a crash-looping deployment for the team to find",
@@ -364,83 +490,126 @@
    {:installed-tools ["kubectl"],
     :cluster-capabilities [],
     :kubectl-can-create ["namespaces" "deployments"],
-    :kubectl-can-delete ["namespaces"]}}},
+    :kubectl-can-delete ["namespaces"],
+    :kubectl-can-get ["namespaces" "pods"]}}},
  "firebooks/kubernetes/image_pull.clj"
  {:extinguish
   {:result true,
-   :confirmations [],
+   :confirmations
+   [{:action "put out the fire: delete the fire-drill namespace",
+     :target "cluster",
+     :items ["namespace fire-drill and everything in it"]}],
    :announcements [],
    :calls
    ["kubectl --context=ctx delete namespace fire-drill --ignore-not-found"
-    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"],
+    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"
+    "kubectl --context=ctx --request-timeout=30s get pods --all-namespaces --output=json"],
    :checks
    [{:description "the fire-drill namespace is gone",
      :timeout 180,
+     :interval 10}
+    {:description
+     "the fire is out: the pods, stuck-pods detectives no longer report it",
+     :timeout 60,
      :interval 10}],
-   :record {:applied 0, :verified true},
+   :record {:applied 1, :verified true},
    :out
-   ["✅ fire extinguished, drill namespace deleted"
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: the fire-drill namespace is gone"]},
+    "✅ verified: the fire-drill namespace is gone"
+    "✅ verified: the fire is out: the pods, stuck-pods detectives no longer report it"]},
   :extinguish-delete-fails
   {:result false,
-   :confirmations [],
+   :confirmations
+   [{:action "put out the fire: delete the fire-drill namespace",
+     :target "cluster",
+     :items ["namespace fire-drill and everything in it"]}],
    :announcements [],
    :calls
    ["kubectl --context=ctx delete namespace fire-drill --ignore-not-found"],
    :checks [],
+   :record
+   {:applied 0,
+    :stopped "kubectl delete namespace fire-drill --ignore-not-found",
+    :recovery
+    {:text
+     "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
+   :out
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"]},
+  :extinguish-dry-run
+  {:result true,
+   :confirmations [],
+   :announcements [],
+   :calls [],
+   :checks [],
    :record {:applied 0},
    :out
-   ["❌ could not extinguish the fire:"
-    "Error from server (Forbidden): refused"]},
-  :extinguish-dry-run
-  {:result false,
-   :confirmations [],
-   :announcements [],
-   :calls
-   ["kubectl --context=ctx delete namespace fire-drill --ignore-not-found"
-    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"],
-   :checks
-   [{:description "the fire-drill namespace is gone",
-     :timeout 180,
-     :interval 10}],
-   :record {:applied 0, :verified false},
-   :out
-   ["✅ fire extinguished, drill namespace deleted"
-    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire-drill namespace is gone"]},
+   ["────────────────────────────────────────────────────────────────────────────────"
+    "  🔍 DRY RUN - nothing will be changed"
+    "────────────────────────────────────────────────────────────────────────────────"
+    "This will put out the fire: delete the fire-drill namespace on 'cluster':"
+    "  - namespace fire-drill and everything in it"
+    "  would run: kubectl delete namespace fire-drill --ignore-not-found"]},
   :extinguish-still-burning
   {:result false,
-   :confirmations [],
+   :confirmations
+   [{:action "put out the fire: delete the fire-drill namespace",
+     :target "cluster",
+     :items ["namespace fire-drill and everything in it"]}],
    :announcements [],
    :calls
    ["kubectl --context=ctx delete namespace fire-drill --ignore-not-found"
-    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"],
+    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"
+    "kubectl --context=ctx --request-timeout=30s get pods --all-namespaces --output=json"],
    :checks
    [{:description "the fire-drill namespace is gone",
      :timeout 180,
+     :interval 10}
+    {:description
+     "the fire is out: the pods, stuck-pods detectives no longer report it",
+     :timeout 60,
      :interval 10}],
-   :record {:applied 0, :verified false},
+   :record
+   {:applied 1,
+    :verified false,
+    :recovery
+    {:text
+     "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
    :out
-   ["✅ fire extinguished, drill namespace deleted"
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire-drill namespace is gone"]},
+    "❌ NOT verified within 0s: the fire-drill namespace is gone"
+    "❌ NOT verified within 0s: the fire is out: the pods, stuck-pods detectives no longer report it"]},
   :extinguish-unanswered
   {:result false,
-   :confirmations [],
+   :confirmations
+   [{:action "put out the fire: delete the fire-drill namespace",
+     :target "cluster",
+     :items ["namespace fire-drill and everything in it"]}],
    :announcements [],
    :calls
    ["kubectl --context=ctx delete namespace fire-drill --ignore-not-found"
-    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"],
+    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"
+    "kubectl --context=ctx --request-timeout=30s get pods --all-namespaces --output=json"],
    :checks
    [{:description "the fire-drill namespace is gone",
      :timeout 180,
+     :interval 10}
+    {:description
+     "the fire is out: the pods, stuck-pods detectives no longer report it",
+     :timeout 60,
      :interval 10}],
-   :record {:applied 0, :verified false},
+   :record
+   {:applied 1,
+    :verified false,
+    :recovery
+    {:text
+     "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
    :out
-   ["✅ fire extinguished, drill namespace deleted"
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire-drill namespace is gone"]},
+    "❌ NOT verified within 0s: the fire-drill namespace is gone"
+    "❌ NOT verified within 0s: the fire is out: the pods, stuck-pods detectives no longer report it - the last read did not answer: kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"]},
   :ignite
   {:result true,
    :confirmations
@@ -451,21 +620,22 @@
    :announcements [["cluster" "Fire drill started: image-pull"]],
    :calls
    ["kubectl --context=ctx apply --filename - <stdin 2 items>"
-    "kubectl --context=ctx --namespace=fire-drill --request-timeout=30s get deployments image-pull --output=json"],
+    "kubectl --context=ctx --request-timeout=30s get pods --all-namespaces --output=json"],
    :checks
    [{:description
-     "deployments fire-drill/image-pull exists - the fire is burning",
-     :timeout 30}],
-   :record {:applied 0, :thunk :ok, :verified true},
+     "the fire is burning: the pods, stuck-pods detectives report it",
+     :timeout 180,
+     :interval 10}],
+   :record {:applied 1, :verified true},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
+    "✅ verified: the fire is burning: the pods, stuck-pods detectives report it"
     "✅ fire started in namespace fire-drill"
     "🔥 Let the team find it with the detectives, e.g.:"
     "   bb run runbooks/detectives/cluster.clj"
     "   The drill is over when the findings are green again."
-    "   Extinguish with --extinguish once you are done."
-    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: deployments fire-drill/image-pull exists - the fire is burning"]},
+    "   Extinguish with --extinguish once you are done."]},
   :ignite-apply-fails
   {:result false,
    :confirmations
@@ -476,11 +646,15 @@
    :announcements [["cluster" "Fire drill started: image-pull"]],
    :calls ["kubectl --context=ctx apply --filename - <stdin 2 items>"],
    :checks [],
-   :record {:applied 0, :thunk :failed},
+   :record
+   {:applied 0,
+    :stopped "kubectl apply --filename - (with stdin)",
+    :recovery
+    {:text
+     "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "❌ could not start the fire:"
-    "Error from server (Forbidden): refused"]},
+    "❌ Error from server (Forbidden): refused"]},
   :ignite-declined
   {:result false,
    :confirmations
@@ -491,7 +665,12 @@
    :announcements [],
    :calls [],
    :checks [],
-   :record {:applied 0, :aborted "declined at the confirmation"},
+   :record
+   {:applied 0,
+    :aborted "declined at the confirmation",
+    :recovery
+    {:text
+     "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out [""]},
   :ignite-dry-run
   {:result true,
@@ -506,10 +685,9 @@
     "────────────────────────────────────────────────────────────────────────────────"
     "This will start a fire drill: a deployment with an unpullable image on 'cluster':"
     "  - fire-drill/image-pull"
-    "🔶 this book does not support --dry-run yet - it declares an :execute! thunk, not an :effect plan"
-    "🔶 nothing was run"]},
+    "  would run: kubectl apply --filename - (with stdin)"]},
   :ignite-unseen
-  {:result true,
+  {:result false,
    :confirmations
    [{:action
      "start a fire drill: a deployment with an unpullable image",
@@ -518,21 +696,22 @@
    :announcements [["cluster" "Fire drill started: image-pull"]],
    :calls
    ["kubectl --context=ctx apply --filename - <stdin 2 items>"
-    "kubectl --context=ctx --namespace=fire-drill --request-timeout=30s get deployments image-pull --output=json"],
+    "kubectl --context=ctx --request-timeout=30s get pods --all-namespaces --output=json"],
    :checks
    [{:description
-     "deployments fire-drill/image-pull exists - the fire is burning",
-     :timeout 30}],
-   :record {:applied 0, :thunk :ok, :verified true},
+     "the fire is burning: the pods, stuck-pods detectives report it",
+     :timeout 180,
+     :interval 10}],
+   :record
+   {:applied 1,
+    :verified false,
+    :recovery
+    {:text
+     "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "✅ fire started in namespace fire-drill"
-    "🔥 Let the team find it with the detectives, e.g.:"
-    "   bb run runbooks/detectives/cluster.clj"
-    "   The drill is over when the findings are green again."
-    "   Extinguish with --extinguish once you are done."
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: deployments fire-drill/image-pull exists - the fire is burning"]},
+    "❌ NOT verified within 0s: the fire is burning: the pods, stuck-pods detectives report it"]},
   :surface
   {:description
    "Firebook: starts a deployment with an unpullable image for the team to find",
@@ -545,83 +724,132 @@
    {:installed-tools ["kubectl"],
     :cluster-capabilities [],
     :kubectl-can-create ["namespaces" "deployments"],
-    :kubectl-can-delete ["namespaces"]}}},
+    :kubectl-can-delete ["namespaces"],
+    :kubectl-can-get ["namespaces" "pods"]}}},
  "firebooks/kubernetes/pending_pvc.clj"
  {:extinguish
   {:result true,
-   :confirmations [],
+   :confirmations
+   [{:action "put out the fire: delete the fire-drill namespace",
+     :target "cluster",
+     :items ["namespace fire-drill and everything in it"]}],
    :announcements [],
    :calls
    ["kubectl --context=ctx delete namespace fire-drill --ignore-not-found"
-    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"],
+    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"
+    "kubectl --context=ctx --request-timeout=30s get events --all-namespaces --output=json"
+    "kubectl --context=ctx --request-timeout=30s get persistentvolumeclaims --all-namespaces --output=json"
+    "kubectl --context=ctx --request-timeout=30s get pods --all-namespaces --output=json"
+    "kubectl --context=ctx --request-timeout=30s get storageclasses --all-namespaces --output=json"],
    :checks
    [{:description "the fire-drill namespace is gone",
      :timeout 180,
-     :interval 10}],
-   :record {:applied 0, :verified true},
+     :interval 10}
+    {:description
+     "the fire is out: the storage detective no longer reports it",
+     :timeout 60,
+     :interval 15}],
+   :record {:applied 1, :verified true},
    :out
-   ["✅ fire extinguished, drill namespace deleted"
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: the fire-drill namespace is gone"]},
+    "✅ verified: the fire-drill namespace is gone"
+    "✅ verified: the fire is out: the storage detective no longer reports it"]},
   :extinguish-delete-fails
   {:result false,
-   :confirmations [],
+   :confirmations
+   [{:action "put out the fire: delete the fire-drill namespace",
+     :target "cluster",
+     :items ["namespace fire-drill and everything in it"]}],
    :announcements [],
    :calls
    ["kubectl --context=ctx delete namespace fire-drill --ignore-not-found"],
    :checks [],
+   :record
+   {:applied 0,
+    :stopped "kubectl delete namespace fire-drill --ignore-not-found",
+    :recovery
+    {:text
+     "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
+   :out
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"]},
+  :extinguish-dry-run
+  {:result true,
+   :confirmations [],
+   :announcements [],
+   :calls [],
+   :checks [],
    :record {:applied 0},
    :out
-   ["❌ could not extinguish the fire:"
-    "Error from server (Forbidden): refused"]},
-  :extinguish-dry-run
-  {:result false,
-   :confirmations [],
-   :announcements [],
-   :calls
-   ["kubectl --context=ctx delete namespace fire-drill --ignore-not-found"
-    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"],
-   :checks
-   [{:description "the fire-drill namespace is gone",
-     :timeout 180,
-     :interval 10}],
-   :record {:applied 0, :verified false},
-   :out
-   ["✅ fire extinguished, drill namespace deleted"
-    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire-drill namespace is gone"]},
+   ["────────────────────────────────────────────────────────────────────────────────"
+    "  🔍 DRY RUN - nothing will be changed"
+    "────────────────────────────────────────────────────────────────────────────────"
+    "This will put out the fire: delete the fire-drill namespace on 'cluster':"
+    "  - namespace fire-drill and everything in it"
+    "  would run: kubectl delete namespace fire-drill --ignore-not-found"]},
   :extinguish-still-burning
   {:result false,
-   :confirmations [],
+   :confirmations
+   [{:action "put out the fire: delete the fire-drill namespace",
+     :target "cluster",
+     :items ["namespace fire-drill and everything in it"]}],
    :announcements [],
    :calls
    ["kubectl --context=ctx delete namespace fire-drill --ignore-not-found"
-    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"],
+    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"
+    "kubectl --context=ctx --request-timeout=30s get events --all-namespaces --output=json"
+    "kubectl --context=ctx --request-timeout=30s get persistentvolumeclaims --all-namespaces --output=json"
+    "kubectl --context=ctx --request-timeout=30s get pods --all-namespaces --output=json"
+    "kubectl --context=ctx --request-timeout=30s get storageclasses --all-namespaces --output=json"],
    :checks
    [{:description "the fire-drill namespace is gone",
      :timeout 180,
-     :interval 10}],
-   :record {:applied 0, :verified false},
+     :interval 10}
+    {:description
+     "the fire is out: the storage detective no longer reports it",
+     :timeout 60,
+     :interval 15}],
+   :record
+   {:applied 1,
+    :verified false,
+    :recovery
+    {:text
+     "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
    :out
-   ["✅ fire extinguished, drill namespace deleted"
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire-drill namespace is gone"]},
+    "❌ NOT verified within 0s: the fire-drill namespace is gone"
+    "❌ NOT verified within 0s: the fire is out: the storage detective no longer reports it"]},
   :extinguish-unanswered
   {:result false,
-   :confirmations [],
+   :confirmations
+   [{:action "put out the fire: delete the fire-drill namespace",
+     :target "cluster",
+     :items ["namespace fire-drill and everything in it"]}],
    :announcements [],
    :calls
    ["kubectl --context=ctx delete namespace fire-drill --ignore-not-found"
-    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"],
+    "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"
+    "kubectl --context=ctx --request-timeout=30s get events --all-namespaces --output=json"],
    :checks
    [{:description "the fire-drill namespace is gone",
      :timeout 180,
-     :interval 10}],
-   :record {:applied 0, :verified false},
+     :interval 10}
+    {:description
+     "the fire is out: the storage detective no longer reports it",
+     :timeout 60,
+     :interval 15}],
+   :record
+   {:applied 1,
+    :verified false,
+    :recovery
+    {:text
+     "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
    :out
-   ["✅ fire extinguished, drill namespace deleted"
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire-drill namespace is gone"]},
+    "❌ NOT verified within 0s: the fire-drill namespace is gone"
+    "❌ NOT verified within 0s: the fire is out: the storage detective no longer reports it - the last read did not answer: kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"]},
   :ignite
   {:result true,
    :confirmations
@@ -632,21 +860,25 @@
    :announcements [["cluster" "Fire drill started: pending-pvc"]],
    :calls
    ["kubectl --context=ctx apply --filename - <stdin 2 items>"
-    "kubectl --context=ctx --namespace=fire-drill --request-timeout=30s get persistentvolumeclaims pending-pvc --output=json"],
+    "kubectl --context=ctx --request-timeout=30s get events --all-namespaces --output=json"
+    "kubectl --context=ctx --request-timeout=30s get persistentvolumeclaims --all-namespaces --output=json"
+    "kubectl --context=ctx --request-timeout=30s get pods --all-namespaces --output=json"
+    "kubectl --context=ctx --request-timeout=30s get storageclasses --all-namespaces --output=json"],
    :checks
    [{:description
-     "persistentvolumeclaims fire-drill/pending-pvc exists - the fire is burning",
-     :timeout 30}],
-   :record {:applied 0, :thunk :ok, :verified true},
+     "the fire is burning: the storage detective reports it",
+     :timeout 420,
+     :interval 15}],
+   :record {:applied 1, :verified true},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
+    "✅ verified: the fire is burning: the storage detective reports it"
     "✅ fire started in namespace fire-drill"
     "🔥 Let the team find it with the detectives, e.g.:"
     "   bb run runbooks/detectives/cluster.clj"
     "   The drill is over when the findings are green again."
-    "   Extinguish with --extinguish once you are done."
-    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: persistentvolumeclaims fire-drill/pending-pvc exists - the fire is burning"]},
+    "   Extinguish with --extinguish once you are done."]},
   :ignite-apply-fails
   {:result false,
    :confirmations
@@ -657,11 +889,15 @@
    :announcements [["cluster" "Fire drill started: pending-pvc"]],
    :calls ["kubectl --context=ctx apply --filename - <stdin 2 items>"],
    :checks [],
-   :record {:applied 0, :thunk :failed},
+   :record
+   {:applied 0,
+    :stopped "kubectl apply --filename - (with stdin)",
+    :recovery
+    {:text
+     "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "❌ could not start the fire:"
-    "Error from server (Forbidden): refused"]},
+    "❌ Error from server (Forbidden): refused"]},
   :ignite-declined
   {:result false,
    :confirmations
@@ -672,7 +908,12 @@
    :announcements [],
    :calls [],
    :checks [],
-   :record {:applied 0, :aborted "declined at the confirmation"},
+   :record
+   {:applied 0,
+    :aborted "declined at the confirmation",
+    :recovery
+    {:text
+     "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out [""]},
   :ignite-dry-run
   {:result true,
@@ -687,10 +928,9 @@
     "────────────────────────────────────────────────────────────────────────────────"
     "This will start a fire drill: a PersistentVolumeClaim that can never bind on 'cluster':"
     "  - fire-drill/pending-pvc"
-    "🔶 this book does not support --dry-run yet - it declares an :execute! thunk, not an :effect plan"
-    "🔶 nothing was run"]},
+    "  would run: kubectl apply --filename - (with stdin)"]},
   :ignite-unseen
-  {:result true,
+  {:result false,
    :confirmations
    [{:action
      "start a fire drill: a PersistentVolumeClaim that can never bind",
@@ -699,21 +939,25 @@
    :announcements [["cluster" "Fire drill started: pending-pvc"]],
    :calls
    ["kubectl --context=ctx apply --filename - <stdin 2 items>"
-    "kubectl --context=ctx --namespace=fire-drill --request-timeout=30s get persistentvolumeclaims pending-pvc --output=json"],
+    "kubectl --context=ctx --request-timeout=30s get events --all-namespaces --output=json"
+    "kubectl --context=ctx --request-timeout=30s get persistentvolumeclaims --all-namespaces --output=json"
+    "kubectl --context=ctx --request-timeout=30s get pods --all-namespaces --output=json"
+    "kubectl --context=ctx --request-timeout=30s get storageclasses --all-namespaces --output=json"],
    :checks
    [{:description
-     "persistentvolumeclaims fire-drill/pending-pvc exists - the fire is burning",
-     :timeout 30}],
-   :record {:applied 0, :thunk :ok, :verified true},
+     "the fire is burning: the storage detective reports it",
+     :timeout 420,
+     :interval 15}],
+   :record
+   {:applied 1,
+    :verified false,
+    :recovery
+    {:text
+     "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "✅ fire started in namespace fire-drill"
-    "🔥 Let the team find it with the detectives, e.g.:"
-    "   bb run runbooks/detectives/cluster.clj"
-    "   The drill is over when the findings are green again."
-    "   Extinguish with --extinguish once you are done."
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: persistentvolumeclaims fire-drill/pending-pvc exists - the fire is burning"]},
+    "❌ NOT verified within 0s: the fire is burning: the storage detective reports it"]},
   :surface
   {:description
    "Firebook: creates a PersistentVolumeClaim that can never bind",
@@ -726,4 +970,10 @@
    {:installed-tools ["kubectl"],
     :cluster-capabilities [],
     :kubectl-can-create ["namespaces" "persistentvolumeclaims"],
-    :kubectl-can-delete ["namespaces"]}}}}
+    :kubectl-can-delete ["namespaces"],
+    :kubectl-can-get
+    ["namespaces"
+     "persistentvolumeclaims"
+     "pods"
+     "storageclasses"
+     "events"]}}}}

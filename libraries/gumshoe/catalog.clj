@@ -14,7 +14,7 @@
 (def ^:private harness-calls
   "The calls a book uses to enter the harness. The config map is their first
    argument and carries the :description."
-  #{'runbook/execute! 'mutation/book 'detective/book 'playbook/book 'dispatch/book})
+  #{'runbook/execute! 'mutation/book 'detective/book 'playbook/book 'dispatch/book 'firebook/book})
 
 (defn- forms-of
   [file]
