@@ -10,8 +10,11 @@
      Pod's node affinity/selector. preemption: ...
 
    which names one cause per group of nodes. `causes` turns it into data, ranked
-   by how many nodes each cause rejected, with what to do about each."
-  (:require [clojure.string :as str]))
+   by how many nodes each cause rejected, with what to do about each. `lead`
+   reorders them for one pod, so that what rejected the nodes the pod would
+   accept comes before the nodes its own placement rules exclude."
+  (:require [clojure.set]
+            [clojure.string :as str]))
 
 (def ^:private classes
   "Ordered: the first pattern that matches a clause names its cause, so the
@@ -29,7 +32,7 @@
     :explain (fn [[_ taint]] (str "have a taint the pod does not tolerate" (when taint (str " " taint))))
     :action (constantly "add a toleration to the pod, or free nodes without that taint")}
    {:cause :node-affinity
-    :pattern #"node affinity/selector|node\(s\) didn't match node selector"
+    :pattern #"(?<!volume )node affinity|node\(s\) didn't match node selector|plugin\(s\) \[[^\]]*NodeAffinity"
     :explain (constantly "lack labels the pod's nodeSelector or node affinity requires")
     :action (constantly "compare the pod's nodeSelector/affinity with the node labels")}
    {:cause :pod-anti-affinity
@@ -93,8 +96,60 @@
                  (assoc (classify text) :nodes (parse-long n)))))
        (sort-by :nodes >)))
 
+(defn total
+  "How many nodes the scheduler considered, read from '0/52 nodes are
+   available', or nil when the message does not say."
+  [message]
+  (some-> (re-find #"\d+/(\d+) nodes are available" (str message)) second parse-long))
+
+(defn- pinned-term
+  "The node names one nodeSelectorTerm admits by matchFields metadata.name In,
+   or nil when the term selects by anything else as well."
+  [{:keys [matchFields matchExpressions]}]
+  (let [[field & more] matchFields]
+    (when (and field (empty? more) (empty? matchExpressions)
+               (= "metadata.name" (:key field)) (= "In" (:operator field)))
+      (set (:values field)))))
+
+(defn placement
+  "What a pod's required node selection says about where it may run:
+   :restricted? when it has a nodeSelector or required node affinity, and
+   :pinned, the set of node names it admits, when every required term names
+   its nodes by matchFields metadata.name, as a DaemonSet pod's does."
+  [pod]
+  (let [terms (-> pod :spec :affinity :nodeAffinity
+                  :requiredDuringSchedulingIgnoredDuringExecution :nodeSelectorTerms)
+        pinned (map pinned-term terms)]
+    {:pinned (when (and (seq terms) (every? some? pinned)) (apply clojure.set/union pinned))
+     :restricted? (boolean (or (seq terms) (seq (-> pod :spec :nodeSelector))))}))
+
+(defn- structural?
+  "Whether a node-affinity cause only counts nodes the pod's own placement
+   excludes. It is when the pod restricts its nodes, another cause rejected
+   the nodes it accepts, and, for a pinned pod, its count fits within the
+   nodes outside the pin, so none of the pinned nodes is among them."
+  [cause others {:keys [pinned restricted?]} total]
+  (and (= :node-affinity (:cause cause))
+       restricted?
+       (boolean (some #(not= :node-affinity (:cause %)) others))
+       (or (nil? pinned) (nil? total) (<= (:nodes cause) (- total (count pinned))))))
+
+(defn lead
+  "The causes of a pod's message, each marked :structural when it only counts
+   nodes the pod's own placement excludes, with those last. The first cause
+   is what blocks the pod on the nodes that could host it."
+  [message pod]
+  (let [causes (causes message)
+        place (placement pod)
+        n (total message)
+        marked (map #(assoc % :structural (structural? % causes place n)) causes)]
+    (concat (remove :structural marked) (filter :structural marked))))
+
 (defn describe
-  "One line per cause, for a hint."
+  "One line per cause, for a hint. A structural cause says that the pod's own
+   node selection excludes those nodes instead of suggesting an action."
   [causes]
-  (str/join "; " (for [{:keys [nodes explain action]} causes]
-                   (str nodes " node(s) " explain (when action (str " - " action))))))
+  (str/join "; " (for [{:keys [nodes explain action structural]} causes]
+                   (str nodes " node(s) " explain
+                        (cond structural " - excluded by the pod's own node selection"
+                              action (str " - " action))))))

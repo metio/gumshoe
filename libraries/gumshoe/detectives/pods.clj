@@ -143,8 +143,9 @@
 
 (defn- pending-finding
   "What a Pending pod waits for. A pod the scheduler rejected gets the causes
-   from the scheduler's message, and turns critical once it has waited 10
-   minutes; a pod held by scheduling gates waits on purpose. A pod already
+   from the scheduler's message, led by what blocks it on the nodes it could
+   run on and kept in full under :causes, and turns critical once it has
+   waited 10 minutes; a pod held by scheduling gates waits on purpose. A pod already
    bound to a node is left to the pod-startup detective."
   [pod now]
   (let [component (kubectl/namespace-name-of pod)
@@ -159,7 +160,8 @@
        :hint "a controller removes the gates when the pod may be scheduled"}
 
       (and (= "False" (:status condition)) (= "Unschedulable" (:reason condition)))
-      (let [causes (scheduling/causes (:message condition))
+      (let [causes (vec (scheduling/lead (:message condition) pod))
+            pinned (:pinned (scheduling/placement pod))
             stuck? (and since now
                         (.isBefore ^java.time.Instant since
                                    (.minus ^java.time.Instant now
@@ -170,7 +172,11 @@
           :summary (if-let [top (first causes)]
                      (format "pod is unschedulable: %d node(s) %s" (:nodes top) (:explain top))
                      "pod is unschedulable")
-          :hint (if (seq causes) (scheduling/describe causes) (:message condition))}
+          :hint (if (seq causes)
+                  (str (when (= 1 (count pinned)) (str "pinned to node " (first pinned) "; "))
+                       (scheduling/describe causes))
+                  (:message condition))
+          :causes causes}
          since))
 
       ;; a pod bound to a node waits for its kubelet; pod-startup reads why

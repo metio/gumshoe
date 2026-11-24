@@ -133,6 +133,11 @@ and outcome; the path is printed after the final banner.
   a Deployment's replica or rollout finding under the `pod-creation` refusal
   of its current ReplicaSet. Fix the parent first.
 - `since` is when the problem began, where the API records it.
+- An unschedulable pod's finding also carries `causes`, every reason the
+  scheduler gave with its node count. Its summary names the first: what
+  rejected the nodes the pod could run on. A cause marked `structural` only
+  counts nodes the pod's own nodeSelector or node affinity excludes, such as
+  the other nodes of a DaemonSet pod pinned to one node, and comes last.
 - `checked` lists every detective that ran. An entry with `unread` read
   nothing, for example because the cluster does not serve that CRD or RBAC
   refused the read, or because the scope it judges selected no subjects, so
