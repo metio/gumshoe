@@ -253,6 +253,13 @@
       (str emoji " " kind)
       (format "%s %s · %s" emoji kind description))))
 
+(def ^:dynamic *loading*
+  "While true, execute! hands back its config and does nothing else: no
+   plugin loads, no argument parse, no action. Every harness entry point goes
+   through execute!, so a book loaded under this binding is analysed - every
+   symbol it names must resolve - without running."
+  false)
+
 (defn execute!
   "Runs a runbook described by a config map:
 
@@ -264,97 +271,101 @@
    :details       optional lines --help shows under the description; an
                   unindented line is a heading
 
-   ctx contains :announcement-data when :announce? is true."
+   ctx contains :announcement-data when :announce? is true. Under *loading*
+   it returns the config untouched."
   [{:keys [description options prerequisites announce? action details]
-    :or {options {} prerequisites {} announce? true}}]
-  (let [spec {:spec (merge options standard-options)
-              :restrict true
-              :error-fn (fn [{:keys [type cause msg option]}]
-                          (when (= :org.babashka/cli type)
-                            (case cause
-                              :require (stdout/error (format "missing required option: --%s" (name option)))
-                              :validate (stdout/error (format "invalid value for option --%s: %s" (name option) msg))
-                              (stdout/error msg))
-                            (System/exit 1)))}]
-    (when (some #{"--no-color"} *command-line-args*) (stdout/disable-colors!))
-    ;; load the configured plugins - their code is already on the classpath via
-    ;; deps - before the parse, which validates --output against the formats
-    ;; they register, and before anything in this run reaches for their
-    ;; announcers, detectives and the like
-    (plugins/load!)
-    ;; help is answered before the strict parse, so required options never
-    ;; stand between the user and the usage text
-    (if (some #{"-h" "--help"} *command-line-args*)
-      (println (help-text description spec details))
-      (let [opts (cli/parse-opts *command-line-args* spec)]
-        ;; select the output theme and the interactive backend from env.edn (or a
-        ;; plugin's, just loaded) before anything prints or prompts
-        (theme/apply!)
-        (ui/activate!)
-        (when-not (prerequisites? prerequisites opts)
-          (stdout/print-banner stdout/red (str (theme/token :error) " PREREQUISITES NOT MET - nothing was attempted"))
-          (stdout/err-println "Next: install the missing tools, connect to the right cluster/VPN, or fix the")
-          (stdout/err-println (str "      access shown with a " (theme/token :check-error) " above, then run this book again."))
-          (System/exit 1))
-        ;; global pre-execution gates (change freeze, required ack) may veto the
-        ;; run before it touches anything - they apply to every book, unlike a
-        ;; book's own declared prerequisites
-        (let [gate (hooks/run-pre-hooks! {:description description
-                                          :book (System/getProperty "babashka.file")
-                                          :opts opts
-                                          :change? (boolean announce?)})]
-          (when-not (:allowed? gate)
-            (stdout/print-banner stdout/red (str (theme/token :error) " BLOCKED - " (:reason gate)))
-            (System/exit 1)))
-        (let [ctx (when announce? {:announcement-data (announcement-data)})]
-          (stdout/print-section (book-heading (System/getProperty "babashka.file") description))
-          ;; an unexpected exception must still land on the red banner with a
-          ;; clean message, never a raw stack trace - the exit code stays 1 so
-          ;; scripts and ./detect see the failure
-          (let [record (outcome/fresh)
-                outcome (try
-                          (binding [flow/*dry-run* (boolean (:dry-run opts))
-                                    outcome/*record* record]
-                            (if (action opts ctx) :ok :failed))
-                          ;; Throwable, not Exception: an Error from the action
-                          ;; must still land on the red banner and the recording,
-                          ;; not skip them with a raw stack trace.
-                          (catch Throwable e
-                            (stdout/error "unexpected error:" (or (ex-message e) (str e)))
-                            :error))
-                ;; every run leaves an audit trail: input vars, selections, commands
-                recording-path (recording/save! {:book-file (System/getProperty "babashka.file")
-                                                 :description description
-                                                 :opts opts
-                                                 :outcome outcome
-                                                 :meta (:announcement-data ctx)})]
-            ;; the final banner leaves no doubt about the outcome, even at 3am
-            (let [{:keys [tone text]} (outcome/banner {:dry-run? (boolean (:dry-run opts))
-                                                        :changes? (boolean announce?)
-                                                        :outcome outcome
-                                                        :findings? (summary/captured?)}
-                                                       @record)]
-              (case tone
-                :ok (stdout/print-banner stdout/green (str (theme/token :ok) " " text))
-                :neutral (stdout/print-banner stdout/yellow (str (theme/token :warn) " " text))
-                (stdout/print-banner stdout/red (str (theme/token :error) " " text))))
-            ;; run summary: where the record is, how to reproduce, how to dig in together
-            (when recording-path
-              (stdout/err-println (format "📼 Recording: %s" (stdout/shorten-path recording-path))))
-            (when-not announce?
-              ;; the exact CLI calls behind a read-only book's output are safe to replay
-              (reproducer/offer! description)
-              ;; the findings themselves, as Markdown, for a shared pad or a ticket
-              (summary/offer! description)
-              ;; something turned up - offer a shared terminal to investigate together
-              (when (= :failed outcome)
-                (upterm/offer!)))
-            ;; post-execution hooks observe the finished run (metrics, audit
-            ;; forwarding, status pages) - bounded so none can block the exit
-            (hooks/run-post-hooks! {:description description
-                                    :book (System/getProperty "babashka.file")
-                                    :opts opts
-                                    :outcome outcome
-                                    :recording-path recording-path
-                                    :meta (:announcement-data ctx)})
-            (System/exit (outcome/exit-code outcome @record))))))))
+    :or {options {} prerequisites {} announce? true}
+    :as config}]
+  (if *loading*
+    config
+    (let [spec {:spec (merge options standard-options)
+                :restrict true
+                :error-fn (fn [{:keys [type cause msg option]}]
+                            (when (= :org.babashka/cli type)
+                              (case cause
+                                :require (stdout/error (format "missing required option: --%s" (name option)))
+                                :validate (stdout/error (format "invalid value for option --%s: %s" (name option) msg))
+                                (stdout/error msg))
+                              (System/exit 1)))}]
+      (when (some #{"--no-color"} *command-line-args*) (stdout/disable-colors!))
+      ;; load the configured plugins - their code is already on the classpath via
+      ;; deps - before the parse, which validates --output against the formats
+      ;; they register, and before anything in this run reaches for their
+      ;; announcers, detectives and the like
+      (plugins/load!)
+      ;; help is answered before the strict parse, so required options never
+      ;; stand between the user and the usage text
+      (if (some #{"-h" "--help"} *command-line-args*)
+        (println (help-text description spec details))
+        (let [opts (cli/parse-opts *command-line-args* spec)]
+          ;; select the output theme and the interactive backend from env.edn (or a
+          ;; plugin's, just loaded) before anything prints or prompts
+          (theme/apply!)
+          (ui/activate!)
+          (when-not (prerequisites? prerequisites opts)
+            (stdout/print-banner stdout/red (str (theme/token :error) " PREREQUISITES NOT MET - nothing was attempted"))
+            (stdout/err-println "Next: install the missing tools, connect to the right cluster/VPN, or fix the")
+            (stdout/err-println (str "      access shown with a " (theme/token :check-error) " above, then run this book again."))
+            (System/exit 1))
+          ;; global pre-execution gates (change freeze, required ack) may veto the
+          ;; run before it touches anything - they apply to every book, unlike a
+          ;; book's own declared prerequisites
+          (let [gate (hooks/run-pre-hooks! {:description description
+                                            :book (System/getProperty "babashka.file")
+                                            :opts opts
+                                            :change? (boolean announce?)})]
+            (when-not (:allowed? gate)
+              (stdout/print-banner stdout/red (str (theme/token :error) " BLOCKED - " (:reason gate)))
+              (System/exit 1)))
+          (let [ctx (when announce? {:announcement-data (announcement-data)})]
+            (stdout/print-section (book-heading (System/getProperty "babashka.file") description))
+            ;; an unexpected exception must still land on the red banner with a
+            ;; clean message, never a raw stack trace - the exit code stays 1 so
+            ;; scripts and ./detect see the failure
+            (let [record (outcome/fresh)
+                  outcome (try
+                            (binding [flow/*dry-run* (boolean (:dry-run opts))
+                                      outcome/*record* record]
+                              (if (action opts ctx) :ok :failed))
+                            ;; Throwable, not Exception: an Error from the action
+                            ;; must still land on the red banner and the recording,
+                            ;; not skip them with a raw stack trace.
+                            (catch Throwable e
+                              (stdout/error "unexpected error:" (or (ex-message e) (str e)))
+                              :error))
+                  ;; every run leaves an audit trail: input vars, selections, commands
+                  recording-path (recording/save! {:book-file (System/getProperty "babashka.file")
+                                                   :description description
+                                                   :opts opts
+                                                   :outcome outcome
+                                                   :meta (:announcement-data ctx)})]
+              ;; the final banner leaves no doubt about the outcome, even at 3am
+              (let [{:keys [tone text]} (outcome/banner {:dry-run? (boolean (:dry-run opts))
+                                                          :changes? (boolean announce?)
+                                                          :outcome outcome
+                                                          :findings? (summary/captured?)}
+                                                         @record)]
+                (case tone
+                  :ok (stdout/print-banner stdout/green (str (theme/token :ok) " " text))
+                  :neutral (stdout/print-banner stdout/yellow (str (theme/token :warn) " " text))
+                  (stdout/print-banner stdout/red (str (theme/token :error) " " text))))
+              ;; run summary: where the record is, how to reproduce, how to dig in together
+              (when recording-path
+                (stdout/err-println (format "📼 Recording: %s" (stdout/shorten-path recording-path))))
+              (when-not announce?
+                ;; the exact CLI calls behind a read-only book's output are safe to replay
+                (reproducer/offer! description)
+                ;; the findings themselves, as Markdown, for a shared pad or a ticket
+                (summary/offer! description)
+                ;; something turned up - offer a shared terminal to investigate together
+                (when (= :failed outcome)
+                  (upterm/offer!)))
+              ;; post-execution hooks observe the finished run (metrics, audit
+              ;; forwarding, status pages) - bounded so none can block the exit
+              (hooks/run-post-hooks! {:description description
+                                      :book (System/getProperty "babashka.file")
+                                      :opts opts
+                                      :outcome outcome
+                                      :recording-path recording-path
+                                      :meta (:announcement-data ctx)})
+              (System/exit (outcome/exit-code outcome @record)))))))))

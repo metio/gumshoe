@@ -296,3 +296,13 @@ identifier passes. `conformance/findings-in` returns the findings as data
 instead, for a test or a bespoke report. Loading the plugins does not parse
 a book, so a casebook gate without this check passes a book nobody can
 run.
+
+The check, and gumshoe's own suite, also load every book that parses, in the one babashka process
+the task runs in, with `gumshoe.runbook/*loading*` bound so the harness
+hands back the book's config instead of running it. A book naming a
+function that does not exist, `reset/action-in-flight?` after a library
+dropped it, is reported as `load` with the book and the symbol named, and
+nobody has to run the book to find out. The casebook's `libraries` (or the
+`:libraries` roots) go on the classpath first; `:load? false` skips the
+step. A book's top-level forms other than its harness call still run while
+it loads, so they must not act on anything.

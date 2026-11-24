@@ -27,8 +27,9 @@ bb verify       # check your books and libraries; run it in CI
 `bb verify` runs gumshoe's conformance rules (`gumshoe.conformance`) against
 this casebook: every file under `runbooks/`, `playbooks/`, `firebooks/` and
 `libraries/` parses and carries its license and a namespace docstring, and
-every book enters the harness once, describes itself and documents its
-options. Each finding names its file, and the task exits 1 when there is
+every book enters the harness once, describes itself, documents its
+options and loads, without running, so a symbol that resolves to nothing
+fails here. Each finding names its file, and the task exits 1 when there is
 any. It needs a pinned gumshoe release that ships `gumshoe.conformance`.
 
 gumshoe's `catalog` discovers books from the whole classpath, so your `runbooks/`

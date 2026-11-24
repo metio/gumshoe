@@ -47,6 +47,22 @@
 (deftest every-book-describes-itself
   (assert-none (conformance/undescribed-books (parsed book-files))))
 
+(def ^:private tool-book-files
+  (conformance/clj-files (for [tool (fs/list-dir "tools")
+                               root ["runbooks" "playbooks" "firebooks"]]
+                           (str (fs/path tool root)))))
+
+(deftest every-book-loads
+  ;; Every book is loaded in this one process with the harness told not to
+  ;; run, so a book referring to a var that does not exist fails here.
+  (assert-none (conformance/unloadable (concat book-files tool-book-files))))
+
+(deftest every-casebook-example-book-loads
+  (assert-none (conformance/unloadable
+                (conformance/clj-files ["casebook-example/runbooks" "casebook-example/playbooks"
+                                        "casebook-example/firebooks"])
+                {:classpath ["casebook-example/libraries"]})))
+
 (deftest every-option-is-documented-and-aliases-never-collide
   (assert-none (conformance/option-problems (parsed book-files))))
 
