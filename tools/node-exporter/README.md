@@ -19,7 +19,7 @@ Prometheus, Thanos Query or Mimir, using `gumshoe.promql` from core.
   no host reports that nothing was checked and exits 1.
 
 ```shell
-bb tools/node-exporter/runbooks/facts.clj --url https://thanos.example.org --flavor thanos \
+bb run tools/node-exporter/runbooks/facts.clj --url https://thanos.example.org --flavor thanos \
    --host-label node --selector 'cluster="staging"' --declared staging-hosts.txt --output json
 ```
 

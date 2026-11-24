@@ -6,6 +6,12 @@
  {gumshoe {:doc "The guided front door - menu, lead shortcut, or fuzzy book search"
            :requires ([gumshoe.main :as main])
            :task (System/exit (main/front-door *command-line-args*))}
+  ;; babashka has a built-in `run`; the task replaces it, so `bb run <path>`
+  ;; runs a listed book here exactly as it does in a casebook
+  run {:doc "Launch a book - by fuzzy search, or by the path --list prints"
+       :override-builtin true
+       :requires ([gumshoe.main :as main])
+       :task (System/exit (main/run *command-line-args*))}
   smoke-runbooks {:doc "Runs the remediation runbooks against the current kind cluster"
                   :task (shell "tests/smoke/runbooks.sh")}
   test {:doc "Runs all unit tests"

@@ -46,7 +46,7 @@ suspects: `kubectl`, `fzf`, `dig`, `gopass`. For everything else, run the book
 and read the checklist it prints.
 
 ```shell
-bb runbooks/detectives/cluster.clj    # it tells you if a tool is missing
+bb run runbooks/detectives/cluster.clj    # it tells you if a tool is missing
 ```
 
 **Your first steps, in order:**
@@ -63,7 +63,7 @@ bb runbooks/detectives/cluster.clj    # it tells you if a tool is missing
    directly reachable as their own scripts - `./investigate`, `./detect`, and
    `./run` - for muscle memory and scripting; each is a thin wrapper over the
    same front-door function.
-2. `bb <any book> --help` - every book explains itself, its options, and its
+2. `bb run <path> --help` - every book explains itself, its options, and its
    defaults.
 3. Run any detective - they are read-only and can never break anything.
 4. Run a runbook without flags - it walks you through selection interactively,
@@ -83,7 +83,7 @@ connectivity to the systems it touches, and the permissions of the user running
 it.
 
 **Host-specific config (`env.edn`).** Optional, gitignored, per machine. Run
-`bb runbooks/setup/init.clj` and it builds one *with* you - detecting the
+`bb run runbooks/setup/init.clj` and it builds one *with* you - detecting the
 Kubernetes cluster you are on and the VPN-looking interfaces on this host,
 asking for your ceph mgr host, and writing a tidy env.edn. Or copy
 `env.edn.example` to `env.edn` and edit by hand. It lets you name your VPN
@@ -135,28 +135,26 @@ did that change, and with what inputs" a week later, it is on disk.
 (on a real terminal, only if [upterm](https://upterm.dev/) is installed,
 defaulting to No) to open a shared terminal. upterm prints an SSH join command
 you hand to your team and they attach instantly - access is key-gated. Start
-one proactively any time with `bb runbooks/collaborate/share.clj` (restrict who
+one proactively any time with `bb run runbooks/collaborate/share.clj` (restrict who
 joins with `--with alice --with bob`).
 
 ## Execution
 
 ```shell
-bb runbooks/<GROUP>[/<SUB_GROUP>]/<ACTION>.clj [options]
+bb run runbooks/<GROUP>[/<SUB_GROUP>]/<ACTION>.clj [options]
 ```
 
-The `bb <path>` form runs a book by its file path - the way you work **inside a
-clone of this repo**, where every book is present on disk. From a **casebook**
-(where gumshoe is a git dependency), its built-in books live in the dependency
-cache (`GITLIBS`, i.e. `~/.gitlibs`), not your working tree, so a repo-relative
-`bb runbooks/...` finds nothing. Launch them through the front door instead -
-`bb run <path>`, `bb gumshoe <path>`, `bb run <name>`, `bb detect`, or
-`bb gumshoe <search>` - which resolves a book from the classpath wherever it
-physically sits and runs it. A path is the one `bb run --list` (or
-`bb gumshoe --list`) prints, such as `runbooks/detectives/cluster.clj`; it stays
-the same when the gumshoe pin moves, and a casebook book at the same path wins
-over the built-in. The examples below use the in-repo path form; from a
-casebook, read `bb runbooks/detectives/cluster.clj` as
-`bb run runbooks/detectives/cluster.clj`.
+`bb run <path>` runs a book by the path `bb run --list` (or `bb gumshoe --list`)
+prints, such as `runbooks/detectives/cluster.clj`, so a line of the listing
+runs as printed. It works the same in a clone of this repo and in a **casebook**
+(where gumshoe is a git dependency): the run door resolves the path from the
+classpath wherever the book physically sits, the dependency cache (`GITLIBS`,
+i.e. `~/.gitlibs`) included, the path stays the same when the gumshoe pin moves,
+and a casebook book at the same path wins over the built-in. `bb gumshoe <path>`
+does the same, and `bb run <name>`, `bb detect` and `bb gumshoe <search>` find a
+book for you. Bare `bb <path>` is babashka loading a file from the working
+directory: it runs gumshoe's books only inside a clone of this repo, and from a
+casebook it finds only the casebook's own files.
 
 Every book behaves the same way:
 
@@ -225,21 +223,21 @@ Detectives collect evidence from the cluster once, then run pure checks over
 it. They compose from single domain to full cluster:
 
 ```shell
-bb runbooks/detectives/cluster.clj        # everything
-bb runbooks/detectives/workloads.clj      # controllers, jobs, pods, Services, storage
-bb runbooks/detectives/platform.clj       # nodes, cluster autoscaler + calico
-bb runbooks/detectives/upgrade.clj        # before a minor upgrade
-bb runbooks/detectives/databases.clj      # CloudNativePG + db-operator
-bb runbooks/detectives/observability.clj  # Prometheus, Alertmanager, Thanos
-bb runbooks/detectives/events.clj         # Warning events, last hour
-bb runbooks/detectives/rbac.clj           # admins, wildcards, secret readers
-bb runbooks/detectives/security.clj       # RBAC + pod security + NetPol
-bb runbooks/detectives/posture.clj        # probes, image tags, replicas, PDBs, deprecated APIs, template drift
-bb runbooks/detectives/dns.clj            # nameservers, SOA replication
-bb runbooks/detectives/mail.clj           # MX/SPF/DKIM/DMARC/rDNS + TLS
-bb runbooks/detectives/fabric.clj         # EVPN-VXLAN MAC ownership, over ssh
+bb run runbooks/detectives/cluster.clj        # everything
+bb run runbooks/detectives/workloads.clj      # controllers, jobs, pods, Services, storage
+bb run runbooks/detectives/platform.clj       # nodes, cluster autoscaler + calico
+bb run runbooks/detectives/upgrade.clj        # before a minor upgrade
+bb run runbooks/detectives/databases.clj      # CloudNativePG + db-operator
+bb run runbooks/detectives/observability.clj  # Prometheus, Alertmanager, Thanos
+bb run runbooks/detectives/events.clj         # Warning events, last hour
+bb run runbooks/detectives/rbac.clj           # admins, wildcards, secret readers
+bb run runbooks/detectives/security.clj       # RBAC + pod security + NetPol
+bb run runbooks/detectives/posture.clj        # probes, image tags, replicas, PDBs, deprecated APIs, template drift
+bb run runbooks/detectives/dns.clj            # nameservers, SOA replication
+bb run runbooks/detectives/mail.clj           # MX/SPF/DKIM/DMARC/rDNS + TLS
+bb run runbooks/detectives/fabric.clj         # EVPN-VXLAN MAC ownership, over ssh
 ./detect                                  # interactive: pick what hurts
-bb runbooks/detectives/cluster.clj --output json    # machine-readable, jq-able
+bb run runbooks/detectives/cluster.clj --output json    # machine-readable, jq-able
 ```
 
 Each [tool package](#casebooks--plugins) brings a scan of the one system it
@@ -248,32 +246,32 @@ knows, and registers its detectives into the composed scopes above - so
 Reach for the focused scan when you know which system is in trouble:
 
 ```shell
-bb tools/flux/runbooks/gitops.clj         # flux sources + reconciliation
-bb tools/argocd/runbooks/scan.clj         # Argo CD Applications, syncs, ApplicationSets
-bb tools/stageset/runbooks/scan.clj       # StageSet staged rollouts
-bb tools/flagger/runbooks/scan.clj        # Flagger Canaries
-bb tools/jaas/runbooks/scan.clj           # JaaS snippets + published artifacts
-bb tools/certmanager/runbooks/scan.clj    # certificates, sour ACME orders
-bb tools/gateway/runbooks/scan.clj        # Gateways, listeners, HTTPRoutes
-bb tools/external-dns/runbooks/scan.clj   # declared hostnames resolve
-bb tools/cluster-api/runbooks/scan.clj    # Cluster API Clusters, Machines, MHCs
-bb tools/crossplane/runbooks/scan.clj     # Crossplane packages
-bb tools/traefik/runbooks/scan.clj        # Traefik routes and middlewares that do not resolve
-bb tools/node-exporter/runbooks/facts.clj # host facts from node_exporter, declared vs reporting hosts
-bb tools/karpenter/runbooks/scan.clj      # Karpenter NodePools, NodeClaims
-bb tools/strimzi/runbooks/scan.clj        # Strimzi Kafka, Connect, connectors, topics
-bb tools/kueue/runbooks/scan.clj          # Kueue queues, Workloads
-bb tools/velero/runbooks/scan.clj         # Velero storage, schedules, backups, restores
-bb tools/calico/runbooks/scan.clj         # tigera-operator components
-bb tools/cnpg/runbooks/scan.clj           # CloudNativePG clusters, WAL archiving
-bb tools/prometheus/runbooks/scan.clj     # Prometheus, Alertmanager, ThanosRuler
-bb tools/thanos/runbooks/scan.clj         # Thanos Query: stores, rules
-bb tools/loki/runbooks/scan.clj           # Loki readiness + ring health
-bb tools/matrix/runbooks/scan.clj         # client/federation APIs, keys
-bb tools/upload/runbooks/scan.clj -n moodle             # nginx/php-fpm uploads
-bb tools/restic/runbooks/scan.clj -r s3:backups         # backups landing or stale?
-bb tools/opennebula/runbooks/scan.clj --frontend one-fe # hosts, VMs, datastores
-bb tools/ceph/runbooks/scan.clj --host mgr-1            # health, OSDs, PGs, quorum
+bb run tools/flux/runbooks/gitops.clj         # flux sources + reconciliation
+bb run tools/argocd/runbooks/scan.clj         # Argo CD Applications, syncs, ApplicationSets
+bb run tools/stageset/runbooks/scan.clj       # StageSet staged rollouts
+bb run tools/flagger/runbooks/scan.clj        # Flagger Canaries
+bb run tools/jaas/runbooks/scan.clj           # JaaS snippets + published artifacts
+bb run tools/certmanager/runbooks/scan.clj    # certificates, sour ACME orders
+bb run tools/gateway/runbooks/scan.clj        # Gateways, listeners, HTTPRoutes
+bb run tools/external-dns/runbooks/scan.clj   # declared hostnames resolve
+bb run tools/cluster-api/runbooks/scan.clj    # Cluster API Clusters, Machines, MHCs
+bb run tools/crossplane/runbooks/scan.clj     # Crossplane packages
+bb run tools/traefik/runbooks/scan.clj        # Traefik routes and middlewares that do not resolve
+bb run tools/node-exporter/runbooks/facts.clj # host facts from node_exporter, declared vs reporting hosts
+bb run tools/karpenter/runbooks/scan.clj      # Karpenter NodePools, NodeClaims
+bb run tools/strimzi/runbooks/scan.clj        # Strimzi Kafka, Connect, connectors, topics
+bb run tools/kueue/runbooks/scan.clj          # Kueue queues, Workloads
+bb run tools/velero/runbooks/scan.clj         # Velero storage, schedules, backups, restores
+bb run tools/calico/runbooks/scan.clj         # tigera-operator components
+bb run tools/cnpg/runbooks/scan.clj           # CloudNativePG clusters, WAL archiving
+bb run tools/prometheus/runbooks/scan.clj     # Prometheus, Alertmanager, ThanosRuler
+bb run tools/thanos/runbooks/scan.clj         # Thanos Query: stores, rules
+bb run tools/loki/runbooks/scan.clj           # Loki readiness + ring health
+bb run tools/matrix/runbooks/scan.clj         # client/federation APIs, keys
+bb run tools/upload/runbooks/scan.clj -n moodle             # nginx/php-fpm uploads
+bb run tools/restic/runbooks/scan.clj -r s3:backups         # backups landing or stale?
+bb run tools/opennebula/runbooks/scan.clj --frontend one-fe # hosts, VMs, datastores
+bb run tools/ceph/runbooks/scan.clj --host mgr-1            # health, OSDs, PGs, quorum
 ```
 
 Diagnostics go to stderr and results go to stdout, so `--output json | jq
@@ -327,13 +325,13 @@ bootstrap binary, `--cephadm-shell` wraps every command in `sudo cephadm shell
 -- ...` instead. Nothing is assumed about the host OS beyond ssh.
 
 ```shell
-bb tools/ceph/runbooks/status.clj --host mgr-1          # status + health detail
-bb tools/ceph/runbooks/scan.clj --host mgr-1            # health, OSDs, PGs, quorum
-bb tools/ceph/runbooks/archive_crashes.clj --host mgr-1 # ack inspected crash reports
-bb tools/ceph/runbooks/restart_daemon.clj --host mgr-1 --daemon osd.3
-bb tools/ceph/runbooks/osd_out.clj --host mgr-1 --osd 3 # data migrates away
-bb tools/ceph/runbooks/osd_in.clj --host mgr-1 --osd 3  # data migrates back
-bb tools/ceph/playbooks/upgrade.clj --host mgr-1 --target-version 17.2.9  # upgrade
+bb run tools/ceph/runbooks/status.clj --host mgr-1          # status + health detail
+bb run tools/ceph/runbooks/scan.clj --host mgr-1            # health, OSDs, PGs, quorum
+bb run tools/ceph/runbooks/archive_crashes.clj --host mgr-1 # ack inspected crash reports
+bb run tools/ceph/runbooks/restart_daemon.clj --host mgr-1 --daemon osd.3
+bb run tools/ceph/runbooks/osd_out.clj --host mgr-1 --osd 3 # data migrates away
+bb run tools/ceph/runbooks/osd_in.clj --host mgr-1 --osd 3  # data migrates back
+bb run tools/ceph/playbooks/upgrade.clj --host mgr-1 --target-version 17.2.9  # upgrade
 ```
 
 SSH runs unattended (BatchMode, short connect timeout) with strict host key
@@ -395,9 +393,9 @@ burns inside the `fire-drill` namespace, so extinguishing it is one namespace
 delete and it can never touch real workloads:
 
 ```shell
-bb firebooks/kubernetes/crash_loop.clj                # start the fire
-bb runbooks/detectives/cluster.clj                    # the team hunts it down
-bb firebooks/kubernetes/crash_loop.clj --extinguish   # clean up
+bb run firebooks/kubernetes/crash_loop.clj                # start the fire
+bb run runbooks/detectives/cluster.clj                    # the team hunts it down
+bb run firebooks/kubernetes/crash_loop.clj --extinguish   # clean up
 ```
 
 A fabric drill has no namespace to burn in - it edits a hypervisor's forwarding
@@ -407,9 +405,9 @@ is attracted to that destination. It is inert on any fabric, and still exactly t
 shape `evpn-static-fdb` reports:
 
 ```shell
-bb firebooks/fabric/stale_fdb_entry.clj -H hv-1 -n 4208               # start
-bb runbooks/detectives/fabric.clj --vni 4208                          # hunt
-bb firebooks/fabric/stale_fdb_entry.clj -H hv-1 -n 4208 --extinguish  # clean up
+bb run firebooks/fabric/stale_fdb_entry.clj -H hv-1 -n 4208               # start
+bb run runbooks/detectives/fabric.clj --vni 4208                          # hunt
+bb run firebooks/fabric/stale_fdb_entry.clj -H hv-1 -n 4208 --extinguish  # clean up
 ```
 
 The drill is over when the detectives are green again. Available drills:

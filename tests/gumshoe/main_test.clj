@@ -4,6 +4,7 @@
 (ns gumshoe.main-test
   (:require [babashka.fs :as fs]
             [babashka.process :as process]
+            [clojure.edn]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.catalog]
@@ -166,3 +167,38 @@
       (let [{:keys [exit err]} (bb-in casebook "run" "runbooks/up/ecko.clj")]
         (is (= 1 exit))
         (is (str/includes? err "runbooks/up/echo.clj"))))))
+
+(deftest the-advised-command-runs-a-listed-path-in-a-casebook-test
+  (fs/with-temp-dir [tmp {}]
+    (let [casebook (fs/path tmp "casebook")
+          pin (fs/path tmp "gitlibs" "libs" "io.github.metio" "gumshoe" (apply str (repeat 40 "c")))]
+      (fs/create-dirs (fs/path casebook "runbooks"))
+      (echo-book! pin "upstream")
+      (casebook-edn! casebook pin)
+      (let [listed (first (str/split (:out (bb-in casebook "run" "--list")) #"\t"))
+            [program & args] (str/split (gumshoe.catalog/run-command listed) #" ")]
+        (is (= "bb" program))
+        (is (= "upstream" (:out (apply bb-in casebook args)))
+            "the advice, with a path copied from --list, runs the book")))))
+
+(defn- door-task
+  [bb-edn task]
+  (get-in (clojure.edn/read-string (slurp bb-edn)) [:tasks task]))
+
+(deftest the-advised-command-resolves-every-listed-book-in-this-checkout-test
+  (testing "the checkout and the example casebook wire bb run to the run door"
+    (doseq [bb-edn ["bb.edn" "casebook-example/bb.edn"]
+            :let [task (door-task bb-edn 'run)]]
+      (is (:override-builtin task) (str bb-edn " replaces babashka's built-in run"))
+      (is (= '(System/exit (main/run *command-line-args*)) (:task task))
+          (str bb-edn " hands bb run to gumshoe.main/run"))))
+  (let [books (gumshoe.catalog/books)
+        root (gumshoe.catalog/casebook-root)]
+    (is (seq books))
+    (doseq [line (main/catalog-lines books)
+            :let [listed (first (str/split line #"\t"))
+                  [program door path & more] (str/split (gumshoe.catalog/run-command listed) #" ")]]
+      (is (= ["bb" "run" listed nil] [program door path (first more)]))
+      (is (#'main/book-path? path) (str path " dispatches as a book path"))
+      (is (some-> (:path (gumshoe.catalog/resolve-book path books root)) fs/regular-file?)
+          (str "bb run " path " resolves to a book file")))))

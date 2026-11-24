@@ -7,6 +7,7 @@
    touch production workloads. The drill is over when the detectives are
    green again."
   (:require [cheshire.core :as json]
+            [gumshoe.catalog :as catalog]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]
@@ -84,7 +85,7 @@
     (if (zero? (:exit result))
       (do (stdout/ok (format "fire started in namespace %s" drill-namespace))
           (stdout/err-println "🔥 Let the team find it with the detectives, e.g.:")
-          (stdout/err-println "   bb runbooks/detectives/cluster.clj")
+          (stdout/err-println (str "   " (catalog/run-command "runbooks/detectives/cluster.clj")))
           (stdout/err-println "   The drill is over when the findings are green again.")
           (stdout/err-println "   Extinguish with --extinguish once you are done.")
           true)
