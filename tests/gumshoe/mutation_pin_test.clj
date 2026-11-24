@@ -49,6 +49,10 @@
     (is (true? ((mutation/pinned-precondition nil ref before (constantly (object :generation 3))))))
     (is (false? ((mutation/pinned-precondition nil ref before (constantly (object :generation 4))))))
     (is (false? ((mutation/pinned-precondition (constantly true) ref before (constantly nil)))))
+    (testing "an object not read at confirmation is refused, since nothing confirms what is acted on"
+      (is (false? ((mutation/pinned-precondition nil ref nil (constantly (object :generation 3))))))
+      (is (re-find #"refusing: it could not be read when the change was confirmed"
+                   (with-out-str ((mutation/pinned-precondition nil ref nil (constantly (object :generation 3))))))))
     (testing "a failing book precondition skips the fetch"
       (let [fetched (atom 0)]
         (is (false? ((mutation/pinned-precondition (constantly false) ref before (fn [_] (swap! fetched inc) nil)))))
@@ -90,6 +94,10 @@
       (is (empty? executed))))
   (testing "replaced: refused"
     (is (empty? (:executed (run-with [(object :generation 3) (object :uid "u2" :generation 1)] {})))))
+  (testing "unread at confirmation: refused, whatever exists before the effect"
+    (let [{:keys [executed out]} (run-with [nil (object :uid "u2" :generation 1)] {})]
+      (is (empty? executed))
+      (is (re-find #"refusing: it could not be read when the change was confirmed" out))))
   (testing "a pin returning nil checks nothing"
     (let [{:keys [executed left]} (run-with [] {:pin (constantly nil)})]
       (is (zero? left))
