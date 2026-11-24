@@ -225,7 +225,12 @@ mostly data:
 - a detective book is `(detective/book {:description … :detectives …})`;
 - a uniform change is `(mutation/book {:select … :confirm … :effect …
   :verify …})`, whose effect plan (`[[:kubectl "cordon" node]]`) runs,
-  dry-runs, or is collected in a test; its `:derive` reads the cluster
+  dry-runs, or is collected in a test. An `:effect` returning one effect,
+  such as a bare `(effect/note …)`, runs as a plan of one; anything else
+  that is not a plan, a keyword, a map or a plan holding a non-effect, is
+  refused with an error naming the step and the fix, `effect/plan`, before
+  the step asks for confirmation or runs any of it. In a playbook the steps
+  before it have already run. Its `:derive` reads the cluster
   under `kubectl/*strict-reads*`, as `:select` does, so a read there that
   did not answer stops the book with "could not read what the change rests
   on" before the confirmation, and the `:precondition` never judges an

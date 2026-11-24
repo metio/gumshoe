@@ -4,6 +4,7 @@
 (ns gumshoe.playbook-test
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [gumshoe.effect :as effect]
             [gumshoe.flow :as flow]
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
@@ -360,3 +361,41 @@
                             :recovery "x"}
                            "w-1" {} nil))))
     (is (not (contains? @record :recovery)))))
+
+(deftest a-step-whose-effect-is-not-a-plan-is-refused-before-it-runs
+  (let [ran (atom [])
+        broken {:select {:mode :one :label "Node"}
+                :title "write the reset note"
+                :confirm {:action "note the reset"}
+                :effect (fn [_] (swap! ran conj [:built]) :note)}
+        refusal (fn [dry-run?]
+                  (quietly
+                   (with-redefs [interact/confirm! (constantly true)]
+                     (binding [flow/*dry-run* dry-run?]
+                       (try (playbook/run-on! {:select {:mode :one} :confirm {:action "x"}
+                                               :steps [(change "cordon" ran) broken]}
+                                              "w-1" {} nil)
+                            nil
+                            (catch clojure.lang.ExceptionInfo e (ex-message e)))))))]
+    (doseq [dry-run? [true false]]
+      (testing (if dry-run? "under --dry-run" "in a real run")
+        (reset! ran [])
+        (let [message (refusal dry-run?)]
+          (is (str/includes? (str message) "write the reset note") "the message names the step")
+          (is (str/includes? (str message) "effect/plan"))
+          (is (not (str/includes? (str message) "ISeq"))))))))
+
+(deftest a-step-returning-one-effect-runs-it
+  (let [ran (atom [])
+        lone {:select {:mode :one :label "Node"}
+              :confirm {:action "note the reset"}
+              :effect (fn [_] (swap! ran conj [:lone]) (effect/note "reset done"))}]
+    (doseq [dry-run? [true false]]
+      (reset! ran [])
+      (quietly
+       (with-redefs [interact/confirm! (constantly true)]
+         (binding [flow/*dry-run* dry-run?]
+           (is (true? (playbook/run-on! {:select {:mode :one} :confirm {:action "x"}
+                                         :steps [(change "cordon" ran) lone]}
+                                        "w-1" {} nil))))))
+      (is (= [["cordon" "w-1"] [:lone]] @ran)))))

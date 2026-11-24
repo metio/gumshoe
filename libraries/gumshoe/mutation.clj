@@ -27,7 +27,9 @@
       :precondition (fn [ctx] -> bool)            ; optional, re-checked after confirm;
                                                   ; reads only, a dry run calls it too
       :announce (fn [ctx] -> changelog message)   ; optional
-      :effect   (fn [ctx] -> effect plan)
+      :effect   (fn [ctx] -> effect plan)         ; one effect runs as a plan of one;
+                                                  ; anything else is refused naming
+                                                  ; the step (:title, else the action)
       :verify   (fn [ctx] -> seq of post-check maps)   ; optional
       :derive   (fn [ctx] -> map)   ; optional, values merged into ctx once so a
                                     ; per-run value is shared by :effect and :verify;
@@ -183,6 +185,7 @@
                       :announce! (when announce
                                    #(announce/announce! cluster announcement-data (announce ctx)))
                       :effect (effect ctx)
+                      :step (or (:title spec) (:action confirm))
                       :post-checks (when verify (verify ctx))}))
                   (catch Throwable e (failed!) (throw e)))]
         (when-not ok? (failed!))

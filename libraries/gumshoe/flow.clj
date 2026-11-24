@@ -30,15 +30,16 @@
 
 (defn valid-config?
   "A change may only run when its confirmation can tell the user exactly what
-   is about to happen, and when it declares its work as either an :effect plan
-   or an :execute! thunk."
+   is about to happen, and when it declares its work as either an :effect or
+   an :execute! thunk. Whether the :effect is a plan is checked by change!,
+   which names the step when it is not."
   [{:keys [confirmation execute! effect]}]
   (boolean (and (map? confirmation)
                 (string? (:action confirmation))
                 (not (str/blank? (:action confirmation)))
                 (some? (:target confirmation))
                 (seq (:items confirmation))
-                (or (fn? execute!) (sequential? effect)))))
+                (or (fn? execute!) (some? effect)))))
 
 (defn- verify-result
   [post-checks]
@@ -46,6 +47,24 @@
     (do (stdout/print-section "🔎 Post-check")
         (verify/all post-checks))
     true))
+
+(defn- abbreviated
+  "x printed for a message, cut short so a large value cannot bury it."
+  [x]
+  (let [printed (pr-str x)]
+    (if (> (count printed) 200) (str (subs printed 0 200) "…") printed)))
+
+(defn not-a-plan
+  "The error for a step whose :effect returned `returned`, which is neither a
+   plan nor one effect. `step` names the step; the book is named when the
+   harness runs one."
+  [step returned]
+  (let [book (System/getProperty "babashka.file")]
+    (ex-info (format "the step \"%s\"%s returned %s from its :effect, which is not a plan - an :effect returns a plan, a sequence of effects such as (effect/plan (effect/note \"…\") (effect/kubectl …)); wrap what it returns in effect/plan. Nothing of this step was run."
+                     step
+                     (if book (str " of " book) "")
+                     (abbreviated returned))
+             {:step step :book book :returned returned})))
 
 (defn- do-work!
   "Runs the declared work - the effect plan when present, otherwise the thunk."
@@ -67,7 +86,12 @@
                   truthy to proceed. It must only read: a dry run calls it too,
                   to show whether the current state would let the step run.
    :announce!     optional thunk posting to the changelog
-   :effect        a plan of effect data (preferred - composes and dry-runs)
+   :effect        a plan of effect data (preferred - composes and dry-runs);
+                  one effect is run as a plan of one, and anything else is
+                  refused with an error naming the step, before the
+                  confirmation and before any of it runs
+   :step          optional name of the step for that error, defaulting to
+                  the confirmation's :action
    :execute!      a thunk doing the work, truthy on success (legacy)
    :post-checks   optional seq of verify/eventually maps proving the result
    :confirmed?    the operator already approved this change as part of a
@@ -75,47 +99,51 @@
                   without asking again; the precondition still applies
 
    Returns true only when every step succeeded."
-  [{:keys [confirmation precondition announce! execute! effect post-checks confirmed?] :as config}]
-  (cond
-    (not (valid-config? config))
-    (do (stdout/error "refusing a malformed change: :confirmation needs a non-blank :action, a :target, and :items, and either an :effect plan or an :execute! function")
-        false)
+  [{:keys [confirmation precondition announce! execute! post-checks confirmed? step] :as config}]
+  (let [effect (some-> (:effect config) effect/as-plan)]
+    (cond
+      (not (valid-config? config))
+      (do (stdout/error "refusing a malformed change: :confirmation needs a non-blank :action, a :target, and :items, and either an :effect plan or an :execute! function")
+          false)
 
-    ;; a dry run shows what would happen and changes nothing - no prompt, no
-    ;; announcement, no post-check. A legacy thunk cannot be shown safely, so we
-    ;; refuse rather than run it.
-    ;;
-    ;; The precondition is a read, so the rehearsal runs it and reports a step
-    ;; the current state would refuse. It keeps going: in a playbook a later
-    ;; step's precondition often depends on an earlier step's effect, which a
-    ;; rehearsal never applies, so stopping here would hide the plans after it.
-    *dry-run*
-    (do (stdout/print-banner stdout/blue "🔍 DRY RUN - nothing will be changed")
-        (stdout/err-println (interact/confirmation-message confirmation))
-        (let [shown (if effect
-                      (effect/dry-run effect)
-                      (do (stdout/warn "this book does not support --dry-run yet - it declares an :execute! thunk, not an :effect plan")
-                          (stdout/warn "nothing was run")
-                          true))]
-          (when (and precondition (not (precondition)))
-            (outcome/unmet! (:action confirmation))
-            (stdout/warn "this step's precondition does not hold against the current state - a real run would abort here unless an earlier step changes that"))
-          shown))
+      (and (some? (:effect config)) (nil? effect))
+      (throw (not-a-plan (or step (:action confirmation)) (:effect config)))
 
-    (not (if confirmed?
-           (do (stdout/err-println (interact/confirmation-message confirmation)) true)
-           (interact/confirm! confirmation)))
-    false
+      ;; a dry run shows what would happen and changes nothing - no prompt, no
+      ;; announcement, no post-check. A legacy thunk cannot be shown safely, so we
+      ;; refuse rather than run it.
+      ;;
+      ;; The precondition is a read, so the rehearsal runs it and reports a step
+      ;; the current state would refuse. It keeps going: in a playbook a later
+      ;; step's precondition often depends on an earlier step's effect, which a
+      ;; rehearsal never applies, so stopping here would hide the plans after it.
+      *dry-run*
+      (do (stdout/print-banner stdout/blue "🔍 DRY RUN - nothing will be changed")
+          (stdout/err-println (interact/confirmation-message confirmation))
+          (let [shown (if effect
+                        (effect/dry-run effect)
+                        (do (stdout/warn "this book does not support --dry-run yet - it declares an :execute! thunk, not an :effect plan")
+                            (stdout/warn "nothing was run")
+                            true))]
+            (when (and precondition (not (precondition)))
+              (outcome/unmet! (:action confirmation))
+              (stdout/warn "this step's precondition does not hold against the current state - a real run would abort here unless an earlier step changes that"))
+            shown))
 
-    (and precondition (not (precondition)))
-    (do (outcome/aborted! "the precondition no longer held after the confirmation")
-        (stdout/error "the change was confirmed but its precondition no longer holds - aborting before any action")
-        false)
+      (not (if confirmed?
+             (do (stdout/err-println (interact/confirmation-message confirmation)) true)
+             (interact/confirm! confirmation)))
+      false
 
-    :else
-    (do
-      (when announce! (announce!))
-      (stdout/print-section "⚡ Action")
-      (if (do-work! effect execute!)
-        (verify-result post-checks)
-        false))))
+      (and precondition (not (precondition)))
+      (do (outcome/aborted! "the precondition no longer held after the confirmation")
+          (stdout/error "the change was confirmed but its precondition no longer holds - aborting before any action")
+          false)
+
+      :else
+      (do
+        (when announce! (announce!))
+        (stdout/print-section "⚡ Action")
+        (if (do-work! effect execute!)
+          (verify-result post-checks)
+          false)))))

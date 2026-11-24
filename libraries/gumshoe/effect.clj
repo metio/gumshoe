@@ -8,8 +8,10 @@
    or collected and asserted in a test without a cluster. Plans compose by
    concatenation, so a book builds a big change out of small, named pieces.
 
-   An effect is [:op & args]. A plan is a seq of effects. Constructors below
-   keep the data tidy; interpreters at the bottom give it meaning."
+   An effect is [:op & args]. A plan is a seq of effects; a change handed one
+   effect where a plan belongs runs it as a plan of one (see as-plan).
+   Constructors below keep the data tidy; interpreters at the bottom give it
+   meaning."
   (:require [clojure.string :as str]
             [gumshoe.outcome :as outcome]
             [gumshoe.shell :as shell]
@@ -63,6 +65,24 @@
    compose optional pieces: (plan a (when x b) c)."
   [& effects]
   (vec (remove nil? effects)))
+
+(defn effect?
+  "Whether x is one effect: a vector whose first element is a keyword, the
+   shape every constructor above returns. A plan's elements are vectors, so a
+   plan never starts with a keyword and the two cannot be mistaken."
+  [x]
+  (and (vector? x) (keyword? (first x))))
+
+(defn as-plan
+  "x as a plan: a plan as it is, one effect as a plan of one, and nil for
+   anything else - a keyword, a map, a string, or a sequence holding anything
+   that is not an effect. Every element is checked before any runs, so a
+   malformed plan is refused whole instead of failing halfway through."
+  [x]
+  (cond
+    (effect? x) [x]
+    (and (sequential? x) (every? effect? x)) x
+    :else nil))
 
 ;; ---------------------------------------------------------------------------
 ;; custom effect verbs - a plugin seam

@@ -62,3 +62,17 @@
   (is (thrown? Throwable (effect/register-effect-type! :bad {:perform (fn [_] true)}))
       ":describe is mandatory - a custom effect can not act without a preview")
   (is (thrown? Throwable (effect/register-effect-type! :bad {:describe (fn [_] "x")}))))
+
+(deftest as-plan-test
+  (testing "a plan stays as it is, the empty plan included"
+    (is (= [[:note "a"] [:kubectl "p" "cordon" "n"]] (effect/as-plan [[:note "a"] [:kubectl "p" "cordon" "n"]])))
+    (is (= [] (effect/as-plan [])))
+    (is (= [[:note "a"]] (effect/as-plan (list (effect/note "a"))))))
+  (testing "one effect, as every constructor returns it, is a plan of one"
+    (doseq [one [(effect/note "a") (effect/kubectl "p" "cordon" "n") (effect/cmd "flux" "reconcile")
+                 (effect/ssh {:host "h"} "ceph" "-s") [:spy "custom verb"]]]
+      (is (= [one] (effect/as-plan one)))))
+  (testing "anything else is not a plan"
+    (doseq [x [:note {:kubectl "cordon"} "kubectl cordon n" 42 ["cordon" "n"] (list :note "a")
+               [(effect/note "a") :oops] [(effect/note "a") nil]]]
+      (is (nil? (effect/as-plan x)) (pr-str x)))))
