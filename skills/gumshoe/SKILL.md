@@ -222,7 +222,11 @@ mostly data:
 - a detective book is `(detective/book {:description … :detectives …})`;
 - a uniform change is `(mutation/book {:select … :confirm … :effect …
   :verify …})`, whose effect plan (`[[:kubectl "cordon" node]]`) runs,
-  dry-runs, or is collected in a test;
+  dry-runs, or is collected in a test; its `:derive` reads the cluster
+  under `kubectl/*strict-reads*`, as `:select` does, so a read there that
+  did not answer stops the book with "could not read what the change rests
+  on" before the confirmation, and the `:precondition` never judges an
+  object nobody could read (a `NotFound` answer still derives nil);
 - a playbook is `(playbook/book {:select … :confirm … :steps […]})`, whose
   steps are mutation specs, checks and pauses; it derives its prerequisites
   and options from the steps and asks for one confirmation;

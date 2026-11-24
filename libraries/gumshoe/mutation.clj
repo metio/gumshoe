@@ -30,7 +30,8 @@
       :effect   (fn [ctx] -> effect plan)
       :verify   (fn [ctx] -> seq of post-check maps)   ; optional
       :derive   (fn [ctx] -> map)   ; optional, values merged into ctx once so a
-                                    ; per-run value is shared by :effect and :verify
+                                    ; per-run value is shared by :effect and :verify;
+                                    ; its reads are strict, see below
       :items    (fn [ctx] -> seq)   ; optional, overrides the confirmation items
       :pin      (fn [ctx] -> {:type :name :namespace? :facts?})  ; optional, see below
       :confirmed? true}  ; set by a playbook whose confirmation covered this step
@@ -38,6 +39,15 @@
    The :precondition, :announce, :effect, :verify, :derive and :items callbacks
    each receive one context map, so a book destructures exactly what it needs:
      {:context .. :cluster .. :target <the pick(s)> :opts <parsed flags>}
+
+:derive runs under kubectl/*strict-reads*, as the candidate query of
+   :select does: a read in it that did not answer stops the change before the
+   confirmation, so neither the precondition nor the effect is computed from
+   a read that stood in for an object nobody could see. A read that answered
+   that its object or resource type does not exist still returns nil, which
+   the precondition judges. Only the gumshoe.kubectl readers that honour
+   *strict-reads* are strict here (see its docstring); a :precondition reads
+   lax and has to refuse a failed read itself.
 
    Three entry points, same spec: `book` is a standalone runbook; `run!` selects
    the subject and runs it, returning a boolean; `run-on!` runs against a subject
@@ -54,7 +64,8 @@
    rests on something outside the spec - an annotation, a status field - names
    it with :facts (fn [object] -> value), which must be equal too. An object
    that cannot be read when the confirmation is shown is refused as well."
-  (:require [gumshoe.flow :as flow]
+  (:require [clojure.walk :as walk]
+            [gumshoe.flow :as flow]
             [gumshoe.prerequisites :as prerequisites]
             [gumshoe.select :as select]
             [gumshoe.kubectl :as kubectl]
@@ -116,10 +127,26 @@
              (when why (println (str "refusing: " why)))
              (nil? why))))))
 
+(defn derived
+  "{:values <what derive returned>} or {:unread <reason>}. derive runs under
+   kubectl/*strict-reads* and its result is realized inside the binding, so a
+   lazy seq cannot run its reads after it, and a read that did not answer
+   surfaces as its message instead of as nil - the same contract as the
+   candidate listing of a select. A read that answered that its object does
+   not exist still derives nil."
+  [derive base]
+  (try
+    {:values (when derive
+               (binding [kubectl/*strict-reads* true]
+                 (walk/postwalk identity (derive base))))}
+    (catch clojure.lang.ExceptionInfo e
+      (if (::kubectl/unread (ex-data e)) {:unread (ex-message e)} (throw e)))))
+
 (defn run-on!
   "Runs a mutation spec against an ALREADY-CHOSEN `target`, skipping the spec's own
-   selection, through confirm -> [precondition] -> announce -> execute -> verify.
-   Returns true/false. This is what a playbook calls per step after picking its
+   selection, through derive -> confirm -> [precondition] -> announce -> execute
+   -> verify. Returns true/false, false without asking for a confirmation when a
+   read in :derive did not answer. This is what a playbook calls per step after picking its
    subject once (e.g. via gumshoe.select/pick), so the operator is not re-prompted
    for every step. `run!` is this plus selection.
 
@@ -131,22 +158,26 @@
         cluster (kubectl/current-cluster)
         base {:context context :cluster cluster :target target
               :opts opts :announcement-data announcement-data}
-        ctx (merge base (when derive (derive base)))
-        ref (when-let [pin (:pin spec)] (pin ctx))
-        before (when ref (fingerprint (fetch-pinned context ref) (:facts ref)))
-        items-fn (:items spec)]
-    (flow/change!
-     {:confirmation {:action (:action confirm)
-                     :target cluster
-                     :items (if items-fn (items-fn ctx) (select/items (:mode select) target))
-                     :destructive? (:destructive? confirm)}
-      :precondition (pinned-precondition (when precondition #(precondition ctx))
-                                         ref before #(fetch-pinned context %))
-      :confirmed? (:confirmed? spec)
-      :announce! (when announce
-                   #(announce/announce! cluster announcement-data (announce ctx)))
-      :effect (effect ctx)
-      :post-checks (when verify (verify ctx))})))
+        {:keys [values unread]} (derived derive base)]
+    (if unread
+      (do (stdout/error (format "could not read what the change rests on - %s" unread))
+          false)
+      (let [ctx (merge base values)
+            ref (when-let [pin (:pin spec)] (pin ctx))
+            before (when ref (fingerprint (fetch-pinned context ref) (:facts ref)))
+            items-fn (:items spec)]
+        (flow/change!
+         {:confirmation {:action (:action confirm)
+                         :target cluster
+                         :items (if items-fn (items-fn ctx) (select/items (:mode select) target))
+                         :destructive? (:destructive? confirm)}
+          :precondition (pinned-precondition (when precondition #(precondition ctx))
+                                             ref before #(fetch-pinned context %))
+          :confirmed? (:confirmed? spec)
+          :announce! (when announce
+                       #(announce/announce! cluster announcement-data (announce ctx)))
+          :effect (effect ctx)
+          :post-checks (when verify (verify ctx))})))))
 
 (defn run!
   "Selects the spec's subject (interactive, honouring the CLI flags) and runs it
