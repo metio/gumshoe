@@ -3,8 +3,12 @@
 
 (ns gumshoe.mutation-test
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure.string :as str]
+            [gumshoe.effect :as effect]
+            [gumshoe.flow :as flow]
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.shell :as shell]
             [gumshoe.mutation :as mutation]
             [gumshoe.outcome :as outcome]))
 
@@ -143,3 +147,78 @@
         (is (false? (mutation/run-on! spec "ns-1" {} nil))))
       (is (= {:text "ns-1 is parked after 1"} (:recovery @record))
           "rendered with the derived values and the effects applied"))))
+
+(defn- shape-spec
+  [effect-fn]
+  {:select {:mode :one :label "Namespace"}
+   :confirm {:action "reset the course"}
+   :effect effect-fn})
+
+(defmacro ^:private on-a-stubbed-cluster
+  "Runs body with kubectl answering 0 and recording what it was asked, the
+   confirmation answered yes and recording that it was asked, and the output
+   discarded. Binds `ran` and `asked`."
+  [& body]
+  `(let [~'ran (atom []) ~'asked (atom 0)]
+     (with-redefs [kubectl/current-context (constantly "ctx")
+                   kubectl/current-cluster (constantly "cluster")
+                   interact/confirm! (fn [_#] (swap! ~'asked inc) true)
+                   shell/run-with-output (fn [& args#] (swap! ~'ran conj (vec args#)) 0)]
+       (binding [*out* (java.io.StringWriter.) *err* (java.io.StringWriter.)]
+         ~@body))))
+
+(deftest a-lone-effect-runs-as-a-plan-of-one
+  (testing "an :effect returning one effect applies it"
+    (on-a-stubbed-cluster
+     (is (true? (mutation/run-on! (shape-spec (fn [_] (effect/kubectl "ctx" "cordon" "w-1"))) "w-1" {} nil)))
+     (is (= [["kubectl" "--context=ctx" "cordon" "w-1"]] @ran))))
+  (testing "a lone note applies too"
+    (on-a-stubbed-cluster
+     (is (true? (mutation/run-on! (shape-spec (fn [_] (effect/note "nothing to reset"))) "w-1" {} nil)))))
+  (testing "a dry run shows a lone effect and runs nothing"
+    (on-a-stubbed-cluster
+     (let [shown (java.io.StringWriter.)]
+       (binding [flow/*dry-run* true *err* shown]
+         (is (true? (mutation/run-on! (shape-spec (fn [_] (effect/kubectl "ctx" "cordon" "w-1"))) "w-1" {} nil))))
+       (is (str/includes? (str shown) "would run: kubectl cordon w-1"))
+       (is (= [] @ran))))))
+
+(defn- refusal
+  "The message run-on! throws for a spec whose :effect returns `returned`, or
+   nil when it does not throw."
+  [returned & {:keys [dry-run?]}]
+  (on-a-stubbed-cluster
+   (try (binding [flow/*dry-run* (boolean dry-run?)]
+          (mutation/run-on! (shape-spec (constantly returned)) "w-1" {} nil)
+          nil)
+        (catch clojure.lang.ExceptionInfo e
+          {:message (ex-message e) :ran @ran :asked @asked}))))
+
+(deftest an-effect-that-is-not-a-plan-is-refused-naming-the-step
+  (doseq [[what returned] [["a keyword" :note]
+                           ["a map" {:kubectl "cordon"}]
+                           ["a string" "kubectl cordon w-1"]
+                           ["a number" 42]
+                           ["a seq of non-effects" ["cordon" "w-1"]]
+                           ["a plan holding one non-effect" [(effect/kubectl "ctx" "cordon" "w-1") :oops]]]
+          dry-run? [false true]]
+    (testing (str what (when dry-run? " under --dry-run"))
+      (let [{:keys [message ran asked] :as refused} (refusal returned :dry-run? dry-run?)]
+        (is (some? refused) "the step is refused")
+        (is (str/includes? (str message) "reset the course") "the message names the step")
+        (is (str/includes? (str message) (pr-str returned)) "the message says what the :effect returned")
+        (is (str/includes? (str message) "an :effect returns a plan"))
+        (is (str/includes? (str message) "effect/plan") "the message names the fix")
+        (is (not (str/includes? (str message) "ISeq")))
+        (is (= [] ran) "no part of the plan runs")
+        (is (zero? asked) "the refusal comes before the confirmation")))))
+
+(deftest a-nil-or-empty-plan-behaves-as-before
+  (testing "an empty plan runs nothing and succeeds"
+    (on-a-stubbed-cluster
+     (is (true? (mutation/run-on! (shape-spec (constantly [])) "w-1" {} nil)))
+     (is (= [] @ran))))
+  (testing "a nil plan is a malformed change, refused without a prompt"
+    (on-a-stubbed-cluster
+     (is (false? (mutation/run-on! (shape-spec (constantly nil)) "w-1" {} nil)))
+     (is (zero? @asked)))))
