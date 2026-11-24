@@ -14,6 +14,7 @@
    request after 24 hours and a decided one after an hour, so what this sees
    is recent."
   (:require [clojure.string :as str]
+            [gumshoe.conditions :as conditions]
             [gumshoe.onset :as onset]))
 
 (def kubelet-serving "kubernetes.io/kubelet-serving")
@@ -25,16 +26,12 @@
 (def pending-grace (java.time.Duration/ofMinutes 15))
 (def signing-grace (java.time.Duration/ofMinutes 5))
 
-(defn- instant
-  [value]
-  (try (java.time.Instant/parse (str value)) (catch Exception _ nil)))
-
 (defn- condition
   "A condition of the type that holds: status True, or no status, as the
    controllers read it."
   [csr type]
-  (first (filter #(and (= type (:type %)) (contains? #{nil "" "True"} (:status %)))
-                 (-> csr :status :conditions))))
+  (let [c (conditions/condition csr type)]
+    (when (contains? #{nil "" "True"} (:status c)) c)))
 
 (defn state
   "Where a request stands: :issued, :denied, :failed, :approved (awaiting the
@@ -57,7 +54,7 @@
 
 (defn- pending-finding
   [csr now]
-  (let [created (instant (-> csr :metadata :creationTimestamp))
+  (let [created (onset/instant (-> csr :metadata :creationTimestamp))
         signer (-> csr :spec :signerName)
         node (node-of csr)
         [summary hint]
@@ -84,7 +81,7 @@
 (defn- unsigned-finding
   [csr now]
   (let [approved (condition csr "Approved")
-        at (instant (or (:lastUpdateTime approved) (:lastTransitionTime approved)))
+        at (onset/instant (or (:lastUpdateTime approved) (:lastTransitionTime approved)))
         signer (-> csr :spec :signerName)]
     (when (older-than? at now signing-grace)
       (onset/since

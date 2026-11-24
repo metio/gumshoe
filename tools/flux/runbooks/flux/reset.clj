@@ -14,7 +14,8 @@
    Verify the cause is actually gone first -- the message is a snapshot of the
    last attempt, not a statement about now. `flux/drift` diffs the stored
    manifest against live when the cause is not obvious."
-  (:require [gumshoe.kubectl :as kubectl]
+  (:require [gumshoe.conditions :as conditions]
+            [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
             [gumshoe.tools.flux :as flux]))
 
@@ -26,13 +27,10 @@
 
 (defn ready-check
   [context namespace name target]
-  {:description (format "HelmRelease %s is Ready" target)
-   :timeout 300 :interval 15
-   :check (fn []
-            (->> (-> (kubectl/get-namespaced-resource context namespace helmrelease-type name)
-                     :status :conditions)
-                 (some #(and (= "Ready" (:type %)) (= "True" (:status %))))
-                 boolean))})
+  (conditions/ready-check
+   {:description (format "HelmRelease %s is Ready" target)
+    :timeout 300 :interval 15
+    :fetch #(kubectl/get-namespaced-resource context namespace helmrelease-type name)}))
 
 (mutation/book
  {:description "Clears a parked HelmRelease's failure counters and reconciles it"

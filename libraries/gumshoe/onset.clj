@@ -8,10 +8,14 @@
    lastTransitionTime, a deletionTimestamp, a creation time - and leave it out
    when nothing records the start.")
 
-(defn- instant
+(defn instant
+  "The Instant value names: an Instant, an ISO-8601 string, or a Date (as
+   clj-yaml reads an unquoted timestamp). nil for anything else, including a
+   string that does not parse."
   [value]
   (cond
     (instance? java.time.Instant value) value
+    (instance? java.util.Date value) (.toInstant ^java.util.Date value)
     (string? value) (try (java.time.Instant/parse value) (catch Exception _ nil))
     :else nil))
 

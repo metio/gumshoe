@@ -9,6 +9,7 @@
    is reported too, because the cause then sits in the node's kubelet or
    runtime."
   (:require [clojure.string :as str]
+            [gumshoe.conditions :as conditions]
             [gumshoe.detectives.pods :as pods]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
@@ -65,9 +66,8 @@
 
 (defn- bound-at
   [pod]
-  (or (some->> (-> pod :status :conditions)
-               (filter #(and (= "PodScheduled" (:type %)) (= "True" (:status %))))
-               first :lastTransitionTime instant)
+  (or (when (conditions/holds? pod "PodScheduled")
+        (some-> (conditions/condition pod "PodScheduled") :lastTransitionTime instant))
       (instant (-> pod :metadata :creationTimestamp))))
 
 (defn- pod-events

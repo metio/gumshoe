@@ -7,7 +7,8 @@
    for quota for an hour, and admitted Workloads whose pods never become
    ready. Kueue's Active condition is outside the generic condition
    fallback, so without this package an inactive queue goes unseen."
-  (:require [gumshoe.kubectl :as kubectl]
+  (:require [gumshoe.conditions :as conditions]
+            [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
 (def clusterqueue-type "clusterqueues.kueue.x-k8s.io")
@@ -27,18 +28,9 @@
   #{"NoMatchingFlavor" "ExceedsMaxQuota" "Misconfigured" "AssignmentError"
     "UnrecordableResourceUsage"})
 
-(defn- conditions
-  [object]
-  (into {} (map (juxt :type identity)) (-> object :status :conditions)))
-
-(defn- minutes-since
-  [value now]
-  (when-let [at (try (some-> value java.time.Instant/parse) (catch Exception _ nil))]
-    (when now (.toMinutes (java.time.Duration/between at ^java.time.Instant now)))))
-
 (defn queue-finding
   [kind queue]
-  (let [active (get (conditions queue) "Active")
+  (let [active (get (conditions/by-type queue) "Active")
         component (if (kubectl/namespace-of queue) (kubectl/namespace-name-of queue) (kubectl/name-of queue))]
     (when (= "False" (:status active))
       (onset/since
@@ -62,7 +54,7 @@
 
 (defn workload-findings
   [workload now]
-  (let [by-type (conditions workload)
+  (let [by-type (conditions/by-type workload)
         status-of #(:status (get by-type %))
         component (kubectl/namespace-name-of workload)
         created (-> workload :metadata :creationTimestamp)
@@ -86,17 +78,17 @@
         (:lastTransitionTime reserved))]
 
       (and (not= "True" (status-of "QuotaReserved"))
-           (some-> (minutes-since created now) (>= waiting-minutes)))
+           (some-> (conditions/minutes-since created now) (>= waiting-minutes)))
       [(onset/since
         {:severity :info
          :component component
-         :summary (format "Workload has waited %d minutes for quota" (minutes-since created now))
+         :summary (format "Workload has waited %d minutes for quota" (conditions/minutes-since created now))
          :hint (str (some-> (:message reserved) not-empty (str " - "))
                     "the queue is full - it is admitted when running workloads finish, or when the ClusterQueue gets more quota or can borrow")}
         created)]
 
       (and (= "True" (status-of "Admitted")) (= "False" (:status pods-ready))
-           (some-> (minutes-since (:lastTransitionTime pods-ready) now) (>= pods-ready-minutes)))
+           (some-> (conditions/minutes-since (:lastTransitionTime pods-ready) now) (>= pods-ready-minutes)))
       [(onset/since
         {:severity :warning
          :component component

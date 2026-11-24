@@ -3,7 +3,8 @@
 
 (ns runbooks.flux.reconcile
   "Triggers a flux reconciliation of a single HelmRelease."
-  (:require [gumshoe.effect :as effect]
+  (:require [gumshoe.conditions :as conditions]
+            [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
             [gumshoe.tools.flux]))
@@ -22,13 +23,10 @@
 
 (defn ready-check
   [context namespace name target]
-  {:description (format "HelmRelease %s is Ready" target)
-   :timeout 120 :interval 10
-   :check (fn []
-            (->> (-> (kubectl/get-namespaced-resource context namespace helmrelease-type name)
-                     :status :conditions)
-                 (some #(and (= "Ready" (:type %)) (= "True" (:status %))))
-                 boolean))})
+  (conditions/ready-check
+   {:description (format "HelmRelease %s is Ready" target)
+    :timeout 120 :interval 10
+    :fetch #(kubectl/get-namespaced-resource context namespace helmrelease-type name)}))
 
 (mutation/book
  {:description "Triggers a flux reconciliation of a single HelmRelease"

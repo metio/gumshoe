@@ -21,10 +21,6 @@
   "How long a new snapshot may go without a VolumeSnapshotContent."
   (java.time.Duration/ofMinutes 10))
 
-(defn- instant
-  [value]
-  (try (java.time.Instant/parse (str value)) (catch Exception _ nil)))
-
 (defn- source-of
   [snapshot]
   (let [{:keys [persistentVolumeClaimName volumeSnapshotContentName]} (-> snapshot :spec :source)]
@@ -46,7 +42,7 @@
 
 (defn- unbound-finding
   [snapshot classes now]
-  (let [created (instant (-> snapshot :metadata :creationTimestamp))
+  (let [created (onset/instant (-> snapshot :metadata :creationTimestamp))
         class (-> snapshot :spec :volumeSnapshotClassName)]
     (when (and created now (.isAfter ^java.time.Instant now (.plus ^java.time.Instant created unbound-grace)))
       (onset/since

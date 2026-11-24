@@ -658,6 +658,12 @@ interpreted three ways: run it, show it (`--dry-run`), or collect it in a test.
 That is why a book's mutation can be asserted without a cluster, and why
 `--dry-run` came for free.
 
+Detectives and post-checks read status conditions through `gumshoe.conditions`,
+one set of pure functions with one meaning: a missing condition is neither True
+nor False, the first of a repeated type counts, staleness against
+`metadata.generation` is asked separately with `stale?`, and an unreadable
+timestamp yields nil rather than an exception.
+
 ## Structure
 
 - `./firebooks`: Directory for all **firebooks**

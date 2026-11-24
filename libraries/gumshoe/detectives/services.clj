@@ -8,6 +8,7 @@
    that never received an address."
   (:require [clojure.set :as set]
             [clojure.string :as str]
+            [gumshoe.conditions :as conditions]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
@@ -28,8 +29,7 @@
 
 (defn ready?
   [pod]
-  (some #(and (= "Ready" (:type %)) (= "True" (:status %)))
-        (-> pod :status :conditions)))
+  (conditions/ready? pod))
 
 (defn- in-namespace
   [items namespace]

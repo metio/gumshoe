@@ -9,6 +9,7 @@
    the drill-down (its CRD kinds plus a reconcile-status probe). Nothing about
    flux lives in the engine any more."
   (:require [clojure.string]
+            [gumshoe.conditions :as conditions]
             [gumshoe.effect :as effect]
             [gumshoe.investigation :as investigation]
             [gumshoe.kubectl :as kubectl]
@@ -23,10 +24,6 @@
 (def ocirepository-type "ocirepositories.source.toolkit.fluxcd.io")
 (def helmchart-type "helmcharts.source.toolkit.fluxcd.io")
 (def externalartifact-type "externalartifacts.source.toolkit.fluxcd.io")
-
-(defn- ready-condition
-  [resource]
-  (first (filter #(= "Ready" (:type %)) (-> resource :status :conditions))))
 
 (def ^:private reconcile-annotations
   ["kustomize.toolkit.fluxcd.io/reconcile"
@@ -125,37 +122,26 @@
    that stops looking like progress."
   10)
 
-(defn- named-condition
-  [resource type]
-  (first (filter #(= type (:type %)) (-> resource :status :conditions))))
-
 (defn in-progress?
   "Whether the Ready condition describes work under way rather than a result.
    ProgressingWithRetry is a failure being retried, so it does not count; a
    generation the controller has not observed yet means Ready describes an
    older spec."
   [resource]
-  (let [ready (ready-condition resource)
-        reconciling (named-condition resource "Reconciling")
-        generation (-> resource :metadata :generation)
-        observed (-> resource :status :observedGeneration)]
+  (let [ready (conditions/condition resource "Ready")
+        reconciling (conditions/condition resource "Reconciling")]
     (boolean
      (or (= "Progressing" (:reason ready))
          (and (= "True" (:status reconciling)) (not= "ProgressingWithRetry" (:reason reconciling)))
-         (and (number? generation) (number? observed) (< observed generation))))))
-
-(defn- minutes-since
-  [now timestamp]
-  (when (and now timestamp)
-    (.toMinutes (java.time.Duration/between (java.time.Instant/parse timestamp) now))))
+         (conditions/stale? resource)))))
 
 (defn- not-ready-finding
   [resource kind now]
-  (let [ready (ready-condition resource)
-        stalled (named-condition resource "Stalled")
+  (let [ready (conditions/condition resource "Ready")
+        stalled (conditions/condition resource "Stalled")
         base (onset/since {:component (kubectl/namespace-name-of resource) :hint (:message ready)}
                           (:lastTransitionTime ready))
-        age (minutes-since now (:lastTransitionTime ready))]
+        age (conditions/minutes-since (:lastTransitionTime ready) now)]
     (cond
       (= "True" (:status stalled))
       (assoc base :severity :critical
@@ -186,7 +172,7 @@
   ([resources kind now]
    (concat
     (for [resource resources
-          :when (= "False" (:status (ready-condition resource)))
+          :when (= "False" (:status (conditions/condition resource "Ready")))
           :let [finding (not-ready-finding resource kind now)]
           :when finding]
       finding)
@@ -205,7 +191,7 @@
      ;; a parked release is reported here instead, with the remedy
      (flux-findings (remove parked? releases) "HelmRelease" (:now evidence))
      (for [release stuck
-           :let [ready (ready-condition release)]]
+           :let [ready (conditions/condition release "Ready")]]
        {:severity :critical
         :component (kubectl/namespace-name-of release)
         :summary (format "HelmRelease is parked after %s and will not retry"
@@ -233,7 +219,7 @@
    upgrade's patch either, so it persists indefinitely."
   [evidence]
   (for [release (kubectl/items-of (get evidence helmrelease-type))
-        :let [drifted (named-condition release "Drifted")
+        :let [drifted (conditions/condition release "Drifted")
               mode (-> release :spec :driftDetection :mode)]
         :when (= "True" (:status drifted))]
     {:severity (if (= "enabled" mode) :warning :critical)
@@ -266,7 +252,7 @@
         broken (group-by kubectl/namespace-of
                          (filter #(seq (crash-looping %)) pods))]
     (for [release (kubectl/items-of (get evidence helmrelease-type))
-          :let [ready (ready-condition release)
+          :let [ready (conditions/condition release "Ready")
                 ;; the workload runs where the release installed it
                 casualties (get broken (release-namespace release))]
           :when (and (= "True" (:status ready)) (seq casualties))]

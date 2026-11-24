@@ -10,7 +10,8 @@
    route to its backend service) and reaching for live probes. The engine does
    the live fetching and the interactive loop; everything in here is pure over
    an already-fetched object, so the graph logic is fully testable."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [gumshoe.conditions :as conditions]))
 
 (defn subject
   "An investigation subject: a Kubernetes object by kind, namespace (nil for a
@@ -102,7 +103,7 @@
 
 (defn- node-facts
   [node]
-  (let [ready (first (filter #(= "Ready" (:type %)) (-> node :status :conditions)))
+  (let [ready (conditions/condition node "Ready")
         bad (bad-node-conditions node)
         allocatable (-> node :status :allocatable)]
     (present-pairs
@@ -130,8 +131,7 @@
 
 (defn- job-facts
   [job]
-  (let [failed (first (filter #(and (= "Failed" (:type %)) (= "True" (:status %)))
-                              (-> job :status :conditions)))]
+  (let [failed (when (conditions/holds? job "Failed") (conditions/condition job "Failed"))]
     (present-pairs
      [["completions" (format "%s/%s succeeded"
                              (or (-> job :status :succeeded) 0) (or (-> job :spec :completions) 1))]
@@ -405,15 +405,13 @@
 
 (defn- node-situation
   [node]
-  (let [conditions (-> node :status :conditions)
-        by-type (into {} (map (juxt :type :status) conditions))]
-    (cond
-      (not= "True" (get by-type "Ready")) :not-ready
-      (= "True" (get by-type "DiskPressure")) :disk-pressure
-      (= "True" (get by-type "MemoryPressure")) :memory-pressure
-      (= "True" (get by-type "PIDPressure")) :pid-pressure
-      (-> node :spec :unschedulable) :cordoned
-      :else :ok)))
+  (cond
+    (not (conditions/ready? node)) :not-ready
+    (conditions/holds? node "DiskPressure") :disk-pressure
+    (conditions/holds? node "MemoryPressure") :memory-pressure
+    (conditions/holds? node "PIDPressure") :pid-pressure
+    (-> node :spec :unschedulable) :cordoned
+    :else :ok))
 
 (defn- pvc-situation
   [pvc]
@@ -455,7 +453,7 @@
 
 (defn- job-situation
   [job]
-  (if (some #(and (= "Failed" (:type %)) (= "True" (:status %))) (-> job :status :conditions))
+  (if (conditions/holds? job "Failed")
     :job-failed
     :ok))
 

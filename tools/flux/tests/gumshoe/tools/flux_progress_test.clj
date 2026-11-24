@@ -50,6 +50,10 @@
               (flux/detect-kustomization-problems {flux/kustomization-type {:items [(kustomization :reason "Progressing")]}})))
       "a scan without a clock"))
 
+(deftest an-unreadable-transition-time-is-an-unknown-age
+  (is (= [[:warning "Kustomization is reconciling"]] (judge (kustomization :reason "Progressing" :since "garbage"))))
+  (is (= [[:critical "Kustomization is not Ready (BuildFailed)"]] (judge (kustomization :reason "BuildFailed" :since "garbage")))))
+
 (deftest an-observed-generation-is-not-progress
   (is (= [:critical] (map first (judge (kustomization :reason "BuildFailed" :since "2026-11-18T11:59:00Z"
                                                       :generation 7 :observed 7))))))

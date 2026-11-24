@@ -7,6 +7,7 @@
    their own scope, left out of whole-cluster health scans, because every
    finding here is a choice someone may have made on purpose."
   (:require [clojure.string :as str]
+            [gumshoe.conditions :as conditions]
             [gumshoe.detectives.pod-security :as pod-security]
             [gumshoe.kubectl :as kubectl]))
 
@@ -147,7 +148,7 @@
   [pod]
   (and (= "Running" (-> pod :status :phase))
        (nil? (-> pod :metadata :deletionTimestamp))
-       (some #(and (= "Ready" (:type %)) (= "True" (:status %))) (-> pod :status :conditions))))
+       (conditions/ready? pod)))
 
 (defn- schedulable-nodes
   [nodes]

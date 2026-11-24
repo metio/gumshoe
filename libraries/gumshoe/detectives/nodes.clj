@@ -5,19 +5,16 @@
   "Detectives for node health: readiness, every node-problem condition, cordoned
    nodes, removals that stall, and kubelets on different minor versions."
   (:require [clojure.string :as str]
+            [gumshoe.conditions :as conditions]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
-
-(defn- condition
-  [node type]
-  (first (filter #(= type (:type %)) (-> node :status :conditions))))
 
 (defn detect-node-problems
   [evidence]
   (let [nodes (kubectl/items-of (get evidence "nodes"))]
     (concat
      (for [node nodes
-           :let [ready (condition node "Ready")]
+           :let [ready (conditions/condition node "Ready")]
            :when (not= "True" (:status ready))]
        (onset/since
         {:severity :critical

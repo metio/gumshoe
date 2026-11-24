@@ -3,7 +3,8 @@
 
 (ns runbooks.kubernetes.cronjobs.start
   "Starts a Job from a CronJob right now instead of waiting for its schedule."
-  (:require [gumshoe.effect :as effect]
+  (:require [gumshoe.conditions :as conditions]
+            [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]))
 
@@ -22,8 +23,7 @@
    :check (fn []
             (let [job (kubectl/get-namespaced-resource context namespace "jobs" job-name)]
               (and (some? job)
-                   (not-any? #(and (= "Failed" (:type %)) (= "True" (:status %)))
-                             (-> job :status :conditions)))))})
+                   (not (conditions/holds? job "Failed")))))})
 
 (mutation/book
  {:description "Starts a Job from a CronJob right now instead of waiting for its schedule"

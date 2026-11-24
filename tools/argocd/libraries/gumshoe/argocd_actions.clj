@@ -9,6 +9,7 @@
    runs and reports in status.operationState."
   (:require [cheshire.core :as json]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.onset :as onset]
             [gumshoe.pick :as pick]))
 
 (def refresh-annotation "argocd.argoproj.io/refresh")
@@ -85,11 +86,9 @@
   (json/generate-string {:operation {:initiatedBy {:username initiator}
                                      :sync (cond-> {:syncStrategy {:hook {}}} prune? (assoc :prune true))}}))
 
-(defn- instant [value] (try (some-> value java.time.Instant/parse) (catch Exception _ nil)))
-
 (defn- since?
   [operation-state ^java.time.Instant requested]
-  (when-let [started (instant (:startedAt operation-state))]
+  (when-let [started (onset/instant (:startedAt operation-state))]
     ;; startedAt has second precision, so the request's second counts
     (not (.isBefore started (.truncatedTo requested java.time.temporal.ChronoUnit/SECONDS)))))
 

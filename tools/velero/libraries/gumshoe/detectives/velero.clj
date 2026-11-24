@@ -32,13 +32,9 @@
   #{"InProgress" "WaitingForPluginOperations" "WaitingForPluginOperationsPartiallyFailed"
     "Finalizing" "FinalizingPartiallyFailed"})
 
-(defn- instant
-  [value]
-  (try (some-> value java.time.Instant/parse) (catch Exception _ nil)))
-
 (defn- hours-since
   [value now]
-  (when-let [at (instant value)]
+  (when-let [at (onset/instant value)]
     (when now (/ (.toMinutes (java.time.Duration/between at ^java.time.Instant now)) 60.0))))
 
 (defn- started-at

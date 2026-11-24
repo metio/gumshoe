@@ -6,7 +6,8 @@
    scheduler, controller-manager, etcd) must be Running and Ready. Maps to the
    kube-prometheus KubeAPIDown / KubeSchedulerDown / KubeControllerManagerDown
    alerts, but read straight from the pods so it needs no metrics backend."
-  (:require [gumshoe.kubectl :as kubectl]))
+  (:require [gumshoe.conditions :as conditions]
+            [gumshoe.kubectl :as kubectl]))
 
 (def ^:private component-names
   {"kube-apiserver" "API server"
@@ -21,8 +22,7 @@
 (defn- ready?
   [pod]
   (and (= "Running" (-> pod :status :phase))
-       (some #(and (= "Ready" (:type %)) (= "True" (:status %)))
-             (-> pod :status :conditions))))
+       (conditions/ready? pod)))
 
 (defn detect-control-plane
   [evidence]

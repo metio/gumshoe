@@ -22,6 +22,7 @@
    reported by the cnpg detectives instead, because a stale pooler cannot be
    told from an unreachable one until the cluster itself is well."
   (:require [gumshoe.cnpg.instances :as inst]
+            [gumshoe.conditions :as conditions]
             [gumshoe.kubectl :as kubectl]))
 
 (def pooler-type "poolers.postgresql.cnpg.io")
@@ -45,8 +46,7 @@
 
 (defn- ready?
   [pod]
-  (some #(and (= "Ready" (:type %)) (= "True" (:status %)))
-        (-> pod :status :conditions)))
+  (conditions/ready? pod))
 
 (defn- earliest
   [instants]

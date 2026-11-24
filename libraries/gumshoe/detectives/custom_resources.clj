@@ -7,7 +7,8 @@
    operators follow the Kubernetes condition conventions, so a False Ready (or
    one of its common siblings) is worth reading even without knowing what the
    object does."
-  (:require [gumshoe.kubectl :as kubectl]
+  (:require [gumshoe.conditions :as conditions]
+            [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
 (def ^:private settle-minutes 10)
@@ -19,22 +20,11 @@
 (def ^:private progress-reasons
   #{"Progressing" "Reconciling" "Pending" "Creating" "Updating" "DependencyNotReady"})
 
-(defn- conditions-by-type
-  [resource]
-  (into {} (map (juxt :type identity)) (-> resource :status :conditions)))
-
-(defn- minutes-since
-  [now timestamp]
-  (when (and now timestamp)
-    (try
-      (.toMinutes (java.time.Duration/between (java.time.Instant/parse timestamp) now))
-      (catch Exception _ nil))))
-
 (defn detect-api-services
   [evidence]
   (for [service (kubectl/items-of (get evidence "apiservices"))
         :when (-> service :spec :service)
-        :let [available (get (conditions-by-type service) "Available")
+        :let [available (conditions/condition service "Available")
               {:keys [namespace name]} (-> service :spec :service)]
         :when (= "False" (:status available))]
     (onset/since
@@ -49,10 +39,9 @@
 (defn detect-crd-health
   [evidence]
   (for [crd (kubectl/items-of (get evidence "customresourcedefinitions"))
-        :let [conditions (conditions-by-type crd)]
         [type summary] [["NamesAccepted" "CustomResourceDefinition names conflict with another resource"]
                         ["Established" "CustomResourceDefinition is not established"]]
-        :let [condition (get conditions type)]
+        :let [condition (conditions/condition crd type)]
         :when (= "False" (:status condition))]
     {:severity :critical
      :component (kubectl/name-of crd)
@@ -63,9 +52,7 @@
 (defn- in-progress?
   [resource condition]
   (or (contains? progress-reasons (:reason condition))
-      (let [generation (-> resource :metadata :generation)
-            observed (or (:observedGeneration condition) (-> resource :status :observedGeneration))]
-        (and (number? generation) (number? observed) (< observed generation)))))
+      (conditions/stale? resource condition)))
 
 (defn condition-finding
   "The finding for one custom resource, or nil. Its first False condition among
@@ -73,9 +60,8 @@
    tell how bad it is. A condition that turned False under ten minutes ago is
    not reported yet, and one that describes work in progress gets thirty."
   [resource now]
-  (let [conditions (conditions-by-type resource)
-        failing (first (keep #(let [c (get conditions %)] (when (= "False" (:status c)) c)) condition-types))
-        age (minutes-since now (:lastTransitionTime failing))]
+  (let [failing (conditions/first-false resource condition-types)
+        age (conditions/minutes-since (:lastTransitionTime failing) now)]
     (when (and failing
                (not (-> resource :metadata :deletionTimestamp))
                (not (and age (< age settle-minutes)))

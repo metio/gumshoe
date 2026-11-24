@@ -5,7 +5,8 @@
   "Detectives for controllers: deployments, statefulsets, and daemonsets whose
    pods are not all up, rollouts past their deadline, jobs that failed and
    CronJobs that stopped running."
-  (:require [gumshoe.cron :as cron]
+  (:require [gumshoe.conditions :as conditions]
+            [gumshoe.cron :as cron]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
@@ -27,14 +28,10 @@
   [evidence]
   (replica-findings (kubectl/items-of (get evidence "statefulsets")) "StatefulSet"))
 
-(defn- condition
-  [resource type]
-  (first (filter #(= type (:type %)) (-> resource :status :conditions))))
-
 (defn detect-stalled-rollouts
   [evidence]
   (for [deployment (kubectl/items-of (get evidence "deployments"))
-        :let [progressing (condition deployment "Progressing")]
+        :let [progressing (conditions/condition deployment "Progressing")]
         :when (and (= "False" (:status progressing)) (= "ProgressDeadlineExceeded" (:reason progressing)))]
     (onset/since
      {:severity :critical
@@ -102,9 +99,8 @@
 (defn detect-failed-jobs
   [evidence]
   (for [job (kubectl/items-of (get evidence "jobs"))
-        :let [failed (first (filter #(and (= "Failed" (:type %)) (= "True" (:status %)))
-                                    (-> job :status :conditions)))]
-        :when failed]
+        :let [failed (conditions/condition job "Failed")]
+        :when (= "True" (:status failed))]
     (onset/since
      {:severity :warning
       :component (kubectl/namespace-name-of job)

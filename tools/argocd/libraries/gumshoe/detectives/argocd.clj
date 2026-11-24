@@ -6,7 +6,8 @@
    whose health is Degraded or Missing, whose last sync failed or never
    finishes, and whose automated sync does not converge, plus ApplicationSets
    whose generators fail."
-  (:require [gumshoe.kubectl :as kubectl]
+  (:require [gumshoe.conditions :as conditions]
+            [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
 (def application-type "applications.argoproj.io")
@@ -35,11 +36,6 @@
    "RepeatedResourceWarning" :warning
    "OrphanedResourceWarning" :info
    "ExcludedResourceWarning" :info})
-
-(defn- minutes-since
-  [value now]
-  (when-let [at (try (some-> value java.time.Instant/parse) (catch Exception _ nil))]
-    (when now (.toMinutes (java.time.Duration/between at ^java.time.Instant now)))))
 
 (defn automated?
   "Whether automated sync is on: an automated block whose enabled flag is not
@@ -76,8 +72,8 @@
   (let [{:keys [phase message startedAt finishedAt retryCount]} (-> application :status :operationState)
         sync-status (-> application :status :sync :status)
         component (kubectl/namespace-name-of application)
-        running-minutes (minutes-since startedAt now)
-        settled-minutes (minutes-since finishedAt now)]
+        running-minutes (conditions/minutes-since startedAt now)
+        settled-minutes (conditions/minutes-since finishedAt now)]
     (remove nil?
             [(when (contains? #{"Failed" "Error"} phase)
                (onset/since

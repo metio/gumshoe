@@ -5,6 +5,7 @@
   "Detectives for disruption and scaling limits: PodDisruptionBudgets that
    block drains and HorizontalPodAutoscalers pegged at their maximum."
   (:require [clojure.string :as str]
+            [gumshoe.conditions :as conditions]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
@@ -99,7 +100,7 @@
   (let [now (:now evidence)
         grace (or (get-in evidence ["options" :hpa-grace-minutes]) default-hpa-grace-minutes)]
     (for [hpa (kubectl/items-of (get evidence "horizontalpodautoscalers"))
-          :let [conditions (into {} (map (juxt :type identity)) (-> hpa :status :conditions))
+          :let [conditions (conditions/by-type hpa)
                 able (get conditions "AbleToScale")
                 active (get conditions "ScalingActive")
                 component (kubectl/namespace-name-of hpa)]

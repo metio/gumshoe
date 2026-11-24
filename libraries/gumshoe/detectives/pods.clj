@@ -5,6 +5,7 @@
   "Detectives for workload health: restart loops, image pull errors, OOM
    kills, pods stuck in Pending or Failed."
   (:require [clojure.string]
+            [gumshoe.conditions :as conditions]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]
             [gumshoe.scheduling :as scheduling]))
@@ -135,9 +136,7 @@
 
 (defn- scheduled-condition
   [pod]
-  (->> (-> pod :status :conditions)
-       (filter #(= "PodScheduled" (:type %)))
-       first))
+  (conditions/condition pod "PodScheduled"))
 
 (def ^:private unschedulable-critical-minutes 10)
 
