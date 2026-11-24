@@ -298,7 +298,19 @@ mostly data:
   whose reason it prints as "refusing: …"; a post-check reads it with
   `(mutation/read-subject ctx)`. So the book writes no fetch, pin or refusal
   printer of its own, and keeps `:precondition` for any other check
-  (`runbooks/kubernetes/cronjobs/suspend.clj` is the short example);
+  (`tools/argocd/runbooks/refresh.clj` is the short example);
+- a pair of books that set one boolean state and set it back - suspend and
+  resume, pause and resume - is one `(toggle/pair {…})` declaration from
+  `gumshoe.toggle`, returning `{:on <spec> :off <spec>}`: the shared spec
+  with its `:subject`, then `:refusal`, `:items`, `:effect` (or a merge
+  `:patch`) and `:applied?` as functions of the object or context and the
+  wanted state, and each side's words under `:on` and `:off`. The builder
+  writes the candidates (by default the objects `:refusal` lets through),
+  the fallback items, the announcement and one post-check; each book is
+  `(mutation/book (merge steps/suspend-cronjob {:description "…"}))`,
+  where the library names each side as a var, `suspend-cronjob` being
+  `(:on cronjob-suspending)`, because conformance reads `(merge <var> {…})`
+  (`gumshoe.steps.workloads` holds the CronJob and Deployment pairs);
 - a playbook is `(playbook/book {:select … :confirm … :steps […]})`, whose
   steps are mutation specs, checks and pauses; it derives its prerequisites
   and options from the steps and asks for one confirmation;

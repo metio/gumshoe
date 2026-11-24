@@ -143,6 +143,7 @@
                    [gumshoe.mimirtool-test]
                    [gumshoe.select-test]
                    [gumshoe.mutation-test]
+                   [gumshoe.toggle-test]
                    [gumshoe.playbook-test]
                    [gumshoe.dispatch-test]
                    [gumshoe.prerequisites-test]
@@ -304,6 +305,7 @@
                                                          'gumshoe.mimirtool-test
                                                          'gumshoe.select-test
                                                          'gumshoe.mutation-test
+                                                         'gumshoe.toggle-test
                                                          'gumshoe.playbook-test
                                                          'gumshoe.dispatch-test
                                                          'gumshoe.prerequisites-test
