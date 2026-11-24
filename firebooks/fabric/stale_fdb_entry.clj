@@ -16,6 +16,7 @@
    run from here can produce it - and a drill that pinned a real guest's MAC to
    fake it would make a real machine unreachable."
   (:require [gumshoe.announce :as announce]
+            [gumshoe.catalog :as catalog]
             [gumshoe.effect :as effect]
             [gumshoe.evpn :as evpn]
             [gumshoe.firebook :as firebook]
@@ -93,7 +94,7 @@
              (ignite conn vni target announcement-data))]
     (when (and ok (not extinguishing?))
       (stdout/warn
-       (str "the fire is lit - find it with 'bb runbooks/detectives/fabric.clj --vni "
+       (str "the fire is lit - find it with '" (catalog/run-command "runbooks/detectives/fabric.clj") " --vni "
             vni "', and put it out with --extinguish")))
     ok))
 

@@ -7,6 +7,7 @@
    finalizer whose controller is down or confused keeps it forever. Pods and
    namespaces have detectives of their own."
   (:require [clojure.string :as str]
+            [gumshoe.catalog :as catalog]
             [gumshoe.finalizers :as finalizers]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]
@@ -48,7 +49,7 @@
                       (when users (str " - mounted by " (str/join ", " users)))))
                (when (seq removable)
                  [(str "check the controller that owns " (str/join ", " removable)
-                       "; only if it is gone for good: bb runbooks/kubernetes/finalizers/remove.clj --pick '"
+                       "; only if it is gone for good: " (catalog/run-command "runbooks/kubernetes/finalizers/remove.clj") " --pick '"
                        type " " (object-name object) " " (first removable) "'")])))))
 
 (defn detect-stuck-terminating

@@ -34,8 +34,7 @@ instead.
 ## Finding the book
 
 ```sh
-./run --list                 # in a gumshoe clone
-bb run --list                # in a casebook with a run task
+bb run --list                # in a gumshoe clone, or a casebook with a run task
 bb gumshoe --list            # in any casebook with the gumshoe task
 ```
 
@@ -56,6 +55,13 @@ and to the classpath book listed under it otherwise, so a casebook overrides
 an upstream book by placing a file at the same path; the listing then shows
 the casebook's book only. A path that names no book exits 1 and prints the
 closest listed paths. An absolute path runs as given.
+
+Bare `bb <path>` is babashka loading a file from the working directory, so
+from a casebook it runs only the casebook's own files and answers `File does
+not exist` for an upstream book. Where a casebook's shell banner or notes
+say `bb <path-to-book>`, run the listed path as `bb run <path>` instead, and
+write `bb run <path-to-book> --help` into such a banner. Every hint a book
+prints names a book the same way.
 
 `bb run` in a casebook is a task of its `bb.edn`, and babashka's own `run`
 answers when the task is missing. Check `bb tasks` first; the `gumshoe` task
@@ -214,7 +220,7 @@ and current list.
    banner naming the `--from-segment` that continues after the human acted.
 3. Show the human the plan and the command without `--dry-run`, written so
    they can run it in their own session, for example
-   `! bb runbooks/kubernetes/nodes/cordon.clj --node worker-3`.
+   `! bb run runbooks/kubernetes/nodes/cordon.clj --node worker-3`.
 4. After they run it, check the outcome with the matching detective. The
    final banner says what the run did: `DONE - applied and verified` is the
    only one that promises its post-checks held, `DONE - applied; this book has
@@ -235,7 +241,7 @@ Every book checks its tools, their versions, connectivity, secrets, and
 permissions before it acts, and prints a checklist naming what is missing.
 With breto, `eval "$(breto env)"` puts every tool a book needs on `PATH`.
 
-`env.edn` (optional, gitignored, built by `bb runbooks/setup/init.clj`)
+`env.edn` (optional, gitignored, built by `bb run runbooks/setup/init.clj`)
 holds per-host settings: environments selected by kubectl context, ceph mgr
 hosts, VPN interfaces, the secrets provider (`:gopass`, `:pass`, `:passage`,
 `:pasejo` or a `:command`), announcers, plugins, and the theme. A missing or

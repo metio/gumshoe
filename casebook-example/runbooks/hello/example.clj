@@ -4,7 +4,7 @@
 (ns casebook.hello.example
   "A worked example of a casebook detective. Copy its shape for your own read-only
    checks; for a book that changes something, use gumshoe.runbook/execute! or the
-   gumshoe.mutation/book helper instead. Run it with: bb runbooks/hello/example.clj"
+   gumshoe.mutation/book helper instead. Run it with: bb run runbooks/hello/example.clj"
   (:require [gumshoe.detective :as detective]))
 
 (detective/book

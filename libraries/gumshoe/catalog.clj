@@ -203,6 +203,14 @@
          {:error (str "no book at " path " in this casebook or on the classpath")
           :near (near-matches path catalog)})))))
 
+(defn run-command
+  "The command a reader types to run the book a listed path names. It goes
+   through the run door, which resolves the path with resolve-book, so it works
+   in this checkout and in a casebook alike; a bare `bb <path>` loads a file
+   from the working directory and finds no upstream book from a casebook."
+  [path]
+  (str "bb run " path))
+
 (defn resolve-path
   "The absolute path of a book named by a book-dir-relative suffix
    (\"tools/flux/runbooks/gitops.clj\", \"runbooks/investigate.clj\") found on the
