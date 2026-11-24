@@ -16,7 +16,8 @@
    object back."
   (:require [cheshire.core :as json]
             [clojure.string :as str]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.pick :as pick]))
 
 (def schedule-name-label "velero.io/schedule-name")
 (def backup-name-label "velero.io/backup-name")
@@ -27,11 +28,9 @@
   #{"New" "Queued" "ReadyToStart" "InProgress" "WaitingForPluginOperations"
     "WaitingForPluginOperationsPartiallyFailed" "Finalizing" "FinalizingPartiallyFailed"})
 
-(defn parse-pick
+(def parse-pick
   "\"<namespace>/<name>\" as {:namespace :name}, or nil."
-  [pick]
-  (when-let [[_ namespace name] (re-matches #"\s*([^/\s]+)/([^/\s]+)\s*" (str pick))]
-    {:namespace namespace :name name}))
+  pick/namespaced)
 
 (defn location-for
   "The BackupStorageLocation a backup writes to: the one it names, else the

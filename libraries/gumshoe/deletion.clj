@@ -6,18 +6,18 @@
    objects can be picked, what depends on the one picked, and what the
    confirmation says. A pick names one object as \"<type> <namespace>/<name>\"."
   (:require [clojure.string :as str]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.pick :as pick]))
 
 (def types
   "The namespaced types the runbook deletes."
   ["deployments" "statefulsets" "daemonsets" "jobs" "cronjobs" "pods" "services" "ingresses"
    "configmaps" "persistentvolumeclaims"])
 
-(defn parse-pick
-  [value]
-  (when-let [[_ type namespace name] (re-matches #"\s*(\S+)\s+([^/\s]+)/(\S+)\s*" (str value))]
-    (when (some #{type} types)
-      {:type type :namespace namespace :name name})))
+(def parse-pick
+  "\"<type> <namespace>/<name>\" of one of types as {:type :namespace :name},
+   or nil."
+  (pick/typed types))
 
 (defn picks
   [lists-by-type]

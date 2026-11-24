@@ -9,10 +9,6 @@
             [gumshoe.mutation :as mutation]
             [gumshoe.workloads :as workloads]))
 
-(defn- fetch
-  [context {:keys [type namespace name]}]
-  (kubectl/get-namespaced-resource context namespace type name))
-
 (defn- history
   [context {:keys [kind namespace]}]
   (kubectl/get-namespaced context namespace (workloads/history-types kind)))
@@ -36,30 +32,24 @@
   :select {:mode :one :label "Workload" :flag :pick :candidates candidates}
   :empty-message "no workload has an earlier revision to go back to"
   :confirm {:action "roll a workload back" :destructive? true}
-  :derive (fn [{:keys [context target opts]}]
-            (let [pick (workloads/parse-pick target)
-                  workload (when pick (fetch context pick))
-                  past (when pick (history context pick))
+  :subject {:parse workloads/parse-pick :invalid "the pick is not \"<Kind> <namespace>/<name>\""}
+  :derive (fn [{:keys [context ref object opts]}]
+            (let [past (when ref (history context ref))
                   to (:to-revision opts)]
-              {:pick pick :workload workload :history past :to to
-               :target-revision (when workload (workloads/rollback-target (:kind pick) workload past to))}))
-  :items (fn [{:keys [pick workload history to target-revision target]}]
+              {:history past :to to
+               :target-revision (when object (workloads/rollback-target (:kind ref) object past to))}))
+  :items (fn [{:keys [ref object history to target-revision target]}]
            (if target-revision
-             (workloads/rollback-items (:kind pick) workload history to)
+             (workloads/rollback-items (:kind ref) object history to)
              [(format "roll %s back" target)]))
-  :pin :pick
-  :precondition (fn [{:keys [context pick to]}]
-                  (let [why (if pick
-                              (workloads/rollback-refusal (:kind pick) (fetch context pick) (history context pick) to)
-                              "the pick is not \"<Kind> <namespace>/<name>\"")]
-                    (when why (println (str "refusing: " why)))
-                    (nil? why)))
+  :refusal (fn [{:keys [context ref object to]}]
+             (workloads/rollback-refusal (:kind ref) object (history context ref) to))
   :announce (fn [{:keys [target target-revision]}] (format "Roll %s back to revision %s" target (:revision target-revision)))
-  :effect (fn [{:keys [context pick target-revision]}]
+  :effect (fn [{:keys [context ref target-revision]}]
             (if target-revision
-              (effect/plan (apply effect/kubectl context (workloads/rollback-args pick (:revision target-revision))))
+              (effect/plan (apply effect/kubectl context (workloads/rollback-args ref (:revision target-revision))))
               (effect/plan (effect/note "nothing to roll back to - the precondition says why"))))
-  :verify (fn [{:keys [context pick target target-revision]}]
+  :verify (fn [{:keys [ref target target-revision] :as ctx}]
             [{:description (format "%s runs revision %s's images and rolled out" target (:revision target-revision))
               :timeout 600 :interval 10
-              :check (fn [] (workloads/rolled-back? (:kind pick) (fetch context pick) target-revision))}])})
+              :check (fn [] (workloads/rolled-back? (:kind ref) (mutation/read-subject ctx) target-revision))}])})

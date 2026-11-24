@@ -7,10 +7,6 @@
             [gumshoe.mutation :as mutation]
             [gumshoe.tools.flux :as flux]))
 
-(defn- fetch
-  [context {:keys [type namespace name]}]
-  (kubectl/get-namespaced-resource context namespace type name))
-
 (defn- candidates
   [context]
   (flux/delivery-picks (into {} (for [[kind type] flux/suspendable] [kind (kubectl/get-all context type)])) true))
@@ -26,24 +22,17 @@
   :select {:mode :one :label "Suspend" :flag :pick :candidates candidates}
   :empty-message "every Flux object is suspended already"
   :confirm {:action "suspend a Flux object"}
-  :derive (fn [{:keys [context target]}]
-            (let [pick (flux/parse-delivery-pick target)]
-              {:pick pick :resource (when pick (fetch context pick))
-               ;; one timestamp, shared by the plan and its announcement
-               :timestamp (str (.truncatedTo (java.time.Instant/now) java.time.temporal.ChronoUnit/SECONDS))}))
-  :items (fn [{:keys [pick resource target]}]
-           (if resource (flux/suspend-items (:kind pick) resource true) [(str "suspend " target)]))
-  :pin :pick
-  :precondition (fn [{:keys [context pick]}]
-                  (let [why (if pick
-                              (flux/suspend-refusal (fetch context pick) true)
-                              "the pick is not \"<Kind> <namespace>/<name>\" of a HelmRelease, Kustomization, GitRepository or OCIRepository")]
-                    (when why (println (str "refusing: " why)))
-                    (nil? why)))
+  :subject {:parse flux/parse-delivery-pick
+            :invalid "the pick is not \"<Kind> <namespace>/<name>\" of a HelmRelease, Kustomization, GitRepository or OCIRepository"}
+  ;; one timestamp, shared by the plan and its announcement
+  :derive (fn [_] {:timestamp (str (.truncatedTo (java.time.Instant/now) java.time.temporal.ChronoUnit/SECONDS))})
+  :items (fn [{:keys [ref object target]}]
+           (if object (flux/suspend-items (:kind ref) object true) [(str "suspend " target)]))
+  :refusal (fn [{:keys [object]}] (flux/suspend-refusal object true))
   :announce (fn [{:keys [target]}] (format "Suspend %s" target))
-  :effect (fn [{:keys [context pick timestamp]}]
-            (flux/suspend-effect context (or pick {}) true timestamp))
-  :verify (fn [{:keys [context pick target]}]
+  :effect (fn [{:keys [context ref timestamp]}]
+            (flux/suspend-effect context (or ref {}) true timestamp))
+  :verify (fn [{:keys [target] :as ctx}]
             [{:description (format "%s is suspended" target)
               :timeout 30 :interval 3
-              :check (fn [] (= true (true? (-> (fetch context pick) :spec :suspend))))}])})
+              :check (fn [] (= true (true? (-> (mutation/read-subject ctx) :spec :suspend))))}])})

@@ -47,6 +47,8 @@
                    [gumshoe.effect-plugin-test]
                    [gumshoe.mutation-pin-test]
                    [gumshoe.mutation-books-test]
+                   [gumshoe.mutation-subject-test]
+                   [gumshoe.pick-test]
                    [gumshoe.deletion-test]
                    [gumshoe.workloads-ops-test]
                    [gumshoe.posture-test]
@@ -202,6 +204,8 @@
                                                          'gumshoe.effect-plugin-test
                                                          'gumshoe.mutation-pin-test
                                                          'gumshoe.mutation-books-test
+                                                         'gumshoe.mutation-subject-test
+                                                         'gumshoe.pick-test
                                                          'gumshoe.deletion-test
                                                          'gumshoe.workloads-ops-test
                                                          'gumshoe.posture-test

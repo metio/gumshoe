@@ -10,10 +10,6 @@
             [gumshoe.shell :as shell]
             [clojure.string :as str]))
 
-(defn- fetch
-  [context {:keys [type namespace name]}]
-  (kubectl/get-namespaced-resource context namespace type name))
-
 (defn- dry-run
   "A server-side dry run: admission webhooks and policies judge it and nothing
    changes, so its refusal is the real delete's refusal."
@@ -37,30 +33,26 @@
            :candidates (fn [context] (deletion/picks (into {} (for [type deletion/types] [type (kubectl/get-all context type)]))))}
   :empty-message "nothing to delete"
   :confirm {:action "delete an object" :destructive? true}
-  :derive (fn [{:keys [context target]}]
-            (let [pick (deletion/parse-pick target)]
-              (when pick
-                {:pick pick
-                 :dry-run (dry-run context pick)
-                 :dependents (deletion/dependents pick (evidence context pick))})))
+  :subject {:parse deletion/parse-pick
+            :invalid (str "the pick is not \"<type> <namespace>/<name>\" of " (str/join ", " deletion/types))}
+  :derive (fn [{:keys [context ref]}]
+            (when ref
+              {:dry-run (dry-run context ref)
+               :dependents (deletion/dependents ref (evidence context ref))}))
   :items (fn [{:keys [target dry-run dependents]}]
            (if dry-run (deletion/deletion-items target dry-run dependents) [(str "delete " target)]))
-  :pin :pick
-  :precondition (fn [{:keys [context pick dry-run]}]
-                  (let [why (cond
-                              (nil? pick) (str "the pick is not \"<type> <namespace>/<name>\" of " (str/join ", " deletion/types))
-                              (not (:ok? dry-run)) (str "the dry run was refused: " (:message dry-run))
-                              (nil? (fetch context pick)) "the object no longer exists"
-                              :else nil)]
-                    (when why (println (str "refusing: " why)))
-                    (nil? why)))
+  :refusal (fn [{:keys [object dry-run]}]
+             (cond
+               (not (:ok? dry-run)) (str "the dry run was refused: " (:message dry-run))
+               (nil? object) "the object no longer exists"
+               :else nil))
   :announce (fn [{:keys [target]}] (format "Delete %s" target))
-  :effect (fn [{:keys [context pick]}]
-            (effect/plan (apply effect/kubectl context (deletion/delete-args (or pick {})))))
-  :verify (fn [{:keys [context pick target]}]
+  :effect (fn [{:keys [context ref]}]
+            (effect/plan (apply effect/kubectl context (deletion/delete-args (or ref {})))))
+  :verify (fn [{:keys [context ref target] :as ctx}]
             [{:description (format "%s is gone or terminating" target)
               :timeout 60 :interval 5
               ;; a fetch that failed returns nil like a deleted object, so
               ;; gone needs a read that answered NotFound
-              :check (fn [] (or (some-> (fetch context pick) :metadata :deletionTimestamp some?)
-                                (kubectl/confirmed-gone? context (:namespace pick) (:type pick) (:name pick))))}])})
+              :check (fn [] (or (some-> (mutation/read-subject ctx) :metadata :deletionTimestamp some?)
+                                (kubectl/confirmed-gone? context (:namespace ref) (:type ref) (:name ref))))}])})

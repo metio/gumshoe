@@ -6,7 +6,8 @@
    pure over the objects so every refusal and every completion test is
    testable. A pick names one workload as \"<Kind> <namespace>/<name>\"."
   (:require [clojure.string :as str]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.pick :as pick]))
 
 (def types
   "The workload controllers, by resource type and kind."
@@ -20,13 +21,10 @@
   [kind workload]
   (str kind " " (kubectl/namespace-name-of workload)))
 
-(defn parse-pick
+(def parse-pick
   "\"<Kind> <namespace>/<name>\" as {:kind :type :namespace :name}, or nil for
    another shape or an unknown kind."
-  [value]
-  (when-let [[_ kind namespace name] (re-matches #"\s*(\w+)\s+([^/\s]+)/(\S+)\s*" (str value))]
-    (when-let [type (type-of kind)]
-      {:kind kind :type type :namespace namespace :name name})))
+  (pick/kinded type-of))
 
 (defn picks
   "Every workload of the listed kinds that pred accepts, as picks."

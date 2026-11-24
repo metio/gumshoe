@@ -13,6 +13,7 @@
             [gumshoe.investigation :as investigation]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]
+            [gumshoe.pick :as pick]
             [gumshoe.plugin :as plugin]
             [gumshoe.subject :as subject]))
 
@@ -414,13 +415,10 @@
    "GitRepository" gitrepository-type
    "OCIRepository" ocirepository-type})
 
-(defn parse-delivery-pick
+(def parse-delivery-pick
   "\"<Kind> <namespace>/<name>\" of a suspendable kind as {:kind :type
    :namespace :name}, or nil."
-  [value]
-  (when-let [[_ kind namespace name] (re-matches #"\s*(\w+)\s+([^/\s]+)/(\S+)\s*" (str value))]
-    (when-let [type (suspendable kind)]
-      {:kind kind :type type :namespace namespace :name name})))
+  (pick/kinded suspendable))
 
 (defn delivery-picks
   "Every object of the suspendable kinds whose suspension differs from wanted."
