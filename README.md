@@ -374,6 +374,13 @@ state the failure left. The run prints it under the `FAILED` banner when it
 stops at that step. The playbook's own `:recovery` covers its steps without
 one once something changed, and a mutation book takes `:recovery` as well.
 
+Steps that recur across playbooks come from step libraries: `gumshoe.steps.objects/delete`
+deletes a list of objects and proves each one gone, and `gumshoe.steps.flux/suspend`,
+`resume` and `reconcile` act on one Flux object of any kind. A library playbook
+whose steps run in a fixed order offers named positions where a casebook adds its
+own steps, through `playbook/with-extra`; `gumshoe.tools.flux-storage` composes
+both, and a casebook calls its `(playbook-with {:after-volumes [step]})`.
+
 `--help` of a playbook or a mutation book describes it from its spec: what it
 picks, every step in order with where the confirmation and the pauses fall,
 what it verifies, and the tools and permissions it needs.

@@ -53,7 +53,12 @@
    :unattended :continue, whose :verify then waits for the result instead.
    `run-segment!` runs one segment against a subject, for a driver that takes a
    batch through a segment, lets the operator act once for all of it, and
-   continues with the next."
+   continues with the next.
+
+   A library playbook whose steps run in a fixed order offers positions where
+   a caller's own steps go: it pairs each step with the position that follows
+   it, [[position step] ..], and `with-extra` splices in a map of position ->
+   steps, refusing an unknown position as the book loads."
   (:refer-clojure :exclude [run!])
   (:require [gumshoe.flow :as flow]
             [gumshoe.interact :as interact]
@@ -75,6 +80,65 @@
     (contains? step :check) :check
     :else (throw (ex-info "a playbook step needs an :effect, a :check or a :pause"
                           {:step (dissoc step :options :prerequisites)}))))
+
+;; --- positions -------------------------------------------------------------------
+
+(defn destructive?
+  "Whether the step is a change whose confirmation calls it destructive."
+  [step]
+  (true? (get-in step [:confirm :destructive?])))
+
+(defn positions
+  "The positions `anchored` offers, in run order. `anchored` is a vector of
+   [position step], each position naming where a caller's steps go: right
+   after that step, or nowhere when the position is nil."
+  [anchored]
+  (vec (keep first anchored)))
+
+(defn insert-at
+  "The steps of `anchored`, with the steps `extra` holds for a position right
+   after the step that position names. Only the position names are read,
+   never a title."
+  [anchored extra]
+  (vec (mapcat (fn [[position step]] (cons step (get extra position))) anchored)))
+
+(defn check-extra!
+  "Throws when `extra` is not a map of position -> steps, names a position
+   `anchored` does not offer, holds anything but a sequence of step maps for
+   one, or holds a step `refuse` names a reason against. `refuse` takes the
+   position and one step and returns why the step cannot go there, or nil;
+   `of` names the steps in the error, as in \"the flux-storage steps\"."
+  [anchored extra {:keys [of refuse] :or {of "the playbook's steps"}}]
+  (let [offered (positions anchored)]
+    (when-not (or (nil? extra) (map? extra))
+      (throw (ex-info "the extra steps must be a map of position -> steps"
+                      {:extra extra :positions offered})))
+    (doseq [[position added] extra]
+      (when-not (some #{position} offered)
+        (throw (ex-info (format "%s is not a position of %s; the positions are %s"
+                                (pr-str position) of (pr-str offered))
+                        {:position position :positions offered})))
+      (when-not (and (sequential? added) (every? map? added))
+        (throw (ex-info (format "the steps for %s must be a vector of step maps" (pr-str position))
+                        {:position position :steps added})))
+      (when refuse
+        (doseq [step added]
+          (when-let [why (refuse position step)]
+            (throw (ex-info why {:position position :step (:title step)}))))))))
+
+(defn with-extra
+  "The steps of `anchored` with a caller's `extra` steps at the positions
+   they name, checked as check-extra! does with `options`. A playbook built
+   from fixed steps offers positions this way, so a casebook adds its own
+   steps by position name and an unknown name fails as its book loads:
+
+     (with-extra [[nil read] [:after-delete delete] [nil resume]]
+                 {:after-delete [my-step]}
+                 {:of \"the reset steps\"})"
+  ([anchored extra] (with-extra anchored extra {}))
+  ([anchored extra options]
+   (check-extra! anchored extra options)
+   (insert-at anchored extra)))
 
 (defn all-prerequisites
   "Everything any step needs, and the playbook's own."

@@ -83,6 +83,8 @@
                    [gumshoe.tools.flux-progress-test]
                    [gumshoe.tools.flux-storage-test]
                    [gumshoe.tools.flux-storage-steps-test]
+                   [gumshoe.steps.flux-test]
+                   [gumshoe.steps-objects-test]
                    [gumshoe.certificates-test]
                    [gumshoe.certificate-renewal-test]
                    [gumshoe.gateway-test]
@@ -241,6 +243,8 @@
                                                          'gumshoe.tools.flux-progress-test
                                                          'gumshoe.tools.flux-storage-test
                                                          'gumshoe.tools.flux-storage-steps-test
+                                                         'gumshoe.steps.flux-test
+                                                         'gumshoe.steps-objects-test
                                                          'gumshoe.certificates-test
                                                          'gumshoe.certificate-renewal-test
                                                          'gumshoe.gateway-test
