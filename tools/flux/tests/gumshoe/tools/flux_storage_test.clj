@@ -2,8 +2,10 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.tools.flux-storage-test
-  (:require [clojure.string :as str]
+  (:require [cheshire.core :as json]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [gumshoe.shell :as shell]
             [gumshoe.tools.flux :as flux]
             [gumshoe.tools.flux-storage :as storage]))
 
@@ -155,3 +157,47 @@
   (let [titles (map :title (storage/steps))]
     (is (some #(re-find #"(?i)suspend the owner" %) titles))
     (is (some #(re-find #"(?i)resume the owner" %) titles))))
+
+;; --- the steps against a cluster --------------------------------------------------
+
+(defn- fake-cluster
+  "A kubectl that answers `get` from state, an atom of type -> objects. A type
+   mapped to :fail does not answer."
+  [state]
+  (fn [& argv]
+    (let [[type name] (rest (drop-while #(not= "get" %) argv))
+          name (when-not (str/starts-with? (str name) "--") name)
+          objects (get @state type)]
+      (cond
+        (= :fail objects) {:exit 1 :out "" :err "Unable to connect to the server"}
+        name (if-let [object (first (filter #(= name (-> % :metadata :name)) objects))]
+               {:exit 0 :out (json/generate-string object) :err ""}
+               {:exit 1 :out "" :err (str "Error from server (NotFound): " type " \"" name "\" not found")})
+        :else {:exit 0 :out (json/generate-string {:items (or objects [])}) :err ""}))))
+
+(defn- step-titled [steps re]
+  (first (filter #(re-find re (str (:title %))) steps)))
+
+(defn- derive-in [step]
+  ((:derive step) {:context "ctx" :target "apps/podinfo"}))
+
+(def ^:private template-sts
+  (object "StatefulSet" "db" :release "podinfo" :spec {:volumeClaimTemplates [{:metadata {:name "data"}}]}))
+
+(defn- cluster-state []
+  {flux/helmrelease-type [release]
+   "statefulsets" [template-sts]
+   "persistentvolumeclaims" [(object "PersistentVolumeClaim" "data-db-0")
+                             (object "PersistentVolumeClaim" "data-db-1")
+                             (object "PersistentVolumeClaim" "unrelated")]})
+
+(deftest the-volumes-step-keeps-the-template-claims-of-statefulsets-the-workloads-step-deleted
+  (let [state (atom (cluster-state))
+        steps (storage/steps)]
+    (with-redefs [shell/execute (fake-cluster state)]
+      (is (= ["statefulsets/db"] (map #(str (:type %) "/" (:name %))
+                                      (:workloads (:observed (derive-in (step-titled steps #"workloads")))))))
+      (swap! state assoc "statefulsets" [])
+      (is (= ["data-db-0" "data-db-1"]
+             (sort (map :name (:volumes (:observed (derive-in (step-titled steps #"volumes")))))))
+          "the claims the deleted StatefulSet made from its templates are still the release's volumes"))))
