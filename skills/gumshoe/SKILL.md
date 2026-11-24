@@ -281,6 +281,16 @@ mostly data:
   `NotFound` answer is not a failure there. `secret-names`, `tls-secrets`,
   `get-raw` and `raw-text` ignore the binding, so a candidate fn that must
   not mistake a failed read for an empty one avoids them;
+- Helm's storage is read with `(kubectl/helm-releases context)` across the
+  cluster, or with `(kubectl/helm-releases context namespace release)` in
+  one storage namespace, selected by `owner=helm,name=<release>` on the
+  server. A book that knows where a release is stored uses the namespaced
+  form: on a busy cluster the cluster-wide listing can outrun the 30s
+  request timeout, and it needs list rights on every namespace's Secrets.
+  Both honour `kubectl/*strict-reads*`. The `:kubectl-can-*` prerequisites
+  always check a right across every namespace, so a book whose namespace is
+  known only once it reads the cluster leaves that read's resource out of
+  them and lets the read itself refuse before any effect;
 - a `namespace/name` target splits with `(kubectl/namespace-name-map
   target)`, which returns the map `{:namespace … :name …}`, so a book
   destructures it by key, `(let [{:keys [namespace name]} …])`. A vector

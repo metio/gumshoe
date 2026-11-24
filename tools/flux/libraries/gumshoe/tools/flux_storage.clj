@@ -31,6 +31,14 @@
    for a caller's steps, carries `recovery`: a failure prints which of the
    HelmRelease and its owner stay suspended and how to resume them.
 
+   Helm's storage is read in the release's storage namespace only, selected
+   by owner=helm and the release's name label, so the steps need `list` on
+   Secrets in that namespace and nowhere else. Deleting the storage needs
+   `delete` on Secrets there too; that step's :kubectl-can-delete prerequisite
+   checks it across every namespace, because a prerequisite cannot name a
+   namespace the HelmRelease decides, and a missing delete right must stop
+   the run before the workloads and volumes go.
+
    A release can own objects Helm never stamped, which the steps cannot find.
    A casebook adds its own steps for them at one of `positions`, named for the
    step they follow, through (steps extra) or (playbook-with extra)."
@@ -240,9 +248,13 @@
 
 (defn- revisions
   "The release's revisions in its storage namespace, or nil when the storage
-   cannot be read."
+   cannot be read. The read names the storage namespace and the release's name
+   label, so it lists a handful of Secrets in one namespace however many
+   releases the cluster holds, and needs list rights on Secrets there only.
+   The rows are still matched on both, so a listing that answered with more
+   than was asked for cannot lend this release another one's revision."
   [context {:keys [release-name storage-namespace]}]
-  (some->> (kubectl/helm-releases context)
+  (some->> (kubectl/helm-releases context storage-namespace release-name)
            (filterv #(and (= release-name (:release %)) (= storage-namespace (:namespace %))))))
 
 (defn- quiet?
@@ -402,10 +414,16 @@
           (println (format "waits:     %s" (pr-str (waits observed))))
           true))))
 
+;; Secrets are absent from :kubectl-can-get on purpose. The storage is read
+;; with `list` in its storage namespace, which is known only once the
+;; HelmRelease is read, and a :kubectl-can-get prerequisite checks `get`
+;; across every namespace before that; it would refuse an operator who holds
+;; exactly the rights the read needs. The report's own storage read is the
+;; check: it runs before any effect, and refuses when it does not answer.
 (def ^:private reads
   {:installed-tools ["kubectl" "fzf"]
    :cluster-capabilities [:flux]
-   :kubectl-can-get (into [flux/helmrelease-type flux/kustomization-type "secrets" "persistentvolumeclaims"]
+   :kubectl-can-get (into [flux/helmrelease-type flux/kustomization-type "persistentvolumeclaims"]
                           workload-types)})
 
 (defn- anchored-steps

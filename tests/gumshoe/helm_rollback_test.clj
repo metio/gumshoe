@@ -2,7 +2,8 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.helm-rollback-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [gumshoe.helm-rollback :as rollback]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.select :as select]
@@ -82,3 +83,22 @@
     (testing "a listing that answered with nothing is still empty under strict reads"
       (with-redefs [shell/execute (fn [& _] {:exit 0 :out "" :err ""})]
         (is (= [] (binding [kubectl/*strict-reads* true] (kubectl/helm-releases "ctx"))))))))
+
+(deftest a-namespaced-release-listing-names-its-namespace-and-release
+  (let [argv (atom nil)]
+    (with-redefs [shell/execute (fn [& args] (reset! argv (vec args)) {:exit 0 :out "" :err ""})]
+      (kubectl/helm-releases "ctx" "web" "shop")
+      (is (some #{"--namespace=web"} @argv))
+      (is (not-any? #{"--all-namespaces"} @argv))
+      (is (some #{"--selector=owner=helm,name=shop"} @argv))
+      (kubectl/helm-releases "ctx" "web")
+      (is (some #{"--namespace=web"} @argv))
+      (is (some #{"--selector=owner=helm"} @argv))
+      (kubectl/helm-releases "ctx")
+      (is (some #{"--all-namespaces"} @argv))
+      (is (not-any? #(str/starts-with? % "--namespace") @argv)))
+    (testing "an unanswered namespaced listing throws under strict reads and is nil otherwise"
+      (with-redefs [shell/execute (fn [& _] {:exit 1 :out "" :err "Unable to connect to the server"})]
+        (is (nil? (kubectl/helm-releases "ctx" "web" "shop")))
+        (is (thrown? clojure.lang.ExceptionInfo
+                     (binding [kubectl/*strict-reads* true] (kubectl/helm-releases "ctx" "web" "shop"))))))))
