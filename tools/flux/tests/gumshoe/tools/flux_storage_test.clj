@@ -408,3 +408,82 @@
                                            flux/kustomization-type :fail
                                            storage/resourceset-type [])))]
       (is (str/includes? text "whether HelmRelease apps/podinfo and its owner are still suspended is unknown") text))))
+
+;; --- the storage read -------------------------------------------------------------
+
+(def ^:private stored-elsewhere
+  "A HelmRelease whose storage lives outside its own namespace, so a read that
+   names the HelmRelease's namespace is told apart from one that names the
+   storage's."
+  (assoc-in release [:spec :storageNamespace] "helm-storage"))
+
+(defn- recording-cluster
+  "fake-cluster, with every `get secrets` recorded into reads and answered by
+   storage: :fail does not answer, a string is the listing kubectl prints."
+  [state reads storage]
+  (let [cluster (fake-cluster state)]
+    (fn [& argv]
+      (if (= "secrets" (second (drop-while #(not= "get" %) argv)))
+        (do (swap! reads conj (vec argv))
+            (if (= :fail storage)
+              {:exit 1 :out "" :err "Unable to connect to the server"}
+              {:exit 0 :out storage :err ""}))
+        (apply cluster argv)))))
+
+(defn- storage-state []
+  (assoc (cluster-state)
+         flux/helmrelease-type [stored-elsewhere]
+         flux/kustomization-type [owning-kustomization]
+         storage/resourceset-type []))
+
+(def ^:private deployed-revision
+  (str/join "\t" ["helm-storage" "podinfo" "deployed" "3" "" "" "2026-11-24T08:00:00Z"]))
+
+(defn- namespaced-to-storage? [argv]
+  (and (some #{"--namespace=helm-storage"} argv)
+       (not (some #{"--all-namespaces"} argv))))
+
+(deftest the-storage-is-read-in-its-own-namespace-only
+  (let [reads (atom [])
+        steps (storage/steps)
+        storage-step (step-titled steps #"Delete the Helm storage")]
+    (with-redefs [shell/execute (recording-cluster (atom (storage-state)) reads deployed-revision)]
+      (is (true? (quietly #((:check (first steps)) {:context "ctx" :target "apps/podinfo"})))
+          "the report reads one deployed revision and goes on")
+      (let [report-reads @reads]
+        (reset! reads [])
+        (is (true? (quietly #((:precondition storage-step) (step-ctx storage-step))))
+            "the storage step's precondition finds no action running")
+        (doseq [[where recorded] [["the report" report-reads] ["the storage precondition" @reads]]]
+          (testing where
+            (is (seq recorded) "the storage is read")
+            (doseq [argv recorded]
+              (is (namespaced-to-storage? argv) (str/join " " argv))
+              (is (some #{"--selector=owner=helm,name=podinfo"} argv) (str/join " " argv)))))))))
+
+(deftest an-unanswered-namespaced-storage-read-refuses
+  (let [steps (storage/steps)]
+    (with-redefs [shell/execute (recording-cluster (atom (storage-state)) (atom []) :fail)]
+      (is (false? (quietly #((:check (first steps)) {:context "ctx" :target "apps/podinfo"})))
+          "the report refuses when the storage cannot be read")
+      (doseq [step (filter :effect steps)
+              :when (re-find #"Delete" (:title step))]
+        (is (false? (quietly #((:precondition step) (step-ctx step))))
+            (str (:title step) " refuses when the storage cannot be read"))))))
+
+(deftest another-releases-revisions-in-the-storage-namespace-are-not-this-ones
+  (let [steps (storage/steps)
+        storage-step (step-titled steps #"Delete the Helm storage")
+        listing (str/join "\n" [(str/join "\t" ["helm-storage" "other" "pending-upgrade" "2"
+                                               (str (quot (System/currentTimeMillis) 1000)) "" ""])
+                                deployed-revision])]
+    (with-redefs [shell/execute (recording-cluster (atom (storage-state)) (atom []) listing)]
+      (is (true? (quietly #((:precondition storage-step) (step-ctx storage-step))))
+          "a running action on another release in the same namespace does not block this one"))))
+
+(deftest the-prerequisites-ask-no-cluster-wide-secret-read
+  (let [steps (storage/steps)]
+    (is (not-any? #{"secrets"} (mapcat #(-> % :prerequisites :kubectl-can-get) steps))
+        "the storage is read in one namespace, which the report's read checks before any effect")
+    (is (some #{"secrets"} (-> (step-titled steps #"Delete the Helm storage") :prerequisites :kubectl-can-delete))
+        "a missing delete right still stops the run before anything is deleted")))

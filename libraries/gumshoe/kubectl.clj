@@ -470,26 +470,41 @@
           :created-at (some-> created not-empty parse-long)
           :creation-timestamp (not-empty created-at)})))
 
+(def ^:private helm-listing-jsonpath
+  (str "--output=jsonpath={range .items[*]}"
+       "{.metadata.namespace}{\"\\t\"}{.metadata.labels.name}{\"\\t\"}"
+       "{.metadata.labels.status}{\"\\t\"}{.metadata.labels.version}{\"\\t\"}"
+       "{.metadata.labels.modifiedAt}{\"\\t\"}{.metadata.labels.createdAt}{\"\\t\"}"
+       "{.metadata.creationTimestamp}{\"\\n\"}{end}"))
+
 (defn helm-releases
   "Every revision Helm stores as a Secret, read from its labels, or nil when
    they cannot be listed; under *strict-reads* a listing that did not answer
    throws instead. The jsonpath selects metadata only, so the release
    payload (rendered manifests and values, which may hold credentials) never
-   reaches gumshoe."
-  [context]
-  (let [{:keys [exit out err]} (shell/execute "kubectl" (str "--context=" context) request-timeout
-                                          "get" "secrets" "--all-namespaces"
-                                          "--selector=owner=helm"
-                                          "--field-selector=type=helm.sh/release.v1"
-                                          (str "--output=jsonpath={range .items[*]}"
-                                               "{.metadata.namespace}{\"\\t\"}{.metadata.labels.name}{\"\\t\"}"
-                                               "{.metadata.labels.status}{\"\\t\"}{.metadata.labels.version}{\"\\t\"}"
-                                               "{.metadata.labels.modifiedAt}{\"\\t\"}{.metadata.labels.createdAt}{\"\\t\"}"
-                                               "{.metadata.creationTimestamp}{\"\\n\"}{end}"))]
-    (when (and *strict-reads* (not (zero? exit)))
-      (throw (did-not-answer exit err)))
-    (when (zero? exit)
-      (parse-helm-listing out))))
+   reaches gumshoe.
+
+   With a namespace, only the revisions stored in that namespace are listed;
+   with a release too, only that release's, selected by Helm's name label on
+   the server. A book that knows where a release is stored reads that way: the
+   API server sends back a handful of Secrets instead of every revision on the
+   cluster, and the read needs list rights on Secrets in that one namespace
+   only."
+  ([context]
+   (helm-releases context nil nil))
+  ([context namespace]
+   (helm-releases context namespace nil))
+  ([context namespace release]
+   (let [{:keys [exit out err]} (shell/execute "kubectl" (str "--context=" context) request-timeout
+                                               "get" "secrets"
+                                               (if namespace (str "--namespace=" namespace) "--all-namespaces")
+                                               (str "--selector=owner=helm" (when release (str ",name=" release)))
+                                               "--field-selector=type=helm.sh/release.v1"
+                                               helm-listing-jsonpath)]
+     (when (and *strict-reads* (not (zero? exit)))
+       (throw (did-not-answer exit err)))
+     (when (zero? exit)
+       (parse-helm-listing out)))))
 
 (defn parse-tls-listing
   "Reads the tab-separated lines of tls-secrets into maps."
