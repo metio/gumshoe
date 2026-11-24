@@ -260,6 +260,17 @@
    symbol it names must resolve - without running."
   false)
 
+(defn- print-outcome!
+  "Prints the final banner and, under a failed one, the recovery guidance of
+   the step the run stopped at."
+  [{:keys [tone text]} record]
+  (case tone
+    :ok (stdout/print-banner stdout/green (str (theme/token :ok) " " text))
+    :neutral (stdout/print-banner stdout/yellow (str (theme/token :warn) " " text))
+    (stdout/print-banner stdout/red (str (theme/token :error) " " text)))
+  (doseq [line (outcome/recovery-lines tone record)]
+    (stdout/err-println (stdout/yellow line))))
+
 (defn execute!
   "Runs a runbook described by a config map:
 
@@ -340,15 +351,12 @@
                                                    :outcome outcome
                                                    :meta (:announcement-data ctx)})]
               ;; the final banner leaves no doubt about the outcome, even at 3am
-              (let [{:keys [tone text]} (outcome/banner {:dry-run? (boolean (:dry-run opts))
-                                                          :changes? (boolean announce?)
-                                                          :outcome outcome
-                                                          :findings? (summary/captured?)}
-                                                         @record)]
-                (case tone
-                  :ok (stdout/print-banner stdout/green (str (theme/token :ok) " " text))
-                  :neutral (stdout/print-banner stdout/yellow (str (theme/token :warn) " " text))
-                  (stdout/print-banner stdout/red (str (theme/token :error) " " text))))
+              (print-outcome! (outcome/banner {:dry-run? (boolean (:dry-run opts))
+                                               :changes? (boolean announce?)
+                                               :outcome outcome
+                                               :findings? (summary/captured?)}
+                                              @record)
+                              @record)
               ;; run summary: where the record is, how to reproduce, how to dig in together
               (when recording-path
                 (stdout/err-println (format "📼 Recording: %s" (stdout/shorten-path recording-path))))

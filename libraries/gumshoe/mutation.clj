@@ -34,6 +34,9 @@
                                     ; its reads are strict, see below
       :items    (fn [ctx] -> seq)   ; optional, overrides the confirmation items
       :pin      (fn [ctx] -> {:type :name :namespace? :facts?})  ; optional, see below
+      :recovery \"...\" or (fn [ctx] -> string)   ; optional, printed under the
+                                    ; FAILED banner when this change fails,
+                                    ; see gumshoe.playbook
       :confirmed? true}  ; set by a playbook whose confirmation covered this step
 
    The :precondition, :announce, :effect, :verify, :derive and :items callbacks
@@ -70,6 +73,7 @@
             [gumshoe.select :as select]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.announce :as announce]
+            [gumshoe.outcome :as outcome]
             [gumshoe.runbook :as runbook]
             [gumshoe.stdout :as stdout]))
 
@@ -163,21 +167,26 @@
       (do (stdout/error (format "could not read what the change rests on - %s" unread))
           false)
       (let [ctx (merge base values)
-            ref (when-let [pin (:pin spec)] (pin ctx))
-            before (when ref (fingerprint (fetch-pinned context ref) (:facts ref)))
-            items-fn (:items spec)]
-        (flow/change!
-         {:confirmation {:action (:action confirm)
-                         :target cluster
-                         :items (if items-fn (items-fn ctx) (select/items (:mode select) target))
-                         :destructive? (:destructive? confirm)}
-          :precondition (pinned-precondition (when precondition #(precondition ctx))
-                                             ref before #(fetch-pinned context %))
-          :confirmed? (:confirmed? spec)
-          :announce! (when announce
-                       #(announce/announce! cluster announcement-data (announce ctx)))
-          :effect (effect ctx)
-          :post-checks (when verify (verify ctx))})))))
+            failed! #(when-not flow/*dry-run* (outcome/recovery! (:recovery spec) ctx))
+            ok? (try
+                  (let [ref (when-let [pin (:pin spec)] (pin ctx))
+                        before (when ref (fingerprint (fetch-pinned context ref) (:facts ref)))
+                        items-fn (:items spec)]
+                    (flow/change!
+                     {:confirmation {:action (:action confirm)
+                                     :target cluster
+                                     :items (if items-fn (items-fn ctx) (select/items (:mode select) target))
+                                     :destructive? (:destructive? confirm)}
+                      :precondition (pinned-precondition (when precondition #(precondition ctx))
+                                                         ref before #(fetch-pinned context %))
+                      :confirmed? (:confirmed? spec)
+                      :announce! (when announce
+                                   #(announce/announce! cluster announcement-data (announce ctx)))
+                      :effect (effect ctx)
+                      :post-checks (when verify (verify ctx))}))
+                  (catch Throwable e (failed!) (throw e)))]
+        (when-not ok? (failed!))
+        ok?))))
 
 (defn run!
   "Selects the spec's subject (interactive, honouring the CLI flags) and runs it

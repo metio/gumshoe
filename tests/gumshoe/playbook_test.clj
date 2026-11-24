@@ -2,12 +2,16 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.playbook-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [gumshoe.flow :as flow]
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.outcome :as outcome]
             [gumshoe.playbook :as playbook]
+            [gumshoe.runbook]
+            [gumshoe.stdout]
+            [gumshoe.theme]
             [gumshoe.steps.nodes :as nodes]))
 
 (defn- change
@@ -250,3 +254,109 @@
       (is (false? (check)) "a failed read is no empty node"))
     (with-redefs [gumshoe.shell/execute (fn [& _] {:exit 0 :out "{\"items\":[]}" :err ""})]
       (is (true? (check)) "an answered read without pods is"))))
+
+(def ^:private missing-binary "this-binary-truly-does-not-exist-xyz")
+
+(defn- failing-change
+  [action & {:as extra}]
+  (merge {:select {:mode :one :label "Node"}
+          :confirm {:action action}
+          :effect (fn [_] [[:cmd missing-binary]])}
+         extra))
+
+(defn- printed-outcome
+  "What the harness prints at the end of a real run of `pb` against w-1:
+   {:ok? <run-on!'s result> :err <the banner and what follows it>}."
+  [pb]
+  (let [record (outcome/fresh)
+        ok? (quietly
+             (with-redefs [interact/confirm! (constantly true)]
+               (binding [outcome/*record* record]
+                 (playbook/run-on! pb "w-1" {} nil))))
+        err (java.io.StringWriter.)]
+    (binding [*err* err]
+      (#'gumshoe.runbook/print-outcome!
+       (outcome/banner {:changes? true :outcome (if ok? :ok :failed)} @record)
+       @record))
+    {:ok? ok? :err (str err)}))
+
+(deftest the-failed-banner-prints-the-recovery-of-the-step-the-run-stopped-at
+  (let [ran (atom [])
+        {:keys [ok? err]} (printed-outcome
+                           {:select {:mode :one} :confirm {:action "maintain"}
+                            :steps [(change "cordon" ran)
+                                    (failing-change "drain"
+                                                    :recovery (fn [{:keys [target applied]}]
+                                                                (format "%s stays cordoned after %d effect - uncordon it" target applied)))
+                                    (change "uncordon" ran :recovery "never shown")]})
+        banner-at (str/index-of err "FAILED after 1 effect - stopped at: " )
+        recovery-at (str/index-of err "w-1 stays cordoned after 1 effect - uncordon it")]
+    (is (false? ok?))
+    (is (some? banner-at) err)
+    (is (some? recovery-at) err)
+    (is (< banner-at recovery-at) "the guidance prints under the banner")
+    (is (not (str/includes? err "never shown")))))
+
+(deftest a-book-without-recovery-prints-only-the-banner
+  (let [ran (atom [])
+        {:keys [err]} (printed-outcome {:select {:mode :one} :confirm {:action "maintain"}
+                                        :steps [(change "cordon" ran) (failing-change "drain")]})
+        expected (java.io.StringWriter.)]
+    (binding [*err* expected]
+      (gumshoe.stdout/print-banner gumshoe.stdout/red
+                                   (str (gumshoe.theme/token :error) " FAILED after 1 effect - stopped at: "
+                                        missing-binary " - the effects before it stay applied")))
+    (is (= (str expected) err))))
+
+(deftest recovery-that-cannot-render-keeps-the-banner-and-says-so
+  (let [ran (atom [])
+        {:keys [err]} (printed-outcome {:select {:mode :one} :confirm {:action "maintain"}
+                                        :steps [(change "cordon" ran)
+                                                (failing-change "drain" :recovery (fn [_] (throw (ex-info "no cluster" {}))))]})]
+    (is (str/includes? err "FAILED after 1 effect - stopped at: "))
+    (is (str/includes? err "Recovery: the guidance for the step the run stopped at could not be rendered - no cluster"))))
+
+(deftest a-failing-check-prints-its-own-recovery
+  (let [ran (atom [])
+        {:keys [err]} (printed-outcome {:select {:mode :one} :confirm {:action "maintain"}
+                                        :steps [(change "cordon" ran)
+                                                (assoc (check "drained?" ran false) :recovery "uncordon w-1 by hand")]})]
+    (is (str/includes? err "FAILED - read the messages above; 1 effect had been applied"))
+    (is (str/includes? err "uncordon w-1 by hand"))))
+
+(deftest the-playbook-recovery-covers-steps-without-their-own-once-something-changed
+  (let [ran (atom [])
+        pb {:select {:mode :one} :confirm {:action "maintain"} :recovery "the node may still be cordoned"}]
+    (testing "after a change, a step without guidance falls back to the playbook's"
+      (is (str/includes? (:err (printed-outcome (assoc pb :steps [(change "cordon" ran) (failing-change "drain")])))
+                         "the node may still be cordoned")))
+    (testing "a step's own guidance wins"
+      (let [{:keys [err]} (printed-outcome (assoc pb :steps [(change "cordon" ran) (failing-change "drain" :recovery "mine")]))]
+        (is (str/includes? err "mine"))
+        (is (not (str/includes? err "the node may still be cordoned")))))
+    (testing "a leading check that fails before any change prints no fallback"
+      (is (not (str/includes? (:err (printed-outcome (assoc pb :steps [(check "look" ran false) (change "cordon" ran)])))
+                              "Recovery"))))))
+
+(deftest a-step-that-throws-records-its-recovery-and-rethrows
+  (let [record (outcome/fresh)]
+    (quietly
+     (with-redefs [interact/confirm! (constantly true)]
+       (binding [outcome/*record* record]
+         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"exploded"
+                               (playbook/run-on! {:select {:mode :one} :confirm {:action "x"}
+                                                  :steps [{:check (fn [_] (throw (ex-info "exploded" {})))
+                                                           :recovery "read the node by hand"}]}
+                                                 "w-1" {} nil))))))
+    (is (= {:text "read the node by hand"} (:recovery @record)))))
+
+(deftest a-dry-run-records-no-recovery
+  (let [record (outcome/fresh)]
+    (quietly
+     (with-redefs [interact/confirm! (constantly true)]
+       (binding [outcome/*record* record flow/*dry-run* true]
+         (playbook/run-on! {:select {:mode :one} :confirm {:action "x"}
+                            :steps [(check "fails" (atom []) false)]
+                            :recovery "x"}
+                           "w-1" {} nil))))
+    (is (not (contains? @record :recovery)))))

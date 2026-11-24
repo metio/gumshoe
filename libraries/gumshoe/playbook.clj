@@ -11,7 +11,7 @@
      {:pause \"what the operator does now\"     waits for ENTER, then proves the result
       :verify (fn [ctx] -> post-checks)        optional
       :unattended :continue}                   optional, see below
-   and may carry :title, :prerequisites and :options. The playbook's
+   and may carry :title, :prerequisites, :options and :recovery. The playbook's
    prerequisites and options are derived from its steps, joined with its own,
    so the harness checks everything any step needs before the first one runs.
    Steps that declare the same option must agree on its :coerce, :alias and
@@ -23,9 +23,20 @@
       :prerequisites {..}   ; joined with the steps' prerequisites
       :select        {..}   ; picks the subject once, see gumshoe.select
       :confirm       {:action \"...\" :destructive? false}
+      :recovery      \"...\" or (fn [ctx] -> string)   ; optional, see below
       :steps         [..]}
 
    Each step receives {:context :cluster :target :opts :announcement-data}.
+
+   :recovery is what the operator reads under the FAILED banner when the run
+   stops at that step: what the steps before it left behind and how to bring
+   the system back. A function receives the step's context with :applied, the
+   effects applied so far, and runs at the failure, so it can read the state
+   the failure left; one that throws leaves the banner intact and says the
+   guidance could not be rendered. The playbook's :recovery covers a step
+   without its own once the run has changed something. Every step whose
+   failure leaves a system parked or half-owned - a controller suspended, a
+   finalizer stripped - carries one.
 
    The checks before the first change or pause run before the confirmation, so
    the operator decides with their report on screen. The confirmation lists
@@ -188,14 +199,27 @@
     :check (boolean ((:check step) ctx))
     :pause (pause! step ctx wait?)))
 
+(defn- stopped-at!
+  "Records the recovery guidance for `step`, the one the run stopped at: its
+   own, or once the run changed something the playbook's `fallback`. A
+   rehearsal changed nothing and records none."
+  [step ctx fallback]
+  (when-not flow/*dry-run*
+    (outcome/recovery! (or (:recovery step) (when (outcome/changed-so-far?) fallback)) ctx)))
+
 (defn- run-steps!
   "Runs the steps in order, stopping at the first that fails. `wait?` says
-   whether a pause that opens the run waits for the operator."
-  [steps ctx wait?]
+   whether a pause that opens the run waits for the operator; `fallback` is
+   the playbook's recovery guidance for a step without its own."
+  [steps ctx wait? fallback]
   (reduce (fn [_ [i step]]
-            (if (run-step! step ctx (or wait? (pos? i)))
+            (if (try (run-step! step ctx (or wait? (pos? i)))
+                     (catch Throwable e
+                       (stopped-at! step ctx fallback)
+                       (throw e)))
               true
-              (reduced false)))
+              (do (stopped-at! step ctx fallback)
+                  (reduced false))))
           true
           (map-indexed vector steps)))
 
@@ -222,7 +246,7 @@
   [playbook n target opts announcement-data]
   (let [segs (segments (:steps playbook))]
     (if-let [steps (get segs (dec n))]
-      (run-steps! steps (context-for target opts announcement-data) false)
+      (run-steps! steps (context-for target opts announcement-data) false (:recovery playbook))
       (do (stdout/error (format "the playbook has %d segments, there is no segment %d" (count segs) n))
           false))))
 
@@ -243,9 +267,9 @@
         ;; the operator did its manual step before running --from-segment.
         ;; A pause after the leading checks, or one opening a fresh run,
         ;; still has its manual step ahead of it
-        (and (run-steps! leading ctx false)
+        (and (run-steps! leading ctx false (:recovery playbook))
              (confirmed! playbook later ctx)
-             (run-steps! later ctx (or (= 1 from) (boolean (seq leading)))))))))
+             (run-steps! later ctx (or (= 1 from) (boolean (seq leading))) (:recovery playbook)))))))
 
 (defn run!
   "Selects the subject, honouring the flags, and runs the playbook against it.

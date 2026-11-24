@@ -361,3 +361,50 @@
     (is (= [{:id 1} {:id 2} {:id :x} {:id 3}]
            (storage/insert-at anchored {:after-volumes [extra]}))
         "steps without any title splice by position name alone")))
+
+;; --- recovery guidance -------------------------------------------------------------
+
+(deftest every-step-from-the-owner-suspend-to-its-resume-carries-recovery
+  (let [steps (storage/steps)
+        from (first (keep-indexed #(when (re-find #"Suspend the owner" (:title %2)) %1) steps))
+        to (first (keep-indexed #(when (re-find #"Resume the owner" (:title %2)) %1) steps))]
+    (is (nil? (:recovery (first steps))) "the report changes nothing")
+    (doseq [step (subvec steps from (inc to))]
+      (is (fn? (:recovery step)) (:title step)))
+    (testing "a casebook's own steps fall back to the playbook's guidance"
+      (is (fn? (:recovery storage/playbook)))
+      (is (fn? (:recovery (storage/playbook-with {:after-volumes [{:check (constantly true)}]})))))))
+
+(defn- recovery-text [state]
+  (let [recovery (:recovery (step-titled (storage/steps) #"Delete the release's workloads"))]
+    (with-redefs [shell/execute (fake-cluster state)]
+      (recovery {:context "ctx" :target "apps/podinfo" :applied 2}))))
+
+(deftest the-recovery-names-what-is-still-suspended-and-how-to-resume-it
+  (let [text (recovery-text (atom (assoc (cluster-state)
+                                         flux/helmrelease-type [(assoc-in release [:spec :suspend] true)]
+                                         flux/kustomization-type [(assoc-in owning-kustomization [:spec :suspend] true)]
+                                         storage/resourceset-type [])))]
+    (is (str/includes? text "Flux does not reconcile HelmRelease apps/podinfo while these stay suspended") text)
+    (is (str/includes? text "kubectl --context=ctx -n apps patch helmreleases.helm.toolkit.fluxcd.io podinfo --type=merge --patch='{\"spec\":{\"suspend\":false}}'") text)
+    (is (str/includes? text "kubectl --context=ctx -n flux-system patch kustomizations.kustomize.toolkit.fluxcd.io apps --type=merge --patch='{\"spec\":{\"suspend\":false}}'") text)
+    (is (< (str/index-of text "HelmRelease apps/podinfo -") (str/index-of text "Kustomization flux-system/apps -"))
+        "the HelmRelease resumes before its owner"))
+  (testing "a ResourceSet owner resumes through its annotation"
+    (let [text (recovery-text (atom (assoc (cluster-state)
+                                           flux/kustomization-type []
+                                           storage/resourceset-type
+                                           [(-> owning-kustomization
+                                                (assoc-in [:metadata :annotations :fluxcd.controlplane.io/reconcile] "disabled"))])))]
+      (is (str/includes? text "ResourceSet flux-system/apps - resume: kubectl --context=ctx -n flux-system annotate resourcesets.fluxcd.controlplane.io apps --overwrite fluxcd.controlplane.io/reconcile=enabled") text)
+      (is (not (str/includes? text "HelmRelease apps/podinfo - resume")) "the HelmRelease is not suspended here")))
+  (testing "nothing suspended is said as such"
+    (is (str/includes? (recovery-text (atom (assoc (cluster-state)
+                                                   flux/kustomization-type [owning-kustomization]
+                                                   storage/resourceset-type [])))
+                       "Neither HelmRelease apps/podinfo nor its owner is suspended")))
+  (testing "an unanswered read says the state is unknown rather than guessing"
+    (let [text (recovery-text (atom (assoc (cluster-state)
+                                           flux/kustomization-type :fail
+                                           storage/resourceset-type [])))]
+      (is (str/includes? text "whether HelmRelease apps/podinfo and its owner are still suspended is unknown") text))))

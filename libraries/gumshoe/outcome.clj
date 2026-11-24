@@ -11,6 +11,10 @@
    fresh record per run and derives the banner from it with `banner`, a pure
    function of the record, the book's kind and its result.
 
+   A step may carry recovery guidance: what its failure leaves behind and what
+   the operator does about it. The step that stops a run records it with
+   `recovery!`, and `recovery-lines` prints it under a failed banner.
+
    Outside a run nothing is bound and recording does nothing, so a library
    function called from a test or a REPL behaves exactly as before."
   (:require [clojure.string :as str]))
@@ -65,6 +69,48 @@
    count as verified."
   [held?]
   (record! update :verified #(if (false? %) false (boolean held?))))
+
+(defn changed-so-far?
+  "Whether the current run has changed anything yet; false outside a run."
+  []
+  (boolean (when *record* (let [{:keys [applied thunk]} @*record*]
+                            (or (pos? applied) (some? thunk))))))
+
+(defn- render
+  "The text of `guidance`, a string or a function of `ctx`, as {:text ..},
+   {:error <why it could not be rendered>}, or nil when there is none."
+  [guidance ctx]
+  (try
+    (let [text (if (fn? guidance) (guidance ctx) guidance)]
+      (when-not (str/blank? (some-> text str))
+        {:text (str text)}))
+    (catch Throwable e
+      {:error (or (ex-message e) (str e))})))
+
+(defn recovery!
+  "Records the recovery guidance of the step the run stopped at: a string, or
+   a function of the step's context, which also carries :applied, the number
+   of effects applied so far. The function runs now, at the failure, so a read
+   in it observes the state the failure left. The first guidance recorded in a
+   run is the one printed: the step that stopped the run records before the
+   playbook around it does."
+  [guidance ctx]
+  (when (and *record* guidance (not (contains? @*record* :recovery)))
+    (when-let [rendered (render guidance (assoc ctx :applied (:applied @*record*)))]
+      (record! assoc :recovery rendered))))
+
+(defn recovery-lines
+  "The lines printed under a banner of `tone` for `record`: the recorded
+   recovery guidance, or a note that it could not be rendered. Only a failed
+   banner carries them, so a book without guidance prints the banner alone."
+  [tone {:keys [recovery]}]
+  (when (= :error tone)
+    (cond
+      (:error recovery)
+      [(str "Recovery: the guidance for the step the run stopped at could not be rendered - " (:error recovery))]
+
+      (:text recovery)
+      (into ["Recovery:"] (map #(str "  " %) (str/split-lines (:text recovery)))))))
 
 (defn exit-code
   "The exit code of a run: 0 only for :ok, and a rehearsal that found an unmet
