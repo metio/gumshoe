@@ -1,0 +1,1624 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+{"ceph"
+ {"clean edn"
+  {:result true,
+   :stdout
+   {:findings [],
+    :checked
+    [{:name "ceph-health", :description "Failing ceph health checks"}
+     {:name "ceph-osds", :description "OSDs that are down or out"}
+     {:name "ceph-pgs",
+      :description "Placement groups that are not active+clean"}
+     {:name "ceph-mons",
+      :description "Monitors missing from the quorum"}
+     {:name "ceph-capacity",
+      :description "Cluster and pool capacity running out"}
+     {:name "ceph-osd-utilization",
+      :description "Individual OSDs running full"}
+     {:name "ceph-services",
+      :description "cephadm services with missing daemons"}
+     {:name "ceph-crashes", :description "Unarchived daemon crashes"}],
+    :summary {:critical 0, :warning 0, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when storage is slow or degraded - the ceph cluster's own health, its OSDs, and placement-group state, straight from a mgr host.\n── 🔌 Connection ────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:check-connection
+     {:host "mgr1",
+      :user nil,
+      :cephadm-shell? false,
+      :needs-sudo? false}]
+    [:collect
+     {:host "mgr1",
+      :user nil,
+      :cephadm-shell? false,
+      :needs-sudo? false}]
+    [:detectives
+     ["ceph-health"
+      "ceph-osds"
+      "ceph-pgs"
+      "ceph-mons"
+      "ceph-capacity"
+      "ceph-osd-utilization"
+      "ceph-services"
+      "ceph-crashes"]
+     {"crash-ls-new" [],
+      "df" {},
+      "orch-ls" [],
+      "osd-df" {},
+      "status" {}}]]},
+  "clean text"
+  {:result true,
+   :stdout
+   "  ✓ Failing ceph health checks\n  ✓ OSDs that are down or out\n  ✓ Placement groups that are not active+clean\n  ✓ Monitors missing from the quorum\n  ✓ Cluster and pool capacity running out\n  ✓ Individual OSDs running full\n  ✓ cephadm services with missing daemons\n  ✓ Unarchived daemon crashes\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when storage is slow or degraded - the ceph cluster's own health, its OSDs, and placement-group state, straight from a mgr host.\n── 🔌 Connection ────────────────────────────────────────────────────────────────\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 8 checks passed\n",
+   :calls
+   [[:check-connection
+     {:host "mgr1",
+      :user nil,
+      :cephadm-shell? false,
+      :needs-sudo? false}]
+    [:collect
+     {:host "mgr1",
+      :user nil,
+      :cephadm-shell? false,
+      :needs-sudo? false}]
+    [:detectives
+     ["ceph-health"
+      "ceph-osds"
+      "ceph-pgs"
+      "ceph-mons"
+      "ceph-capacity"
+      "ceph-osd-utilization"
+      "ceph-services"
+      "ceph-crashes"]
+     {"crash-ls-new" [],
+      "df" {},
+      "orch-ls" [],
+      "osd-df" {},
+      "status" {}}]]},
+  "finding edn"
+  {:result true,
+   :stdout
+   {:findings
+    [{:severity :warning,
+      :component "ns/subject",
+      :summary "something to look at",
+      :detective "ceph-health"}],
+    :checked
+    [{:name "ceph-health", :description "Failing ceph health checks"}
+     {:name "ceph-osds", :description "OSDs that are down or out"}
+     {:name "ceph-pgs",
+      :description "Placement groups that are not active+clean"}
+     {:name "ceph-mons",
+      :description "Monitors missing from the quorum"}
+     {:name "ceph-capacity",
+      :description "Cluster and pool capacity running out"}
+     {:name "ceph-osd-utilization",
+      :description "Individual OSDs running full"}
+     {:name "ceph-services",
+      :description "cephadm services with missing daemons"}
+     {:name "ceph-crashes", :description "Unarchived daemon crashes"}],
+    :summary {:critical 0, :warning 1, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when storage is slow or degraded - the ceph cluster's own health, its OSDs, and placement-group state, straight from a mgr host.\n── 🔌 Connection ────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:check-connection
+     {:host "mgr1",
+      :user nil,
+      :cephadm-shell? false,
+      :needs-sudo? false}]
+    [:collect
+     {:host "mgr1",
+      :user nil,
+      :cephadm-shell? false,
+      :needs-sudo? false}]
+    [:detectives
+     ["ceph-health"
+      "ceph-osds"
+      "ceph-pgs"
+      "ceph-mons"
+      "ceph-capacity"
+      "ceph-osd-utilization"
+      "ceph-services"
+      "ceph-crashes"]
+     {"crash-ls-new" [],
+      "df" {},
+      "orch-ls" [],
+      "osd-df" {},
+      "status" {}}]]},
+  "finding text"
+  {:result true,
+   :stdout
+   "  ceph-health (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 7 other checks came back clean: ceph-osds, ceph-pgs, ceph-mons, ceph-capacity, ceph-osd-utilization, ceph-services, ceph-crashes\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when storage is slow or degraded - the ceph cluster's own health, its OSDs, and placement-group state, straight from a mgr host.\n── 🔌 Connection ────────────────────────────────────────────────────────────────\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:check-connection
+     {:host "mgr1",
+      :user nil,
+      :cephadm-shell? false,
+      :needs-sudo? false}]
+    [:collect
+     {:host "mgr1",
+      :user nil,
+      :cephadm-shell? false,
+      :needs-sudo? false}]
+    [:detectives
+     ["ceph-health"
+      "ceph-osds"
+      "ceph-pgs"
+      "ceph-mons"
+      "ceph-capacity"
+      "ceph-osd-utilization"
+      "ceph-services"
+      "ceph-crashes"]
+     {"crash-ls-new" [],
+      "df" {},
+      "orch-ls" [],
+      "osd-df" {},
+      "status" {}}]]},
+  "no connection"
+  {:result false,
+   :stdout "",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when storage is slow or degraded - the ceph cluster's own health, its OSDs, and placement-group state, straight from a mgr host.\n── 🔌 Connection ────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:check-connection
+     {:host "mgr1",
+      :user nil,
+      :cephadm-shell? false,
+      :needs-sudo? false}]]}},
+ "dns"
+ {"clean edn"
+  {:result true,
+   :stdout
+   {:findings [],
+    :checked
+    [{:name "dns-transports",
+      :description "The entry server answers over both IPv4 and IPv6"}
+     {:name "dns-nameservers",
+      :description
+      "The zone has redundant, dual-stack reachable nameservers"}
+     {:name "dns-replication",
+      :description
+      "Every nameserver answers and serves the same SOA serial"}
+     {:name "dns-probes",
+      :description
+      "Probe names resolve identically on every nameserver"}],
+    :summary {:critical 0, :warning 0, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when names aren't resolving, mail is bouncing, or right after a nameserver change - transports, nameserver redundancy, SOA replication, and answer consistency across servers.\n",
+   :calls
+   [[:collect
+     {:server "192.0.2.53",
+      :zone "example.org",
+      :probes ["www.example.org"]}]
+    [:detectives
+     ["dns-transports"
+      "dns-nameservers"
+      "dns-replication"
+      "dns-probes"]
+     {"addresses" {},
+      "nameservers" [],
+      "probes" [],
+      "serials" [],
+      "server" "192.0.2.53",
+      "transports" [],
+      "zone" "example.org"}]]},
+  "clean text"
+  {:result true,
+   :stdout
+   "  ✓ The entry server answers over both IPv4 and IPv6\n  ✓ The zone has redundant, dual-stack reachable nameservers\n  ✓ Every nameserver answers and serves the same SOA serial\n  ✓ Probe names resolve identically on every nameserver\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when names aren't resolving, mail is bouncing, or right after a nameserver change - transports, nameserver redundancy, SOA replication, and answer consistency across servers.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 4 checks passed\n",
+   :calls
+   [[:collect
+     {:server "192.0.2.53",
+      :zone "example.org",
+      :probes ["www.example.org"]}]
+    [:detectives
+     ["dns-transports"
+      "dns-nameservers"
+      "dns-replication"
+      "dns-probes"]
+     {"addresses" {},
+      "nameservers" [],
+      "probes" [],
+      "serials" [],
+      "server" "192.0.2.53",
+      "transports" [],
+      "zone" "example.org"}]]},
+  "finding edn"
+  {:result true,
+   :stdout
+   {:findings
+    [{:severity :warning,
+      :component "ns/subject",
+      :summary "something to look at",
+      :detective "dns-transports"}],
+    :checked
+    [{:name "dns-transports",
+      :description "The entry server answers over both IPv4 and IPv6"}
+     {:name "dns-nameservers",
+      :description
+      "The zone has redundant, dual-stack reachable nameservers"}
+     {:name "dns-replication",
+      :description
+      "Every nameserver answers and serves the same SOA serial"}
+     {:name "dns-probes",
+      :description
+      "Probe names resolve identically on every nameserver"}],
+    :summary {:critical 0, :warning 1, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when names aren't resolving, mail is bouncing, or right after a nameserver change - transports, nameserver redundancy, SOA replication, and answer consistency across servers.\n",
+   :calls
+   [[:collect
+     {:server "192.0.2.53",
+      :zone "example.org",
+      :probes ["www.example.org"]}]
+    [:detectives
+     ["dns-transports"
+      "dns-nameservers"
+      "dns-replication"
+      "dns-probes"]
+     {"addresses" {},
+      "nameservers" [],
+      "probes" [],
+      "serials" [],
+      "server" "192.0.2.53",
+      "transports" [],
+      "zone" "example.org"}]]},
+  "finding text"
+  {:result true,
+   :stdout
+   "  dns-transports (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 3 other checks came back clean: dns-nameservers, dns-replication, dns-probes\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when names aren't resolving, mail is bouncing, or right after a nameserver change - transports, nameserver redundancy, SOA replication, and answer consistency across servers.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:collect
+     {:server "192.0.2.53",
+      :zone "example.org",
+      :probes ["www.example.org"]}]
+    [:detectives
+     ["dns-transports"
+      "dns-nameservers"
+      "dns-replication"
+      "dns-probes"]
+     {"addresses" {},
+      "nameservers" [],
+      "probes" [],
+      "serials" [],
+      "server" "192.0.2.53",
+      "transports" [],
+      "zone" "example.org"}]]}},
+ "external-dns"
+ {"clean edn"
+  {:result true,
+   :stdout
+   {:findings [],
+    :checked
+    [{:name "external-dns",
+      :description
+      "Cluster-declared hostnames that do not resolve in DNS"}],
+    :summary {:critical 0, :warning 0, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a hostname points nowhere - it checks that every hostname your ingresses and routes declare actually resolves in DNS.\n",
+   :calls
+   [[:collect "ctx" "192.0.2.53"]
+    [:detectives
+     ["external-dns"]
+     {"ingresses" [],
+      "resolved" {},
+      "server" "192.0.2.53",
+      "sources" []}]]},
+  "clean text"
+  {:result true,
+   :stdout
+   "  ✓ Cluster-declared hostnames that do not resolve in DNS\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a hostname points nowhere - it checks that every hostname your ingresses and routes declare actually resolves in DNS.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 1 check passed\n",
+   :calls
+   [[:collect "ctx" "192.0.2.53"]
+    [:detectives
+     ["external-dns"]
+     {"ingresses" [],
+      "resolved" {},
+      "server" "192.0.2.53",
+      "sources" []}]]},
+  "finding edn"
+  {:result true,
+   :stdout
+   {:findings
+    [{:severity :warning,
+      :component "ns/subject",
+      :summary "something to look at",
+      :detective "external-dns"}],
+    :checked
+    [{:name "external-dns",
+      :description
+      "Cluster-declared hostnames that do not resolve in DNS"}],
+    :summary {:critical 0, :warning 1, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a hostname points nowhere - it checks that every hostname your ingresses and routes declare actually resolves in DNS.\n",
+   :calls
+   [[:collect "ctx" "192.0.2.53"]
+    [:detectives
+     ["external-dns"]
+     {"ingresses" [],
+      "resolved" {},
+      "server" "192.0.2.53",
+      "sources" []}]]},
+  "finding text"
+  {:result true,
+   :stdout
+   "  external-dns (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a hostname points nowhere - it checks that every hostname your ingresses and routes declare actually resolves in DNS.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:collect "ctx" "192.0.2.53"]
+    [:detectives
+     ["external-dns"]
+     {"ingresses" [],
+      "resolved" {},
+      "server" "192.0.2.53",
+      "sources" []}]]}},
+ "fabric"
+ {"clean edn"
+  {:result true,
+   :stdout
+   {:findings [],
+    :checked
+    [{:name "evpn-mac-ownership",
+      :description
+      "guest MACs the fabric attributes to a VTEP that is not their host's"}
+     {:name "evpn-fdb-conflict",
+      :description
+      "hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local and whether BGP still advertises the remote one"}
+     {:name "evpn-hosts",
+      :description
+      "hosts whose fabric state could not be read, making the scan incomplete"}
+     {:name "evpn-static-fdb",
+      :description
+      "static fdb entries, which outrank EVPN learning and go stale silently"}],
+    :summary {:critical 0, :warning 0, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when hosts or guests are unreachable and nothing inside the cluster explains it - a guest whose MAC the fabric attributes to the wrong VTEP is up and serving, and invisible.\n── 🔌 Fabric ────────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:connections ("h1" "h2") {:user nil}]
+    [:collect [:conns] (100)]
+    [:detectives
+     ["evpn-mac-ownership"
+      "evpn-fdb-conflict"
+      "evpn-hosts"
+      "evpn-static-fdb"]
+     {"config" {:config :active},
+      "evpn-fdb" [],
+      "evpn-hosts" [],
+      "evpn-macs" []}]]},
+  "clean text"
+  {:result true,
+   :stdout
+   "  ✓ guest MACs the fabric attributes to a VTEP that is not their host's\n  ✓ hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local and whether BGP still advertises the remote one\n  ✓ hosts whose fabric state could not be read, making the scan incomplete\n  ✓ static fdb entries, which outrank EVPN learning and go stale silently\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when hosts or guests are unreachable and nothing inside the cluster explains it - a guest whose MAC the fabric attributes to the wrong VTEP is up and serving, and invisible.\n── 🔌 Fabric ────────────────────────────────────────────────────────────────────\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 4 checks passed\n",
+   :calls
+   [[:connections ("h1" "h2") {:user nil}]
+    [:collect [:conns] (100)]
+    [:detectives
+     ["evpn-mac-ownership"
+      "evpn-fdb-conflict"
+      "evpn-hosts"
+      "evpn-static-fdb"]
+     {"config" {:config :active},
+      "evpn-fdb" [],
+      "evpn-hosts" [],
+      "evpn-macs" []}]]},
+  "finding edn"
+  {:result true,
+   :stdout
+   {:findings
+    [{:severity :warning,
+      :component "ns/subject",
+      :summary "something to look at",
+      :detective "evpn-hosts"}],
+    :checked
+    [{:name "evpn-mac-ownership",
+      :description
+      "guest MACs the fabric attributes to a VTEP that is not their host's"}
+     {:name "evpn-fdb-conflict",
+      :description
+      "hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local and whether BGP still advertises the remote one"}
+     {:name "evpn-hosts",
+      :description
+      "hosts whose fabric state could not be read, making the scan incomplete"}
+     {:name "evpn-static-fdb",
+      :description
+      "static fdb entries, which outrank EVPN learning and go stale silently"}],
+    :summary {:critical 0, :warning 1, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when hosts or guests are unreachable and nothing inside the cluster explains it - a guest whose MAC the fabric attributes to the wrong VTEP is up and serving, and invisible.\n── 🔌 Fabric ────────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:connections ("h1" "h2") {:user nil}]
+    [:collect [:conns] (100)]
+    [:detectives
+     ["evpn-mac-ownership"
+      "evpn-fdb-conflict"
+      "evpn-hosts"
+      "evpn-static-fdb"]
+     {"config" {:config :active},
+      "evpn-fdb" [],
+      "evpn-hosts" [],
+      "evpn-macs" []}]]},
+  "finding text"
+  {:result true,
+   :stdout
+   "  evpn-hosts (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 3 other checks came back clean: evpn-mac-ownership, evpn-fdb-conflict, evpn-static-fdb\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when hosts or guests are unreachable and nothing inside the cluster explains it - a guest whose MAC the fabric attributes to the wrong VTEP is up and serving, and invisible.\n── 🔌 Fabric ────────────────────────────────────────────────────────────────────\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:connections ("h1" "h2") {:user nil}]
+    [:collect [:conns] (100)]
+    [:detectives
+     ["evpn-mac-ownership"
+      "evpn-fdb-conflict"
+      "evpn-hosts"
+      "evpn-static-fdb"]
+     {"config" {:config :active},
+      "evpn-fdb" [],
+      "evpn-hosts" [],
+      "evpn-macs" []}]]},
+  "no hosts"
+  {:result false,
+   :stdout "",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when hosts or guests are unreachable and nothing inside the cluster explains it - a guest whose MAC the fabric attributes to the wrong VTEP is up and serving, and invisible.\n── 🔌 Fabric ────────────────────────────────────────────────────────────────────\n🔶 no fabric hosts - pass --hosts or set :evpn :hosts in env.edn\n",
+   :calls []},
+  "no vnis"
+  {:result false,
+   :stdout "",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when hosts or guests are unreachable and nothing inside the cluster explains it - a guest whose MAC the fabric attributes to the wrong VTEP is up and serving, and invisible.\n── 🔌 Fabric ────────────────────────────────────────────────────────────────────\n🔶 no VNIs - pass --vni or set :evpn :vnis in env.edn\n",
+   :calls []}},
+ "flows"
+ {"clean edn"
+  {:result true,
+   :stdout
+   {:findings [],
+    :checked
+    [{:name "calico-flows-api",
+      :description "The Whisker flow API answers"}
+     {:name "calico-denied-flows",
+      :description
+      "Flows denied over the window, grouped by path, with the deciding policy"}
+     {:name "calico-staged-disagreement",
+      :description "Flows a staged policy would decide differently"}],
+    :summary {:critical 0, :warning 0, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when traffic is being dropped and you want the verdict rather than another probe - which policy denied a path, what a staged policy would change, and which denials look like timeouts. Also run it before enforcing a staged default-deny.\n",
+   :calls
+   [[:collect
+     {:url "https://whisker.example.org",
+      :user nil,
+      :password nil,
+      :window 600}]
+    [:detectives
+     ["calico-flows-api"
+      "calico-denied-flows"
+      "calico-staged-disagreement"]
+     {:flows [],
+      :mode :list,
+      :reachable true,
+      :status 200,
+      :url "https://whisker.example.org",
+      :window 600}]]},
+  "clean text"
+  {:result true,
+   :stdout
+   "  ✓ The Whisker flow API answers\n  ✓ Flows denied over the window, grouped by path, with the deciding policy\n  ✓ Flows a staged policy would decide differently\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when traffic is being dropped and you want the verdict rather than another probe - which policy denied a path, what a staged policy would change, and which denials look like timeouts. Also run it before enforcing a staged default-deny.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 3 checks passed\n",
+   :calls
+   [[:collect
+     {:url "https://whisker.example.org",
+      :user nil,
+      :password nil,
+      :window 600}]
+    [:detectives
+     ["calico-flows-api"
+      "calico-denied-flows"
+      "calico-staged-disagreement"]
+     {:flows [],
+      :mode :list,
+      :reachable true,
+      :status 200,
+      :url "https://whisker.example.org",
+      :window 600}]]},
+  "finding edn"
+  {:result true,
+   :stdout
+   {:findings
+    [{:severity :warning,
+      :component "ns/subject",
+      :summary "something to look at",
+      :detective "calico-denied-flows"}],
+    :checked
+    [{:name "calico-flows-api",
+      :description "The Whisker flow API answers"}
+     {:name "calico-denied-flows",
+      :description
+      "Flows denied over the window, grouped by path, with the deciding policy"}
+     {:name "calico-staged-disagreement",
+      :description "Flows a staged policy would decide differently"}],
+    :summary {:critical 0, :warning 1, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when traffic is being dropped and you want the verdict rather than another probe - which policy denied a path, what a staged policy would change, and which denials look like timeouts. Also run it before enforcing a staged default-deny.\n",
+   :calls
+   [[:collect
+     {:url "https://whisker.example.org",
+      :user nil,
+      :password nil,
+      :window 600}]
+    [:detectives
+     ["calico-flows-api"
+      "calico-denied-flows"
+      "calico-staged-disagreement"]
+     {:flows [],
+      :mode :list,
+      :reachable true,
+      :status 200,
+      :url "https://whisker.example.org",
+      :window 600}]]},
+  "finding text"
+  {:result true,
+   :stdout
+   "  calico-denied-flows (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 2 other checks came back clean: calico-flows-api, calico-staged-disagreement\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when traffic is being dropped and you want the verdict rather than another probe - which policy denied a path, what a staged policy would change, and which denials look like timeouts. Also run it before enforcing a staged default-deny.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:collect
+     {:url "https://whisker.example.org",
+      :user nil,
+      :password nil,
+      :window 600}]
+    [:detectives
+     ["calico-flows-api"
+      "calico-denied-flows"
+      "calico-staged-disagreement"]
+     {:flows [],
+      :mode :list,
+      :reachable true,
+      :status 200,
+      :url "https://whisker.example.org",
+      :window 600}]]}},
+ "loki"
+ {"clean edn"
+  {:result true,
+   :stdout
+   {:findings [],
+    :checked
+    [{:name "loki-mode",
+      :description
+      "Loki runs in microservice mode with components present"}
+     {:name "loki-components",
+      :description
+      "Every essential Loki component (distributor, ingester, querier, query-frontend) exists"}
+     {:name "loki-health",
+      :description "Every Loki component has all its replicas ready"}
+     {:name "loki-rings",
+      :description
+      "Every reachable component hash ring is fully ACTIVE"}],
+    :summary {:critical 0, :warning 0, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings.\n",
+   :calls
+   [[:collect-workloads
+     {:context "ctx",
+      :namespace "loki",
+      :selector "app.kubernetes.io/name=loki"}]
+    [:get-selected "ctx" "services" "app.kubernetes.io/name=loki"]
+    [:port-forward
+     {:context "ctx",
+      :namespace "loki",
+      :service "loki-distributor",
+      :local-port 13100,
+      :remote-port 3100}]
+    [:collect-rings "http://localhost:13100"]
+    [:detectives
+     ["loki-mode" "loki-components" "loki-health" "loki-rings"]
+     {"namespace" "loki",
+      "rings" {},
+      "url" "http://localhost:13100",
+      "workloads" []}]]},
+  "clean text"
+  {:result true,
+   :stdout
+   "  ✓ Loki runs in microservice mode with components present\n  ✓ Every essential Loki component (distributor, ingester, querier, query-frontend) exists\n  ✓ Every Loki component has all its replicas ready\n  ✓ Every reachable component hash ring is fully ACTIVE\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 4 checks passed\n",
+   :calls
+   [[:collect-workloads
+     {:context "ctx",
+      :namespace "loki",
+      :selector "app.kubernetes.io/name=loki"}]
+    [:get-selected "ctx" "services" "app.kubernetes.io/name=loki"]
+    [:port-forward
+     {:context "ctx",
+      :namespace "loki",
+      :service "loki-distributor",
+      :local-port 13100,
+      :remote-port 3100}]
+    [:collect-rings "http://localhost:13100"]
+    [:detectives
+     ["loki-mode" "loki-components" "loki-health" "loki-rings"]
+     {"namespace" "loki",
+      "rings" {},
+      "url" "http://localhost:13100",
+      "workloads" []}]]},
+  "finding edn"
+  {:result true,
+   :stdout
+   {:findings
+    [{:severity :warning,
+      :component "ns/subject",
+      :summary "something to look at",
+      :detective "loki-components"}],
+    :checked
+    [{:name "loki-mode",
+      :description
+      "Loki runs in microservice mode with components present"}
+     {:name "loki-components",
+      :description
+      "Every essential Loki component (distributor, ingester, querier, query-frontend) exists"}
+     {:name "loki-health",
+      :description "Every Loki component has all its replicas ready"}
+     {:name "loki-rings",
+      :description
+      "Every reachable component hash ring is fully ACTIVE"}],
+    :summary {:critical 0, :warning 1, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings.\n",
+   :calls
+   [[:collect-workloads
+     {:context "ctx",
+      :namespace "loki",
+      :selector "app.kubernetes.io/name=loki"}]
+    [:get-selected "ctx" "services" "app.kubernetes.io/name=loki"]
+    [:port-forward
+     {:context "ctx",
+      :namespace "loki",
+      :service "loki-distributor",
+      :local-port 13100,
+      :remote-port 3100}]
+    [:collect-rings "http://localhost:13100"]
+    [:detectives
+     ["loki-mode" "loki-components" "loki-health" "loki-rings"]
+     {"namespace" "loki",
+      "rings" {},
+      "url" "http://localhost:13100",
+      "workloads" []}]]},
+  "finding text"
+  {:result true,
+   :stdout
+   "  loki-components (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 3 other checks came back clean: loki-mode, loki-health, loki-rings\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:collect-workloads
+     {:context "ctx",
+      :namespace "loki",
+      :selector "app.kubernetes.io/name=loki"}]
+    [:get-selected "ctx" "services" "app.kubernetes.io/name=loki"]
+    [:port-forward
+     {:context "ctx",
+      :namespace "loki",
+      :service "loki-distributor",
+      :local-port 13100,
+      :remote-port 3100}]
+    [:collect-rings "http://localhost:13100"]
+    [:detectives
+     ["loki-mode" "loki-components" "loki-health" "loki-rings"]
+     {"namespace" "loki",
+      "rings" {},
+      "url" "http://localhost:13100",
+      "workloads" []}]]},
+  "no distributor"
+  {:result true,
+   :stdout
+   "  ✓ Loki runs in microservice mode with components present\n  ✓ Every essential Loki component (distributor, ingester, querier, query-frontend) exists\n  ✓ Every Loki component has all its replicas ready\n  ✓ Every reachable component hash ring is fully ACTIVE\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 4 checks passed\n",
+   :calls
+   [[:collect-workloads
+     {:context "ctx",
+      :namespace "loki",
+      :selector "app.kubernetes.io/name=loki"}]
+    [:get-selected "ctx" "services" "app.kubernetes.io/name=loki"]
+    [:detectives
+     ["loki-mode" "loki-components" "loki-health" "loki-rings"]
+     {"namespace" "loki", "workloads" []}]]},
+  "no namespace"
+  {:result false,
+   :stdout "",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings.\n❌ no Loki namespace - set [:loki :namespace] in env.edn, pass --namespace, or check --selector\n",
+   :calls
+   [[:get-selected "ctx" "deployments" "x"]
+    [:choose-one "Loki namespace" [] nil]]}},
+ "mail"
+ {"clean edn"
+  {:result true,
+   :stdout
+   {:findings [],
+    :checked
+    [{:name "mail-mx",
+      :description "MX records: mail can be received at all"}
+     {:name "mail-spf",
+      :description
+      "SPF record present, unique, and not dangerously permissive"}
+     {:name "mail-dmarc",
+      :description "DMARC policy published and enforcing"}
+     {:name "mail-dkim",
+      :description "DKIM keys published for the configured selectors"}
+     {:name "mail-rdns",
+      :description "Forward-confirmed reverse DNS for the mail host"}
+     {:name "mail-services",
+      :description
+      "SMTP/POP3/IMAP ports reachable, STARTTLS offered, certificates valid"}],
+    :summary {:critical 0, :warning 0, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when mail is bouncing or landing in spam - deliverability records (SPF/DKIM/DMARC/reverse DNS) and the live SMTP/POP3/IMAP services.\n",
+   :calls
+   [[:collect
+     {:domain "example.org",
+      :host "mx.example.org",
+      :server "192.0.2.53",
+      :dkim-selectors ["default"]}]
+    [:detectives
+     ["mail-mx"
+      "mail-spf"
+      "mail-dmarc"
+      "mail-dkim"
+      "mail-rdns"
+      "mail-services"]
+     {"dkim" {},
+      "dmarc" [],
+      "domain" "example.org",
+      "host" "mx.example.org",
+      "mx" [],
+      "probes" [],
+      "ptr" [],
+      "spf" []}]]},
+  "clean text"
+  {:result true,
+   :stdout
+   "  ✓ MX records: mail can be received at all\n  ✓ SPF record present, unique, and not dangerously permissive\n  ✓ DMARC policy published and enforcing\n  ✓ DKIM keys published for the configured selectors\n  ✓ Forward-confirmed reverse DNS for the mail host\n  ✓ SMTP/POP3/IMAP ports reachable, STARTTLS offered, certificates valid\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when mail is bouncing or landing in spam - deliverability records (SPF/DKIM/DMARC/reverse DNS) and the live SMTP/POP3/IMAP services.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 6 checks passed\n",
+   :calls
+   [[:collect
+     {:domain "example.org",
+      :host "mx.example.org",
+      :server "192.0.2.53",
+      :dkim-selectors ["default"]}]
+    [:detectives
+     ["mail-mx"
+      "mail-spf"
+      "mail-dmarc"
+      "mail-dkim"
+      "mail-rdns"
+      "mail-services"]
+     {"dkim" {},
+      "dmarc" [],
+      "domain" "example.org",
+      "host" "mx.example.org",
+      "mx" [],
+      "probes" [],
+      "ptr" [],
+      "spf" []}]]},
+  "finding edn"
+  {:result true,
+   :stdout
+   {:findings
+    [{:severity :warning,
+      :component "ns/subject",
+      :summary "something to look at",
+      :detective "mail-mx"}],
+    :checked
+    [{:name "mail-mx",
+      :description "MX records: mail can be received at all"}
+     {:name "mail-spf",
+      :description
+      "SPF record present, unique, and not dangerously permissive"}
+     {:name "mail-dmarc",
+      :description "DMARC policy published and enforcing"}
+     {:name "mail-dkim",
+      :description "DKIM keys published for the configured selectors"}
+     {:name "mail-rdns",
+      :description "Forward-confirmed reverse DNS for the mail host"}
+     {:name "mail-services",
+      :description
+      "SMTP/POP3/IMAP ports reachable, STARTTLS offered, certificates valid"}],
+    :summary {:critical 0, :warning 1, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when mail is bouncing or landing in spam - deliverability records (SPF/DKIM/DMARC/reverse DNS) and the live SMTP/POP3/IMAP services.\n",
+   :calls
+   [[:collect
+     {:domain "example.org",
+      :host "mx.example.org",
+      :server "192.0.2.53",
+      :dkim-selectors ["default"]}]
+    [:detectives
+     ["mail-mx"
+      "mail-spf"
+      "mail-dmarc"
+      "mail-dkim"
+      "mail-rdns"
+      "mail-services"]
+     {"dkim" {},
+      "dmarc" [],
+      "domain" "example.org",
+      "host" "mx.example.org",
+      "mx" [],
+      "probes" [],
+      "ptr" [],
+      "spf" []}]]},
+  "finding text"
+  {:result true,
+   :stdout
+   "  mail-mx (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 5 other checks came back clean: mail-spf, mail-dmarc, mail-dkim, mail-rdns, mail-services\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when mail is bouncing or landing in spam - deliverability records (SPF/DKIM/DMARC/reverse DNS) and the live SMTP/POP3/IMAP services.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:collect
+     {:domain "example.org",
+      :host "mx.example.org",
+      :server "192.0.2.53",
+      :dkim-selectors ["default"]}]
+    [:detectives
+     ["mail-mx"
+      "mail-spf"
+      "mail-dmarc"
+      "mail-dkim"
+      "mail-rdns"
+      "mail-services"]
+     {"dkim" {},
+      "dmarc" [],
+      "domain" "example.org",
+      "host" "mx.example.org",
+      "mx" [],
+      "probes" [],
+      "ptr" [],
+      "spf" []}]]}},
+ "matrix"
+ {"clean edn"
+  {:result true,
+   :stdout
+   {:findings [],
+    :checked
+    [{:name "matrix-client-api",
+      :description "The Matrix client API answers"}
+     {:name "matrix-health",
+      :description "The homeserver health endpoint is green"}
+     {:name "matrix-federation-api",
+      :description "The federation API is reachable"}
+     {:name "matrix-signing-keys",
+      :description "Signing keys are published and not expiring"}
+     {:name "matrix-wellknown",
+      :description ".well-known federation delegation is coherent"}
+     {:name "matrix-federation-destinations",
+      :description
+      "Federation to other servers is not silently failing (needs admin token)"}],
+    :summary {:critical 0, :warning 0, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when federation or logins break - the client and federation APIs, signing-key expiry, and .well-known delegation.\n",
+   :calls
+   [[:password "matrix/admin"]
+    [:collect
+     {:domain "example.org",
+      :host "matrix.example.org",
+      :admin-token "token"}]
+    [:detectives
+     ["matrix-client-api"
+      "matrix-health"
+      "matrix-federation-api"
+      "matrix-signing-keys"
+      "matrix-wellknown"
+      "matrix-federation-destinations"]
+     {"admin?" true,
+      "client-versions" {},
+      "destinations" [],
+      "domain" "example.org",
+      "federation-version" {},
+      "health" "OK",
+      "host" "matrix.example.org",
+      "server-keys" {},
+      "wellknown-client" {},
+      "wellknown-server" {}}]]},
+  "clean text"
+  {:result true,
+   :stdout
+   "  ✓ The Matrix client API answers\n  ✓ The homeserver health endpoint is green\n  ✓ The federation API is reachable\n  ✓ Signing keys are published and not expiring\n  ✓ .well-known federation delegation is coherent\n  ✓ Federation to other servers is not silently failing (needs admin token)\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when federation or logins break - the client and federation APIs, signing-key expiry, and .well-known delegation.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 6 checks passed\n",
+   :calls
+   [[:password "matrix/admin"]
+    [:collect
+     {:domain "example.org",
+      :host "matrix.example.org",
+      :admin-token "token"}]
+    [:detectives
+     ["matrix-client-api"
+      "matrix-health"
+      "matrix-federation-api"
+      "matrix-signing-keys"
+      "matrix-wellknown"
+      "matrix-federation-destinations"]
+     {"admin?" true,
+      "client-versions" {},
+      "destinations" [],
+      "domain" "example.org",
+      "federation-version" {},
+      "health" "OK",
+      "host" "matrix.example.org",
+      "server-keys" {},
+      "wellknown-client" {},
+      "wellknown-server" {}}]]},
+  "finding edn"
+  {:result true,
+   :stdout
+   {:findings
+    [{:severity :warning,
+      :component "ns/subject",
+      :summary "something to look at",
+      :detective "matrix-health"}],
+    :checked
+    [{:name "matrix-client-api",
+      :description "The Matrix client API answers"}
+     {:name "matrix-health",
+      :description "The homeserver health endpoint is green"}
+     {:name "matrix-federation-api",
+      :description "The federation API is reachable"}
+     {:name "matrix-signing-keys",
+      :description "Signing keys are published and not expiring"}
+     {:name "matrix-wellknown",
+      :description ".well-known federation delegation is coherent"}
+     {:name "matrix-federation-destinations",
+      :description
+      "Federation to other servers is not silently failing (needs admin token)"}],
+    :summary {:critical 0, :warning 1, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when federation or logins break - the client and federation APIs, signing-key expiry, and .well-known delegation.\n",
+   :calls
+   [[:password "matrix/admin"]
+    [:collect
+     {:domain "example.org",
+      :host "matrix.example.org",
+      :admin-token "token"}]
+    [:detectives
+     ["matrix-client-api"
+      "matrix-health"
+      "matrix-federation-api"
+      "matrix-signing-keys"
+      "matrix-wellknown"
+      "matrix-federation-destinations"]
+     {"admin?" true,
+      "client-versions" {},
+      "destinations" [],
+      "domain" "example.org",
+      "federation-version" {},
+      "health" "OK",
+      "host" "matrix.example.org",
+      "server-keys" {},
+      "wellknown-client" {},
+      "wellknown-server" {}}]]},
+  "finding text"
+  {:result true,
+   :stdout
+   "  matrix-health (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 5 other checks came back clean: matrix-client-api, matrix-federation-api, matrix-signing-keys, matrix-wellknown, matrix-federation-destinations\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when federation or logins break - the client and federation APIs, signing-key expiry, and .well-known delegation.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:password "matrix/admin"]
+    [:collect
+     {:domain "example.org",
+      :host "matrix.example.org",
+      :admin-token "token"}]
+    [:detectives
+     ["matrix-client-api"
+      "matrix-health"
+      "matrix-federation-api"
+      "matrix-signing-keys"
+      "matrix-wellknown"
+      "matrix-federation-destinations"]
+     {"admin?" true,
+      "client-versions" {},
+      "destinations" [],
+      "domain" "example.org",
+      "federation-version" {},
+      "health" "OK",
+      "host" "matrix.example.org",
+      "server-keys" {},
+      "wellknown-client" {},
+      "wellknown-server" {}}]]}},
+ "node-exporter"
+ {"clean edn"
+  {:result true,
+   :stdout
+   {:source "https://prometheus.example.org",
+    :hosts
+    [{:host "w1",
+      :cores 4,
+      :memory-bytes 8589934592,
+      :kernel "6.1",
+      :os "Debian",
+      :os-version "12",
+      :up true}],
+    :findings [],
+    :checked
+    [{:name "host-queries",
+      :description "Every host-facts query answered"}
+     {:name "host-exporters-up",
+      :description "Every host's node_exporter is up"}
+     {:name "host-facts-complete",
+      :description "Every host reports its CPU count and memory"}
+     {:name "declared-hosts-report",
+      :description "Every declared host reports facts",
+      :unread true}
+     {:name "reporting-hosts-declared",
+      :description "Every reporting host is declared",
+      :unread true}],
+    :summary {:critical 0, :warning 0, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this to count and size hosts from their metrics, or to find hosts that are declared but not scraped, and scraped but not declared.\n",
+   :calls
+   [[:collect
+     {:url "https://prometheus.example.org",
+      :flavor :prometheus,
+      :headers {"Authorization" "Basic dTpw"}}
+     {:host-label "instance", :selector nil, :job "node"}]
+    [:detectives
+     ["host-queries"
+      "host-exporters-up"
+      "host-facts-complete"
+      "declared-hosts-report"
+      "reporting-hosts-declared"]
+     {"failed" [],
+      "hosts"
+      [{:host "w1",
+        :cores 4,
+        :memory-bytes 8589934592,
+        :kernel "6.1",
+        :os "Debian",
+        :os-version "12",
+        :up true}],
+      "source" "https://prometheus.example.org"}]]},
+  "clean text"
+  {:result true,
+   :stdout
+   "  ✓ Every host-facts query answered\n  ✓ Every host's node_exporter is up\n  ✓ Every host reports its CPU count and memory\n▸ 2 checks read nothing on this cluster - other (declared-hosts-report, reporting-hosts-declared); what they read is not served, not readable, or not gathered by this scan\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this to count and size hosts from their metrics, or to find hosts that are declared but not scraped, and scraped but not declared.\n── 🖥️  Hosts (1) ───────────────────────────────────────────────────────────────\nHOST  CORES  MEMORY GiB  KERNEL  OS         UP\nw1    4      8.0         6.1     Debian 12  yes\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 3 checks passed\n",
+   :calls
+   [[:collect
+     {:url "https://prometheus.example.org",
+      :flavor :prometheus,
+      :headers {"Authorization" "Basic dTpw"}}
+     {:host-label "instance", :selector nil, :job "node"}]
+    [:detectives
+     ["host-queries"
+      "host-exporters-up"
+      "host-facts-complete"
+      "declared-hosts-report"
+      "reporting-hosts-declared"]
+     {"failed" [],
+      "hosts"
+      [{:host "w1",
+        :cores 4,
+        :memory-bytes 8589934592,
+        :kernel "6.1",
+        :os "Debian",
+        :os-version "12",
+        :up true}],
+      "source" "https://prometheus.example.org"}]]},
+  "finding edn"
+  {:result true,
+   :stdout
+   {:source "https://prometheus.example.org",
+    :hosts
+    [{:host "w1",
+      :cores 4,
+      :memory-bytes 8589934592,
+      :kernel "6.1",
+      :os "Debian",
+      :os-version "12",
+      :up true}],
+    :findings
+    [{:severity :warning,
+      :component "ns/subject",
+      :summary "something to look at",
+      :detective "host-facts-complete"}],
+    :checked
+    [{:name "host-queries",
+      :description "Every host-facts query answered"}
+     {:name "host-exporters-up",
+      :description "Every host's node_exporter is up"}
+     {:name "host-facts-complete",
+      :description "Every host reports its CPU count and memory"}
+     {:name "declared-hosts-report",
+      :description "Every declared host reports facts",
+      :unread true}
+     {:name "reporting-hosts-declared",
+      :description "Every reporting host is declared",
+      :unread true}],
+    :summary {:critical 0, :warning 1, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this to count and size hosts from their metrics, or to find hosts that are declared but not scraped, and scraped but not declared.\n",
+   :calls
+   [[:collect
+     {:url "https://prometheus.example.org",
+      :flavor :prometheus,
+      :headers {"Authorization" "Basic dTpw"}}
+     {:host-label "instance", :selector nil, :job "node"}]
+    [:detectives
+     ["host-queries"
+      "host-exporters-up"
+      "host-facts-complete"
+      "declared-hosts-report"
+      "reporting-hosts-declared"]
+     {"failed" [],
+      "hosts"
+      [{:host "w1",
+        :cores 4,
+        :memory-bytes 8589934592,
+        :kernel "6.1",
+        :os "Debian",
+        :os-version "12",
+        :up true}],
+      "source" "https://prometheus.example.org"}]]},
+  "finding text"
+  {:result true,
+   :stdout
+   "  host-facts-complete (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 2 other checks came back clean: host-queries, host-exporters-up\n▸ 2 checks read nothing on this cluster - other (declared-hosts-report, reporting-hosts-declared); what they read is not served, not readable, or not gathered by this scan\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this to count and size hosts from their metrics, or to find hosts that are declared but not scraped, and scraped but not declared.\n── 🖥️  Hosts (1) ───────────────────────────────────────────────────────────────\nHOST  CORES  MEMORY GiB  KERNEL  OS         UP\nw1    4      8.0         6.1     Debian 12  yes\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:collect
+     {:url "https://prometheus.example.org",
+      :flavor :prometheus,
+      :headers {"Authorization" "Basic dTpw"}}
+     {:host-label "instance", :selector nil, :job "node"}]
+    [:detectives
+     ["host-queries"
+      "host-exporters-up"
+      "host-facts-complete"
+      "declared-hosts-report"
+      "reporting-hosts-declared"]
+     {"failed" [],
+      "hosts"
+      [{:host "w1",
+        :cores 4,
+        :memory-bytes 8589934592,
+        :kernel "6.1",
+        :os "Debian",
+        :os-version "12",
+        :up true}],
+      "source" "https://prometheus.example.org"}]]}},
+ "opennebula"
+ {"clean edn"
+  {:result true,
+   :stdout
+   {:findings [],
+    :checked
+    [{:name "opennebula-hosts",
+      :description "Hosts in error or offline states"}
+     {:name "opennebula-vms",
+      :description "VMs that failed or failed to clone"}
+     {:name "opennebula-datastores",
+      :description "Datastores running out of space"}],
+    :summary {:critical 0, :warning 0, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a VM won't start or a datastore is filling up - OpenNebula hosts in error/offline states, failed VMs, and datastore capacity.\n── 🔌 Connection ────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:check-connection {:host "one.example.org", :user nil}]
+    [:collect {:host "one.example.org", :user nil}]
+    [:detectives
+     ["opennebula-hosts" "opennebula-vms" "opennebula-datastores"]
+     {"datastores" [], "hosts" [], "vms" []}]]},
+  "clean text"
+  {:result true,
+   :stdout
+   "  ✓ Hosts in error or offline states\n  ✓ VMs that failed or failed to clone\n  ✓ Datastores running out of space\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a VM won't start or a datastore is filling up - OpenNebula hosts in error/offline states, failed VMs, and datastore capacity.\n── 🔌 Connection ────────────────────────────────────────────────────────────────\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 3 checks passed\n",
+   :calls
+   [[:check-connection {:host "one.example.org", :user nil}]
+    [:collect {:host "one.example.org", :user nil}]
+    [:detectives
+     ["opennebula-hosts" "opennebula-vms" "opennebula-datastores"]
+     {"datastores" [], "hosts" [], "vms" []}]]},
+  "finding edn"
+  {:result true,
+   :stdout
+   {:findings
+    [{:severity :warning,
+      :component "ns/subject",
+      :summary "something to look at",
+      :detective "opennebula-vms"}],
+    :checked
+    [{:name "opennebula-hosts",
+      :description "Hosts in error or offline states"}
+     {:name "opennebula-vms",
+      :description "VMs that failed or failed to clone"}
+     {:name "opennebula-datastores",
+      :description "Datastores running out of space"}],
+    :summary {:critical 0, :warning 1, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a VM won't start or a datastore is filling up - OpenNebula hosts in error/offline states, failed VMs, and datastore capacity.\n── 🔌 Connection ────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:check-connection {:host "one.example.org", :user nil}]
+    [:collect {:host "one.example.org", :user nil}]
+    [:detectives
+     ["opennebula-hosts" "opennebula-vms" "opennebula-datastores"]
+     {"datastores" [], "hosts" [], "vms" []}]]},
+  "finding text"
+  {:result true,
+   :stdout
+   "  opennebula-vms (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 2 other checks came back clean: opennebula-hosts, opennebula-datastores\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a VM won't start or a datastore is filling up - OpenNebula hosts in error/offline states, failed VMs, and datastore capacity.\n── 🔌 Connection ────────────────────────────────────────────────────────────────\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:check-connection {:host "one.example.org", :user nil}]
+    [:collect {:host "one.example.org", :user nil}]
+    [:detectives
+     ["opennebula-hosts" "opennebula-vms" "opennebula-datastores"]
+     {"datastores" [], "hosts" [], "vms" []}]]},
+  "no connection"
+  {:result false,
+   :stdout "",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a VM won't start or a datastore is filling up - OpenNebula hosts in error/offline states, failed VMs, and datastore capacity.\n── 🔌 Connection ────────────────────────────────────────────────────────────────\n",
+   :calls [[:check-connection {:host "one.example.org", :user nil}]]},
+  "no frontend"
+  {:result false,
+   :stdout "",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a VM won't start or a datastore is filling up - OpenNebula hosts in error/offline states, failed VMs, and datastore capacity.\n── 🔌 Connection ────────────────────────────────────────────────────────────────\n❌ no OpenNebula frontend - pass --frontend or set [:opennebula :frontend] in env.edn\n",
+   :calls []}},
+ "restic"
+ {"clean edn"
+  {:result true,
+   :stdout
+   {:findings [],
+    :checked
+    [{:name "restic-backups",
+      :description
+      "Restic repositories readable, populated, and backing up on schedule"}],
+    :summary {:critical 0, :warning 0, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when you need to trust the backups - that each restic repository is readable, actually populated, and has a recent enough snapshot.\n",
+   :calls
+   [[:password "restic/pw"]
+    [:collect
+     {:repositories ["s3:backup"],
+      :password "pw",
+      :warn-days 2,
+      :critical-days 7}]
+    [:detectives ["restic-backups"] {"repositories" []}]]},
+  "clean text"
+  {:result true,
+   :stdout
+   "  ✓ Restic repositories readable, populated, and backing up on schedule\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when you need to trust the backups - that each restic repository is readable, actually populated, and has a recent enough snapshot.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 1 check passed\n",
+   :calls
+   [[:password "restic/pw"]
+    [:collect
+     {:repositories ["s3:backup"],
+      :password "pw",
+      :warn-days 2,
+      :critical-days 7}]
+    [:detectives ["restic-backups"] {"repositories" []}]]},
+  "finding edn"
+  {:result true,
+   :stdout
+   {:findings
+    [{:severity :warning,
+      :component "ns/subject",
+      :summary "something to look at",
+      :detective "restic-backups"}],
+    :checked
+    [{:name "restic-backups",
+      :description
+      "Restic repositories readable, populated, and backing up on schedule"}],
+    :summary {:critical 0, :warning 1, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when you need to trust the backups - that each restic repository is readable, actually populated, and has a recent enough snapshot.\n",
+   :calls
+   [[:password "restic/pw"]
+    [:collect
+     {:repositories ["s3:backup"],
+      :password "pw",
+      :warn-days 2,
+      :critical-days 7}]
+    [:detectives ["restic-backups"] {"repositories" []}]]},
+  "finding text"
+  {:result true,
+   :stdout
+   "  restic-backups (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when you need to trust the backups - that each restic repository is readable, actually populated, and has a recent enough snapshot.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:password "restic/pw"]
+    [:collect
+     {:repositories ["s3:backup"],
+      :password "pw",
+      :warn-days 2,
+      :critical-days 7}]
+    [:detectives ["restic-backups"] {"repositories" []}]]},
+  "no password"
+  {:result false,
+   :stdout "",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when you need to trust the backups - that each restic repository is readable, actually populated, and has a recent enough snapshot.\n❌ no repository password: pass --password-secret or set RESTIC_PASSWORD\n",
+   :calls [[:password "restic/pw"]]},
+  "warn not below critical"
+  {:result false,
+   :stdout "",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when you need to trust the backups - that each restic repository is readable, actually populated, and has a recent enough snapshot.\n❌ --warn-days must be smaller than --critical-days\n",
+   :calls [[:password "restic/pw"]]}},
+ "thanos"
+ {"clean edn"
+  {:result true,
+   :stdout
+   {:findings [],
+    :checked
+    [{:name "thanos-readiness",
+      :description "Thanos Query is up and ready to serve"}
+     {:name "thanos-stores",
+      :description "Store endpoints are connected and error-free"}
+     {:name "thanos-rules",
+      :description "Recording and alerting rules evaluate cleanly"}],
+    :summary {:critical 0, :warning 0, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when long-range queries or recording rules misbehave - Thanos query readiness, its store endpoints, and rule health.\n",
+   :calls
+   [[:get-selected
+     "ctx"
+     "services"
+     "app.kubernetes.io/name=thanos-query"]
+    [:choose "Thanos Query" [] nil nil]
+    [:port-forward
+     {:context "ctx",
+      :namespace "monitoring",
+      :service "thanos-query",
+      :local-port 19090,
+      :remote-port 9090}]
+    [:collect "http://localhost:19090"]
+    [:detectives
+     ["thanos-readiness" "thanos-stores" "thanos-rules"]
+     {"ready" true,
+      "rules" [],
+      "stores" [],
+      "url" "http://localhost:19090"}]]},
+  "clean text"
+  {:result true,
+   :stdout
+   "  ✓ Thanos Query is up and ready to serve\n  ✓ Store endpoints are connected and error-free\n  ✓ Recording and alerting rules evaluate cleanly\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when long-range queries or recording rules misbehave - Thanos query readiness, its store endpoints, and rule health.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 3 checks passed\n",
+   :calls
+   [[:get-selected
+     "ctx"
+     "services"
+     "app.kubernetes.io/name=thanos-query"]
+    [:choose "Thanos Query" [] nil nil]
+    [:port-forward
+     {:context "ctx",
+      :namespace "monitoring",
+      :service "thanos-query",
+      :local-port 19090,
+      :remote-port 9090}]
+    [:collect "http://localhost:19090"]
+    [:detectives
+     ["thanos-readiness" "thanos-stores" "thanos-rules"]
+     {"ready" true,
+      "rules" [],
+      "stores" [],
+      "url" "http://localhost:19090"}]]},
+  "finding edn"
+  {:result true,
+   :stdout
+   {:findings
+    [{:severity :warning,
+      :component "ns/subject",
+      :summary "something to look at",
+      :detective "thanos-stores"}],
+    :checked
+    [{:name "thanos-readiness",
+      :description "Thanos Query is up and ready to serve"}
+     {:name "thanos-stores",
+      :description "Store endpoints are connected and error-free"}
+     {:name "thanos-rules",
+      :description "Recording and alerting rules evaluate cleanly"}],
+    :summary {:critical 0, :warning 1, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when long-range queries or recording rules misbehave - Thanos query readiness, its store endpoints, and rule health.\n",
+   :calls
+   [[:get-selected
+     "ctx"
+     "services"
+     "app.kubernetes.io/name=thanos-query"]
+    [:choose "Thanos Query" [] nil nil]
+    [:port-forward
+     {:context "ctx",
+      :namespace "monitoring",
+      :service "thanos-query",
+      :local-port 19090,
+      :remote-port 9090}]
+    [:collect "http://localhost:19090"]
+    [:detectives
+     ["thanos-readiness" "thanos-stores" "thanos-rules"]
+     {"ready" true,
+      "rules" [],
+      "stores" [],
+      "url" "http://localhost:19090"}]]},
+  "finding text"
+  {:result true,
+   :stdout
+   "  thanos-stores (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 2 other checks came back clean: thanos-readiness, thanos-rules\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when long-range queries or recording rules misbehave - Thanos query readiness, its store endpoints, and rule health.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:get-selected
+     "ctx"
+     "services"
+     "app.kubernetes.io/name=thanos-query"]
+    [:choose "Thanos Query" [] nil nil]
+    [:port-forward
+     {:context "ctx",
+      :namespace "monitoring",
+      :service "thanos-query",
+      :local-port 19090,
+      :remote-port 9090}]
+    [:collect "http://localhost:19090"]
+    [:detectives
+     ["thanos-readiness" "thanos-stores" "thanos-rules"]
+     {"ready" true,
+      "rules" [],
+      "stores" [],
+      "url" "http://localhost:19090"}]]},
+  "no service"
+  {:result false,
+   :stdout "",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when long-range queries or recording rules misbehave - Thanos query readiness, its store endpoints, and rule health.\n❌ no Thanos Query service selected - check --selector\n",
+   :calls
+   [[:get-selected
+     "ctx"
+     "services"
+     "app.kubernetes.io/name=thanos-query"]
+    [:choose "Thanos Query" [] nil nil]]}},
+ "upload"
+ {"clean edn"
+  {:result true,
+   :stdout
+   {:findings [],
+    :checked
+    [{:name "upload-limits",
+      :description
+      "The nginx + php-fpm file-upload limit chain is coherent"}],
+    :summary {:critical 0, :warning 0, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a Moodle/Nextcloud upload fails at a size limit - the nginx client_max_body_size and php-fpm post/upload limits along the whole chain.\n",
+   :calls
+   [[:choose-one "Namespace" ["moodle"] "moodle"]
+    [:collect "ctx" "moodle"]
+    [:detectives
+     ["upload-limits"]
+     {:component "moodle",
+      :found-nginx? true,
+      :found-php? true,
+      :memory-limit 134217728,
+      :nginx-body-size 1048576,
+      :nginx-explicit? true,
+      :post-max 1048576,
+      :upload-max 1048576}]]},
+  "clean text"
+  {:result true,
+   :stdout
+   "  ✓ The nginx + php-fpm file-upload limit chain is coherent\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a Moodle/Nextcloud upload fails at a size limit - the nginx client_max_body_size and php-fpm post/upload limits along the whole chain.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 1 check passed\n",
+   :calls
+   [[:choose-one "Namespace" ["moodle"] "moodle"]
+    [:collect "ctx" "moodle"]
+    [:detectives
+     ["upload-limits"]
+     {:component "moodle",
+      :found-nginx? true,
+      :found-php? true,
+      :memory-limit 134217728,
+      :nginx-body-size 1048576,
+      :nginx-explicit? true,
+      :post-max 1048576,
+      :upload-max 1048576}]]},
+  "finding edn"
+  {:result true,
+   :stdout
+   {:findings
+    [{:severity :warning,
+      :component "ns/subject",
+      :summary "something to look at",
+      :detective "upload-limits"}],
+    :checked
+    [{:name "upload-limits",
+      :description
+      "The nginx + php-fpm file-upload limit chain is coherent"}],
+    :summary {:critical 0, :warning 1, :info 0}},
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a Moodle/Nextcloud upload fails at a size limit - the nginx client_max_body_size and php-fpm post/upload limits along the whole chain.\n",
+   :calls
+   [[:choose-one "Namespace" ["moodle"] "moodle"]
+    [:collect "ctx" "moodle"]
+    [:detectives
+     ["upload-limits"]
+     {:component "moodle",
+      :found-nginx? true,
+      :found-php? true,
+      :memory-limit 134217728,
+      :nginx-body-size 1048576,
+      :nginx-explicit? true,
+      :post-max 1048576,
+      :upload-max 1048576}]]},
+  "finding text"
+  {:result true,
+   :stdout
+   "  upload-limits (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a Moodle/Nextcloud upload fails at a size limit - the nginx client_max_body_size and php-fpm post/upload limits along the whole chain.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
+   :calls
+   [[:choose-one "Namespace" ["moodle"] "moodle"]
+    [:collect "ctx" "moodle"]
+    [:detectives
+     ["upload-limits"]
+     {:component "moodle",
+      :found-nginx? true,
+      :found-php? true,
+      :memory-limit 134217728,
+      :nginx-body-size 1048576,
+      :nginx-explicit? true,
+      :post-max 1048576,
+      :upload-max 1048576}]]},
+  "nginx only"
+  {:result true,
+   :stdout
+   "  ✓ The nginx + php-fpm file-upload limit chain is coherent\n",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a Moodle/Nextcloud upload fails at a size limit - the nginx client_max_body_size and php-fpm post/upload limits along the whole chain.\n🔶 no php container answered 'php -i' - reporting the nginx side only\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 1 check passed\n",
+   :calls
+   [[:choose-one "Namespace" ["moodle"] "moodle"]
+    [:collect "ctx" "moodle"]
+    [:detectives
+     ["upload-limits"]
+     {:component "moodle",
+      :found-nginx? true,
+      :found-php? false,
+      :nginx-body-size 1048576}]]},
+  "no containers"
+  {:result false,
+   :stdout "",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a Moodle/Nextcloud upload fails at a size limit - the nginx client_max_body_size and php-fpm post/upload limits along the whole chain.\n❌ found no nginx or php-fpm container in moodle - is this an nginx+php-fpm app?\n",
+   :calls
+   [[:choose-one "Namespace" ["moodle"] "moodle"]
+    [:collect "ctx" "moodle"]]},
+  "no namespace"
+  {:result false,
+   :stdout "",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a Moodle/Nextcloud upload fails at a size limit - the nginx client_max_body_size and php-fpm post/upload limits along the whole chain.\n❌ no namespace selected\n",
+   :calls [[:choose-one "Namespace" ["moodle"] "moodle"]]}}}
