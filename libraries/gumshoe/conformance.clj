@@ -17,6 +17,12 @@
    Each book is also loaded without running, so a symbol it names that
    resolves to nothing fails the gate instead of the run.
 
+   An advisory names something worth a look that the gate does not fail on:
+   a mutation book whose spec declares no :recovery. gumshoe.mutation prints
+   generic guidance when such a change fails after applying an effect, so
+   the book works without one; verify! prints the advisories as notes and
+   still passes.
+
    Every check returns findings, {:file :check :message}, rather than
    asserting, so a caller decides how to report them. A file that does not
    parse is reported once as :unparseable and skipped by the structural
@@ -291,6 +297,31 @@
              (format "binds %s to the vector %s, but it returns the map {:namespace .. :name ..}; destructure it by key"
                      (first init) binding))))
 
+(defn- mutation-book-call?
+  [form]
+  (and (harness-call? form)
+       (= "book" (name (first form)))
+       (= "mutation" (last (str/split (namespace (first form)) #"\.")))))
+
+(defn without-recovery
+  "Advisory: mutation books whose spec is a literal map without :recovery. A
+   spec built by merge or by a library may carry one from elsewhere, which a
+   static read cannot see, so only a literal map is judged."
+  [parsed-books]
+  (for [{:keys [file forms]} parsed-books
+        :when forms
+        :let [call (some #(when (mutation-book-call? %) %) forms)
+              spec (second call)]
+        :when (and (map? spec) (not (contains? spec :recovery)))]
+    (finding file :recovery
+             "declares no :recovery, so a failure after an applied effect prints only the engine's generic guidance; say what the change leaves behind and how to undo it")))
+
+(defn advisories
+  "Every advisory for the book files (see without-recovery). None fails the
+   gate."
+  [{:keys [books]}]
+  (vec (without-recovery (keep #(let [parsed (parse %)] (when (:forms parsed) parsed)) books))))
+
 (defn findings
   "Every finding for the book and library files, unparseable ones first.
    `license` names the SPDX identifier every file must carry; without it any
@@ -340,7 +371,7 @@
   "Prints every finding below the roots (see files-in) and throws an ex-info
    carrying :babashka/exit 1 when there is any, so a bb task running it fails
    with the offending files named. Returns the number of files checked
-   otherwise. opts are those of findings-in:
+   otherwise. Advisories are printed first, as notes, and never fail it. opts are those of findings-in:
 
      {:books [\"runbooks\"] :libraries [\"libraries\"] :license \"0BSD\"}
 
@@ -349,6 +380,7 @@
   (let [{:keys [books libraries] :as files} (files-in opts)
         found (findings (merge (with-library-classpath opts) files))]
     (binding [*out* *err*]
+      (doseq [f (advisories files)] (println (str "note: " (format-finding f))))
       (doseq [f found] (println (format-finding f))))
     (when (seq found)
       (throw (ex-info (format "%d conformance finding(s) in %d file(s)"

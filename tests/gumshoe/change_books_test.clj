@@ -14,6 +14,11 @@
    stopped answering. The transcripts are kept in
    tests/golden/change_books.edn.
 
+   A book's :failing scenarios run for real instead, with flow/change! and
+   the effect interpreter in place, every effect applying and the state not
+   moving, so a post-check does not hold: they keep what the run printed,
+   its banner and the recovery lines the harness prints under it.
+
    Regenerate the file after an intended change with
    (gumshoe.change-books-test/write-golden!) and review its diff."
   (:require [babashka.cli :as cli]
@@ -26,10 +31,14 @@
             [gumshoe.announce :as announce]
             [gumshoe.flow :as flow]
             [gumshoe.fuzzy-finder :as fuzzy]
+            [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.outcome :as outcome]
             [gumshoe.runbook :as runbook]
             [gumshoe.shell :as shell]
-            [gumshoe.ssh :as ssh]))
+            [gumshoe.ssh :as ssh]
+            [gumshoe.stdout :as stdout]
+            [gumshoe.verify :as verify]))
 
 (def golden-path "tests/golden/change_books.edn")
 
@@ -128,6 +137,32 @@
                                    post-checks (assoc :checks {:after (judged true)
                                                                :unanswered (judged false)})))))))))
 
+(defn failed-transcript
+  "What the book prints when it runs for real against state with every
+   effect applying and the state staying as it is: what the run printed, its
+   banner and the recovery lines under it. Post-checks run once, with a
+   timeout of 0."
+  [config {:keys [state opts]}]
+  (let [state (merge {:answering? true} state)
+        record (outcome/fresh)
+        eventually verify/eventually]
+    (binding [ssh/*user-config* nil]
+      (with-redefs [shell/execute (fn [& argv] (answer state (vec argv)))
+                    shell/exit-code-of (fn [& argv] (:exit (answer state (vec argv))))
+                    shell/run-with-output (constantly 0)
+                    kubectl/current-context (constantly "ctx")
+                    kubectl/current-cluster (constantly "cluster")
+                    interact/confirm! (constantly true)
+                    announce/announce! (fn [_ _ _] nil)
+                    verify/eventually (fn [check] (eventually (assoc check :timeout 0)))]
+        (let [{:keys [result out]} (capture #(binding [outcome/*record* record]
+                                               (attempt (fn [] ((:action config) opts {:announcement-data nil})))))
+              {:keys [tone text]} (outcome/banner {:changes? true :outcome (if (true? result) :ok :failed)} @record)]
+          {:result result
+           :out (str/split-lines (stdout/strip-colors out))
+           :banner text
+           :recovery (vec (outcome/recovery-lines tone @record))})))))
+
 (defn surface
   "What the book declares outside a run, and the opts its options parse argv
    into."
@@ -167,7 +202,9 @@
                             :opts {:host "mgr-1" :osd "osd.3"}}
      :all-in {:state {:osds [(osd 1 true) (osd 3 true)]} :opts {:host "mgr-1" :osd "osd.3"}}
      :unpicked {:state {:osds out-osd} :opts {:host "mgr-1" :osd "osd.9"}}
-     :unreachable {:state {:osds out-osd :answering? false} :opts {:host "mgr-1" :osd "osd.3"}}}}
+     :unreachable {:state {:osds out-osd :answering? false} :opts {:host "mgr-1" :osd "osd.3"}}}
+    :failing
+    {:failed-after-applying {:state {:osds out-osd} :opts {:host "mgr-1" :osd "osd.3"}}}}
 
    "runbooks/kubernetes/netshoot/node.clj"
    {:scenarios
@@ -187,9 +224,10 @@
 (defn transcripts
   []
   (into (sorted-map)
-        (for [[path {:keys [argv scenarios]}] books]
+        (for [[path {:keys [argv scenarios failing]}] books]
           (let [config (load-config path)]
-            [path (assoc (into (sorted-map) (for [[k scenario] scenarios] [k (transcript config scenario)]))
+            [path (assoc (into (sorted-map) (concat (for [[k scenario] scenarios] [k (transcript config scenario)])
+                                                    (for [[k scenario] failing] [k (failed-transcript config scenario)])))
                          :surface (surface config argv))]))))
 
 (defn write-golden!

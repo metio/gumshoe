@@ -155,6 +155,27 @@
     :checks
     {:after [["osd.3 is marked in" true]],
      :unanswered [["osd.3 is marked in" false]]}}},
+  :failed-after-applying
+  {:result false,
+   :out
+   ["── 🔌 Connection ────────────────────────────────────────────────────────────────"
+    "  ✓ can connect to mgr-1"
+    "▸ OSD: osd.3"
+    "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
+    "❌ NOT verified within 0s: osd.3 is marked in"],
+   :banner
+   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   :recovery
+   ["Recovery:"
+    "  This change declares no recovery guidance. What it left behind:"
+    "    1 effect of this change stayed applied - nothing was rolled back:"
+    "      ssh mgr-1 -- ceph osd in 3"
+    "    its post-check did not hold"
+    "  Look at:"
+    "    the post-check messages above"
+    "    the changelog entry this change posted"
+    "    the current state of osd.3 on mgr-1"]},
   :numbered
   {:result true,
    :out

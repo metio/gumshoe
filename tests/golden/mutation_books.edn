@@ -24,6 +24,13 @@
      :timeout 30,
      :interval 3,
      :holds true}]},
+  :failed-at-the-first-effect
+  {:result false,
+   :out
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"],
+   :banner
+   "FAILED at the first effect: kubectl --namespace=batch patch cronjob nightly --type=merge --patch={\"spec\":{\"suspend\":false}} - nothing was changed",
+   :recovery []},
   :permitted
   {:action "resume a CronJob",
    :destructive? false,
@@ -186,6 +193,24 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
+  :failed-after-applying
+  {:result false,
+   :out
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
+    "❌ NOT verified within 0s: CronJob batch/nightly is suspended"],
+   :banner
+   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   :recovery
+   ["Recovery:"
+    "  This change declares no recovery guidance. What it left behind:"
+    "    1 effect of this change stayed applied - nothing was rolled back:"
+    "      kubectl --namespace=batch patch cronjob nightly --type=merge --patch={\"spec\":{\"suspend\":true}}"
+    "    its post-check did not hold"
+    "  Look at:"
+    "    the post-check messages above"
+    "    the changelog entry this change posted"
+    "    the current state of batch/nightly on cluster"]},
   :permitted
   {:action "suspend a CronJob",
    :destructive? false,
@@ -1582,6 +1607,24 @@
      :timeout 600,
      :interval 10,
      :holds false}]},
+  :failed-after-applying
+  {:result false,
+   :out
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
+    "❌ NOT verified within 0s: Deployment shop/web runs 3 ready replica(s)"],
+   :banner
+   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   :recovery
+   ["Recovery:"
+    "  This change declares no recovery guidance. What it left behind:"
+    "    1 effect of this change stayed applied - nothing was rolled back:"
+    "      kubectl --namespace=shop scale deployment/web --replicas=3"
+    "    its post-check did not hold"
+    "  Look at:"
+    "    the post-check messages above"
+    "    the changelog entry this change posted"
+    "    the current state of Deployment shop/web on cluster"]},
   :invalid
   {:action "scale a workload",
    :destructive? false,
@@ -3939,6 +3982,22 @@
      :timeout 30,
      :interval 3,
      :holds true}]},
+  :failed-after-applying
+  {:result false,
+   :out
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"],
+   :banner
+   "FAILED after 1 effect - stopped at: kubectl -n flux-system annotate kustomizations.kustomize.toolkit.fluxcd.io apps --overwrite reconcile.fluxcd.io/requestedAt=<instant> - the effects before it stay applied",
+   :recovery
+   ["Recovery:"
+    "  This change declares no recovery guidance. What it left behind:"
+    "    1 effect of this change stayed applied - nothing was rolled back:"
+    "      kubectl -n flux-system patch kustomizations.kustomize.toolkit.fluxcd.io apps --type=merge --patch={\"spec\":{\"suspend\":false}}"
+    "    it stopped at: kubectl -n flux-system annotate kustomizations.kustomize.toolkit.fluxcd.io apps --overwrite reconcile.fluxcd.io/requestedAt=<instant>"
+    "  Look at:"
+    "    the messages of the effect that failed, above"
+    "    the changelog entry this change posted"
+    "    the current state of Kustomization flux-system/apps on cluster"]},
   :invalid
   {:action "resume a Flux object",
    :destructive? false,

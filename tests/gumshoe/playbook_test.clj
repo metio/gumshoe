@@ -438,3 +438,19 @@
              (refusal {:after-resume [{:title "keep"} {:title "wipe" :confirm {:destructive? true}}]}
                       {:refuse refuse})))
       (is (nil? (refusal {:after-delete [{:title "wipe" :confirm {:destructive? true}}]} {:refuse refuse}))))))
+
+(defn- applying-then-failing
+  "A change running `true` before the effect that fails."
+  [action & {:as extra}]
+  (merge (failing-change action) {:effect (fn [_] [[:cmd "true"] [:cmd missing-binary]])} extra))
+
+(deftest the-playbook-recovery-wins-over-the-engine-fallback
+  (let [pb {:select {:mode :one} :confirm {:action "maintain"} :recovery "the node may still be cordoned"}]
+    (testing "a step without guidance that applied an effect falls back to the playbook's"
+      (let [{:keys [err]} (printed-outcome (assoc pb :steps [(applying-then-failing "drain")]))]
+        (is (str/includes? err "the node may still be cordoned") err)
+        (is (not (str/includes? err "declares no recovery guidance")) err)))
+    (testing "without playbook guidance the engine says what the step left applied"
+      (let [{:keys [err]} (printed-outcome (assoc pb :recovery nil :steps [(applying-then-failing "drain")]))]
+        (is (str/includes? err "This change declares no recovery guidance") err)
+        (is (str/includes? err "    true") "names the effect that stayed applied")))))

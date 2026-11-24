@@ -15,6 +15,11 @@
    messages and --help text its spec declares, and the candidates its select
    offers over the permitted and the refused cluster.
 
+   A few books also run for real, with flow/change! and the effect
+   interpreter in place and an effect or a post-check failing after an
+   earlier effect applied, and keep the banner and the recovery lines the
+   harness prints under it.
+
    Regenerate the file after an intended change with
    (gumshoe.mutation-books-test/write-golden!) and review its diff."
   (:require [cheshire.core :as json]
@@ -24,9 +29,13 @@
             [clojure.test :refer [deftest is testing]]
             [gumshoe.announce :as announce]
             [gumshoe.flow :as flow]
+            [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
-            [gumshoe.shell :as shell]))
+            [gumshoe.outcome :as outcome]
+            [gumshoe.shell :as shell]
+            [gumshoe.stdout :as stdout]
+            [gumshoe.verify :as verify]))
 
 (def golden-path "tests/golden/mutation_books.edn")
 
@@ -145,6 +154,36 @@
                                                (cond-> {:description description :timeout timeout :interval interval
                                                         :holds (attempt check)}
                                                  abort (assoc :abort (attempt abort)))))))))))))
+
+(defn failed-transcript
+  "What the book prints when it runs for real against objects and the
+   `fail-at`th effect fails, or with every effect applied and nothing on the
+   recorded cluster changing, so a post-check does not hold: what the run
+   printed, its banner and the recovery lines under it. Post-checks run once,
+   with a timeout of 0."
+  [spec {:keys [objects target opts fail-at]}]
+  (let [record (outcome/fresh)
+        effects (atom 0)
+        exit (fn [] (if (= fail-at (swap! effects inc)) 1 0))
+        eventually verify/eventually]
+    (with-redefs [shell/execute (fn [& argv] (answer {:objects objects :answering? true} (vec argv)))
+                  shell/run-with-output (fn [& _] (exit))
+                  shell/execute-with-stdin (fn [& _] (let [code (exit)]
+                                                       {:exit code :out "" :err (if (zero? code) "" "Error from server (Forbidden): refused")}))
+                  kubectl/current-context (constantly "ctx")
+                  kubectl/current-cluster (constantly "cluster")
+                  interact/confirm! (constantly true)
+                  announce/announce! (fn [_ _ message] message)
+                  verify/eventually (fn [check] (eventually (assoc check :timeout 0)))]
+      (let [{:keys [result out]} (capture #(binding [outcome/*record* record]
+                                             (try (mutation/run-on! spec target (or opts {}) nil)
+                                                  (catch Exception e (println "threw:" (type e) (ex-message e))))))
+            {:keys [tone text]} (outcome/banner {:changes? true :outcome (if result :ok :failed)} @record)]
+        (normalise
+         {:result result
+          :out (str/split-lines (stdout/strip-colors out))
+          :banner text
+          :recovery (vec (outcome/recovery-lines tone @record))})))))
 
 (defn surface
   "What the book declares outside a run: its flags, prerequisites, selection,
@@ -439,12 +478,28 @@
     "tools/cnpg/runbooks/suspend_scheduled_backup.clj" "tools/cnpg/runbooks/resume_scheduled_backup.clj"
     "tools/velero/runbooks/pause_schedule.clj" "tools/velero/runbooks/resume_schedule.clj"})
 
+(def ^:private failing
+  "Books that also run for real, by the scenario name their failing run is
+   kept under."
+  {"tools/flux/runbooks/flux/resume.clj"
+   {:failed-after-applying {:objects [[flux-type (kustomization true)]] :target "Kustomization flux-system/apps" :fail-at 2}}
+
+   "runbooks/kubernetes/cronjobs/suspend.clj"
+   {:failed-after-applying {:objects [["cronjobs" (cronjob false)]] :target "batch/nightly"}}
+
+   "runbooks/kubernetes/workloads/scale.clj"
+   {:failed-after-applying {:objects [["deployments" (deployment)]] :target "Deployment shop/web" :opts {:replicas 3}}}
+
+   "runbooks/kubernetes/cronjobs/resume.clj"
+   {:failed-at-the-first-effect {:objects [["cronjobs" (cronjob true)]] :target "batch/nightly" :fail-at 1}}})
+
 (defn transcripts
   []
   (into (sorted-map)
         (for [[path scenarios] books]
           (let [spec (load-spec path)]
-            [path (assoc (into (sorted-map) (for [[k scenario] scenarios] [k (transcript spec scenario)]))
+            [path (assoc (into (sorted-map) (concat (for [[k scenario] scenarios] [k (transcript spec scenario)])
+                                                    (for [[k scenario] (get failing path)] [k (failed-transcript spec scenario)])))
                          :surface (surface spec (let [permitted (get-in scenarios [:permitted :objects])
                                                       refused (get-in scenarios [:refused :objects])]
                                                   (cond-> {:permitted permitted :refused refused}

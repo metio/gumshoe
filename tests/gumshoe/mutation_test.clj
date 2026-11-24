@@ -259,3 +259,89 @@
     (on-a-stubbed-cluster
      (is (false? (mutation/run-on! (shape-spec (constantly nil)) "w-1" {} nil)))
      (is (zero? @asked)))))
+
+(defn- failing-after
+  "Runs spec against w-1 with every effect but the `n`th succeeding (nil:
+   all succeed), and returns the record and the lines printed under the
+   banner it leaves."
+  [spec n & {:keys [dry-run?]}]
+  (let [record (outcome/fresh)
+        calls (atom 0)]
+    (with-redefs [kubectl/current-context (constantly "ctx")
+                  kubectl/current-cluster (constantly "cluster")
+                  interact/confirm! (constantly true)
+                  shell/run-with-output (fn [& _] (if (= n (swap! calls inc)) 1 0))]
+      (binding [*err* (java.io.StringWriter.) *out* (java.io.StringWriter.)
+                outcome/*record* record flow/*dry-run* (boolean dry-run?)]
+        (mutation/run-on! spec "w-1" {} nil)))
+    {:record @record
+     :lines (outcome/recovery-lines :error @record)}))
+
+(defn- three-effects
+  [& {:as extra}]
+  (merge {:select {:mode :one :label "Node"}
+          :confirm {:action "maintain the node"}
+          :effect (fn [_] [[:note "cordoning first"]
+                           [:kubectl "ctx" "cordon" "w-1"]
+                           [:kubectl "ctx" "drain" "w-1"]])}
+         extra))
+
+(deftest a-change-without-recovery-that-failed-after-applying-prints-a-fallback
+  (let [{:keys [lines]} (failing-after (three-effects) 2)
+        text (str/join "\n" lines)]
+    (is (= "Recovery:" (first lines)) text)
+    (is (str/includes? text "declares no recovery guidance") text)
+    (is (str/includes? text "stayed applied") text)
+    (is (str/includes? text "kubectl cordon w-1") "names the effect that stayed applied")
+    (is (not (str/includes? text "cordoning first")) "a note changed nothing and is not listed")
+    (is (str/includes? text "stopped at: kubectl drain w-1") text)
+    (is (str/includes? text "w-1 on cluster") "names the object and where it lives")))
+
+(deftest a-change-whose-post-check-failed-after-applying-points-at-the-post-check
+  (let [spec (three-effects :verify (fn [_] [{:description "w-1 is drained" :check (constantly false) :timeout 0}])
+                            :announce (fn [_] "draining w-1"))
+        {:keys [lines]} (failing-after spec nil)
+        text (str/join "\n" lines)]
+    (is (str/includes? text "kubectl cordon w-1") text)
+    (is (str/includes? text "kubectl drain w-1") text)
+    (is (str/includes? text "post-check") text)
+    (is (str/includes? text "changelog") "an announced change points at its changelog entry")))
+
+(deftest a-change-that-applied-nothing-prints-no-fallback
+  (is (nil? (:lines (failing-after (three-effects) 1)))
+      "the first change failed - the note before it changed nothing"))
+
+(deftest a-rehearsal-prints-no-fallback
+  (is (nil? (:lines (failing-after (three-effects :verify (fn [_] [{:description "never" :check (constantly false) :timeout 0}]))
+                                   nil :dry-run? true)))))
+
+(deftest a-change-with-its-own-recovery-prints-only-that
+  (let [{:keys [lines]} (failing-after (three-effects :recovery "uncordon w-1 by hand") 2)]
+    (is (= ["Recovery:" "  uncordon w-1 by hand"] lines))))
+
+(deftest the-fallback-is-a-function-of-what-the-change-left
+  (is (= ["This change declares no recovery guidance. What it left behind:"
+          "  2 effects of this change stayed applied - nothing was rolled back:"
+          "    kubectl cordon w-1"
+          "    kubectl drain w-1"
+          "  its post-check did not hold"
+          "Look at:"
+          "  the post-check messages above"
+          "  the changelog entry this change posted"
+          "  the current state of w-1 on cluster"]
+         (str/split-lines (mutation/fallback-guidance {:applied ["kubectl cordon w-1" "kubectl drain w-1"]
+                                                       :post-check-failed? true
+                                                       :announced? true
+                                                       :subject "w-1"
+                                                       :cluster "cluster"}))))
+  (is (= ["This change declares no recovery guidance. What it left behind:"
+          "  1 effect of this change stayed applied - nothing was rolled back:"
+          "    kubectl cordon w-1"
+          "  it stopped at: kubectl drain w-1"
+          "Look at:"
+          "  the messages of the effect that failed, above"
+          "  the current state of w-1 on cluster"]
+         (str/split-lines (mutation/fallback-guidance {:applied ["kubectl cordon w-1"]
+                                                       :stopped "kubectl drain w-1"
+                                                       :subject "w-1"
+                                                       :cluster "cluster"})))))
