@@ -4,12 +4,14 @@
 (ns runbooks.detectives.cluster
   "Runs every registered detective against the current cluster - the full investigation."
   (:require [gumshoe.detective :as detective]
+            [gumshoe.detectives.disruption :as disruption]
             [gumshoe.detectives.registry :as registry]))
 
 (detective/book
  {:description "Runs every registered detective against the current cluster"
   :when-to-run "Reach for this first when something is wrong but you don't yet know where - it runs every cluster-wide check at once and points you at the area to dig into."
   :scope :all
+  :options disruption/hpa-grace-option
   :prerequisites {:installed-tools ["kubectl"]
                   :cluster-capabilities []
                   :kubectl-can-get ["nodes" "pods" "persistentvolumeclaims" "deployments" "statefulsets" "daemonsets" "jobs" "cronjobs" "ingresses" "configmaps" "persistentvolumes" "services" "ingressclasses" "storageclasses" "roles" "validatingwebhookconfigurations" "mutatingwebhookconfigurations" "replicasets" "events" "validatingwebhookconfigurations" "mutatingwebhookconfigurations" "resourcequotas" "clusterroles" "clusterrolebindings" "rolebindings" "serviceaccounts" "networkpolicies"]}})
