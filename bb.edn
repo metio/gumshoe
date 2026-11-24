@@ -53,6 +53,7 @@
                    [gumshoe.effect-plugin-test]
                    [gumshoe.mutation-pin-test]
                    [gumshoe.mutation-books-test]
+                   [gumshoe.change-books-test]
                    [gumshoe.mutation-subject-test]
                    [gumshoe.pick-test]
                    [gumshoe.deletion-test]
@@ -215,6 +216,7 @@
                                                          'gumshoe.effect-plugin-test
                                                          'gumshoe.mutation-pin-test
                                                          'gumshoe.mutation-books-test
+                                                         'gumshoe.change-books-test
                                                          'gumshoe.mutation-subject-test
                                                          'gumshoe.pick-test
                                                          'gumshoe.deletion-test
