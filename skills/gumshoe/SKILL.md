@@ -306,6 +306,18 @@ mostly data:
   reading through the nil ref (`runbooks/kubernetes/workloads/restart.clj`).
   A change whose subject is no single object, such as a Helm release kept
   as many Secrets, uses `:refusal` alone (`runbooks/kubernetes/helm/rollback.clj`);
+- a change that acts on something other than the cluster of the kube context
+  - an SSH host, a storage cluster - names it with `:connect (fn [opts] …)`,
+  which checks the connection and returns `{:context … :cluster …
+  :announce-as …}` or nil. The candidate query, every callback and the
+  effect receive that `:context` (an ssh connection for `gumshoe.ceph`), the
+  confirmation names `:cluster`, and the changelog names `:announce-as`,
+  defaulting to `:cluster`; nil stops the book before anything is listed.
+  `gumshoe.ceph/connect` is the ceph one (`tools/ceph/runbooks/osd_in.clj`).
+  `:subject` and `:pin` read with kubectl, so a spec with `:connect` takes
+  neither and re-checks its object in `:precondition`. A change nobody else
+  needs to hear of, such as a netshoot debug session, sets `:announce?
+  false` and runs as a read-only book does (`runbooks/kubernetes/netshoot/node.clj`);
 - a pair of books that set one boolean state and set it back - suspend and
   resume, pause and resume - is one `(toggle/pair {…})` declaration from
   `gumshoe.toggle`, returning `{:on <spec> :off <spec>}`: the shared spec

@@ -634,7 +634,11 @@ the same machine-enforced contract:
   the pick, reads and pins the object, and prints the refusal. A suspend/resume
   or pause/resume pair is one `gumshoe.toggle/pair` declaration whose `:on` and
   `:off` specs differ only in the wanted state and their words
-  (`gumshoe.steps.workloads/cronjob-suspending`). A spec a playbook shares lives in a
+  (`gumshoe.steps.workloads/cronjob-suspending`). A change acting over SSH or another API
+  names its target with `:connect`, which returns the context the callbacks
+  and the effect receive and the names the confirmation and the changelog
+  show (`gumshoe.ceph/connect`); a debug session that announces nothing sets
+  `:announce? false`. A spec a playbook shares lives in a
   library, and the runbook names its description beside it:
   `(mutation/book (merge nodes/cordon {:description "…"}))`, so the catalog
   reads it without loading the book.

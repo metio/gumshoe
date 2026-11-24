@@ -25,15 +25,27 @@
     :kubectl-can-get ["nodes"],
     :kubectl-can-create ["pods"]},
    :announce? false,
-   :details [],
+   :details
+   ["What it does:"
+    "  picks one Node (--node, or interactively)"
+    "  asks to confirm: start a privileged netshoot debug pod on a node"
+    "  has no post-check"
+    ""
+    "Needs:"
+    "  tools: kubectl, kubectl-netshoot, fzf"
+    "  kubectl get: nodes"
+    "  kubectl create: pods"],
    :parsed nil},
-  :unanswered {:result false, :out "❌ no node selected"},
+  :unanswered
+  {:result false,
+   :out
+   "❌ could not list the Node candidates - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
   :unpicked
   {:result false,
    :out
-   "🔶 Node 'n9' is not a valid choice, please select one\n❌ no node selected"}},
+   "🔶 Node 'n9' is not a valid choice, please select one\n❌ no Node selected"}},
  "runbooks/kubernetes/netshoot/pod.clj"
- {:no-pods {:result false, :out "❌ no pod selected"},
+ {:no-pods {:result true, :out "✅ no pod is running to debug"},
   :permitted
   {:result true,
    :out "▸ Pod: shop/web-1",
@@ -68,13 +80,24 @@
     :cluster-capabilities [],
     :kubectl-can-get ["pods"]},
    :announce? false,
-   :details [],
+   :details
+   ["What it does:"
+    "  picks one Pod by namespace and name (--namespace and --pod, or interactively)"
+    "  asks to confirm: attach a netshoot debug container to a running pod"
+    "  has no post-check"
+    ""
+    "Needs:"
+    "  tools: kubectl, kubectl-netshoot, fzf"
+    "  kubectl get: pods"],
    :parsed nil},
-  :unanswered {:result false, :out "❌ no pod selected"},
+  :unanswered
+  {:result false,
+   :out
+   "❌ could not list the Pod candidates - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
   :unpicked
   {:result false,
    :out
-   "🔶 no Pod matches the given flags, please select from all instead\n🔶 Pod 'shop/web-9' is not a valid choice, please select one\n❌ no pod selected"}},
+   "🔶 no Pod matches the given flags, please select from all instead\n🔶 Pod 'shop/web-9' is not a valid choice, please select one\n❌ no Pod selected"}},
  "tools/ceph/runbooks/osd_in.clj"
  {:all-in
   {:result true,
@@ -83,7 +106,7 @@
   :brought-in-meanwhile
   {:result true,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n▸ OSD: osd.3\n────────────────────────────────────────────────────────────────────────────────\nhost : mgr-1\nosd  : osd.3\nup   : yes",
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n▸ OSD: osd.3",
    :change
    {:action "bring an OSD back in - data migrates back onto it",
     :target "mgr-1",
@@ -99,6 +122,7 @@
       "osd"
       "in"
       "3"]],
+    :precondition {:result false, :out ""},
     :announce ["ceph (mgr-1)" "Bring osd.3 back in"],
     :checks
     {:after [["osd.3 is marked in" true]],
@@ -106,7 +130,7 @@
   :cephadm
   {:result true,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to admin@mgr-1\n  ✓ can use sudo on admin@mgr-1\n▸ OSD: osd.3\n────────────────────────────────────────────────────────────────────────────────\nhost : mgr-1\nosd  : osd.3\nup   : yes",
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to admin@mgr-1\n  ✓ can use sudo on admin@mgr-1\n▸ OSD: osd.3",
    :change
    {:action "bring an OSD back in - data migrates back onto it",
     :target "mgr-1",
@@ -126,6 +150,7 @@
       "osd"
       "in"
       "3"]],
+    :precondition {:result true, :out ""},
     :announce ["ceph (mgr-1)" "Bring osd.3 back in"],
     :checks
     {:after [["osd.3 is marked in" true]],
@@ -133,7 +158,7 @@
   :numbered
   {:result true,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n▸ OSD: osd.3\n────────────────────────────────────────────────────────────────────────────────\nhost : mgr-1\nosd  : osd.3\nup   : yes",
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n▸ OSD: osd.3",
    :change
    {:action "bring an OSD back in - data migrates back onto it",
     :target "mgr-1",
@@ -149,6 +174,7 @@
       "osd"
       "in"
       "3"]],
+    :precondition {:result true, :out ""},
     :announce ["ceph (mgr-1)" "Bring osd.3 back in"],
     :checks
     {:after [["osd.3 is marked in" true]],
@@ -156,7 +182,7 @@
   :permitted
   {:result true,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n▸ OSD: osd.3\n────────────────────────────────────────────────────────────────────────────────\nhost : mgr-1\nosd  : osd.3\nup   : yes",
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n▸ OSD: osd.3",
    :change
    {:action "bring an OSD back in - data migrates back onto it",
     :target "mgr-1",
@@ -172,6 +198,7 @@
       "osd"
       "in"
       "3"]],
+    :precondition {:result true, :out ""},
     :announce ["ceph (mgr-1)" "Bring osd.3 back in"],
     :checks
     {:after [["osd.3 is marked in" true]],
@@ -179,7 +206,7 @@
   :still-out
   {:result true,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n▸ OSD: osd.3\n────────────────────────────────────────────────────────────────────────────────\nhost : mgr-1\nosd  : osd.3\nup   : yes",
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n▸ OSD: osd.3",
    :change
    {:action "bring an OSD back in - data migrates back onto it",
     :target "mgr-1",
@@ -195,6 +222,7 @@
       "osd"
       "in"
       "3"]],
+    :precondition {:result true, :out ""},
     :announce ["ceph (mgr-1)" "Bring osd.3 back in"],
     :checks
     {:after [["osd.3 is marked in" false]],
@@ -219,15 +247,24 @@
     {:desc
      "The OSD to bring back in (3 or osd.3) - interactive selection when omitted",
      :alias :d,
-     :coerce :string}},
+     :coerce :fn}},
    :prerequisites {:installed-tools ["ssh"]},
    :announce? true,
-   :details [],
-   :parsed {:host "mgr-1", :osd "3"}},
+   :details
+   ["What it does:"
+    "  picks one OSD (--osd, or interactively)"
+    "  asks to confirm: bring an OSD back in - data migrates back onto it"
+    "  checks again right before acting that what was confirmed still holds"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: ssh"],
+   :parsed {:host "mgr-1", :osd "osd.3"}},
   :unanswered-meanwhile
   {:result true,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n▸ OSD: osd.3\n────────────────────────────────────────────────────────────────────────────────\nhost : mgr-1\nosd  : osd.3\nup   : yes",
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n▸ OSD: osd.3",
    :change
    {:action "bring an OSD back in - data migrates back onto it",
     :target "mgr-1",
@@ -243,6 +280,7 @@
       "osd"
       "in"
       "3"]],
+    :precondition {:result false, :out ""},
     :announce ["ceph (mgr-1)" "Bring osd.3 back in"],
     :checks
     {:after [["osd.3 is marked in" false]],

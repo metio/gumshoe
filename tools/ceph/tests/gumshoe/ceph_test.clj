@@ -64,6 +64,11 @@
     (is (= 3 (ceph/osd-id "3")))
     (is (= 3 (ceph/osd-id "osd.3")))
     (is (nil? (ceph/osd-id "mon.a"))))
+  (testing "an --osd value becomes the name the candidates carry, garbage stays as given"
+    (is (= "osd.3" (ceph/osd-pick "3")))
+    (is (= "osd.3" (ceph/osd-pick "osd.3")))
+    (is (= "mon.a" (ceph/osd-pick "mon.a")))
+    (is (nil? (ceph/osd-pick nil))))
   (let [osds [{:osd 0 :up 1 :in 1} {:osd 1 :up 0 :in 0}]]
     (testing "names, lookup, and state predicates"
       (is (= "osd.0" (ceph/osd-name (first osds))))
