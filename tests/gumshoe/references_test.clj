@@ -44,6 +44,70 @@
                    (assoc evidence "secret-names" nil
                           "ingresses" {:items [(ingress {:tls [{:secretName "gone"}]})]})))))))
 
+(defn- redirect-ingress
+  "An Ingress shaped like a redirect product's: the work is done in
+   annotations and the backend names a placeholder Service that does not exist."
+  [annotations]
+  {:apiVersion "networking.k8s.io/v1"
+   :kind "Ingress"
+   :metadata {:namespace "eh-ludwigsburg-de-redirect-1" :name "redirect" :annotations annotations}
+   :spec {:ingressClassName "nginx"
+          :rules [{:host "eh-ludwigsburg.de"
+                   :http {:paths [{:path "/" :pathType "Prefix"
+                                   :backend {:service {:name "no-backend" :port {:number 8000}}}}]}}]}})
+
+(defn- run-redirect
+  [annotations]
+  (references/detect-ingress-references
+   {"ingresses" {:items [(redirect-ingress annotations)]}
+    "services" {:items []}
+    "ingressclasses" {:items [(object nil "nginx")]}
+    "secret-names" []}))
+
+(deftest a-redirect-only-ingress-is-not-critical-for-its-missing-backend
+  (doseq [[annotations target]
+          [[{:nginx.ingress.kubernetes.io/temporal-redirect "https://www.eh-ludwigsburg.de"} "https://www.eh-ludwigsburg.de"]
+           [{:nginx.ingress.kubernetes.io/permanent-redirect "https://www.eh-ludwigsburg.de/"} "https://www.eh-ludwigsburg.de/"]
+           [{:nginx.ingress.kubernetes.io/configuration-snippet "rewrite ^/(.*)$ https://www.eh-ludwigsburg.de/$1 redirect;\n"}
+            "https://www.eh-ludwigsburg.de/$1"]
+           [{:nginx.ingress.kubernetes.io/configuration-snippet "more_set_headers \"X-Robots-Tag: noindex\";\nrewrite ^ https://example.org permanent;"}
+            "https://example.org"]
+           [{:nginx.ingress.kubernetes.io/configuration-snippet "rewrite ^/(.*)$ /landing/$1 permanent;"} "/landing/$1"]
+           [{:nginx.ingress.kubernetes.io/configuration-snippet "rewrite \"^/(.*)$\" https://example.org/$1 last;"}
+            "https://example.org/$1"]
+           [{:nginx.ingress.kubernetes.io/configuration-snippet "return 301 https://example.org$request_uri;"}
+            "https://example.org$request_uri"]]]
+    (testing (pr-str annotations)
+      (let [findings (run-redirect annotations)]
+        (is (= [:info] (map :severity findings)))
+        (is (= [(format "Ingress redirects to %s - backend Service no-backend does not exist and receives no requests" target)]
+               (summaries findings)))))))
+
+(deftest an-ingress-that-still-proxies-keeps-its-missing-backend-critical
+  (doseq [annotations
+          [{}
+           {:nginx.ingress.kubernetes.io/temporal-redirect ""}
+           {:nginx.ingress.kubernetes.io/temporal-redirect-code "308"}
+           {:example.com/permanent-redirect "https://example.org"}
+           {:nginx.ingress.kubernetes.io/configuration-snippet "rewrite ^/(.*)$ /index.php?q=$1 last;"}
+           {:nginx.ingress.kubernetes.io/configuration-snippet "rewrite ^/(.*)$ /app/$1 break;"}
+           {:nginx.ingress.kubernetes.io/configuration-snippet "rewrite ^/old/(.*)$ https://example.org/new/$1 permanent;"}
+           {:nginx.ingress.kubernetes.io/configuration-snippet "if ($host = old.example) { rewrite ^ https://example.org redirect; }"}
+           {:nginx.ingress.kubernetes.io/configuration-snippet "# rewrite ^ https://example.org redirect;\nproxy_set_header X-Foo bar;"}
+           {:nginx.ingress.kubernetes.io/configuration-snippet "return 200 ok;"}]]
+    (testing (pr-str annotations)
+      (is (= [[:critical "Ingress backend Service no-backend does not exist"]]
+             (map (juxt :severity :summary) (run-redirect annotations)))))))
+
+(deftest a-redirect-only-ingress-is-not-critical-for-a-missing-port
+  (is (= [:info]
+         (map :severity
+              (references/detect-ingress-references
+               {"ingresses" {:items [(redirect-ingress {:nginx.ingress.kubernetes.io/permanent-redirect "https://example.org"})]}
+                "services" {:items [(object "eh-ludwigsburg-de-redirect-1" "no-backend" {:spec {:ports [{:port 80}]}})]}
+                "ingressclasses" {:items [(object nil "nginx")]}
+                "secret-names" []})))))
+
 (deftest service-addresses-are-read-from-env-values
   (doseq [[value expected] [["redis.cache:6379" ["cache" "redis" 6379]]
                             ["http://api.shop.svc.cluster.local:8080/v1" ["shop" "api" 8080]]

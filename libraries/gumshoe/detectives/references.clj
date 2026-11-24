@@ -40,6 +40,71 @@
   (some #(or (and number (= number (:port %))) (and name (= name (:name %))))
         (-> service :spec :ports)))
 
+(defn- nginx-annotation
+  [ingress name]
+  (get-in ingress [:metadata :annotations (keyword (str "nginx.ingress.kubernetes.io/" name))]))
+
+(defn- top-level-statements
+  "The directives of an nginx snippet outside any block, without comments. A
+   directive inside an `if` or `location` block applies only to the requests
+   that block selects, so it never stands for the whole Ingress."
+  [snippet]
+  (let [text (str/replace (str snippet) #"(?m)#.*$" "")]
+    (loop [chars (seq text) depth 0 current (StringBuilder.) statements []]
+      (if-let [c (first chars)]
+        (case c
+          \{ (recur (rest chars) (inc depth) (StringBuilder.) statements)
+          \} (recur (rest chars) (max 0 (dec depth)) (StringBuilder.) statements)
+          \; (recur (rest chars) depth (StringBuilder.)
+                    (cond-> statements (zero? depth) (conj (str/trim (str current)))))
+          (recur (rest chars) depth (.append current c) statements))
+        statements))))
+
+(def ^:private uri-probes
+  "Request URIs a catch-all rewrite regex matches. A regex that misses any of
+   them leaves some requests to the backend."
+  ["/" "/index.html" "/a/b/c" "/a/b?c=d"])
+
+(defn- unquote-arg
+  [arg]
+  (if-let [[_ inner] (re-matches #"[\"'](.*)[\"']" arg)] inner arg))
+
+(defn- catch-all?
+  [regex]
+  (try
+    (let [pattern (re-pattern regex)]
+      (every? #(re-find pattern %) uri-probes))
+    (catch Exception _ false)))
+
+(defn- snippet-redirect
+  "The redirect target of a snippet directive that answers every request with
+   a redirect, or nil. nginx returns a redirect for a rewrite flagged
+   `redirect` or `permanent`, and for one whose replacement starts with a
+   scheme whatever its flag; a rewrite flagged `last` or `break` to a local
+   path still proxies. Only a rewrite whose regex matches every URI redirects
+   the whole Ingress."
+  [statement]
+  (or (when-let [[_ regex replacement flag] (re-matches #"rewrite\s+(\S+)\s+(\S+)(?:\s+(\S+))?" statement)]
+        (let [replacement (unquote-arg replacement)]
+          (when (and (catch-all? (unquote-arg regex))
+                     (or (#{"redirect" "permanent"} flag)
+                         (re-find #"^(?:https?://|\$scheme)" replacement)))
+            replacement)))
+      (when-let [[_ target] (re-matches #"return\s+(?:301|302|303|307|308)\s+(\S+)" statement)]
+        (unquote-arg target))))
+
+(defn redirect-target
+  "Where ingress-nginx redirects every request of this Ingress instead of
+   proxying it, or nil when requests reach its backends. The redirect
+   annotations and the configuration snippet apply to every location the
+   Ingress generates, so one redirect covers all of its paths and its default
+   backend."
+  [ingress]
+  (or (some #(let [target (nginx-annotation ingress %)]
+               (when-not (str/blank? (str target)) (str target)))
+            ["permanent-redirect" "temporal-redirect"])
+      (some snippet-redirect (top-level-statements (nginx-annotation ingress "configuration-snippet")))))
+
 (defn detect-ingress-references
   [{:strs [ingresses ingressclasses services secret-names]}]
   (let [services (by-key services)
@@ -48,18 +113,25 @@
     (for [ingress (kubectl/items-of ingresses)
           :let [namespace (kubectl/namespace-of ingress)
                 component (kubectl/namespace-name-of ingress)
-                class (-> ingress :spec :ingressClassName)]
+                class (-> ingress :spec :ingressClassName)
+                redirect (redirect-target ingress)]
           finding (concat
                    (distinct
                     (for [{:keys [name port]} (ingress-backends ingress)
-                          :let [service (get services (str namespace "/" name))]
+                          :let [service (get services (str namespace "/" name))
+                                problem (if service
+                                          (format "backend Service %s has no port %s" name (or (:number port) (:name port)))
+                                          (format "backend Service %s does not exist" name))]
                           :when (or (nil? service) (and port (not (port-exists? service port))))]
-                      {:severity :critical
-                       :component component
-                       :summary (if service
-                                  (format "Ingress backend Service %s has no port %s" name (or (:number port) (:name port)))
-                                  (format "Ingress backend Service %s does not exist" name))
-                       :hint "requests routed to this backend fail with 503"}))
+                      (if redirect
+                        {:severity :info
+                         :component component
+                         :summary (format "Ingress redirects to %s - %s and receives no requests" redirect problem)
+                         :hint "ingress-nginx answers every request with the redirect, so the backend only satisfies the Ingress schema"}
+                        {:severity :critical
+                         :component component
+                         :summary (str "Ingress " problem)
+                         :hint "requests routed to this backend fail with 503"})))
                    (when secret-names
                      (for [tls (-> ingress :spec :tls)
                            :let [secret (:secretName tls)]
