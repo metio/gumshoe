@@ -127,7 +127,7 @@ The detectives compose from one domain to the whole cluster:
 | Book | Looks at |
 | --- | --- |
 | `runbooks/detectives/cluster.clj` | every registered detective, except posture |
-| `runbooks/detectives/workloads.clj` | controllers, jobs, pods, Services, their storage |
+| `runbooks/detectives/workloads.clj` | controllers, jobs, pods, Services, their storage; an Ingress backend Service that is missing is critical, and info when ingress-nginx redirects every request of that Ingress (`permanent-redirect`, `temporal-redirect`, or a top-level catch-all redirecting `rewrite` or `return 30x` in `configuration-snippet`) |
 | `runbooks/detectives/pods.clj` | restart loops, image pulls, OOM kills, Pending and Failed pods |
 | `runbooks/detectives/nodes.clj` | readiness, pressure, cordoned nodes |
 | `runbooks/detectives/platform.clj` | control plane, nodes, calico, CSI storage |
