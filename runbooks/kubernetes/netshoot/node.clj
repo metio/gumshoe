@@ -4,40 +4,23 @@
 (ns runbooks.kubernetes.netshoot.node
   "Starts an interactive netshoot debug session on a node."
   (:require [gumshoe.effect :as effect]
-            [gumshoe.flow :as flow]
-            [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.runbook :as runbook]
-            [gumshoe.stdout :as stdout]))
+            [gumshoe.mutation :as mutation]))
 
-(def options
-  {:node {:desc "The node to debug - interactive selection when omitted"
-          :alias :n
-          :coerce :string}})
-
-(def prerequisites
-  {:installed-tools ["kubectl" "kubectl-netshoot" "fzf"]
-   :cluster-capabilities []
-   :kubectl-can-get ["nodes"]
-   :kubectl-can-create ["pods"]})
-
-(defn- debug-node
-  [opts _ctx]
-  (let [context (kubectl/current-context)
-        cluster (kubectl/current-cluster)
-        nodes (kubectl/names-of (kubectl/get-all context "nodes"))
-        node (interact/choose-one "Node" nodes (:node opts))]
-    (if (nil? node)
-      (do (stdout/error "no node selected") false)
-      (flow/change!
-       {:confirmation {:action "start a privileged netshoot debug pod on a node"
-                       :target cluster
-                       :items [node]}
-        :effect (effect/plan (effect/kubectl-plugin context "netshoot" "debug" (str "node/" node)))}))))
-
-(runbook/execute!
+(mutation/book
  {:description "Starts an interactive netshoot debug session on a node"
-  :options options
-  :prerequisites prerequisites
+  :options {:node {:desc "The node to debug - interactive selection when omitted"
+                   :alias :n
+                   :coerce :string}}
+  :prerequisites {:installed-tools ["kubectl" "kubectl-netshoot" "fzf"]
+                  :cluster-capabilities []
+                  :kubectl-can-get ["nodes"]
+                  :kubectl-can-create ["pods"]}
   :announce? false
-  :action debug-node})
+  :select {:mode :one
+           :label "Node"
+           :flag :node
+           :candidates (fn [context] (kubectl/names-of (kubectl/get-all context "nodes")))}
+  :confirm {:action "start a privileged netshoot debug pod on a node"}
+  :effect (fn [{:keys [context target]}]
+            (effect/plan (effect/kubectl-plugin context "netshoot" "debug" (str "node/" target))))})

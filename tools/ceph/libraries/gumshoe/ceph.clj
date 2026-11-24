@@ -62,6 +62,19 @@
    :cephadm-shell? (boolean (:cephadm-shell opts))
    :needs-sudo? (boolean (:cephadm-shell opts))})
 
+(defn connect
+  "The :connect of a ceph mutation spec (see gumshoe.mutation): the
+   connection the flags name, checked before anything is listed. The
+   confirmation names the host and the changelog names \"ceph (<host>)\".
+   nil when the host cannot be reached, or sudo is needed and refused."
+  [opts]
+  (let [connection (connection opts)]
+    (stdout/print-section "🔌 Connection")
+    (when (ssh/check-connection? connection)
+      {:context connection
+       :cluster (:host opts)
+       :announce-as (format "ceph (%s)" (:host opts))})))
+
 ;; ---------------------------------------------------------------------------
 ;; pure helpers over fetched ceph data
 
@@ -81,6 +94,12 @@
 (defn osd-name
   [osd]
   (str "osd." (:osd osd)))
+
+(defn osd-pick
+  "An --osd value as the name the OSD candidates carry: 3 and osd.3 both
+   become osd.3, anything else stays as given so the picker can show it."
+  [value]
+  (or (some->> value osd-id (str "osd.")) value))
 
 (defn osd-numbered
   [osds id]
