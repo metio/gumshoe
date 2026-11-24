@@ -114,6 +114,7 @@
                    [gumshoe.effect-test]
                    [gumshoe.federation-test]
                    [gumshoe.firebook-test]
+                   [gumshoe.firebook-books-test]
                    [gumshoe.inputs-test]
                    [gumshoe.flow-test]
                    [gumshoe.thanos-test]
@@ -275,6 +276,7 @@
                                                          'gumshoe.effect-test
                                                          'gumshoe.federation-test
                                                          'gumshoe.firebook-test
+                                                         'gumshoe.firebook-books-test
                                                          'gumshoe.inputs-test
                                                          'gumshoe.flow-test
                                                          'gumshoe.thanos-test
