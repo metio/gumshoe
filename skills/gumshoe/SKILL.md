@@ -261,7 +261,17 @@ mostly data:
   under `kubectl/*strict-reads*`, as `:select` does, so a read there that
   did not answer stops the book with "could not read what the change rests
   on" before the confirmation, and the `:precondition` never judges an
-  object nobody could read (a `NotFound` answer still derives nil);
+  object nobody could read (a `NotFound` answer still derives nil). The
+  `:precondition` reads strictly too: a read in it that did not answer
+  refuses the change with "refusing: could not read what the precondition
+  rests on". Every post-check in `:verify` runs under the same binding, so a
+  read that did not answer counts as not yet verified: a check asserting an
+  absence (a taint gone, a resource resumed) waits for an answer and fails
+  at its timeout instead of holding on the nil a failed read returns, while
+  a `NotFound` answer still reads nil and confirms a deletion. A `:soft?`
+  check still turns that timeout into a warning. Reads over SSH, among them
+  every `gumshoe.ceph` read, ignore the binding, so a check built on them
+  still has to tell a failed read from an empty one itself;
 - a playbook is `(playbook/book {:select … :confirm … :steps […]})`, whose
   steps are mutation specs, checks and pauses; it derives its prerequisites
   and options from the steps and asks for one confirmation;
@@ -302,8 +312,9 @@ mostly data:
   `(kubectl/get-json context "namespaces" "--selector=…")`, nil when the read
   fails, or `get-json-result`, whose `:ok?` tells a failed read from an empty
   one before a gate trusts an absence. Both are strict readers: while a
-  `:select` lists candidates, `kubectl/*strict-reads*` is bound and a read
-  that did not answer throws `::kubectl/unread`, which the book reports as
+  `:select` lists candidates, or a `:derive`, `:precondition` or post-check
+  runs, `kubectl/*strict-reads*` is bound and a read
+  that did not answer throws `::kubectl/unread`, which a `:select` reports as
   "could not list the … candidates" instead of "nothing to do". A
   `NotFound` answer is not a failure there. `secret-names`, `tls-secrets`,
   `get-raw` and `raw-text` ignore the binding, so a candidate fn that must

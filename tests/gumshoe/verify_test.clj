@@ -4,6 +4,8 @@
 (ns gumshoe.verify-test
   (:require [clojure.string]
             [clojure.test :refer [deftest is testing]]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.shell :as shell]
             [gumshoe.verify :as verify]))
 
 (deftest eventually-test
@@ -88,6 +90,52 @@
                               :abort #(when (> @attempts 5) "never reached")})))
     (is (verify/eventually {:description "throwing abort" :timeout 0 :soft? true
                             :check (constantly false) :abort #(throw (ex-info "boom" {}))}))))
+
+;; A check that asserts an absence: it holds when the node cannot be found.
+(defn- node-absent-check
+  []
+  {:description "node n1 is gone" :timeout 0 :interval 0
+   :check #(nil? (kubectl/get-cluster-resource "ctx" "nodes" "n1"))})
+
+(defn- quietly
+  [f]
+  (binding [*out* (java.io.StringWriter.) *err* (java.io.StringWriter.)] (f)))
+
+(deftest a-read-that-did-not-answer-never-verifies-a-check
+  (with-redefs [shell/execute (fn [& _] {:exit 1 :out "" :err "Unable to connect to the server: dial tcp: i/o timeout"})]
+    (testing "a hard check fails at its timeout and names the read that did not answer"
+      (let [err (java.io.StringWriter.)]
+        (binding [*out* (java.io.StringWriter.) *err* err]
+          (is (false? (verify/eventually (node-absent-check)))))
+        (is (clojure.string/includes? (str err) "the last read did not answer"))
+        (is (clojure.string/includes? (str err) "i/o timeout"))))
+    (testing "the wait keeps polling until the timeout instead of passing early"
+      (let [attempts (atom 0)]
+        (is (false? (quietly #(verify/eventually {:description "node n1 is gone" :timeout 2 :interval 0
+                                                   :check (fn [] (swap! attempts inc)
+                                                            (nil? (kubectl/get-cluster-resource "ctx" "nodes" "n1")))}))))
+        (is (< 1 @attempts))))
+    (testing "a soft check still downgrades the timeout to a warning"
+      (let [err (java.io.StringWriter.)]
+        (binding [*out* (java.io.StringWriter.) *err* err]
+          (is (true? (verify/eventually (assoc (node-absent-check) :soft? true)))))
+        (is (clojure.string/includes? (str err) "could not confirm"))))))
+
+(deftest a-read-that-answered-not-found-verifies-an-absence
+  (with-redefs [shell/execute (fn [& _] {:exit 1 :out "" :err "Error from server (NotFound): nodes \"n1\" not found"})]
+    (is (true? (quietly #(verify/eventually (node-absent-check)))))))
+
+(deftest a-check-reads-strictly-only-while-it-runs
+  (with-redefs [shell/execute (fn [& _] {:exit 1 :out "" :err "Unable to connect to the server"})]
+    (testing "the watch and abort samplers read lax, as outside a check"
+      (let [watched (atom [])]
+        (quietly #(verify/eventually {:description "x" :timeout 1 :interval 0 :soft? true
+                                      :check (constantly false)
+                                      :watch (fn [] (swap! watched conj (kubectl/get-json "ctx" "events")) [])}))
+        (is (seq @watched))
+        (is (every? nil? @watched))))
+    (testing "outside eventually the reads stay lax"
+      (is (nil? (kubectl/get-json "ctx" "nodes"))))))
 
 (deftest all-test
   (testing "every check must hold"

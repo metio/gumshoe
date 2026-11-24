@@ -133,6 +133,43 @@
           (is (false? (mutation/run-on! spec "web/moodle" {} nil)))))
       (is (= [] @reached)))))
 
+(defn- precondition-release-spec
+  "A book whose precondition reads the HelmRelease it gates on itself."
+  [reached]
+  {:select {:mode :namespaced :label "HelmRelease"}
+   :confirm {:action "reset the release" :destructive? true}
+   :precondition (fn [{:keys [context target]}]
+                   (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
+                         release (kubectl/get-namespaced-resource context namespace "helmreleases" name)]
+                     (swap! reached conj [:precondition release])
+                     (not (get-in release [:status :inFlight]))))
+   :effect (fn [_] (effect/plan (effect/note "reset")))})
+
+(deftest a-precondition-read-that-did-not-answer-refuses-the-change
+  (let [reached (atom [])
+        out (java.io.StringWriter.)
+        ran (atom false)]
+    (with-redefs [kubectl/current-context (constantly "ctx")
+                  kubectl/current-cluster (constantly "cluster")
+                  interact/confirm! (constantly true)
+                  effect/run! (fn [& _] (reset! ran true) true)
+                  gumshoe.shell/execute (fn [& _] {:exit 1 :out "" :err "Error from server (TooManyRequests): the server has received too many requests"})]
+      (binding [*out* out *err* out]
+        (is (false? (mutation/run-on! (precondition-release-spec reached) "web/moodle" {} nil)))))
+    (is (false? @ran) "the effect did not run")
+    (is (re-find #"refusing: could not read" (str out)))
+    (is (re-find #"TooManyRequests" (str out)) "the reason the read failed is reported")))
+
+(deftest a-precondition-read-that-answered-not-found-reaches-the-precondition
+  (let [reached (atom [])]
+    (with-redefs [kubectl/current-context (constantly "ctx")
+                  kubectl/current-cluster (constantly "cluster")
+                  interact/confirm! (constantly true)
+                  gumshoe.shell/execute (fn [& _] {:exit 1 :out "" :err "Error from server (NotFound): helmreleases.helm.toolkit.fluxcd.io \"moodle\" not found"})]
+      (binding [*out* (java.io.StringWriter.) *err* (java.io.StringWriter.)]
+        (is (true? (mutation/run-on! (precondition-release-spec reached) "web/moodle" {} nil)))))
+    (is (some #{[:precondition nil]} @reached) "the precondition judged the absent release")))
+
 (deftest a-standalone-change-records-its-recovery-when-it-fails
   (with-redefs [kubectl/current-context (constantly "ctx")
                 kubectl/current-cluster (constantly "cluster")

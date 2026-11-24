@@ -14,13 +14,30 @@
    - :watch turns the dead polling time into live diagnosis: a sampler run
      each interval, whose new signals (a Warning event, a resizer error) are
      surfaced the moment they appear, so the operator learns something is wrong
-     while waiting instead of after."
-  (:require [gumshoe.outcome :as outcome]
+     while waiting instead of after.
+
+   A check runs under kubectl/*strict-reads*: a read that did not answer
+   counts as not-yet-verified, so a check asserting an absence or a negation
+   waits for an answer instead of holding on the nil a failed read returns.
+   A read that answered NotFound still returns nil, so a deletion check holds.
+   The :watch and :abort samplers read lax."
+  (:require [gumshoe.kubectl :as kubectl]
+            [gumshoe.outcome :as outcome]
             [gumshoe.stdout :as stdout]))
+
+(defn- attempt
+  "One run of check with strict reads: true when it held, the message of a
+   read that did not answer, or false."
+  [check]
+  (try (binding [kubectl/*strict-reads* true] (boolean (check)))
+       (catch clojure.lang.ExceptionInfo e
+         (if (::kubectl/unread (ex-data e)) (ex-message e) false))
+       (catch Exception _ false)))
 
 (defn eventually
   "Retries check until it returns truthy or timeout (seconds) elapses.
-   Exceptions inside check count as not-yet-verified. A malformed post-check is
+   Exceptions inside check count as not-yet-verified, among them a strict
+   read that did not answer. A malformed post-check is
    refused. Returns the verdict - true when verified, true-with-a-warning when
    a :soft? check times out, false when a hard check times out.
 
@@ -37,32 +54,34 @@
            ;; tail) is not reported as if it appeared during this wait. Only
            ;; signals that show up after the change are surfaced.
            seen (if watch (try (set (watch)) (catch Exception _ #{})) #{})]
-      (cond
-        (try (boolean (check)) (catch Exception _ false))
-        (do (stdout/ok (str "verified: " description))
-            true)
-
-        (when abort (try (abort) (catch Exception _ nil)))
-        (do (stdout/error (format "NOT verified: %s - %s" description (abort)))
-            false)
-
-        (>= elapsed timeout)
-        (if soft?
-          (do (stdout/warn (format "could not confirm within %ds (best effort): %s" timeout description))
-              (stdout/warn "the operation itself reported no error - confirm by hand if in doubt")
+      (let [result (attempt check)
+            unread (when (string? result) (str " - the last read did not answer: " result))]
+        (cond
+          (true? result)
+          (do (stdout/ok (str "verified: " description))
               true)
-          (do (stdout/error (format "NOT verified within %ds: %s" timeout description))
-              false))
 
-        :else
-        (do (stdout/err-println (format "  ⏳ waiting for: %s (%d/%ds)" description elapsed timeout))
-            (Thread/sleep (* interval 1000))
-            (let [fresh (when watch
-                          (try (seq (remove seen (watch))) (catch Exception _ nil)))]
-              (doseq [signal fresh]
-                (stdout/warn (str "while waiting — " signal)))
-              (recur (+ elapsed (max interval 1))
-                     (into seen fresh))))))))
+          (when abort (try (abort) (catch Exception _ nil)))
+          (do (stdout/error (format "NOT verified: %s - %s" description (abort)))
+              false)
+
+          (>= elapsed timeout)
+          (if soft?
+            (do (stdout/warn (format "could not confirm within %ds (best effort): %s%s" timeout description (str unread)))
+                (stdout/warn "the operation itself reported no error - confirm by hand if in doubt")
+                true)
+            (do (stdout/error (format "NOT verified within %ds: %s%s" timeout description (str unread)))
+                false))
+
+          :else
+          (do (stdout/err-println (format "  ⏳ waiting for: %s (%d/%ds)" description elapsed timeout))
+              (Thread/sleep (* interval 1000))
+              (let [fresh (when watch
+                            (try (seq (remove seen (watch))) (catch Exception _ nil)))]
+                (doseq [signal fresh]
+                  (stdout/warn (str "while waiting — " signal)))
+                (recur (+ elapsed (max interval 1))
+                       (into seen fresh)))))))))
 
 (defn all
   "Runs every post-check in order; all of them must hold (a :soft? check that
