@@ -46,6 +46,7 @@
                    [gumshoe.isolated-services-test]
                    [gumshoe.effect-plugin-test]
                    [gumshoe.mutation-pin-test]
+                   [gumshoe.mutation-books-test]
                    [gumshoe.deletion-test]
                    [gumshoe.workloads-ops-test]
                    [gumshoe.posture-test]
@@ -200,6 +201,7 @@
                                                          'gumshoe.isolated-services-test
                                                          'gumshoe.effect-plugin-test
                                                          'gumshoe.mutation-pin-test
+                                                         'gumshoe.mutation-books-test
                                                          'gumshoe.deletion-test
                                                          'gumshoe.workloads-ops-test
                                                          'gumshoe.posture-test
