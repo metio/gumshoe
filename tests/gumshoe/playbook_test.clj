@@ -399,3 +399,42 @@
                                          :steps [(change "cordon" ran) lone]}
                                         "w-1" {} nil))))))
       (is (= [["cordon" "w-1"] [:lone]] @ran)))))
+
+;; --- positions ---------------------------------------------------------------------
+
+(def ^:private anchored
+  [[nil {:title "read" :check (constantly true)}]
+   [:after-delete {:title "delete" :confirm {:destructive? true} :effect (fn [_] [])}]
+   [:after-resume {:title "resume" :effect (fn [_] [])}]])
+
+(deftest positions-are-the-anchors-in-run-order
+  (is (= [:after-delete :after-resume] (playbook/positions anchored))))
+
+(deftest extra-steps-go-right-after-the-step-their-position-names
+  (let [mine {:title "mine" :check (constantly true)}]
+    (is (= ["read" "delete" "mine" "resume"]
+           (map :title (playbook/with-extra anchored {:after-delete [mine]}))))
+    (is (= ["read" "delete" "resume" "mine"]
+           (map :title (playbook/with-extra anchored {:after-resume [mine]}))))
+    (is (= ["read" "delete" "resume"] (map :title (playbook/with-extra anchored nil))))))
+
+(defn- refusal [extra options]
+  (try (playbook/with-extra anchored extra options) nil
+       (catch clojure.lang.ExceptionInfo e [(ex-message e) (ex-data e)])))
+
+(deftest a-misplaced-extra-step-is-refused-as-the-steps-are-built
+  (is (= [":before-read is not a position of the playbook's steps; the positions are [:after-delete :after-resume]"
+          {:position :before-read :positions [:after-delete :after-resume]}]
+         (refusal {:before-read []} {})))
+  (is (re-find #"of the reset steps" (first (refusal {:before-read []} {:of "the reset steps"}))))
+  (is (= "the extra steps must be a map of position -> steps" (first (refusal [:x] {}))))
+  (is (= "the steps for :after-delete must be a vector of step maps"
+         (first (refusal {:after-delete {:title "not a vector"}} {}))))
+  (testing "a refusal the playbook names"
+    (let [refuse (fn [position step]
+                   (when (and (= :after-resume position) (playbook/destructive? step))
+                     (str "no destructive step after the resume: " (:title step))))]
+      (is (= ["no destructive step after the resume: wipe" {:position :after-resume :step "wipe"}]
+             (refusal {:after-resume [{:title "keep"} {:title "wipe" :confirm {:destructive? true}}]}
+                      {:refuse refuse})))
+      (is (nil? (refusal {:after-delete [{:title "wipe" :confirm {:destructive? true}}]} {:refuse refuse}))))))

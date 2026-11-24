@@ -313,14 +313,27 @@ mostly data:
   :routes {key {:playbook …}}})`, one front door that runs the playbook a
   subject's kind routes to;
 - a library playbook that takes a caller's steps does so at named
-  positions, never by matching a title: `gumshoe.tools.flux-storage` builds
-  `(playbook-with {:after-volumes [step]})` from `positions`
-  (`:after-suspend`, `:after-workloads`, `:after-volumes`, `:after-storage`,
-  `:after-resume`); an unknown position, or a destructive step at
-  `:after-resume`, throws as the book loads;
+  positions, never by matching a title: it pairs each step with the position
+  that follows it, `[[position step] …]`, and builds its steps with
+  `(playbook/with-extra anchored extra {:of "the … steps" :refuse (fn
+  [position step] why-or-nil)})`, which throws on an unknown position as the
+  book loads. `gumshoe.tools.flux-storage` builds `(playbook-with
+  {:after-volumes [step]})` this way from `positions` (`:after-suspend`,
+  `:after-workloads`, `:after-volumes`, `:after-storage`, `:after-resume`),
+  refusing a destructive step at `:after-resume`;
 - a step a runbook and a playbook share lives in a library, and the runbook
   names its description beside it, `(mutation/book (merge nodes/cordon
   {:description "…"}))`, so `./run --list` reads it without loading the book;
+- the step libraries build the acting half of common steps - `:items`,
+  `:effect`, `:verify` - which a step merges with its own title,
+  confirmation, `:derive`, `:precondition` and `:recovery`:
+  `(gumshoe.steps.objects/delete {:objects (fn [ctx] …) :none "…" :timeout
+  …})` deletes `{:type :namespace :name}` objects without waiting and proves
+  each gone with a read that answered; `gumshoe.steps.flux/suspend`,
+  `resume` and `reconcile` take `{:object (fn [ctx] {:kind :type :namespace
+  :name}) …}` for any kind in `flux/suspendable` or a ResourceSet, and
+  `reconcile` waits for `status.lastHandledReconcileAt` to equal the token
+  it stamped;
 - a bespoke book calls `runbook/execute!` with its own `:action`;
 - a PromQL read goes through `gumshoe.promql`: `(promql/endpoint {:url …
   :flavor :thanos})` (or `:prometheus`, `:mimir` with `:tenant`), then
