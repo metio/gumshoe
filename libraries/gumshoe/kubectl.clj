@@ -333,6 +333,14 @@
   [err]
   (boolean (re-find #"\(NotFound\)|doesn't have a resource type" (str err))))
 
+(defn- did-not-answer
+  "The ::unread exception a strict read throws for a kubectl get that did not
+   answer."
+  [exit err]
+  (ex-info (format "kubectl get did not answer: %s"
+                   (or (not-empty (str/trim (str err))) (str "exit " exit)))
+           {::unread true}))
+
 (defn- read-json
   "The parsed output of a kubectl get, nil when it failed or did not parse.
    Under *strict-reads* the exit status is kept, and a read that did not
@@ -343,9 +351,7 @@
     (let [{:keys [exit out err]} (apply shell/execute argv)
           doc (when (zero? exit) (parse-json (str/trim (str out))))]
       (when (and (nil? doc) (not (answered-empty? err)))
-        (throw (ex-info (format "kubectl get did not answer: %s"
-                                (or (not-empty (str/trim (str err))) (str "exit " exit)))
-                        {::unread true})))
+        (throw (did-not-answer exit err)))
       doc)))
 
 (defn get-json
@@ -441,11 +447,12 @@
 
 (defn helm-releases
   "Every revision Helm stores as a Secret, read from its labels, or nil when
-   they cannot be listed. The jsonpath selects metadata only, so the release
+   they cannot be listed; under *strict-reads* a listing that did not answer
+   throws instead. The jsonpath selects metadata only, so the release
    payload (rendered manifests and values, which may hold credentials) never
    reaches gumshoe."
   [context]
-  (let [{:keys [exit out]} (shell/execute "kubectl" (str "--context=" context) request-timeout
+  (let [{:keys [exit out err]} (shell/execute "kubectl" (str "--context=" context) request-timeout
                                           "get" "secrets" "--all-namespaces"
                                           "--selector=owner=helm"
                                           "--field-selector=type=helm.sh/release.v1"
@@ -454,6 +461,8 @@
                                                "{.metadata.labels.status}{\"\\t\"}{.metadata.labels.version}{\"\\t\"}"
                                                "{.metadata.labels.modifiedAt}{\"\\t\"}{.metadata.labels.createdAt}{\"\\t\"}"
                                                "{.metadata.creationTimestamp}{\"\\n\"}{end}"))]
+    (when (and *strict-reads* (not (zero? exit)))
+      (throw (did-not-answer exit err)))
     (when (zero? exit)
       (parse-helm-listing out))))
 
