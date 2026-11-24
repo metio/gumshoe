@@ -48,7 +48,7 @@
       false
 
       :else
-      (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+      (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
         (stdout/print-section-marker)
         (etcd/etcdctl! context namespace name "check" "perf" (str "--load=" workload))))))
 

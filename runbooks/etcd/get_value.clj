@@ -34,7 +34,7 @@
         target (interact/choose-namespaced "Pod" pods (:namespace opts) (:pod opts))]
     (if (nil? target)
       (do (stdout/error "no etcd pod selected") false)
-      (let [{:keys [namespace name]} (kubectl/split-namespace-name target)
+      (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
             keys (->> (etcd/etcdctl-stdout context namespace name "get" "--from-key" "" "--keys-only")
                       str/split-lines
                       (remove str/blank?))

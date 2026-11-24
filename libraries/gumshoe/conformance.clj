@@ -5,7 +5,8 @@
   "The rules every book and library follows, checked statically: each file
    parses, carries a license, and documents its namespace; each book enters
    the harness exactly once, describes itself, and documents its options
-   without colliding aliases. gumshoe's own conformance test runs these, and a
+   without colliding aliases; no file destructures namespace-name-map as a
+   vector. gumshoe's own conformance test runs these, and a
    casebook runs the same checks against its own books and libraries from a
    bb task:
 
@@ -225,6 +226,35 @@
                    [(str "has colliding option aliases: " (vec aliases))]))]
     (finding file :options problem)))
 
+;; namespace-name-map and its deprecated alias split-namespace-name return
+;; the map {:namespace .. :name ..}. A vector binding of either throws only
+;; when the call runs - inside an :effect that is mid-procedure, after earlier
+;; effects applied - so the gate finds the binding in the source instead.
+
+(def ^:private map-returning-fns
+  #{"namespace-name-map" "split-namespace-name"})
+
+(defn- map-returning-call?
+  [form]
+  (and (seq? form)
+       (symbol? (first form))
+       (contains? map-returning-fns (name (first form)))))
+
+(defn map-destructured-as-vector
+  "A binding that destructures the map namespace-name-map returns as a
+   vector, (let [[ns name] (kubectl/namespace-name-map target)] ..), in a
+   let, a for or doseq :let, a loop or any other binding vector."
+  [parsed]
+  (for [{:keys [file forms]} parsed
+        :when forms
+        node (tree-seq coll? seq (vec forms))
+        :when (vector? node)
+        [binding init] (partition 2 node)
+        :when (and (vector? binding) (map-returning-call? init))]
+    (finding file :destructuring
+             (format "binds %s to the vector %s, but it returns the map {:namespace .. :name ..}; destructure it by key"
+                     (first init) binding))))
+
 (defn findings
   "Every finding for the book and library files, unparseable ones first.
    `license` names the SPDX identifier every file must carry; without it any
@@ -236,6 +266,7 @@
     (vec (concat (unparseable parsed)
                  (missing-license (concat books libraries) license)
                  (undocumented-namespaces parsed)
+                 (map-destructured-as-vector parsed)
                  (harness-entries parsed-books)
                  (undescribed-books parsed-books)
                  (option-problems parsed-books)))))

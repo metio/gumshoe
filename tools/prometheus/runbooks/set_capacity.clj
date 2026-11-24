@@ -84,7 +84,7 @@
         target (interact/choose-namespaced "Prometheus" candidates (:namespace opts) (:prometheus opts))]
     (if (nil? target)
       (do (stdout/error "no Prometheus selected") false)
-      (let [{:keys [namespace name]} (kubectl/split-namespace-name target)
+      (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
             resource (kubectl/get-namespaced-resource context namespace prometheus-type name)
             volume-name (prometheus/volume-name-of resource)
             pods (pods-of-prometheus context namespace name)

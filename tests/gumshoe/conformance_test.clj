@@ -127,3 +127,15 @@
     (is (contains? run-list ns-sym)
         (format "%s (%s) is not in bb.edn's test run-tests list -- it compiles but never runs; add '%s to the run-tests call"
                 file ns-sym ns-sym))))
+
+(deftest no-file-destructures-namespace-name-map-as-a-vector
+  (assert-none (conformance/map-destructured-as-vector
+                (parsed (concat all-clj-files (conformance/clj-files ["casebook-example"]))))))
+
+(deftest no-file-calls-the-deprecated-split-namespace-name
+  (doseq [file (concat all-clj-files (conformance/clj-files ["casebook-example"]))
+          ;; kubectl defines the alias and conformance names it to find misuse
+          :when (not-any? #(str/ends-with? file %) ["libraries/gumshoe/kubectl.clj"
+                                                    "libraries/gumshoe/conformance.clj"])]
+    (is (not (str/includes? (slurp file) "split-namespace-name"))
+        (str file " calls the deprecated split-namespace-name; use namespace-name-map"))))

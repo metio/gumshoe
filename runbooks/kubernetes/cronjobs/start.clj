@@ -40,13 +40,13 @@
   :confirm {:action "start a Job from a CronJob outside its schedule"}
   ;; the random job name is computed once here and shared by effect and verify
   :derive (fn [{:keys [target]}]
-            (let [{:keys [name]} (kubectl/split-namespace-name target)]
+            (let [{:keys [name]} (kubectl/namespace-name-map target)]
               {:cronjob name :job-name (str name "-" (random-suffix))}))
   :announce (fn [{:keys [target]}] (format "Start CronJob %s" target))
   :effect (fn [{:keys [context target cronjob job-name]}]
-            (let [{:keys [namespace]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace]} (kubectl/namespace-name-map target)]
               (effect/plan (effect/kubectl context (str "--namespace=" namespace)
                                            "create" "job" job-name "--from" (str "cronjob/" cronjob)))))
   :verify (fn [{:keys [context target job-name]}]
-            (let [{:keys [namespace]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace]} (kubectl/namespace-name-map target)]
               [(not-failed-check context namespace job-name)]))})

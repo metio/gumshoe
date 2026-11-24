@@ -39,11 +39,11 @@
   :confirm {:action "trigger a StageSet reconciliation"}
   :announce (fn [{:keys [target]}] (format "Reconcile StageSet %s" target))
   :effect (fn [{:keys [target opts]}]
-            (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               (effect/plan
                (apply effect/cmd "stagesetctl" "reconcile" name
                       (str "--namespace=" namespace)
                       (when (:update-now opts) ["--update-now"])))))
   :verify (fn [{:keys [context target]}]
-            (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               [(ready-check context namespace name target)]))})

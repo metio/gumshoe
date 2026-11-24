@@ -67,8 +67,18 @@
   (testing "finds cluster-scoped items"
     (is (= "worker-2" (kubectl/name-of (kubectl/find-item nodes "worker-2"))))))
 
-(deftest split-namespace-name-test
-  (is (= {:namespace "moodle" :name "web-1"} (kubectl/split-namespace-name "moodle/web-1"))))
+(deftest namespace-name-map-test
+  (is (= {:namespace "moodle" :name "web-1"} (kubectl/namespace-name-map "moodle/web-1")))
+  (testing "only the first slash separates, so a name keeps any further one"
+    (is (= {:namespace "moodle" :name "a/b"} (kubectl/namespace-name-map "moodle/a/b"))))
+  (testing "the docstring names the map it returns"
+    (is (re-find #"\{:namespace .* :name .*\}" (:doc (meta #'kubectl/namespace-name-map))))))
+
+(deftest split-namespace-name-is-a-deprecated-alias
+  (is (= (kubectl/namespace-name-map "moodle/web-1") (#'kubectl/split-namespace-name "moodle/web-1")))
+  (is (string? (:deprecated (meta #'kubectl/split-namespace-name))))
+  (is (re-find #"\{:namespace .* :name .*\}" (:doc (meta #'kubectl/split-namespace-name))))
+  (is (re-find #"namespace-name-map" (:doc (meta #'kubectl/split-namespace-name)))))
 
 (deftest taints-test
   (testing "renders key=value:effect"

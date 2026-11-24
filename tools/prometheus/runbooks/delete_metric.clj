@@ -76,7 +76,7 @@
         metric (:metric opts)]
     (if (nil? target)
       (do (stdout/error "no Prometheus service selected - check --selector") false)
-      (let [{:keys [namespace name]} (kubectl/split-namespace-name target)
+      (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
             remote-port (prometheus/api-port (kubectl/find-item services target) (:port-name opts))]
         (cond
           (nil? remote-port)

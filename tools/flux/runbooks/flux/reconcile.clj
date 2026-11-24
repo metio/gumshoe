@@ -45,8 +45,8 @@
   :confirm {:action "trigger a flux reconciliation"}
   :announce (fn [{:keys [target]}] (format "Reconcile HelmRelease %s" target))
   :effect (fn [{:keys [context target]}]
-            (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               (reconcile-effect context namespace name)))
   :verify (fn [{:keys [context target]}]
-            (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               [(ready-check context namespace name target)]))})

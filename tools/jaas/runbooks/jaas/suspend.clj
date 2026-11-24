@@ -35,7 +35,7 @@
   :confirm {:action "suspend a JsonnetSnippet"}
   :announce (fn [{:keys [target]}] (format "Suspend JsonnetSnippet %s" target))
   :effect (fn [{:keys [context target]}]
-            (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               (effect/plan
                ;; Suspending pauses writes; it does not withdraw what is already
                ;; published, so consumers keep fetching the last good artifact.
@@ -44,5 +44,5 @@
                                "patch" jaas/jsonnetsnippet-type name
                                "--type=merge" "--patch" "{\"spec\":{\"suspend\":true}}"))))
   :verify (fn [{:keys [context target]}]
-            (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               [(suspended-check context namespace name target)]))})

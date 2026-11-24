@@ -130,7 +130,7 @@
                                            (:namespace opts) (:cluster opts))]
     (if (nil? chosen)
       (do (stdout/error "no cluster selected") false)
-      (let [{:keys [namespace name]} (kubectl/split-namespace-name chosen)
+      (let [{:keys [namespace name]} (kubectl/namespace-name-map chosen)
             cluster (kubectl/find-item clusters chosen)
             pods (kubectl/items-of (kubectl/get-all context "pods"))
             instances (mapv kubectl/name-of (inst/instance-pods pods namespace name))]

@@ -172,7 +172,7 @@
    (try
      (strict
       (fn []
-        (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+        (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
           (when-let [release (kubectl/get-namespaced-resource context namespace flux/helmrelease-type name)]
             (let [release-name (flux/release-name release)
                   release-namespace (flux/release-namespace release)

@@ -253,7 +253,12 @@ mostly data:
   "could not list the … candidates" instead of "nothing to do". A
   `NotFound` answer is not a failure there. `secret-names`, `tls-secrets`,
   `get-raw` and `raw-text` ignore the binding, so a candidate fn that must
-  not mistake a failed read for an empty one avoids them.
+  not mistake a failed read for an empty one avoids them;
+- a `namespace/name` target splits with `(kubectl/namespace-name-map
+  target)`, which returns the map `{:namespace … :name …}`, so a book
+  destructures it by key, `(let [{:keys [namespace name]} …])`. A vector
+  binding throws only when the call runs; gumshoe's conformance suite
+  refuses one. `split-namespace-name` is its deprecated alias.
 
 A plugin calls `gumshoe.plugin/provide!` once with any of the seams:
 announcers, detectives, capabilities, tools, pre- and post-hooks, secrets,
@@ -262,7 +267,7 @@ themes, prerequisites, drill-down probes, kinds and fetched edges.
 `bb test` runs the unit and conformance suites; the conformance suite
 requires that every file parses, and a license header, a namespace
 docstring, one harness entry point and a description on every book and
-every option.
+every option, and refuses a vector binding of `namespace-name-map`.
 
 A casebook gates on the same rules with `gumshoe.conformance`. Wire it as a
 `verify` task in the casebook's `bb.edn`, as `casebook-example/bb.edn` does,
@@ -277,7 +282,9 @@ verify {:doc "Check the casebook's books and libraries"
 It reads `runbooks`, `playbooks` and `firebooks` as books and `libraries` as
 libraries (override with `:books` and `:libraries`, each a list of
 directories), prints one line per finding naming the file, and exits 1 when
-there is any; a file with an unbalanced form is reported as `unparseable`.
+there is any; a file with an unbalanced form is reported as `unparseable`,
+and a vector binding of `namespace-name-map` or `split-namespace-name` as
+`destructuring`.
 `:license` names the SPDX identifier every file must carry; without it any
 identifier passes. `conformance/findings-in` returns the findings as data
 instead, for a test or a bespoke report. Loading the plugins does not parse
