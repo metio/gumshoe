@@ -249,3 +249,255 @@
           findings (evpn/detect-mac-ownership evidence)]
       (is (= #{(str "MAC is local on host-a (one-256-0) but host-b reaches it via " gateway)}
              (summaries (filter #(= :critical (:severity %)) findings)))))))
+
+;; --- per-conflict context: how long the MAC has been local, and BGP behind it -
+;;
+;; The recorded outputs follow FRR 10.2's text printers: zebra_evpn_print_mac
+;; for `show evpn mac vni <vni> mac <mac>` and evpn_show_route_vni_macip with
+;; route_vty_out_detail for `show bgp l2vpn evpn route vni <vni> mac <mac>`.
+
+(def ^:private stale-vtep "10.21.2.70")
+(def ^:private own-vtep "10.21.2.73")
+
+(def ^:private mac-detail-weeks
+  (str "MAC: 02:00:0a:18:00:16\n"
+       " Intf: one-284-0(41) VLAN: 1\n"
+       " Sync-info: neigh#: 0\n"
+       " Local Seq: 1 Remote Seq: 0\n"
+       " Uptime: 05w0d22h\n"
+       " Neighbors:\n"
+       "    No Neighbors\n"))
+
+(def ^:private mac-detail-fresh
+  (str "MAC: 02:00:0a:18:00:12\n"
+       " Intf: one-270-1(57) VLAN: 1\n"
+       " Sync-info: neigh#: 0\n"
+       " Local Seq: 2 Remote Seq: 1\n"
+       " Uptime: 00:04:27\n"
+       " Neighbors:\n"
+       "    10.24.0.18 Active\n"))
+
+(def ^:private mac-detail-remote
+  (str "MAC: 02:00:0a:18:00:16\n"
+       " Remote VTEP: 10.21.2.70\n"
+       " Sync-info: neigh#: 0\n"
+       " Local Seq: 0 Remote Seq: 3\n"
+       " Uptime: 4d09h18m\n"
+       " Neighbors:\n"
+       "    No Neighbors\n"))
+
+(def ^:private bgp-absent "% Network not in table\n")
+
+(def ^:private bgp-from-stale-vtep
+  (str "BGP routing table entry for [2]:[0]:[48]:[02:00:0a:18:00:12]\n"
+       "Paths: (1 available, best #1)\n"
+       "  Not advertised to any peer\n"
+       "  Route [2]:[0]:[48]:[02:00:0a:18:00:12] VNI 4208\n"
+       "  65102 65000 65101\n"
+       "    10.21.2.70 from 10.21.1.1 (10.21.1.1)\n"
+       "      Origin IGP, valid, external, bestpath-from-AS 65102, best (First path received)\n"
+       "      Extended Community: RT:65101:4208 ET:8 MM:1\n"
+       "      Last update: Tue Nov 24 10:01:12 2026\n"
+       "\n"
+       "Displayed 1 paths for requested prefix\n"))
+
+(def ^:private bgp-own-route-only
+  (str "BGP routing table entry for [2]:[0]:[48]:[02:00:0a:18:00:16]\n"
+       "Paths: (1 available, best #1)\n"
+       "  Advertised to non peer-group peers:\n"
+       "  spine-1(10.21.1.1) spine-2(10.21.1.2)\n"
+       "  Route [2]:[0]:[48]:[02:00:0a:18:00:16] VNI 4208\n"
+       "  Local\n"
+       "    10.21.2.73 from 0.0.0.0 (10.21.2.73)\n"
+       "      Origin IGP, weight 32768, valid, sourced, local, bestpath-from-AS Local, best (First path received)\n"
+       "      Extended Community: ET:8 RT:65103:4208 MM:2\n"
+       "      Last update: Tue Nov 24 10:05:44 2026\n"
+       "\n"
+       "Displayed 1 paths for requested prefix\n"))
+
+(deftest parsing-frr-uptimes
+  (testing "the three shapes frrtime_to_interval prints"
+    (is (= 267 (collect/uptime-seconds "00:04:27")))
+    (is (= (+ (* 4 86400) (* 9 3600) (* 18 60)) (collect/uptime-seconds "4d09h18m")))
+    (is (= (+ (* 5 7 86400) (* 22 3600)) (collect/uptime-seconds "05w0d22h"))))
+  (testing "anything else is unknown rather than zero"
+    (is (nil? (collect/uptime-seconds "never")))
+    (is (nil? (collect/uptime-seconds nil)))))
+
+(deftest parsing-the-mac-detail
+  (testing "a local MAC carries its tap, sequences and uptime"
+    (is (= {:read? true :state :local :intf "one-284-0" :remote-vtep nil
+            :local-seq 1 :remote-seq 0 :uptime "05w0d22h"
+            :uptime-seconds (+ (* 35 86400) (* 22 3600))}
+           (collect/parse-mac-detail mac-detail-weeks))))
+  (testing "a MAC FRR holds as remote names the VTEP instead of a tap"
+    (let [parsed (collect/parse-mac-detail mac-detail-remote)]
+      (is (= :remote (:state parsed)))
+      (is (= stale-vtep (:remote-vtep parsed)))
+      (is (nil? (:intf parsed)))))
+  (testing "FRR not knowing the MAC is an answer"
+    (is (= {:read? true :state :absent}
+           (collect/parse-mac-detail "% Requested MAC does not exist in VNI 4208\n"))))
+  (testing "silence or unrecognised output is unread, never an answer"
+    (is (false? (:read? (collect/parse-mac-detail ""))))
+    (is (false? (:read? (collect/parse-mac-detail nil))))
+    (is (false? (:read? (collect/parse-mac-detail "% VNI 4208 does not exist\n"))))
+    (is (false? (:read? (collect/parse-mac-detail "vtysh: command not found\n"))))))
+
+(deftest parsing-the-bgp-route
+  (testing "no route at all"
+    (is (= {:read? true :next-hops []} (collect/parse-bgp-mac-route bgp-absent))))
+  (testing "each path's next hop is read, not its peer"
+    (is (= {:read? true :next-hops [stale-vtep]}
+           (collect/parse-bgp-mac-route bgp-from-stale-vtep)))
+    (is (= {:read? true :next-hops [own-vtep]}
+           (collect/parse-bgp-mac-route bgp-own-route-only))))
+  (testing "a next hop printed with its hostname"
+    (is (= [stale-vtep]
+           (:next-hops (collect/parse-bgp-mac-route
+                        (str/replace bgp-from-stale-vtep
+                                     "    10.21.2.70 from" "    10.21.2.70(safe-sole) from"))))))
+  (testing "silence, an unknown VNI or unrecognised output is unread"
+    (is (false? (:read? (collect/parse-bgp-mac-route ""))))
+    (is (false? (:read? (collect/parse-bgp-mac-route "VNI not found\n"))))
+    (is (false? (:read? (collect/parse-bgp-mac-route "sudo: a password is required\n"))))))
+
+(deftest conflict-commands-name-the-vni-and-mac
+  (is (= {:mac-detail ["sudo" "vtysh" "-c" "show evpn mac vni 4208 mac 02:00:0a:18:00:16"]
+          :bgp-route ["sudo" "vtysh" "-c" "show bgp l2vpn evpn route vni 4208 mac 02:00:0a:18:00:16"]}
+         (collect/conflict-commands {:host "h" :needs-sudo? true} 4208 "02:00:0a:18:00:16")))
+  (is (= ["vtysh" "-c" "show evpn mac vni 4201 mac 02:00:0a:15:09:0d"]
+         (:mac-detail (collect/conflict-commands {:host "h" :needs-sudo? false}
+                                                 4201 "02:00:0a:15:09:0d")))))
+
+(def ^:private conflict-fdb
+  [{:host "upward-cobra" :mac "02:00:0a:18:00:16" :dev "lo.4208" :vxlan? true
+    :dst stale-vtep :extern-learn? true :static? false}
+   {:host "upward-cobra" :mac "02:00:0a:18:00:16" :dev "one-284-0" :vxlan? false
+    :dst nil :static? false}])
+
+(deftest a-conflict-names-its-vni-from-the-overlay-device
+  (is (= [{:host "upward-cobra" :mac "02:00:0a:18:00:16" :vni 4208
+           :local-intf "one-284-0" :stale-remote-vtep stale-vtep}]
+         (collect/fdb-conflicts conflict-fdb))))
+
+(defn- conflict-finding
+  [context]
+  (first (evpn/detect-fdb-conflicts
+          (cond-> {"evpn-fdb" conflict-fdb}
+            context (assoc "evpn-fdb-context"
+                           {["upward-cobra" 4208 "02:00:0a:18:00:16"] context})))))
+
+(deftest an-orphan-is-a-conflict-no-route-stands-behind
+  (let [finding (conflict-finding
+                 {:mac-detail (collect/parse-mac-detail mac-detail-weeks)
+                  :bgp-route (collect/parse-bgp-mac-route bgp-absent)})]
+    (testing "the existing fields are unchanged"
+      (is (= :critical (:severity finding)))
+      (is (= "upward-cobra/02:00:0a:18:00:16" (:component finding)))
+      (is (= (str "host holds both a local tap entry (one-284-0) and a remote entry (dst "
+                  stale-vtep ") for one MAC")
+             (:summary finding))))
+    (is (= "05w0d22h" (:local-uptime finding)))
+    (is (= (+ (* 35 86400) (* 22 3600)) (:local-uptime-seconds finding)))
+    (is (= "absent" (:bgp-route finding)))
+    (is (= "orphan" (:classification finding)))
+    (is (= 4208 (:vni finding)))
+    (is (= stale-vtep (:stale-remote-vtep finding)))
+    (testing "the text report carries both values"
+      (is (str/includes? (:hint finding) "05w0d22h"))
+      (is (str/includes? (:hint finding) "orphan")))))
+
+(deftest a-route-from-another-vtep-does-not-stand-behind-the-stale-entry
+  (testing "the host's own advertisement of its local MAC is not the stale VTEP's"
+    (let [finding (conflict-finding
+                   {:mac-detail (collect/parse-mac-detail mac-detail-weeks)
+                    :bgp-route (collect/parse-bgp-mac-route bgp-own-route-only)})]
+      (is (= "absent" (:bgp-route finding)))
+      (is (= [own-vtep] (:bgp-next-hops finding)))
+      (is (= "orphan" (:classification finding))))))
+
+(deftest a-route-from-the-stale-vtep-is-a-live-misadvertisement
+  (let [finding (conflict-finding
+                 {:mac-detail (collect/parse-mac-detail mac-detail-fresh)
+                  :bgp-route (collect/parse-bgp-mac-route bgp-from-stale-vtep)})]
+    (is (= "00:04:27" (:local-uptime finding)))
+    (is (= 267 (:local-uptime-seconds finding)))
+    (is (= "present" (:bgp-route finding)))
+    (is (= "live-misadvertisement" (:classification finding)))
+    (is (str/includes? (:hint finding) "relearn"))))
+
+(deftest a-failed-read-is-unread-never-no-route
+  (let [finding (conflict-finding
+                 {:mac-detail (collect/parse-mac-detail "")
+                  :bgp-route (collect/parse-bgp-mac-route "")})]
+    (is (= "unread" (:bgp-route finding)))
+    (is (= "unknown" (:classification finding)))
+    (is (nil? (:local-uptime finding)))
+    (is (= "unread" (:frr-mac finding)))
+    (is (str/includes? (:hint finding) "could not be read")))
+  (testing "context that was never collected reads the same"
+    (let [finding (conflict-finding nil)]
+      (is (= "unread" (:bgp-route finding)))
+      (is (= "unknown" (:classification finding)))
+      (is (= :critical (:severity finding))))))
+
+(deftest a-mac-frr-holds-as-remote-has-no-local-uptime
+  (testing "FRR's uptime of a remote entry is not how long the guest has been here"
+    (let [finding (conflict-finding
+                   {:mac-detail (collect/parse-mac-detail mac-detail-remote)
+                    :bgp-route (collect/parse-bgp-mac-route bgp-from-stale-vtep)})]
+      (is (= "remote" (:frr-mac finding)))
+      (is (nil? (:local-uptime finding)))
+      (is (= "live-misadvertisement" (:classification finding))))))
+
+(defn- stub-ssh
+  "A gumshoe.shell/execute stand-in answering per remote command, recording each
+  remote argv after the ssh destination."
+  [seen answers]
+  (fn [& args]
+    (let [argv (vec (flatten args))
+          remote (vec (drop (inc (.indexOf argv "--")) argv))
+          remote (vec (rest remote))]
+      (swap! seen conj remote)
+      (let [line (str/join " " remote)
+            out (some (fn [[needle out]] (when (str/includes? line needle) out)) answers)]
+        {:exit 0 :out (or out "") :err ""}))))
+
+(deftest collecting-reads-context-only-for-conflicts
+  (let [seen (atom [])
+        fdb (str "02:00:0a:18:00:16 dev lo.4208 vlan 1 extern_learn master onebr8\n"
+                 "02:00:0a:18:00:16 dev lo.4208 dst 10.21.2.70 self extern_learn\n"
+                 "02:00:0a:18:00:16 dev one-284-0 master onebr8\n"
+                 "02:00:0a:18:00:13 dev one-278-0 master onebr8\n")
+        answers [["'show evpn vni 4208'" " Local VTEP IP: 10.21.2.73\n"]
+                 ["'show evpn mac vni 4208 mac 02:00:0a:18:00:16'" mac-detail-weeks]
+                 ["'show evpn mac vni 4208'" "02:00:0a:18:00:16 local one-284-0 1/0\n"]
+                 ["'show bgp l2vpn evpn route vni 4208 mac 02:00:0a:18:00:16'" bgp-absent]
+                 ["bridge fdb show" fdb]]
+        evidence (binding [gumshoe.ssh/*user-config* nil]
+                   (with-redefs [gumshoe.shell/execute (stub-ssh seen answers)]
+                     (collect/collect-evidence! [{:host "upward-cobra" :needs-sudo? true}]
+                                                [4208])))
+        context (get-in evidence ["evpn-fdb-context" ["upward-cobra" 4208 "02:00:0a:18:00:16"]])]
+    (testing "the two reads name the conflict's VNI and MAC"
+      (is (some #{["sudo" "vtysh" "-c" "'show evpn mac vni 4208 mac 02:00:0a:18:00:16'"]} @seen))
+      (is (some #{["sudo" "vtysh" "-c" "'show bgp l2vpn evpn route vni 4208 mac 02:00:0a:18:00:16'"]}
+                @seen)))
+    (testing "no MAC without a conflict is read"
+      (is (not-any? #(str/includes? (str/join " " %) "02:00:0a:18:00:13") @seen)))
+    (is (= "05w0d22h" (get-in context [:mac-detail :uptime])))
+    (is (= {:read? true :next-hops []} (:bgp-route context)))
+    (is (= "orphan" (:classification (first (evpn/detect-fdb-conflicts evidence)))))))
+
+(deftest a-fabric-without-conflicts-reads-nothing-more
+  (let [seen (atom [])
+        answers [["'show evpn vni 4208'" " Local VTEP IP: 10.21.2.73\n"]
+                 ["'show evpn mac vni 4208'" "02:00:0a:18:00:13 local one-278-0 1/0\n"]
+                 ["bridge fdb show" "02:00:0a:18:00:13 dev one-278-0 master onebr8\n"]]
+        evidence (binding [gumshoe.ssh/*user-config* nil]
+                   (with-redefs [gumshoe.shell/execute (stub-ssh seen answers)]
+                     (collect/collect-evidence! [{:host "secure-emu" :needs-sudo? true}]
+                                                [4208])))]
+    (is (= {} (get evidence "evpn-fdb-context")))
+    (is (not-any? #(re-find #"vni \d+ mac " (str/join " " %)) @seen))))

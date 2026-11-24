@@ -9,8 +9,8 @@
   gathered per host and kept per host - asking one host, or asking a router,
   cannot show a disagreement.
 
-  Read-only throughout: three `show`-style commands per host, no configuration
-  is touched. Hosts are queried in parallel and a host that cannot be reached
+  Read-only throughout: three `show`-style commands per host, plus two per fdb
+  conflict found, and no configuration is touched. Hosts are queried in parallel and a host that cannot be reached
   becomes evidence rather than an aborted scan, because the unreachable host is
   often the symptom being investigated."
   (:require [clojure.string :as str]
@@ -103,6 +103,101 @@
        :static? (contains? flags "static")
        :extern-learn? (contains? flags "extern_learn")})))
 
+(def ^:private interval-patterns
+  "The three shapes FRR's frrtime_to_interval prints an age in: under a day,
+  under a week, and weeks."
+  [[#"^(\d+):(\d{2}):(\d{2})$" (fn [h m s] (+ (* h 3600) (* m 60) s))]
+   [#"^(\d+)d(\d{2})h(\d{2})m$" (fn [d h m] (+ (* d 86400) (* h 3600) (* m 60)))]
+   [#"^(\d+)w(\d+)d(\d{2})h$" (fn [w d h] (+ (* w 7 86400) (* d 86400) (* h 3600)))]])
+
+(defn uptime-seconds
+  "Seconds in an FRR uptime such as `00:04:27`, `4d09h18m` or `05w0d22h`, or nil
+  for anything else. FRR derives the days from gmtime's day of the year, so an
+  age of a year or more prints modulo a year and reads back the same way."
+  [s]
+  (some (fn [[pattern f]]
+          (when-let [[_ & parts] (re-matches pattern (str/trim (str s)))]
+            (apply f (map parse-long-or-nil parts))))
+        interval-patterns))
+
+(defn- unread
+  [output why]
+  {:read? false
+   :error (if (str/blank? (or output ""))
+            "no output"
+            (str why ": " (first (str/split-lines (str/trim output)))))})
+
+(defn parse-mac-detail
+  "What FRR knows about one MAC, from `show evpn mac vni <vni> mac <mac>`.
+
+  `:uptime` is how long FRR has held the entry in its current role, so for a
+  local MAC it is how long the guest has been local on this host. FRR answering
+  that it does not know the MAC is a read (`:absent`); silence, an unknown VNI or
+  output of another shape is `:read? false`, because none of those says anything
+  about the MAC."
+  [output]
+  (let [text (or output "")
+        field (fn [re] (some->> (re-find re text) second))]
+    (cond
+      (str/includes? text "% Requested MAC does not exist")
+      {:read? true :state :absent}
+
+      (re-find #"(?m)^MAC: " text)
+      (let [intf (field #"(?m)^\s*Intf: ([^\s(]+)")
+            remote-vtep (field #"Remote VTEP: (\S+)")
+            uptime (field #"(?m)^\s*Uptime: (\S+)")]
+        {:read? true
+         :state (cond (and intf (not= "-" intf)) :local
+                      (or remote-vtep (str/includes? text "Remote ES:")) :remote
+                      :else :other)
+         :intf (when (not= "-" intf) intf)
+         :remote-vtep remote-vtep
+         :local-seq (some-> (field #"Local Seq: (\d+)") parse-long-or-nil)
+         :remote-seq (some-> (field #"Remote Seq: (\d+)") parse-long-or-nil)
+         :uptime uptime
+         :uptime-seconds (uptime-seconds uptime)})
+
+      :else (unread output "unrecognised output"))))
+
+(def ^:private next-hop-pattern
+  "A path's next-hop line in route_vty_out_detail: the address, optionally its
+  hostname in parentheses, then the peer it came from."
+  #"^\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?:\([^)]*\))?(?:\s.*)?\sfrom\s")
+
+(defn parse-bgp-mac-route
+  "The next hop of every path BGP holds for one MAC, from
+  `show bgp l2vpn evpn route vni <vni> mac <mac>`. `% Network not in table` is a
+  read with no paths; silence, an unknown VNI or output of another shape is
+  `:read? false`, so a failed read never passes for an absent route."
+  [output]
+  (let [text (or output "")]
+    (cond
+      (str/includes? text "% Network not in table")
+      {:read? true :next-hops []}
+
+      (str/includes? text "BGP routing table entry for")
+      {:read? true
+       :next-hops (vec (keep #(second (re-find next-hop-pattern %))
+                             (str/split-lines text)))}
+
+      :else (unread output "unrecognised output"))))
+
+(defn fdb-conflicts
+  "Every host holding both a local tap entry and a remote entry for one MAC, with
+  the VNI read from the remote entry's overlay device. Tap rows repeat once per
+  VNI scanned because the fdb table is per host, so the VNI comes from the remote
+  row, which is kept only for its own overlay."
+  [fdb]
+  (for [[[host mac] entries] (group-by (juxt :host :mac) fdb)
+        :let [tap (some #(when-not (:vxlan? %) %) entries)
+              remote (some #(when (:dst %) %) entries)]
+        :when (and tap remote)]
+    {:host host
+     :mac mac
+     :vni (some->> (:dev remote) (re-matches vxlan-dev-pattern) second parse-long-or-nil)
+     :local-intf (:dev tap)
+     :stale-remote-vtep (:dst remote)}))
+
 (defn host-commands
   "The three read-only commands, with sudo only where it is needed: vtysh talks to
   FRR's control socket and needs it, `bridge fdb show` reads the kernel's table and
@@ -153,17 +248,46 @@
               :macs (vec (parse-macs vni host host-vtep (:macs out)))
               :fdb (vec (parse-fdb vni host (:fdb out)))})))))))
 
+(defn conflict-commands
+  "The two reads one fdb conflict needs: FRR's view of the MAC, and the BGP
+  paths behind it."
+  [connection vni mac]
+  (let [sudo (if (:needs-sudo? connection) ["sudo"] [])]
+    {:mac-detail (vec (concat sudo ["vtysh" "-c" (str "show evpn mac vni " vni " mac " mac)]))
+     :bgp-route (vec (concat sudo ["vtysh" "-c" (str "show bgp l2vpn evpn route vni " vni " mac " mac)]))}))
+
+(defn collect-conflict-context
+  "FRR's reading of each conflict's MAC, keyed by [host vni mac]. Only conflicts
+  are read, two commands each, in parallel. Never throws: a host that does not
+  answer leaves both reads `:read? false`."
+  [connections conflicts run]
+  (let [by-host (into {} (map (juxt :host identity)) connections)]
+    (->> (for [{:keys [host vni mac]} conflicts
+               :let [connection (get by-host host)]
+               :when (and connection vni)]
+           (future
+             (binding [shell/*timeout-ms* (or (:timeout-ms connection) 30000)]
+               (let [cmds (conflict-commands connection vni mac)]
+                 [[host vni mac]
+                  {:mac-detail (parse-mac-detail (run connection (:mac-detail cmds)))
+                   :bgp-route (parse-bgp-mac-route (run connection (:bgp-route cmds)))}]))))
+         doall
+         (into {} (map deref)))))
+
 (defn collect-evidence!
   "Fan out across every host and VNI, then flatten into the evidence a detective
   reads. Hosts are queried in parallel because a fabric scan is otherwise as slow
-  as the sum of its hosts, and a partitioned fabric is when speed matters."
+  as the sum of its hosts, and a partitioned fabric is when speed matters. The
+  fdb conflicts found get a second, bounded round of reads for their context."
   [connections vnis]
   (let [results (->> (for [c connections vni vnis]
                        (future (collect-host c vni)))
                      doall
-                     (mapv deref))]
+                     (mapv deref))
+        fdb (vec (mapcat :fdb results))]
     {"evpn-macs" (vec (mapcat :macs results))
-     "evpn-fdb" (vec (mapcat :fdb results))
+     "evpn-fdb" fdb
+     "evpn-fdb-context" (collect-conflict-context connections (fdb-conflicts fdb) ssh-runner)
      "evpn-hosts" results}))
 
 (defn connections

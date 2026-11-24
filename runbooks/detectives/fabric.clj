@@ -4,7 +4,16 @@
 (ns runbooks.detectives.fabric
   "Investigates an EVPN-VXLAN fabric over SSH: which host owns each guest MAC,
    which VTEP the rest of the fabric believes owns it, and the local overrides
-   that hide or cause a disagreement."
+   that hide or cause a disagreement.
+
+   Each fdb conflict - a host holding a local tap and a remote entry for one
+   MAC - is read twice more from FRR on that host: `show evpn mac vni <vni> mac
+   <mac>` for how long the MAC has been local (`local-uptime`), and
+   `show bgp l2vpn evpn route vni <vni> mac <mac>` for whether a path from the
+   stale VTEP still stands behind the remote entry (`bgp-route`). An `orphan`
+   has no such path and a local delete holds; a `live-misadvertisement` has one
+   and a delete is relearned. A read that did not answer reports `unread` and
+   `unknown`, never an absent route."
   (:require [clojure.string :as str]
             [gumshoe.config :as config]
             [gumshoe.detective :as detective]

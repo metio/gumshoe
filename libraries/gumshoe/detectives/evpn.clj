@@ -12,7 +12,8 @@
 
   Evidence is per host, so a disagreement between two hosts about the same MAC
   is visible without asking a router anything."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [gumshoe.evpn :as evpn]))
 
 (defn- gateway-vteps
   [evidence]
@@ -87,19 +88,83 @@
                    ":evpn :hosts, or a gateway has claimed it the way "
                    "proxy-macip-advertisement does")}))))
 
+(def ^:private not-collected
+  {:read? false :error "not collected"})
+
+(defn conflict-reading
+  "What FRR says behind one fdb conflict, as finding data.
+
+  `:bgp-route` is `present` when a BGP path names the stale remote VTEP as its
+  next hop, `absent` when BGP answered with no such path, and `unread` when it
+  did not answer; `:classification` follows it as `live-misadvertisement`,
+  `orphan` or `unknown`. A path from any other VTEP - the host's own
+  advertisement of its local MAC included - does not stand behind the stale
+  entry. `:local-uptime` is FRR's uptime of the MAC only while FRR holds it as
+  local, because the uptime of a remote entry says nothing about how long the
+  guest has been here."
+  [{:keys [stale-remote-vtep]} {:keys [mac-detail bgp-route]}]
+  (let [mac-detail (or mac-detail not-collected)
+        bgp-route (or bgp-route not-collected)
+        local? (= :local (:state mac-detail))
+        bgp (cond (not (:read? bgp-route)) "unread"
+                  (some #{stale-remote-vtep} (:next-hops bgp-route)) "present"
+                  :else "absent")]
+    (cond-> {:frr-mac (if (:read? mac-detail) (name (:state mac-detail)) "unread")
+             :local-uptime (when local? (:uptime mac-detail))
+             :local-uptime-seconds (when local? (:uptime-seconds mac-detail))
+             :bgp-route bgp
+             :bgp-next-hops (:next-hops bgp-route)
+             :classification (case bgp
+                               "present" "live-misadvertisement"
+                               "absent" "orphan"
+                               "unknown")}
+      (not (:read? mac-detail)) (assoc :frr-mac-error (:error mac-detail))
+      (not (:read? bgp-route)) (assoc :bgp-route-error (:error bgp-route)))))
+
+(defn- reading-hint
+  [{:keys [stale-remote-vtep]} {:keys [frr-mac frr-mac-error local-uptime bgp-route
+                                       bgp-route-error bgp-next-hops]}]
+  (str (case frr-mac
+         "local" (str "FRR has held the MAC as local for "
+                      (or local-uptime "an uptime it did not print") ". ")
+         "unread" (str "FRR's view of the MAC could not be read (" frr-mac-error
+                       "), so how long it has been local is unknown. ")
+         (str "FRR holds the MAC as " frr-mac ", not local, so it has no local uptime. "))
+       (case bgp-route
+         "absent" (str "No BGP path names " stale-remote-vtep
+                       (when (seq bgp-next-hops)
+                         (str " (paths name " (str/join ", " bgp-next-hops) ")"))
+                       ", so this is an orphan: the route that installed the entry is "
+                       "gone and a local delete holds. A migrated guest leaves two stale "
+                       "rows, the dst self row and a vlan-tagged master row, so check "
+                       "every row for the MAC before deleting. ")
+         "present" (str "A BGP path from " stale-remote-vtep " still stands behind the "
+                        "entry, so this is a live misadvertisement: a local delete is "
+                        "relearned until whatever advertises it stops. ")
+         (str "BGP could not be read (" bgp-route-error "), so whether a route stands "
+              "behind the entry is unknown. "))))
+
 (defn detect-fdb-conflicts
   [evidence]
-  (for [[[host mac] entries] (group-by (juxt :host :mac) (get evidence "evpn-fdb"))
-        :let [tap (some #(when-not (:vxlan? %) %) entries)
-              remote (some #(when (:dst %) %) entries)]
-        :when (and tap remote)]
-    {:severity :critical
-     :component (str host "/" mac)
-     :summary (str "host holds both a local tap entry (" (:dev tap)
-                   ") and a remote entry (dst " (:dst remote) ") for one MAC")
-     :hint (str "the host owns this MAC and is simultaneously told to send its "
-                "traffic across the fabric. Traffic for the guest is black-holed "
-                "rather than flooded, because a nolearning bridge has no fallback")}))
+  (let [context (get evidence "evpn-fdb-context")]
+    (for [{:keys [host mac vni local-intf stale-remote-vtep] :as conflict}
+          (evpn/fdb-conflicts (get evidence "evpn-fdb"))
+          :let [reading (conflict-reading conflict (get context [host vni mac]))]]
+      (merge
+       {:severity :critical
+        :component (str host "/" mac)
+        :summary (str "host holds both a local tap entry (" local-intf
+                      ") and a remote entry (dst " stale-remote-vtep ") for one MAC")
+        :hint (str (reading-hint conflict reading)
+                   "The host owns this MAC and is simultaneously told to send its "
+                   "traffic across the fabric. Traffic for the guest is black-holed "
+                   "rather than flooded, because a nolearning bridge has no fallback")
+        :host host
+        :mac mac
+        :vni vni
+        :local-intf local-intf
+        :stale-remote-vtep stale-remote-vtep}
+       reading))))
 
 (defn detect-static-fdb
   [evidence]
@@ -146,7 +211,7 @@
     :requires ["evpn-macs" "config"]
     :detect detect-mac-ownership}
    {:name "evpn-fdb-conflict"
-    :description "hosts holding both a local tap and a remote entry for one MAC"
+    :description "hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local and whether BGP still advertises the remote one"
     :requires ["evpn-fdb"]
     :detect detect-fdb-conflicts}
    {:name "evpn-hosts"
