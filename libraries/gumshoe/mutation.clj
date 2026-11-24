@@ -45,7 +45,7 @@
       :pin      (fn [ctx] -> {:type :name :namespace? :facts?})  ; optional, see below
       :recovery \"...\" or (fn [ctx] -> string)   ; optional, printed under the
                                     ; FAILED banner when this change fails,
-                                    ; see gumshoe.playbook
+                                    ; see gumshoe.playbook and below
       :connect  (fn [opts] -> {:context .. :cluster .. :announce-as ..} or nil)
                                     ; optional, what the change acts on when that
                                     ; is not the kube context, see below
@@ -100,6 +100,14 @@
    current kube context and :cluster its cluster. :subject and :pin read
    their object with kubectl, so a spec with :connect takes neither.
 
+   A change without :recovery that fails after applying an effect - a later
+   effect failed, its post-check did not hold, or an error stopped it - is
+   still followed by guidance: `fallback-guidance` names the effects that
+   stayed applied, where it stopped, and where to look (the messages of the
+   failure, the changelog entry it posted, the object on its cluster). It is
+   recorded with gumshoe.outcome/fallback!, so the guidance of a playbook
+   running the change as a step wins over it, and a rehearsal records none.
+
    Three entry points, same spec: `book` is a standalone runbook; `run!` selects
    the subject and runs it, returning a boolean; `run-on!` runs against a subject
    already chosen, so a playbook picks once and drives many steps without
@@ -115,7 +123,9 @@
    rests on something outside the spec - an annotation, a status field - names
    it with :facts (fn [object] -> value), which must be equal too. An object
    that cannot be read when the confirmation is shown is refused as well."
-  (:require [clojure.walk :as walk]
+  (:require [clojure.string :as str]
+            [clojure.walk :as walk]
+            [gumshoe.effect :as effect]
             [gumshoe.flow :as flow]
             [gumshoe.prerequisites :as prerequisites]
             [gumshoe.select :as select]
@@ -295,6 +305,52 @@
           cluster (kubectl/current-cluster)]
       {:context context :cluster cluster :announce-as cluster})))
 
+(defn fallback-guidance
+  "The guidance under the FAILED banner of a change that declares no
+   :recovery and applied an effect before it failed. `applied` are the
+   effects that stayed applied, as gumshoe.effect/describe renders them;
+   `stopped` the effect it stopped at, when one failed; `post-check-failed?`
+   whether its post-check did not hold; `announced?` whether it posted to the
+   changelog; `subject` what it acted on and `cluster` where."
+  [{:keys [applied stopped post-check-failed? announced? subject cluster]}]
+  (str/join "\n"
+            (concat ["This change declares no recovery guidance. What it left behind:"
+                     (format "  %d %s of this change stayed applied - nothing was rolled back:"
+                             (count applied) (if (= 1 (count applied)) "effect" "effects"))]
+                    (map #(str "    " %) applied)
+                    (cond
+                      stopped [(str "  it stopped at: " stopped)]
+                      post-check-failed? ["  its post-check did not hold"]
+                      :else ["  an unexpected error stopped it"])
+                    ["Look at:"]
+                    (cond
+                      stopped ["  the messages of the effect that failed, above"]
+                      post-check-failed? ["  the post-check messages above"]
+                      :else ["  the error above"])
+                    (when announced? ["  the changelog entry this change posted"])
+                    [(str "  the current state of " subject " on " cluster)])))
+
+(defn- left-behind
+  "fallback-guidance for a change that failed after running the first
+   effects of `plan`, counting from `applied-before`, the effects the run had
+   applied when the change began; nil when none of its effects that ran
+   changes anything, and outside a run, which records nothing. effect/run!
+   applies a plan in order and stops at the first failure, so the applied
+   effects are the plan's first ones."
+  [{:keys [select announce] :as spec} {:keys [cluster target]} plan applied-before]
+  (let [{:keys [applied stopped verified]} (outcome/current)
+        changed (->> (when applied plan)
+                     (take (- (or applied 0) applied-before))
+                     (remove #(= :note (first %)))
+                     (mapv effect/describe))]
+    (when (seq changed)
+      (fallback-guidance {:applied changed
+                          :stopped stopped
+                          :post-check-failed? (false? verified)
+                          :announced? (boolean (and announce (not (false? (:announce? spec)))))
+                          :subject (str/join ", " (select/items (:mode select) target))
+                          :cluster cluster}))))
+
 (defn- run-connected!
   [{:keys [select confirm announce effect verify] :as spec}
    {:keys [context cluster announce-as]} target opts announcement-data]
@@ -305,7 +361,13 @@
       (do (stdout/error (format "could not read what the change rests on - %s" unread))
           false)
       (let [ctx (merge base values)
-            failed! #(when-not flow/*dry-run* (outcome/recovery! (:recovery spec) ctx))
+            applied-before (outcome/applied-count)
+            plan (volatile! nil)
+            failed! #(when-not flow/*dry-run*
+                       (if (:recovery spec)
+                         (outcome/recovery! (:recovery spec) ctx)
+                         (when-let [guidance (left-behind spec ctx (effect/as-plan @plan) applied-before)]
+                           (outcome/fallback! guidance ctx))))
             ok? (try
                   (let [{:keys [ref before]} (pin-of spec ctx)
                         items-fn (:items spec)]
@@ -320,7 +382,7 @@
                       :confirmed? (:confirmed? spec)
                       :announce! (when announce
                                    #(announce/announce! announce-as announcement-data (announce ctx)))
-                      :effect (effect ctx)
+                      :effect (vreset! plan (effect ctx))
                       :step (or (:title spec) (:action confirm))
                       :post-checks (when verify (verify ctx))}))
                   (catch Throwable e (failed!) (throw e)))]

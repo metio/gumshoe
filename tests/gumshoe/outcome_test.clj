@@ -141,3 +141,16 @@
   (is (nil? (outcome/recovery-lines :error {:applied 1 :stopped "x"})) "no guidance, no lines")
   (is (nil? (outcome/recovery-lines :neutral {:recovery {:text "x"}})) "a pause or a clean abort prints none")
   (is (nil? (outcome/recovery-lines :ok {:recovery {:text "x"}}))))
+
+(deftest a-fallback-prints-only-when-no-guidance-was-recorded
+  (let [recorded (fn [f] (let [record (outcome/fresh)]
+                           (binding [outcome/*record* record] (f))
+                           @record))]
+    (is (= ["Recovery:" "  generic"]
+           (outcome/recovery-lines :error (recorded #(outcome/fallback! "generic" {})))))
+    (is (= ["Recovery:" "  specific"]
+           (outcome/recovery-lines :error (recorded #(do (outcome/fallback! "generic" {})
+                                                         (outcome/recovery! "specific" {})))))
+        "guidance recorded after the fallback still wins")
+    (is (nil? (outcome/recovery-lines :neutral (recorded #(outcome/fallback! "generic" {})))))
+    (is (nil? (outcome/fallback! "generic" {})) "outside a run nothing is recorded")))

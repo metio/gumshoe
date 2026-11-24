@@ -227,8 +227,13 @@ and current list.
    no post-checks` verified nothing, and a `FAILED after N effects` banner
    names where it stopped while the effects before it stay applied. Lines
    under a failed banner headed `Recovery:` are the stopped step's guidance:
-   what the half-applied state means and how to bring the system back. Read
-   them to the human before anything else is run.
+   what the half-applied state means and how to bring the system back. A
+   mutation book without its own `:recovery` that fails after applying an
+   effect prints generic guidance there instead, starting `This change
+   declares no recovery guidance`: which effects stayed applied, where it
+   stopped or that its post-check did not hold, and where to look (those
+   messages, the changelog entry, the object on its cluster). Read them to
+   the human before anything else is run.
 
 A book whose change cannot be expressed as a plan says under `--dry-run` that
 it does not support a dry run, and runs nothing. Interactive sessions
@@ -343,7 +348,10 @@ mostly data:
   says the guidance could not be rendered. The playbook's own `:recovery`
   covers its steps without one once the run changed something, which reaches
   a caller's steps added at positions; a mutation book carries `:recovery`
-  the same way. `gumshoe.tools.flux-storage/recovery` is the example: it
+  the same way. A mutation without `:recovery` that fails after applying an
+  effect still prints the engine's generic guidance (`mutation/fallback-guidance`:
+  the effects that stayed applied and where to look), which a step's or the
+  playbook's own `:recovery` replaces, and a dry run prints none. `gumshoe.tools.flux-storage/recovery` is the example: it
   names which of the HelmRelease and its owner stay suspended. A rollback
   step at the end never runs, because the run stops at the first failure;
 - a firebook is `(firebook/book {:description … :drill "crash-loop" :fire
@@ -456,7 +464,9 @@ libraries (override with `:books` and `:libraries`, each a list of
 directories), prints one line per finding naming the file, and exits 1 when
 there is any; a file with an unbalanced form is reported as `unparseable`,
 and a vector binding of `namespace-name-map` or `split-namespace-name` as
-`destructuring`.
+`destructuring`. It also prints advisories as `note:` lines, which never fail
+it: a mutation book whose spec is a literal map without `:recovery` is named
+(`conformance/advisories` returns them as data).
 `:license` names the SPDX identifier every file must carry; without it any
 identifier passes. A casebook that carries no SPDX headers passes
 `:license false`, which omits the header check and keeps every other one, so

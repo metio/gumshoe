@@ -266,3 +266,29 @@
                        (conformance/verify! (assoc (roots clean) :license false)))))
             (finally (fs/delete-tree clean)))))
       (finally (fs/delete-tree root)))))
+
+(defn- mutation-book
+  [ns spec]
+  (str header
+       "(ns " ns "\n"
+       "  \"A change.\"\n"
+       "  (:require [gumshoe.mutation :as mutation]))\n\n"
+       "(mutation/book " spec ")\n"))
+
+(deftest a-mutation-book-without-recovery-is-an-advisory-and-passes
+  (let [root (casebook! {"runbooks/bare.clj"
+                         (mutation-book "casebook.bare" "{:description \"Cordons\" :select {:mode :one} :confirm {:action \"cordon\"}}")
+                         "runbooks/guided.clj"
+                         (mutation-book "casebook.guided" "{:description \"Cordons\" :select {:mode :one} :confirm {:action \"cordon\"} :recovery \"uncordon it\"}")
+                         "runbooks/shared.clj"
+                         (mutation-book "casebook.shared" "(merge shared {:description \"Cordons\"})")})
+        opts (assoc (roots root) :load? false)]
+    (try
+      (is (= {"bare.clj" [:recovery]} (by-file (conformance/advisories (conformance/files-in opts))))
+          "a literal spec without :recovery is named; one with it, and a merged one, are not")
+      (is (empty? (filter #(= :recovery (:check %)) (conformance/findings-in opts))) "the gate does not fail on it")
+      (let [err (java.io.StringWriter.)]
+        (is (= 3 (binding [*out* (java.io.StringWriter.) *err* err] (conformance/verify! opts))))
+        (is (str/includes? (str err) "note: ") "verify! prints it as a note")
+        (is (str/includes? (str err) "bare.clj") (str err)))
+      (finally (fs/delete-tree root)))))
