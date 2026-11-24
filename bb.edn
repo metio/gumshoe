@@ -24,6 +24,7 @@
                    [gumshoe.theme-test]
                    [gumshoe.spec-test]
                    [gumshoe.conformance-test]
+                   [gumshoe.conformance-library-test]
                    [gumshoe.detectives-test]
                    [gumshoe.helm-releases-test]
                    [gumshoe.helm-rollback-test]
@@ -175,6 +176,7 @@
                                                          'gumshoe.theme-test
                                                          'gumshoe.spec-test
                                                          'gumshoe.conformance-test
+                                                         'gumshoe.conformance-library-test
                                                          'gumshoe.detectives-test
                                                          'gumshoe.helm-releases-test
                                                          'gumshoe.helm-rollback-test

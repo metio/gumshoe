@@ -250,5 +250,26 @@ announcers, detectives, capabilities, tools, pre- and post-hooks, secrets,
 themes, prerequisites, drill-down probes, kinds and fetched edges.
 `examples/example/plugin.clj` uses every one. In the gumshoe repository,
 `bb test` runs the unit and conformance suites; the conformance suite
-requires a license header, a namespace docstring, one harness entry point and
-a description on every book and every option.
+requires that every file parses, and a license header, a namespace
+docstring, one harness entry point and a description on every book and
+every option.
+
+A casebook gates on the same rules with `gumshoe.conformance`. Wire it as a
+`verify` task in the casebook's `bb.edn`, as `casebook-example/bb.edn` does,
+and run `bb verify` in CI beside the casebook's tests:
+
+```clojure
+verify {:doc "Check the casebook's books and libraries"
+        :requires ([gumshoe.conformance :as conformance])
+        :task (conformance/verify! {:license "0BSD"})}
+```
+
+It reads `runbooks`, `playbooks` and `firebooks` as books and `libraries` as
+libraries (override with `:books` and `:libraries`, each a list of
+directories), prints one line per finding naming the file, and exits 1 when
+there is any; a file with an unbalanced form is reported as `unparseable`.
+`:license` names the SPDX identifier every file must carry; without it any
+identifier passes. `conformance/findings-in` returns the findings as data
+instead, for a test or a bespoke report. Loading the plugins does not parse
+a book, so a casebook gate without this check passes a book nobody can
+run.

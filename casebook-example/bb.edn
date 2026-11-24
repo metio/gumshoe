@@ -24,4 +24,9 @@
          run     {:doc "Launch a book"
                   :override-builtin true
                   :requires ([gumshoe.main :as main])
-                  :task (System/exit (main/run *command-line-args*))}}}
+                  :task (System/exit (main/run *command-line-args*))}
+         ;; the gate: every book and library parses, documents itself and
+         ;; follows the harness contract; a finding names its file and exits 1
+         verify  {:doc "Check the casebook's books and libraries"
+                  :requires ([gumshoe.conformance :as conformance])
+                  :task (conformance/verify! {:license "0BSD"})}}}
