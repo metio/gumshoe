@@ -11,7 +11,8 @@
       :detect      (fn [evidence] [finding])} ; pure - no cluster access
 
    Evidence is collected once per investigation and shared by all detectives,
-   keyed by resource type, plus :now for time-based checks. Because :detect is
+   keyed by resource type, plus :now for time-based checks and \"options\" for
+   the book's own options beyond --output. Because :detect is
    pure over that map, detectives compose freely into bigger investigations
    and are trivially unit-testable.
 
@@ -436,7 +437,7 @@
   ([context detectives]
    (investigate! context detectives {}))
   ([context detectives opts]
-   (let [evidence (collect-evidence! context detectives)
+   (let [evidence (assoc (collect-evidence! context detectives) "options" (dissoc opts :output))
          detectives (mark-unread detectives evidence)]
      (report-and-offer! context detectives (run-detectives detectives evidence) (:output opts "text")))))
 
@@ -461,16 +462,21 @@
 
    Spec: {:description \"...\" :prerequisites {..}
           :detectives <vector> | :scope <keyword>   ; a fixed set, or a registry
+          :options {..}                             ; babashka.cli spec (optional)
           :when-to-run \"one-line orientation shown before the run\" (optional)}
+
+   The parsed :options reach every detective as the \"options\" evidence, so
+   a threshold a check reads is set on the command line while :detect stays
+   pure over the evidence map.
 
    With :scope the detectives are resolved from the registry when the book runs -
    so a plugin that registered detectives into that scope joins this scan. A
    scope that resolves to nothing fails rather than reporting a clean cluster;
    see no-detectives-message."
-  [{:keys [description detectives scope prerequisites when-to-run]}]
+  [{:keys [description detectives scope prerequisites when-to-run options]}]
   (runbook/execute!
    {:description description
-    :options output-option
+    :options (merge options output-option)
     :prerequisites prerequisites
     :announce? false
     :action (fn [opts _ctx]

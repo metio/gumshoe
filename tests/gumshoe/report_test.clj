@@ -10,6 +10,7 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [gumshoe.detective :as detective]
+            [gumshoe.detectives.disruption :as disruption]
             [gumshoe.report :as report]
             [gumshoe.summary]))
 
@@ -76,3 +77,17 @@
   (binding [*out* (java.io.StringWriter.)]
     (detective/report! detectives findings "json"))
   (is (gumshoe.summary/captured?) "a book rendering through report! gets the findings banner and the share offer"))
+
+(deftest a-book-option-reaches-the-detectives-as-evidence
+  (let [seen (atom nil)]
+    (with-redefs [detective/collect-evidence! (fn [_ _] {:now (java.time.Instant/now)})
+                  detective/report-and-offer! (fn [_ _ _ _] true)]
+      (detective/investigate! "ctx" [{:name "probe" :requires [] :detect (fn [evidence] (reset! seen evidence) [])}]
+                              {:output "json" :hpa-grace-minutes 3}))
+    (is (= {:hpa-grace-minutes 3} (get @seen "options")))))
+
+(deftest the-hpa-grace-option-parses-and-defaults
+  (let [spec (merge detective/output-option disruption/hpa-grace-option)]
+    (is (= 10 (:hpa-grace-minutes (cli/parse-opts [] {:spec spec}))))
+    (is (= 3 (:hpa-grace-minutes (cli/parse-opts ["--hpa-grace-minutes" "3"] {:spec spec}))))
+    (is (thrown? Exception (cli/parse-opts ["--hpa-grace-minutes" "-1"] {:spec spec})))))

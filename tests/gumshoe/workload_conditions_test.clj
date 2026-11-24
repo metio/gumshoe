@@ -108,3 +108,64 @@
 (deftest a-question-mark-is-every-day
   (is (= (java.time.Duration/ofDays 1) (cron/interval "0 2 ? * *")))
   (is (= (java.time.Duration/ofDays 1) (cron/interval "0 2 * * ?"))))
+
+(def ^:private collected (java.time.Instant/parse "2026-11-24T20:30:00Z"))
+
+(defn- failing-hpa
+  "An HPA in shop/<name> whose condition of type is False since transitioned,
+   which is a string, nil for a missing lastTransitionTime, or :absent."
+  [name type reason transitioned]
+  {:metadata (meta-of name) :spec {:maxReplicas 10}
+   :status {:currentReplicas 1
+            :conditions [(cond-> {:type type :status "False" :reason reason :message "no metrics returned"}
+                           transitioned (assoc :lastTransitionTime transitioned))]}})
+
+(defn- hpa-findings
+  ([hpas] (hpa-findings hpas nil))
+  ([hpas options]
+   (vec (disruption/detect-failing-hpas
+         (cond-> {:now collected "horizontalpodautoscalers" {:items hpas}}
+           options (assoc "options" options))))))
+
+(deftest a-scaling-active-false-younger-than-the-threshold-is-a-warning
+  (let [[finding] (hpa-findings [(failing-hpa "young" "ScalingActive" "FailedGetPodsMetric" "2026-11-24T20:27:00Z")])]
+    (is (= :warning (:severity finding)))
+    (is (= "HorizontalPodAutoscaler cannot read its metrics (FailedGetPodsMetric), held under 10m" (:summary finding)))
+    (is (str/includes? (:hint finding) "False for 3m"))
+    (is (str/includes? (:hint finding) "may recover on its own"))
+    (is (= "2026-11-24T20:27:00Z" (:since finding)))))
+
+(deftest a-scaling-active-false-at-or-beyond-the-threshold-stays-critical
+  (doseq [transitioned ["2026-11-24T20:00:00Z" "2026-11-24T20:20:00Z"]]
+    (let [[finding] (hpa-findings [(failing-hpa "old" "ScalingActive" "FailedGetPodsMetric" transitioned)])]
+      (is (= :critical (:severity finding)) transitioned)
+      (is (= "HorizontalPodAutoscaler cannot read its metrics (FailedGetPodsMetric)" (:summary finding))))))
+
+(deftest a-condition-of-unknown-age-stays-critical-and-says-so
+  (doseq [transitioned [nil "yesterday"]]
+    (let [[finding] (hpa-findings [(failing-hpa "unknown" "ScalingActive" "FailedGetPodsMetric" transitioned)])]
+      (is (= :critical (:severity finding)) (pr-str transitioned))
+      (is (str/includes? (:hint finding) "how long it has held is unknown") (pr-str transitioned))))
+  (testing "without the collection time no age can be read either"
+    (let [[finding] (disruption/detect-failing-hpas
+                     {"horizontalpodautoscalers"
+                      {:items [(failing-hpa "no-clock" "ScalingActive" "FailedGetPodsMetric" "2026-11-24T20:27:00Z")]}})]
+      (is (= :critical (:severity finding)))
+      (is (str/includes? (:hint finding) "how long it has held is unknown")))))
+
+(deftest a-scaling-active-true-is-quiet
+  (is (empty? (hpa-findings [{:metadata (meta-of "fine")
+                              :status {:conditions [{:type "AbleToScale" :status "True" :lastTransitionTime "2026-11-24T20:29:00Z"}
+                                                    {:type "ScalingActive" :status "True" :lastTransitionTime "2026-11-24T20:29:00Z"}]}}]))))
+
+(deftest able-to-scale-false-follows-the-same-threshold
+  (is (= [:warning] (map :severity (hpa-findings [(failing-hpa "young" "AbleToScale" "FailedGetScale" "2026-11-24T20:27:00Z")]))))
+  (is (= [:critical] (map :severity (hpa-findings [(failing-hpa "old" "AbleToScale" "FailedGetScale" "2026-11-24T20:00:00Z")]))))
+  (is (= [:critical] (map :severity (hpa-findings [(failing-hpa "unknown" "AbleToScale" "FailedGetScale" nil)])))))
+
+(deftest the-threshold-comes-from-the-book-option
+  (let [young (failing-hpa "young" "ScalingActive" "FailedGetPodsMetric" "2026-11-24T20:27:00Z")]
+    (is (= [:critical] (map :severity (hpa-findings [young] {:hpa-grace-minutes 2}))))
+    (is (= [:critical] (map :severity (hpa-findings [young] {:hpa-grace-minutes 0}))))
+    (is (= ["HorizontalPodAutoscaler cannot read its metrics (FailedGetPodsMetric), held under 5m"]
+           (map :summary (hpa-findings [young] {:hpa-grace-minutes 5}))))))
