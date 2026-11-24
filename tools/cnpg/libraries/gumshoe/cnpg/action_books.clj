@@ -11,22 +11,14 @@
             [gumshoe.detectives.cnpg :as cnpg]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.mutation :as mutation]
             [gumshoe.toggle :as toggle]))
-
-(defn- fetch
-  [context type {:keys [namespace name]}]
-  (kubectl/get-namespaced-resource context namespace type name))
 
 (defn- cluster-picks
   [context refusal]
   (vec (for [cluster (sort-by kubectl/namespace-name-of (kubectl/items-of (kubectl/get-all context cnpg/cluster-type)))
              :when (nil? (refusal cluster))]
          (kubectl/namespace-name-of cluster))))
-
-(defn- refuse
-  [why]
-  (when why (println (str "refusing: " why)))
-  (nil? why))
 
 (def ^:private cluster-option
   {:cluster {:desc "\"<namespace>/<cluster>\" - interactive selection when omitted" :alias :c :coerce :string}})
@@ -38,6 +30,9 @@
    :kubectl-can-get (cond-> [type] list-pods? (conj "pods"))
    :kubectl-can-patch [type]})
 
+(def ^:private cluster-subject
+  {:type cnpg/cluster-type :parse actions/parse-pick :invalid "the pick is not \"<namespace>/<cluster>\""})
+
 (defn- cluster-annotation-book
   "A book that writes one annotation on a Cluster: the shape restart, reload
    and hibernation share."
@@ -48,26 +43,19 @@
             :candidates (fn [context] (cluster-picks context refusal))}
    :empty-message empty-message
    :confirm confirm
-   :derive (fn [{:keys [context target]}]
-             (let [pick (actions/parse-pick target)]
-               {:pick pick
-                :cluster (when pick (fetch context cnpg/cluster-type pick))
-                :stamp (when stamp? (str (java.time.Instant/now)))}))
-   :items (fn [{:keys [cluster target]}] (if cluster (items cluster) [(str verb " " target)]))
-   :pin (fn [{:keys [pick]}]
-          (when pick {:type cnpg/cluster-type :namespace (:namespace pick) :name (:name pick)
-                      :facts #(select-keys (:metadata %) [:annotations])}))
-   :precondition (fn [{:keys [context pick]}]
-                   (refuse (if pick (refusal (fetch context cnpg/cluster-type pick)) "the pick is not \"<namespace>/<cluster>\"")))
+   :subject (assoc cluster-subject :facts #(select-keys (:metadata %) [:annotations]))
+   :derive (fn [_] {:stamp (when stamp? (str (java.time.Instant/now)))})
+   :items (fn [{:keys [object target]}] (if object (items object) [(str verb " " target)]))
+   :refusal (fn [{:keys [object]}] (refusal object))
    :announce (fn [{:keys [target]}] (format "%s %s" verb target))
-   :effect (fn [{:keys [context pick stamp]}]
-             (effect/plan (effect/kubectl context (str "--namespace=" (:namespace pick)) "annotate" cnpg/cluster-type
-                                          (:name pick) "--overwrite" (arg stamp))))
-   :verify (fn [{:keys [context pick target stamp]}]
+   :effect (fn [{:keys [context ref stamp]}]
+             (effect/plan (effect/kubectl context (str "--namespace=" (:namespace ref)) "annotate" cnpg/cluster-type
+                                          (:name ref) "--overwrite" (arg stamp))))
+   :verify (fn [{:keys [context ref target stamp] :as ctx}]
              [{:description (format verify-description target)
                :timeout verify-timeout :interval 10
-               :check (fn [] (applied? (fetch context cnpg/cluster-type pick)
-                                       (when pods? (kubectl/get-namespaced context (:namespace pick) "pods"))
+               :check (fn [] (applied? (mutation/read-subject ctx)
+                                       (when pods? (kubectl/get-namespaced context (:namespace ref) "pods"))
                                        stamp))}])})
 
 (def restart
@@ -123,26 +111,21 @@
             :candidates (fn [context] (cluster-picks context #(actions/backup-refusal % nil)))}
    :empty-message "no healthy cluster configures a backup destination"
    :confirm {:action "start an on-demand backup"}
-   :derive (fn [{:keys [context target]}]
-             (let [pick (actions/parse-pick target)
-                   cluster (when pick (fetch context cnpg/cluster-type pick))]
-               {:pick pick :cluster cluster
-                :backup-name (when cluster (actions/backup-name cluster (java.time.Instant/now)))}))
-   :items (fn [{:keys [cluster backup-name opts target]}]
-            (if cluster (actions/backup-items cluster (:method opts) backup-name) [(str "back up " target)]))
-   :pin (fn [{:keys [pick]}] (when pick {:type cnpg/cluster-type :namespace (:namespace pick) :name (:name pick)}))
-   :precondition (fn [{:keys [context pick opts]}]
-                   (refuse (if pick (actions/backup-refusal (fetch context cnpg/cluster-type pick) (:method opts))
-                               "the pick is not \"<namespace>/<cluster>\"")))
+   :subject cluster-subject
+   :derive (fn [{:keys [object]}]
+             {:backup-name (when object (actions/backup-name object (java.time.Instant/now)))})
+   :items (fn [{:keys [object backup-name opts target]}]
+            (if object (actions/backup-items object (:method opts) backup-name) [(str "back up " target)]))
+   :refusal (fn [{:keys [object opts]}] (actions/backup-refusal object (:method opts)))
    :announce (fn [{:keys [target backup-name]}] (format "Back up %s as %s" target backup-name))
-   :effect (fn [{:keys [context cluster backup-name opts]}]
-             (if cluster
-               (effect/plan (effect/kubectl-stdin context (actions/backup-json (actions/backup-manifest cluster (:method opts) backup-name))
+   :effect (fn [{:keys [context object backup-name opts]}]
+             (if object
+               (effect/plan (effect/kubectl-stdin context (actions/backup-json (actions/backup-manifest object (:method opts) backup-name))
                                                   "create" "-f" "-"))
                (effect/plan (effect/note "nothing to back up - the precondition says why"))))
-   :verify (fn [{:keys [context pick backup-name]}]
-             (let [current #(fetch context cnpg/backup-type {:namespace (:namespace pick) :name backup-name})]
-               [{:description (format "Backup %s/%s completed" (:namespace pick) backup-name)
+   :verify (fn [{:keys [context ref backup-name]}]
+             (let [current #(kubectl/get-namespaced-resource context (:namespace ref) cnpg/backup-type backup-name)]
+               [{:description (format "Backup %s/%s completed" (:namespace ref) backup-name)
                  :timeout 3600 :interval 15
                  :abort #(first (actions/backup-signals (current)))
                  :check #(actions/backup-completed? (current))}]))})

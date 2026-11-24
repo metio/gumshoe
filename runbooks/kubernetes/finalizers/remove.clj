@@ -13,12 +13,6 @@
   [context]
   (finalizers/picks (for [[type] terminating/types] [type (kubectl/get-all context type)])))
 
-(defn- fetch
-  [context {:keys [type namespace name]}]
-  (if namespace
-    (kubectl/get-namespaced-resource context namespace type name)
-    (kubectl/get-cluster-resource context type name)))
-
 (mutation/book
  {:description "Removes one controller finalizer from an object stuck terminating"
   :options {:pick {:desc "\"<type> <namespace>/<name> <finalizer>\" - interactive selection when omitted"
@@ -32,17 +26,12 @@
   :confirm {:action (str "remove a finalizer - the cleanup its controller would do (deleting cloud resources, "
                          "backups, DNS records) is skipped for good; do this only when that controller is gone")
             :destructive? true}
-  :derive (fn [{:keys [context target]}]
-            (let [pick (finalizers/parse-pick target)]
-              {:pick pick :object (when pick (fetch context pick))}))
-  :precondition (fn [{:keys [context pick]}]
-                  (let [why (if pick (finalizers/refusal (fetch context pick) pick) "the pick is not \"<type> <object> <finalizer>\"")]
-                    (when why (println (str "refusing: " why)))
-                    (nil? why)))
+  :subject {:parse finalizers/parse-pick :invalid "the pick is not \"<type> <object> <finalizer>\""}
+  :refusal (fn [{:keys [ref object]}] (finalizers/refusal object ref))
   :announce (fn [{:keys [target]}] (format "Remove finalizer from %s" target))
-  :effect (fn [{:keys [context pick object]}]
-            (effect/plan (apply effect/kubectl context (finalizers/patch-args object pick))))
-  :verify (fn [{:keys [context pick target]}]
+  :effect (fn [{:keys [context ref object]}]
+            (effect/plan (apply effect/kubectl context (finalizers/patch-args object ref))))
+  :verify (fn [{:keys [context ref target]}]
             [{:description (format "%s no longer waits on that finalizer" target)
               :timeout 60 :interval 5
-              :check #(finalizers/released? context pick)}])})
+              :check #(finalizers/released? context ref)}])})

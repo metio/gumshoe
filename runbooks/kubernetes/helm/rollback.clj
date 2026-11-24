@@ -32,14 +32,13 @@
                :target-revision (rollback/rollback-target history (:to-revision opts))}))
   :items (fn [{:keys [pick history to target-revision target]}]
            (if target-revision (rollback/rollback-items pick history to) [(str "roll " target " back")]))
-  :precondition (fn [{:keys [context pick to before]}]
-                  (let [now (when pick (revisions context pick))
-                        why (cond
-                              (nil? pick) "the pick is not \"<namespace>/<release>\""
-                              (not= before (:version (first now))) "the release changed since it was confirmed"
-                              :else (rollback/rollback-refusal now to))]
-                    (when why (println (str "refusing: " why)))
-                    (nil? why)))
+  :refusal (fn [{:keys [context pick to before]}]
+             (if-not pick
+               "the pick is not \"<namespace>/<release>\""
+               (let [now (revisions context pick)]
+                 (if (= before (:version (first now)))
+                   (rollback/rollback-refusal now to)
+                   "the release changed since it was confirmed"))))
   :announce (fn [{:keys [target target-revision]}] (format "Roll Helm release %s back to revision %s" target (:version target-revision)))
   :effect (fn [{:keys [context pick target-revision]}]
             (if target-revision

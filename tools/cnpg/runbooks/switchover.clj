@@ -9,10 +9,6 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]))
 
-(defn- fetch
-  [context {:keys [namespace cluster]}]
-  (kubectl/get-namespaced-resource context namespace cnpg/cluster-type cluster))
-
 (mutation/book
  {:description "Switches a CloudNativePG cluster over to one of its healthy replicas"
   :options {:pick {:desc "\"<namespace>/<cluster> <instance>\" (the instance by name or number) - interactive selection when omitted"
@@ -27,20 +23,14 @@
   :confirm {:action (str "switch the primary over - the old primary restarts as a replica, and clients "
                          "of the -rw Service lose their connections and must reconnect")
             :destructive? true}
-  :derive (fn [{:keys [target]}] {:pick (operations/parse-pick target)})
-  :pin (fn [{:keys [pick]}]
-         (when pick {:type cnpg/cluster-type :namespace (:namespace pick) :name (:cluster pick)
-                     :facts #(select-keys (:status %) [:currentPrimary :targetPrimary])}))
-  :precondition (fn [{:keys [context pick]}]
-                  (let [why (if pick
-                              (operations/switchover-refusal (fetch context pick) (:instance pick))
-                              "the pick is not \"<namespace>/<cluster> <instance>\"")]
-                    (when why (println (str "refusing: " why)))
-                    (nil? why)))
-  :announce (fn [{:keys [pick]}] (format "Promote %s in %s/%s" (:instance pick) (:namespace pick) (:cluster pick)))
-  :effect (fn [{:keys [context pick]}]
-            (effect/plan (apply effect/cmd (operations/promote-args context pick))))
-  :verify (fn [{:keys [context pick]}]
-            [{:description (format "%s is the primary" (:instance pick))
+  :subject {:type cnpg/cluster-type :parse operations/parse-pick
+            :invalid "the pick is not \"<namespace>/<cluster> <instance>\""
+            :facts #(select-keys (:status %) [:currentPrimary :targetPrimary])}
+  :refusal (fn [{:keys [ref object]}] (operations/switchover-refusal object (:instance ref)))
+  :announce (fn [{:keys [ref]}] (format "Promote %s in %s/%s" (:instance ref) (:namespace ref) (:cluster ref)))
+  :effect (fn [{:keys [context ref]}]
+            (effect/plan (apply effect/cmd (operations/promote-args context ref))))
+  :verify (fn [{:keys [ref] :as ctx}]
+            [{:description (format "%s is the primary" (:instance ref))
               :timeout 300 :interval 10
-              :check (fn [] (= (:instance pick) (-> (fetch context pick) :status :currentPrimary)))}])})
+              :check (fn [] (= (:instance ref) (-> (mutation/read-subject ctx) :status :currentPrimary)))}])})

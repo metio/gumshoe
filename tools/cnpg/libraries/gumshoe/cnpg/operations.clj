@@ -74,10 +74,12 @@
 (defn- cluster-key [cluster] (kubectl/namespace-name-of cluster))
 
 (defn parse-pick
-  "\"<namespace>/<cluster> <instance>\" as {:namespace :cluster :instance}, or nil."
+  "\"<namespace>/<cluster> <instance>\" as {:namespace :cluster :instance}, or nil.
+   :name repeats the cluster, so the map is the ref of the Cluster a mutation
+   spec's :subject reads."
   [pick]
   (when-let [[_ namespace cluster instance] (re-matches #"\s*([^/\s]+)/(\S+)\s+(\S+)\s*" (str pick))]
-    {:namespace namespace :cluster cluster
+    {:namespace namespace :cluster cluster :name cluster
      ;; a bare number names the instance as the cnpg plugin does: <cluster>-<n>
      :instance (if (re-matches #"\d+" instance) (str cluster "-" instance) instance)}))
 
