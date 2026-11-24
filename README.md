@@ -420,6 +420,25 @@ bb run firebooks/fabric/stale_fdb_entry.clj -H hv-1 -n 4208 --extinguish  # clea
 The drill is over when the detectives are green again. Available drills:
 `crash_loop`, `image_pull`, `pending_pvc`, `stale_fdb_entry`.
 
+A firebook proves its fire with the detective meant to find it: after lighting
+it, the book runs that detective until it reports the fire, and after
+`--extinguish` until it no longer does, so a drill whose detective has stopped
+seeing the fault fails instead of lighting green. Both changes are effect
+plans, so `--dry-run` shows them without touching anything. A kubernetes drill
+is a spec naming its manifests and the detective:
+
+```clojure
+(firebook/book
+ {:description "Firebook: starts a crash-looping deployment for the team to find"
+  :drill "crash-loop"
+  :fire "a crash-looping deployment"
+  :manifests [(firebook/deployment-manifest {:name "crash-loop" :image "…" :command […]})]
+  :prerequisites {:kubectl-can-create ["deployments"]}
+  :expect {:detectives pods/detectives
+           :fire? (fn [{:keys [summary]} _] (str/includes? summary "CrashLoopBackOff"))
+           :timeout 180}})
+```
+
 ## Casebooks & plugins
 
 gumshoe is a small engine with plugin seams. It ships only generic, reusable

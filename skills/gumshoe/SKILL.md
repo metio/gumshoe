@@ -334,6 +334,21 @@ mostly data:
   the same way. `gumshoe.tools.flux-storage/recovery` is the example: it
   names which of the HelmRelease and its owner stay suspended. A rollback
   step at the end never runs, because the run stops at the first failure;
+- a firebook is `(firebook/book {:description … :drill "crash-loop" :fire
+  "a crash-looping deployment" :manifests […] :expect {:detectives
+  pods/detectives :fire? (fn [finding ctx] …) :timeout 180}})`. A
+  kubernetes drill names only its manifests: the builder applies them
+  inside the `fire-drill` namespace and deletes that namespace on
+  `--extinguish`, both as effect plans behind a confirmation, so
+  `--dry-run` shows either and changes nothing. After the ignite the
+  burning check runs the `:expect` detectives over fresh evidence until
+  one reports a finding `:fire?` accepts about an object of the drill
+  namespace; after the extinguish the out check waits until none does,
+  and evidence a detective read nothing from never passes either check.
+  Any other drill declares `:derive`, `:ignite`, `:extinguish` (with its
+  `:recovery`) and an `:expect :collect` that throws `(firebook/unread
+  msg)` when it could not read; `firebooks/fabric/stale_fdb_entry.clj` is
+  the example;
 - a dispatcher is `(dispatch/book {:select … :classify (fn [ctx target] key)
   :routes {key {:playbook …}}})`, one front door that runs the playbook a
   subject's kind routes to;

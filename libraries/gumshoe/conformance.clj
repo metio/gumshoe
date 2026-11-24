@@ -84,7 +84,7 @@
 (def harness-calls
   "The ways a book enters the harness: the raw runbook config, or one of the
    declarative specs that build a runbook config internally."
-  #{'runbook/execute! 'mutation/book 'detective/book 'playbook/book 'dispatch/book})
+  #{'runbook/execute! 'mutation/book 'detective/book 'playbook/book 'dispatch/book 'firebook/book})
 
 (defn- harness-call?
   "Whether a form calls the harness, through the usual alias or the full
@@ -228,10 +228,11 @@
                      ["needs a :description"])
                    ;; a runbook declares :action, a mutation or playbook
                    ;; :select, a detective :detectives or a :scope, a
-                   ;; dispatcher :routes; a shared spec carries its own
+                   ;; dispatcher :routes, a firebook :manifests or :ignite;
+                   ;; a shared spec carries its own
                    (when-not (or (shared-spec? form)
-                                 (some #(contains? config %) [:action :select :detectives :scope :routes]))
-                     ["needs an :action (runbook), :select (mutation, playbook), :detectives/:scope (detective) or :routes (dispatcher)"])))]
+                                 (some #(contains? config %) [:action :select :detectives :scope :routes :manifests :ignite]))
+                     ["needs an :action (runbook), :select (mutation, playbook), :detectives/:scope (detective), :routes (dispatcher) or :manifests/:ignite (firebook)"])))]
     (finding file :description problem)))
 
 (defn option-problems

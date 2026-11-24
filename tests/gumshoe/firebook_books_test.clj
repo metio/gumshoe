@@ -69,13 +69,15 @@
 (def ^:private guest-row "aa:bb:cc:dd:ee:01 dev tap0 master br0")
 
 (defn- ssh-answer
-  "What a read over ssh answers against {:fdb [rows] :answering?}."
+  "What a read over ssh answers against {:fdb [rows] or :unread :answering?}."
   [{:keys [fdb answering?]} argv]
   (let [line (str/join " " argv)]
     (cond
       (not answering?) ssh-unanswered
       (str/includes? line "exit 0") {:exit 0 :out "" :err ""}
-      (str/includes? line "bridge fdb show") {:exit 0 :out (str/join "\n" fdb) :err ""}
+      (str/includes? line "bridge fdb show") (if (= :unread fdb)
+                                               {:exit 1 :out "" :err "bridge: command not found"}
+                                               {:exit 0 :out (str/join "\n" fdb) :err ""})
       (str/includes? line "show evpn mac vni") {:exit 0 :out "Number of MACs (local and remote) known for this VNI: 1\n" :err ""}
       (str/includes? line "show evpn vni") {:exit 0 :out "VNI: 4208\n Local Vtep Ip: 10.0.0.11\n" :err ""}
       :else {:exit 0 :out "" :err ""})))
@@ -225,7 +227,10 @@
     :extinguish-unpin-fails {:opts (assoc fabric-opts :extinguish true) :fdb [guest-row drill-row] :exits {"del" 1}}
     :extinguish-still-burning {:opts (assoc fabric-opts :extinguish true) :fdb [guest-row drill-row]}
     :extinguish-unanswered {:opts (assoc fabric-opts :extinguish true) :fdb [guest-row drill-row] :answering? false}
-    :extinguish-dry-run {:opts (assoc fabric-opts :extinguish true) :fdb [guest-row drill-row] :dry-run? true}}})
+    :extinguish-dry-run {:opts (assoc fabric-opts :extinguish true) :fdb [guest-row drill-row] :dry-run? true}
+    ;; FRR answers and only `bridge fdb show` fails: the empty table still
+    ;; reads as a fire that is out
+    :extinguish-fdb-unread {:opts (assoc fabric-opts :extinguish true) :fdb :unread}}})
 
 (defn transcripts
   []
