@@ -293,14 +293,16 @@
 (defn findings
   "Every finding for the book and library files, unparseable ones first.
    `license` names the SPDX identifier every file must carry; without it any
-   identifier will do. Every book that parses is also loaded (see
+   identifier will do, and false omits the header check for a repository
+   that carries no headers, leaving every other check in place. Every book that parses is also loaded (see
    unloadable, which takes :classpath) unless `load?` is false."
   [{:keys [books libraries license load?] :as opts}]
   (let [parsed-books (mapv parse books)
         parsed-libraries (mapv parse libraries)
         parsed (concat parsed-books parsed-libraries)]
     (vec (concat (unparseable parsed)
-                 (missing-license (concat books libraries) license)
+                 (when-not (false? license)
+                   (missing-license (concat books libraries) license))
                  (undocumented-namespaces parsed)
                  (map-destructured-as-vector parsed)
                  (harness-entries parsed-books)
@@ -339,7 +341,9 @@
    with the offending files named. Returns the number of files checked
    otherwise. opts are those of findings-in:
 
-     {:books [\"runbooks\"] :libraries [\"libraries\"] :license \"0BSD\"}"
+     {:books [\"runbooks\"] :libraries [\"libraries\"] :license \"0BSD\"}
+
+   A casebook that carries no SPDX headers passes :license false."
   [opts]
   (let [{:keys [books libraries] :as files} (files-in opts)
         found (findings (merge (with-library-classpath opts) files))]

@@ -292,7 +292,9 @@ there is any; a file with an unbalanced form is reported as `unparseable`,
 and a vector binding of `namespace-name-map` or `split-namespace-name` as
 `destructuring`.
 `:license` names the SPDX identifier every file must carry; without it any
-identifier passes. `conformance/findings-in` returns the findings as data
+identifier passes. A casebook that carries no SPDX headers passes
+`:license false`, which omits the header check and keeps every other one, so
+a check gumshoe adds later still runs there. `conformance/findings-in` returns the findings as data
 instead, for a test or a bespoke report. Loading the plugins does not parse
 a book, so a casebook gate without this check passes a book nobody can
 run.

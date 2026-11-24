@@ -236,3 +236,33 @@
         (is (some #(str/includes? (:message %) "binds kubectl/split-namespace-name to the vector [ns name]") findings))
         (is (some #(str/includes? (:message %) "{:namespace .. :name ..}") findings)))
       (finally (fs/delete-tree root)))))
+
+(defn- without-header
+  "content with its SPDX header removed, as in a casebook that carries none."
+  [content]
+  (str/replace content header ""))
+
+(deftest a-casebook-without-headers-skips-only-the-license-check-when-asked
+  (let [root (casebook! {"runbooks/hello/ok.clj" (without-header good-book)
+                         "libraries/casebook/reset.clj" (without-header reset-library)
+                         "runbooks/moodle/reset.clj" (without-header unresolved-book)
+                         "runbooks/moodle/adopt/status.clj" (without-header unbalanced-book)
+                         "playbooks/twice.clj" (without-header twice-book)})]
+    (try
+      (testing "by default every file must carry a header"
+        (is (= #{"ok.clj" "reset.clj" "status.clj" "twice.clj"}
+               (set (for [f (conformance/findings-in (roots root))
+                          :when (= :license (:check f))]
+                      (str (fs/file-name (:file f))))))))
+      (testing ":license false omits the header check and keeps every other one"
+        (let [findings (conformance/findings-in (assoc (roots root) :license false))]
+          (is (not-any? #(= :license (:check %)) findings))
+          (is (= {"reset.clj" [:load] "status.clj" [:unparseable] "twice.clj" [:harness]}
+                 (by-file findings)))))
+      (testing "verify! accepts :license false"
+        (let [clean (casebook! {"runbooks/hello/ok.clj" (without-header good-book)})]
+          (try
+            (is (= 1 (binding [*out* (java.io.StringWriter.)]
+                       (conformance/verify! (assoc (roots clean) :license false)))))
+            (finally (fs/delete-tree clean)))))
+      (finally (fs/delete-tree root)))))

@@ -32,6 +32,11 @@ options and loads, without running, so a symbol that resolves to nothing
 fails here. Each finding names its file, and the task exits 1 when there is
 any. It needs a pinned gumshoe release that ships `gumshoe.conformance`.
 
+`:license` in the `verify` task of `bb.edn` names the SPDX identifier every
+file must carry. A casebook that carries no SPDX headers passes
+`(conformance/verify! {:license false})`, which skips only the header check;
+every other check, including any a later gumshoe release adds, still runs.
+
 gumshoe's `catalog` discovers books from the whole classpath, so your `runbooks/`
 and gumshoe's built-ins (arriving via the dep) are found together - no manifest,
 no `:book-paths`. Register announcers / detectives / capability detectors by
