@@ -220,8 +220,8 @@
 (deftest every-collect-book-reports-as-pinned
   (let [actual (outcomes)]
     (if (System/getenv "GUMSHOE_RECORD_GOLDEN")
-      (spit golden-path (str ";; SPDX-FileCopyrightText: The gumshoe Authors\n"
-                             ";; SPDX-License-Identifier: 0BSD\n\n"
+      (spit golden-path (str ";; SPDX-" "FileCopyrightText: The gumshoe Authors\n"
+                             ";; SPDX-" "License-Identifier: 0BSD\n\n"
                              (with-out-str (pprint/pprint actual))))
       (let [golden (edn/read-string (slurp golden-path))]
         (doseq [[book scenarios] golden
