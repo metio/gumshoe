@@ -85,3 +85,17 @@
     (concat (when namespace [(str "--namespace=" namespace)])
             ["patch" type name "--type=json"
              (str "--patch=" (json/encode (removal-patch (-> object :metadata :uid) index finalizer)))])))
+
+(defn released?
+  "Whether the object no longer waits on the pick's finalizer: it was read
+   without the finalizer, or a read answered that the object is gone. The
+   plain getters return nil for a read that did not answer as for a missing
+   object, so a nil read is confirmed with kubectl/confirmed-gone? before it
+   counts as released."
+  [context {:keys [type namespace name finalizer]}]
+  (let [object (if namespace
+                 (kubectl/get-namespaced-resource context namespace type name)
+                 (kubectl/get-cluster-resource context type name))]
+    (if object
+      (not (some #{finalizer} (-> object :metadata :finalizers)))
+      (kubectl/confirmed-gone? context namespace type name))))
