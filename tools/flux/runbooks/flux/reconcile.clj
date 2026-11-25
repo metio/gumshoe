@@ -7,13 +7,11 @@
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
-            [gumshoe.tools.flux]))
-
-(def helmrelease-type "helmreleases.helm.toolkit.fluxcd.io")
+            [gumshoe.tools.flux :as flux]))
 
 (defn helmreleases
   [context]
-  (kubectl/namespaces-names (kubectl/get-all context helmrelease-type)))
+  (kubectl/namespaces-names (kubectl/get-all context flux/helmrelease-type)))
 
 (defn reconcile-effect
   [context namespace name]
@@ -26,7 +24,7 @@
   (conditions/ready-check
    {:description (format "HelmRelease %s is Ready" target)
     :timeout 120 :interval 10
-    :fetch #(kubectl/get-namespaced-resource context namespace helmrelease-type name)}))
+    :fetch #(kubectl/get-namespaced-resource context namespace flux/helmrelease-type name)}))
 
 (mutation/book
  {:description "Triggers a flux reconciliation of a single HelmRelease"
@@ -36,8 +34,8 @@
                    :alias :r :coerce :string}}
   :prerequisites {:installed-tools ["flux" "kubectl" "fzf"]
                   :cluster-capabilities []
-                  :kubectl-can-get [helmrelease-type]
-                  :kubectl-can-patch [helmrelease-type]}
+                  :kubectl-can-get [flux/helmrelease-type]
+                  :kubectl-can-patch [flux/helmrelease-type]}
   :select {:mode :namespaced :label "HelmRelease" :namespace-flag :namespace :name-flag :name
            :candidates helmreleases}
   :confirm {:action "trigger a flux reconciliation"}

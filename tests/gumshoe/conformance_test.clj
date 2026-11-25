@@ -149,9 +149,13 @@
                 (parsed (concat all-clj-files (conformance/clj-files ["casebook-example"]))))))
 
 (deftest no-file-calls-the-deprecated-split-namespace-name
-  (doseq [file (concat all-clj-files (conformance/clj-files ["casebook-example"]))
-          ;; kubectl defines the alias and conformance names it to find misuse
+  (doseq [file (concat all-clj-files (conformance/clj-files ["casebook-example" "tests"]))
+          ;; kubectl defines the alias, conformance names it to find misuse,
+          ;; and their tests pin both
           :when (not-any? #(str/ends-with? file %) ["libraries/gumshoe/kubectl.clj"
-                                                    "libraries/gumshoe/conformance.clj"])]
+                                                    "libraries/gumshoe/conformance.clj"
+                                                    "tests/gumshoe/kubectl_test.clj"
+                                                    "tests/gumshoe/conformance_test.clj"
+                                                    "tests/gumshoe/conformance_library_test.clj"])]
     (is (not (str/includes? (slurp file) "split-namespace-name"))
         (str file " calls the deprecated split-namespace-name; use namespace-name-map"))))
