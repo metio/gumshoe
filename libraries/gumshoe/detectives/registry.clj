@@ -66,8 +66,11 @@
 
 (def opt-in-scopes
   "Scopes a whole-cluster scan leaves out. Posture findings describe choices
-   that may be deliberate, so they run only when asked for."
-  #{:posture})
+   that may be deliberate, and :exec holds checks that run a command inside a
+   pod, which needs create on pods/exec - a write-level grant a reader of the
+   resource API does not hold and should not be asked for. Both run only when a
+   book asks for them by name."
+  #{:posture :exec})
 
 (defn for-scope
   "The detectives in a scope; :all spans every scope but the opt-in ones.

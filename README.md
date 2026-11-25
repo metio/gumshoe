@@ -271,7 +271,7 @@ bb run tools/strimzi/runbooks/scan.clj        # Strimzi Kafka, Connect, connecto
 bb run tools/kueue/runbooks/scan.clj          # Kueue queues, Workloads
 bb run tools/velero/runbooks/scan.clj         # Velero storage, schedules, backups, restores
 bb run tools/calico/runbooks/scan.clj         # tigera-operator components
-bb run tools/cnpg/runbooks/scan.clj           # CloudNativePG clusters, WAL archiving
+bb run tools/cnpg/runbooks/scan.clj           # CloudNativePG clusters, WAL archiving, connection ceiling (exec)
 bb run tools/prometheus/runbooks/scan.clj     # Prometheus, Alertmanager, ThanosRuler
 bb run tools/thanos/runbooks/scan.clj         # Thanos Query: stores, rules
 bb run tools/loki/runbooks/scan.clj           # Loki readiness + ring health
@@ -294,7 +294,8 @@ condition's transition, a deletion, a creation - the finding carries it as
 `since`, and the text report shows how long it has held (`for 40m`, `for 5h`,
 `since 2026-11-02`). The posture book's findings are left out of the
 whole-cluster scan: they describe risks that may be deliberate choices, so
-they run only when asked for.
+they run only when asked for. Checks that exec into pods are left out the same
+way, and run only in the book that asks for them and its `pods/exec` grant.
 
 Covered so far: the control plane
 (apiserver/scheduler/controller-manager/etcd static pods), nodes, pods

@@ -4,7 +4,9 @@
 (ns gumshoe.tools.cnpg
   "The CloudNativePG tool package: its detectives join the :databases scan scope
    (alongside any other database operator's), and it teaches the setup wizard the
-   :cnpg capability - both through one plugin/provide!."
+   :cnpg capability - both through one plugin/provide!. The connection-ceiling
+   check execs into each primary, so it goes into the opt-in :exec scope and
+   runs only in this package's scan book, which declares pods/exec."
   (:require [gumshoe.cnpg.connections :as connections]
             [gumshoe.cnpg.pooler-logs :as pooler-logs]
             [gumshoe.cnpg.volumes :as volumes]
@@ -22,8 +24,8 @@
 (plugin/provide!
  {:detectives {:databases (concat cnpg/detectives pooler/detectives cnpg-volumes/detectives
                               cnpg-retention/detectives cnpg-storage/detectives
-                              cnpg-recoverability/detectives cnpg-pooler-logs/detectives
-                              cnpg-connections/detectives)}
+                              cnpg-recoverability/detectives cnpg-pooler-logs/detectives)
+               :exec cnpg-connections/detectives}
   ;; PVC usage is not in the resource API, so the volume detective brings its
   ;; own collector; it reads kubelet stats for the nodes hosting instance pods.
   :collectors {volumes/evidence-key volumes/collector

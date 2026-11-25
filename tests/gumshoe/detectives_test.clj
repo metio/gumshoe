@@ -120,9 +120,10 @@
   (testing "a scope resolves to its detectives, and :all spans them but the opt-in ones"
     (is (seq (registry/for-scope :workloads)))
     (is (seq (registry/for-scope :posture)))
-    (is (= (- (count (registry/all)) (count (registry/for-scope :posture)))
-           (count (registry/for-scope :all))))
-    (is (not-any? (set (map :name (registry/for-scope :posture))) (map :name (registry/for-scope :all)))))
+    (let [opt-in (set (map :name (mapcat registry/for-scope registry/opt-in-scopes)))]
+      (is (= (- (count (registry/all)) (count opt-in))
+             (count (registry/for-scope :all))))
+      (is (not-any? opt-in (map :name (registry/for-scope :all))))))
   (testing "a plugin can register detectives into a scope, joining later scans"
     (let [before (count (registry/for-scope :workloads))
           probe {:name "plugin-probe" :description "a plugin detective" :requires [] :detect (fn [_] [])}]
