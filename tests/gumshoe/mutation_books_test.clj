@@ -450,7 +450,7 @@
    :spec {:nodeName node-name}})
 
 (def ^:private apiserver-container "sudo crictl ps --name kube-apiserver -q")
-(def ^:private apiserver-readyz "curl -sk https://localhost:6443/readyz")
+(def ^:private apiserver-readyz "curl -sk --max-time 10 https://localhost:6443/readyz")
 (def ^:private apiserver-started "sudo crictl inspect -o go-template --template '{{.status.startedAt}}' abc123")
 
 (defn- apiserver-host

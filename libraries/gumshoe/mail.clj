@@ -80,15 +80,24 @@
 ;; ---------------------------------------------------------------------------
 ;; live probes
 
+(def default-probe-timeout-ms
+  "How long one TLS probe may take. openssl s_client has no connect timeout of
+   its own, so a filtered port would otherwise wait out the kernel's SYN retries
+   (about two minutes on Linux); the deadline turns that into exit 124, which
+   connected? reads as unreachable."
+  15000)
+
 (defn- s-client
   "Runs `openssl s_client` against host:port as an argument vector, so the host
    is never reparsed by a shell. starttls is a protocol keyword (:smtp/:pop3/
    :imap) for a cleartext port that upgrades, or nil for an implicit-TLS port.
-   Feeds QUIT on stdin so the client exits once the handshake is done."
-  [host port starttls]
-  (apply shell/execute-with-stdin "QUIT\n"
-         "openssl" "s_client" "-connect" (format "%s:%d" host port) "-servername" host
-         (when starttls ["-starttls" (name starttls)])))
+   Feeds QUIT on stdin so the client exits once the handshake is done, and gives
+   up after timeout-ms."
+  [host port starttls timeout-ms]
+  (binding [shell/*timeout-ms* timeout-ms]
+    (apply shell/execute-with-stdin "QUIT\n"
+           "openssl" "s_client" "-connect" (format "%s:%d" host port) "-servername" host
+           (when starttls ["-starttls" (name starttls)]))))
 
 (defn- connected?
   "Whether openssl reached the port at all. A refused, filtered, or timed-out
@@ -117,8 +126,8 @@
    so its presence is the success signal for both implicit-TLS and STARTTLS
    ports; the notAfter is read from that same certificate. The port is reachable
    whenever openssl connected, even if the negotiation then failed."
-  [host {:keys [port tls starttls]}]
-  (let [result (s-client host port starttls)
+  [host {:keys [port tls starttls]} timeout-ms]
+  (let [result (s-client host port starttls timeout-ms)
         established (str/includes? (str (:out result) (:err result)) "BEGIN CERTIFICATE")
         base {:reachable (or established (connected? result))
               :not-after (enddate-of (:out result))}]
@@ -127,11 +136,14 @@
       (assoc base :starttls-ok established))))
 
 (defn probe-service
-  [host service]
-  (assoc (probe-tls host service)
-         :service (:name service)
-         :port (:port service)
-         :tls (:tls service)))
+  "Probes one service port on host, each probe bounded by timeout-ms
+   (default-probe-timeout-ms when not given)."
+  ([host service] (probe-service host service default-probe-timeout-ms))
+  ([host service timeout-ms]
+   (assoc (probe-tls host service timeout-ms)
+          :service (:name service)
+          :port (:port service)
+          :tls (:tls service))))
 
 ;; ---------------------------------------------------------------------------
 ;; evidence collection
@@ -149,8 +161,10 @@
         (filter address? (dns/query {:server server} "A" host))))
 
 (defn collect-evidence!
-  "Collects deliverability records and live protocol probes in parallel."
-  [{:keys [domain host server dkim-selectors]}]
+  "Collects deliverability records and live protocol probes in parallel. Each
+   probe is bounded by :probe-timeout-ms (default-probe-timeout-ms)."
+  [{:keys [domain host server dkim-selectors probe-timeout-ms]
+    :or {probe-timeout-ms default-probe-timeout-ms}}]
   (stdout/print-section "🔍 Evidence (dig + openssl)")
   (stdout/err-println (format "  %s domain %s, host %s" (stdout/blue "▸") domain host))
   (let [q (fn [type name] (dns/query {:server server} type name))
@@ -161,7 +175,7 @@
         dkim (future (into {} (map (fn [selector]
                                      [selector (q "TXT" (format "%s._domainkey.%s" selector domain))])
                                    dkim-selectors)))
-        probes (mapv (fn [service] (future (probe-service host service))) services)]
+        probes (mapv (fn [service] (future (probe-service host service probe-timeout-ms))) services)]
     (stdout/err-println (format "  %s probing %d service ports on %s" (stdout/blue "▸") (count services) host))
     {:now (java.time.Instant/now)
      "domain" domain

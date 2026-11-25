@@ -29,7 +29,10 @@
   (apply effect/plan
          (for [order selected
                :let [{:keys [namespace name]} (kubectl/namespace-name-map order)]]
-           (effect/kubectl context (str "--namespace=" namespace) "delete" order-type name))))
+           ;; --wait=false: the order's finalizer waits on cert-manager,
+           ;; and cleared-checks is the bounded wait
+           (effect/kubectl context (str "--namespace=" namespace) "delete" order-type name
+                           "--wait=false"))))
 
 (defn cleared-checks
   "cert-manager recreates the order (often with the same name), so success is

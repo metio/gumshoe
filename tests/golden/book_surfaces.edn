@@ -88,7 +88,12 @@
    "  -h, --help        Show this help message"]},
  "playbooks/kubernetes/node_maintenance.clj"
  {:options
-  {:from-segment
+  {:drain-timeout
+   {:desc
+    "Seconds the drain waits for its evictions before it gives up and fails - 0 waits forever",
+    :default 300,
+    :coerce :long},
+   :from-segment
    {:desc
     "Start at this segment: the steps after the pause that opens it, once the operator acted on it",
     :coerce :long},
@@ -125,14 +130,16 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --node          The node to maintain - interactive selection when omitted"
-   "  -g, --grace-period  Seconds each pod is given to terminate - the pod's own"
-   "                      value when omitted (default: -1)"
-   "      --from-segment  Start at this segment: the steps after the pause that"
-   "                      opens it, once the operator acted on it"
-   "      --dry-run       Show what would change without changing anything"
-   "      --no-color      Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help          Show this help message"]},
+   "  -n, --node           The node to maintain - interactive selection when omitted"
+   "  -g, --grace-period   Seconds each pod is given to terminate - the pod's own"
+   "                       value when omitted (default: -1)"
+   "      --drain-timeout  Seconds the drain waits for its evictions before it gives"
+   "                       up and fails - 0 waits forever (default: 300)"
+   "      --from-segment   Start at this segment: the steps after the pause that"
+   "                       opens it, once the operator acted on it"
+   "      --dry-run        Show what would change without changing anything"
+   "      --no-color       Disable colored output (also honors the NO_COLOR env var)"
+   "  -h, --help           Show this help message"]},
  "runbooks/alertmanager/alerts/silence.clj"
  {:options
   {:alertmanager
@@ -1238,7 +1245,12 @@
    "  -h, --help      Show this help message"]},
  "runbooks/kubernetes/nodes/drain.clj"
  {:options
-  {:grace-period
+  {:drain-timeout
+   {:desc
+    "Seconds the drain waits for its evictions before it gives up and fails - 0 waits forever",
+    :default 300,
+    :coerce :long},
+   :grace-period
    {:desc
     "Seconds each pod is given to terminate - the pod's own value when omitted",
     :alias :g,
@@ -1269,12 +1281,14 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --node          The node to drain - interactive selection when omitted"
-   "  -g, --grace-period  Seconds each pod is given to terminate - the pod's own"
-   "                      value when omitted (default: -1)"
-   "      --dry-run       Show what would change without changing anything"
-   "      --no-color      Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help          Show this help message"]},
+   "  -n, --node           The node to drain - interactive selection when omitted"
+   "  -g, --grace-period   Seconds each pod is given to terminate - the pod's own"
+   "                       value when omitted (default: -1)"
+   "      --drain-timeout  Seconds the drain waits for its evictions before it gives"
+   "                       up and fails - 0 waits forever (default: 300)"
+   "      --dry-run        Show what would change without changing anything"
+   "      --no-color       Disable colored output (also honors the NO_COLOR env var)"
+   "  -h, --help           Show this help message"]},
  "runbooks/kubernetes/nodes/list_taints.clj"
  {:options
   {:node
@@ -3581,7 +3595,12 @@
    "  -h, --help      Show this help message"]},
  "tools/prometheus/runbooks/delete_metric.clj"
  {:options
-  {:metric
+  {:delete-timeout
+   {:desc
+    "Seconds the delete_series call may take - a large TSDB can need minutes",
+    :default 600,
+    :coerce :long},
+   :metric
    {:desc "The metric to delete",
     :alias :m,
     :require true,
@@ -3617,18 +3636,23 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the Prometheus service - interactive"
-   "                   selection when omitted"
-   "  -s, --service    The name of the Prometheus service - interactive selection"
-   "                   when omitted"
-   "  -m, --metric     The metric to delete (required)"
-   "  -l, --selector   Label selector used to find Prometheus services (default:"
-   "                   operated-prometheus=true)"
-   "      --port-name  The service port serving the Prometheus API (default: web)"
-   "  -p, --port       The local port used for the port-forward (default: 46372)"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"],
+   "  -n, --namespace       The namespace of the Prometheus service - interactive"
+   "                        selection when omitted"
+   "  -s, --service         The name of the Prometheus service - interactive"
+   "                        selection when omitted"
+   "  -m, --metric          The metric to delete (required)"
+   "  -l, --selector        Label selector used to find Prometheus services"
+   "                        (default: operated-prometheus=true)"
+   "      --port-name       The service port serving the Prometheus API (default:"
+   "                        web)"
+   "  -p, --port            The local port used for the port-forward (default:"
+   "                        46372)"
+   "      --delete-timeout  Seconds the delete_series call may take - a large TSDB"
+   "                        can need minutes (default: 600)"
+   "      --dry-run         Show what would change without changing anything"
+   "      --no-color        Disable colored output (also honors the NO_COLOR env"
+   "                        var)"
+   "  -h, --help            Show this help message"],
   :parsed
   {"--service query" "threw: Required option: --metric",
    "-m query"
@@ -3636,6 +3660,7 @@
     {:selector "operated-prometheus=true",
      :port-name "web",
      :port 46372,
+     :delete-timeout 600,
      :metric "query"},
     :notes []},
    "-s query" "threw: Required option: --metric"}},

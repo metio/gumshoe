@@ -715,6 +715,11 @@
     {:desc "The local port used for the port-forward",
      :alias :p,
      :default 46372,
+     :coerce :long},
+    :delete-timeout
+    {:desc
+     "Seconds the delete_series call may take - a large TSDB can need minutes",
+     :default 600,
      :coerce :long}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
@@ -725,6 +730,7 @@
    {:selector "operated-prometheus=true",
     :port-name "web",
     :port 46372,
+    :delete-timeout 600,
     :metric "up",
     :namespace "monitoring",
     :service "prometheus"}},

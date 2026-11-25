@@ -153,6 +153,8 @@
                    [gumshoe.thanos-test]
                    [gumshoe.loki-test]
                    [gumshoe.http-test]
+                   [gumshoe.port-forward-test]
+                   [gumshoe.bounded-waits-test]
                    [gumshoe.ipfamily-test]
                    [gumshoe.opennebula-test]
                    [gumshoe.pad-test]
@@ -353,6 +355,8 @@
                                                          'gumshoe.thanos-test
                                                          'gumshoe.loki-test
                                                          'gumshoe.http-test
+                                                         'gumshoe.port-forward-test
+                                                         'gumshoe.bounded-waits-test
                                                          'gumshoe.ipfamily-test
                                                          'gumshoe.opennebula-test
                                                          'gumshoe.pad-test

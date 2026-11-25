@@ -310,7 +310,7 @@
       "5/5 🔬 Verification"]}],
    :writes
    ["cordon n1"
-    "drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1"
+    "drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1 --timeout=300s"
     "uncordon n1"],
    :banner "DONE - applied and verified",
    :recovery [],
@@ -374,7 +374,7 @@
     "────────────────────────────────────────────────────────────────────────────────"
     "This will drain a node - every pod on it is evicted and emptyDir data is deleted on 'cluster':"
     "  - n1"
-    "  would run: kubectl drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1"
+    "  would run: kubectl drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1 --timeout=300s"
     "── ⏸  perform the maintenance on the node now ──────────────────────────────────"
     "  would pause: perform the maintenance on the node now"
     "── 4/5 ✅ Uncordon ──────────────────────────────────────────────────────────────"
@@ -443,9 +443,9 @@
       "5/5 🔬 Verification"]}],
    :writes
    ["cordon n1"
-    "drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1"],
+    "drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1 --timeout=300s"],
    :banner
-   "FAILED after 1 effect - stopped at: kubectl drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1 - the effects before it stay applied",
+   "FAILED after 1 effect - stopped at: kubectl drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1 --timeout=300s - the effects before it stay applied",
    :recovery
    ["Recovery:"
     "  The drain stopped before every evictable pod left node n1. The pods it evicted are gone from the node: their controllers recreate them on other nodes, a pod without a controller is not recreated, and the emptyDir data of an evicted pod is deleted. A PodDisruptionBudget that allows no disruption blocks a drain; the disruption check above names those. Remove the blocker and run the playbook again, or bring the node back as below."
@@ -591,7 +591,7 @@
       "5/5 🔬 Verification"]}],
    :writes
    ["cordon n1"
-    "drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=30"
+    "drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=30 --timeout=300s"
     "uncordon n1"],
    :banner "DONE - applied and verified",
    :recovery [],
@@ -650,7 +650,7 @@
       "4/5 uncordon (mark schedulable) a node"
       "5/5 🔬 Verification"]}],
    :writes
-   ["drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1"
+   ["drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1 --timeout=300s"
     "uncordon n1"],
    :banner
    "DONE - applied and verified; skipped as already done: 🚧 Cordon",
@@ -813,6 +813,11 @@
      :alias :g,
      :default -1,
      :coerce :long},
+    :drain-timeout
+    {:desc
+     "Seconds the drain waits for its evictions before it gives up and fails - 0 waits forever",
+     :default 300,
+     :coerce :long},
     :from-segment
     {:desc
      "Start at this segment: the steps after the pause that opens it, once the operator acted on it",
@@ -895,7 +900,7 @@
       "5/5 🔬 Verification"]}],
    :writes
    ["cordon n1"
-    "drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1"],
+    "drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1 --timeout=300s"],
    :banner
    "PAUSED after 2 effects - continue with --from-segment 2 once this is done: perform the maintenance on the node now",
    :recovery []},
@@ -958,7 +963,7 @@
       "5/5 🔬 Verification"]}],
    :writes
    ["cordon n1"
-    "drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1"
+    "drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1 --timeout=300s"
     "uncordon n1"],
    :banner
    "FAILED - read the messages above; 3 effects had been applied",

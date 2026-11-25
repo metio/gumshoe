@@ -36,10 +36,12 @@
              {:pods (kubectl/get-json-result context "pods" (str "--namespace=" (:namespace ref)))})
   :refusal (fn [{:keys [ref object pods]}] (cleanup/claim-refusal ref object pods))
   :announce (fn [{:keys [target]}] (format "Delete unused PersistentVolumeClaim %s" target))
+  ;; --wait=false: the pvc-protection finalizer holds the claim for as long as
+  ;; a pod uses it, and the gone check is the bounded wait
   :effect (fn [{:keys [context target]}]
             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               (effect/plan (effect/kubectl context (str "--namespace=" namespace)
-                                           "delete" "persistentvolumeclaim" name))))
+                                           "delete" "persistentvolumeclaim" name "--wait=false"))))
   :verify (fn [{:keys [context target]}]
             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               [(gone-check context namespace name target)]))})

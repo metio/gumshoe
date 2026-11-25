@@ -94,8 +94,17 @@
   [id]
   ["sudo" "crictl" "stop" id])
 
+(def default-readyz-max-time
+  "Seconds one /readyz probe may take. An apiserver that accepts the connection
+   and never answers (starting up, wedged on etcd) would otherwise hold curl,
+   and with it the attempt of a post-check whose timeout is only judged
+   between attempts."
+  10)
+
 (defn readyz-command
   "Asks the local apiserver rather than the load balancer, so the answer is about
-   this node. -k because the serving certificate is not valid for localhost."
-  []
-  ["curl" "-sk" "https://localhost:6443/readyz"])
+   this node. -k because the serving certificate is not valid for localhost.
+   curl gives up after max-time seconds (default-readyz-max-time)."
+  ([] (readyz-command default-readyz-max-time))
+  ([max-time]
+   ["curl" "-sk" "--max-time" (str max-time) "https://localhost:6443/readyz"]))
