@@ -134,3 +134,48 @@
                 (binding [*err* (java.io.StringWriter.)]
                   (detective/report! detectives findings "json" {:day (java.time.LocalDate/of 2026 11 25)})))]
       (is (= "boom" (:summary (first (:findings (cheshire.core/parse-string out true)))))))))
+
+(defn- absolute-classpath []
+  (->> (str/split (System/getProperty "java.class.path") #":")
+       (map #(str (babashka.fs/absolutize %)))
+       (str/join ":")))
+
+(defn- scan-script
+  "A scan as a book runs it: runbook/execute! around an action that reports
+   one warning, so a written report exits 0."
+  [output]
+  (str "(require '[gumshoe.runbook :as runbook] '[gumshoe.detective :as d])"
+       "(binding [*command-line-args* []]"
+       "  (runbook/execute! {:description \"reports a warning\" :announce? false"
+       "                     :action (fn [_ _] (d/report! [{:name \"d\" :description \"checks\"}]"
+       "                                                  [{:severity :warning :component \"ns/x\" :summary \"meh\"}]"
+       "                                                  " (pr-str output) "))}))"))
+
+(defn- run-scan
+  "Runs the scan in a fresh bb with its stdout sent to `out` (a babashka.process
+   :out value) and returns the finished process."
+  [output out]
+  (babashka.fs/with-temp-dir [dir {}]
+    (let [p (babashka.process/process
+             {:dir (str dir) :out out :err :string :continue true
+              :extra-env {"GUMSHOE_ENV" (str (babashka.fs/path dir "env.edn")) "NO_COLOR" "1"}}
+             "bb" "-cp" (absolute-classpath) "-e" (scan-script output))]
+      (when (= :pipe out)
+        ;; the reader is gone before anything is written: a closed pipe
+        (.close ^java.io.InputStream (:out p)))
+      @p)))
+
+(deftest a-real-stdout-that-loses-the-report-fails-the-scan-test
+  (doseq [output ["json" "edn" "text"]]
+    (testing (str output " to a full disk")
+      (let [{:keys [exit err]} (run-scan output (java.io.File. "/dev/full"))]
+        (is (not= 0 exit) err)
+        (is (str/includes? err "the report could not be written to stdout") err)))
+    (testing (str output " to a closed pipe")
+      (let [{:keys [exit err]} (run-scan output :pipe)]
+        (is (not= 0 exit) err)
+        (is (str/includes? err "the report could not be written to stdout") err)))
+    (testing (str output " to a working stdout keeps its verdict")
+      (let [{:keys [exit err]} (run-scan output :string)]
+        (is (= 0 exit) err)
+        (is (not (str/includes? err "could not be written")) err)))))
