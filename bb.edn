@@ -64,6 +64,7 @@
                    [gumshoe.mutation-pick-test]
                    [gumshoe.mutation-subjects-test]
                    [gumshoe.mutation-recheck-test]
+                   [gumshoe.mutation-reads-values-test]
                    [gumshoe.mutation-prejudge-test]
                    [gumshoe.playbook-prejudge-test]
                    [gumshoe.mutation-reads-test]
@@ -245,6 +246,7 @@
                                                          'gumshoe.mutation-pick-test
                                                          'gumshoe.mutation-subjects-test
                                                          'gumshoe.mutation-recheck-test
+                                                         'gumshoe.mutation-reads-values-test
                                                          'gumshoe.mutation-prejudge-test
                                                          'gumshoe.playbook-prejudge-test
                                                          'gumshoe.mutation-reads-test

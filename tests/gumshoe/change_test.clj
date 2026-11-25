@@ -26,12 +26,14 @@
 (defn- effect-fn [_] (effect/plan (effect/note "go")))
 (defn- verify [_] [])
 (defn- items [_] ["x"])
+(defn- live [_] "read")
+(defn- stamp [_] "now")
 
 (def ^:private subject {:type "cronjobs" :facts :suspend})
 (def ^:private one {:mode :one :label "CronJob"})
 (def ^:private many {:mode :many :label "CronJob"})
 
-(def ^:private alias-keys #{:subject :pin :precondition :empty-message :announce?})
+(def ^:private alias-keys #{:subject :pin :precondition :empty-message :announce? :derive :recheck})
 
 (defn- refused-message
   "The message normalize refuses spec with, or nil when it accepts it."
@@ -90,7 +92,7 @@
 
 (deftest every-other-key-is-carried-as-it-is
   (let [spec {:title "t" :description "d" :options {:n {:desc "n"}} :prerequisites {}
-              :select one :derive derive-fn :recheck recheck :refusal refusal
+              :select one :reads {:live live} :values {:stamp stamp} :refusal refusal
               :confirm {:action "act" :destructive? true :separately? true}
               :items items :announce announce :effect effect-fn :verify verify
               :no-verify "why" :recovery "undo it" :confirmed? true
@@ -98,6 +100,60 @@
     (is (= spec (change/normalize spec)))
     (is (= {:connect connect :select one :effect effect-fn}
            (change/normalize {:connect connect :select one :effect effect-fn})))))
+
+(deftest reads-and-values-and-their-aliases
+  (doseq [[label spec expected]
+          [["named :reads are carried as they are"
+            {:reads {:live live}}
+            {:reads {:live live}}]
+           ["named :values are carried as they are"
+            {:values {:stamp stamp}}
+            {:values {:stamp stamp}}]
+           ["both, under different names"
+            {:reads {:live live} :values {:stamp stamp}}
+            {:reads {:live live} :values {:stamp stamp}}]
+           [":derive is the :values entry derive-entry"
+            {:derive derive-fn}
+            {:values {change/derive-entry derive-fn}}]
+           [":recheck is the :reads entry recheck-entry"
+            {:recheck recheck :refusal refusal}
+            {:reads {change/recheck-entry recheck} :refusal refusal}]
+           [":derive and :recheck together"
+            {:derive derive-fn :recheck recheck :refusal refusal}
+            {:values {change/derive-entry derive-fn} :reads {change/recheck-entry recheck} :refusal refusal}]
+           ["the canonical spelling of the aliases stays"
+            {:values {change/derive-entry derive-fn} :reads {change/recheck-entry recheck} :refusal refusal}
+            {:values {change/derive-entry derive-fn} :reads {change/recheck-entry recheck} :refusal refusal}]
+           ["empty maps are absent"
+            {:reads {} :values {}}
+            {}]
+           ["nil maps and nil aliases are absent"
+            {:reads nil :values nil :derive nil :recheck nil}
+            {}]
+           ["a var is a function of the context"
+            {:values {:stamp #'stamp}}
+            {:values {:stamp #'stamp}}]]]
+    (testing label
+      (is (= expected (change/normalize spec))))))
+
+(deftest a-canonical-alias-entry-normalizes-to-what-its-alias-does
+  (is (= (change/normalize {:derive derive-fn})
+         (change/normalize {:values {change/derive-entry derive-fn}})))
+  (is (= (change/normalize {:recheck recheck :refusal refusal})
+         (change/normalize {:reads {change/recheck-entry recheck} :refusal refusal}))))
+
+(deftest the-accessors-split-named-entries-from-the-aliases
+  (let [named (change/normalize {:reads {:live live} :values {:stamp stamp} :refusal refusal})
+        aliased (change/normalize {:derive derive-fn :recheck recheck :refusal refusal})]
+    (is (= {:live live} (change/reads named)))
+    (is (= {:stamp stamp} (change/values named)))
+    (is (nil? (change/derive-alias named)))
+    (is (nil? (change/recheck-alias named)))
+    (is (nil? (change/reads aliased)))
+    (is (nil? (change/values aliased)))
+    (is (= derive-fn (change/derive-alias aliased)))
+    (is (= recheck (change/recheck-alias aliased)))
+    (is (nil? (change/reads (change/normalize {}))))))
 
 (deftest a-precondition-is-a-refusal-in-the-generic-words
   (let [{:keys [refusal] :as canonical} (change/normalize {:precondition (fn [{:keys [ok]}] ok)})]
@@ -192,7 +248,67 @@
             #"so a spec with :connect takes neither"]
            ["a spec that is not a map"
             [:subject subject]
-            #"a change spec is a map"]]]
+            #"a change spec is a map"]
+           [":derive beside :values"
+            {:derive derive-fn :values {:stamp stamp}}
+            #"the spec has :derive and :values - write what :derive returns as :values entries"]
+           [":recheck beside :reads"
+            {:recheck recheck :reads {:live live} :refusal refusal}
+            #"the spec has :recheck and :reads - write what :recheck returns as :reads entries"]
+           [":derive beside a named read"
+            {:derive derive-fn :reads {:live live}}
+            #"the spec has :derive beside the named entries \[:live\], which a :derive map could hide"]
+           [":recheck beside a named value"
+            {:recheck recheck :values {:stamp stamp} :refusal refusal}
+            #"the spec has :recheck beside the named entries \[:stamp\], which a :recheck map could hide"]
+           ["a canonical :derive entry beside a named value"
+            {:values {change/derive-entry derive-fn :stamp stamp}}
+            #"the spec has :derive beside the named entries \[:stamp\]"]
+           ["a canonical :recheck entry beside a named read"
+            {:reads {change/recheck-entry recheck :live live} :refusal refusal}
+            #"the spec has :recheck beside the named entries \[:live\]"]
+           ["one name as a read and a value"
+            {:reads {:live live} :values {:live stamp}}
+            #":live is both a read and a value"]
+           ["a read that would hide the subject's object"
+            {:reads {:object live}}
+            #"the :reads entry :object would hide the :object the engine hands every callback"]
+           ["a value that would hide the context"
+            {:values {:context stamp}}
+            #"the :values entry :context would hide the :context"]
+           ["a value that would hide the pick"
+            {:values {:target stamp}}
+            #"the :values entry :target would hide"]
+           ["a read that would hide the subjects"
+            {:reads {:objects live}}
+            #"the :reads entry :objects would hide"]
+           ["a name that is not a keyword"
+            {:reads {"live" live}}
+            #":reads names its entries with keywords, not \"live\""]
+           ["an entry that is not a function"
+            {:values {:stamp "now"}}
+            #"the :values entry :stamp is a function of the context, not \"now\""]
+           ["an entry that is a map"
+            {:values {:stamp {:a 1}}}
+            #"the :values entry :stamp is a function of the context"]
+           [":reads that is not a map"
+            {:reads [live]}
+            #":reads is a map of name to \(fn \[ctx\] -> value\)"]
+           [":values as one function"
+            {:values stamp}
+            #":values is a map of name to"]
+           ["the :derive entry among the reads"
+            {:reads {change/derive-entry derive-fn}}
+            #":gumshoe.change/derive is reserved and is not a :reads entry"]
+           ["the :recheck entry among the values"
+            {:values {change/recheck-entry recheck}}
+            #":gumshoe.change/recheck is reserved and is not a :values entry"]
+           ["another reserved name"
+            {:values {::change/elsewhere stamp}}
+            #":gumshoe.change/elsewhere is reserved"]
+           ["a canonical :recheck entry with nothing to judge it"
+            {:reads {change/recheck-entry recheck}}
+            #"a :recheck is judged by :refusal or :precondition, and the spec has neither"]]]
     (testing label
       (let [refused (refused-message spec)]
         (is (some? refused) "it is refused")
@@ -224,11 +340,13 @@
    {:announce? false}
    {:announce announce}
    {:connect connect}
-   {:derive derive-fn :no-verify "why" :confirm {:action "x" :destructive? false}}])
+   {:derive derive-fn :no-verify "why" :confirm {:action "x" :destructive? false}}
+   {:reads {:live live}}
+   {:values {:stamp stamp}}])
 
 (def ^:private combinations
   "Every subset of fragments merged into one spec (fragments naming the
-   same key merge left to right), 2^13 of them."
+   same key merge left to right), 2^15 of them."
   (for [mask (range (bit-shift-left 1 (count fragments)))]
     (apply merge {} (keep-indexed (fn [i f] (when (bit-test mask i) f)) fragments))))
 
@@ -243,6 +361,8 @@
     (doseq [{:keys [spec canonical again]} (remove :refused outcomes)]
       (is (= canonical again) (str "normalize is idempotent for " (keys spec)))
       (is (empty? (filter alias-keys (keys canonical))) (str "no alias survives for " (keys spec)))
+      (is (not-any? #{:derive :recheck} (keys canonical)) (str ":derive and :recheck become entries for " (keys spec)))
+      (is (every? #(or (nil? %) (map? %)) [(:reads canonical) (:values canonical)]))
       (is (or (nil? (:subjects canonical)) (vector? (:subjects canonical))))
       (is (not (contains? canonical :announce?))))))
 
@@ -255,7 +375,11 @@
              "the spec has an :announce message and :announce? false, so it is unclear whether it posts to the changelog - drop one"
              "the spec has two empty messages, \"top\" at the top and \"inside\" in :select - keep the one in :select"
              "the spec names its subjects in :subjects and again as :subject - write one or the other"
-             "the spec names its subjects in :subjects and again as :pin - write one or the other"}
+             "the spec names its subjects in :subjects and again as :pin - write one or the other"
+             "the spec has :derive and :values - write what :derive returns as :values entries"
+             "the spec has :recheck and :reads - write what :recheck returns as :reads entries"
+             "the spec has :derive beside the named entries [:live], which a :derive map could hide - write what :derive returns as named :values and :reads"
+             "the spec has :recheck beside the named entries [:stamp], which a :recheck map could hide - write what :recheck returns as named :values and :reads"}
            refusals))))
 
 ;; --- the engine reads only the canonical map -------------------------------------
@@ -372,5 +496,9 @@
                   {:refusal refusal} {:subjects [{:from :reads :ref pin}]}]]
       (is (some #{check} (mutation/details (merge base spec))) (str (keys spec))))
     (is (not-any? #{check} (mutation/details base)))
+    (is (some #{check} (mutation/details (merge base {:recheck recheck :refusal refusal}))))
+    (is (not-any? #{check} (mutation/details (merge base {:reads {:live live} :values {:stamp stamp}})))
+        "a read nothing judges is not checked again")
+    (is (some #{check} (mutation/details (merge base {:reads {:live live} :refusal refusal}))))
     (is (not-any? #{"  announces the change to the changelog"}
                   (mutation/details (merge base {:announce? false}))))))

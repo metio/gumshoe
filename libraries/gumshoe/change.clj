@@ -15,8 +15,8 @@
       :subjects [{:from :pick   :type .. :parse .. :invalid .. :facts ..}
                  {:from :target :refs (fn [ctx] -> refs)}
                  {:from :reads  :ref  (fn [ctx] -> ref or nil)}]
-      :derive   (fn [ctx] -> map)
-      :recheck  (fn [ctx] -> map)
+      :reads    {name (fn [ctx] -> value)}
+      :values   {name (fn [ctx] -> value)}
       :refusal  (fn [ctx] -> nil, a reason, or gumshoe.change/unmet)
       :confirm  {:action .. :destructive? .. :separately? ..}
       :items    (fn [ctx] -> seq)
@@ -43,6 +43,24 @@
    Each :from appears at most once. :connect takes no :subjects, because
    every entry is read with kubectl.
 
+   :reads are the live state a change rests on, each named and read
+   strictly. They are read before the confirmation, after the subjects,
+   concurrently with each other, and bound in the context under their names,
+   so :items, :announce, :effect and :verify see what the confirmation
+   showed. When the spec has a :refusal they are read again after the
+   confirmation, after the subjects are read again, and :refusal judges
+   the fresh values under the same names. A post-check reads one again
+   with gumshoe.mutation/read-again.
+
+   :values are computed once per run, before the confirmation and after
+   the reads, and never again: a timestamp, a generated name, an operator's
+   choice, a snapshot the confirmation shows. A value sees the subjects and
+   the reads, never another value, and a read inside it is made once.
+
+   A name is a keyword, and is neither one of the keys the engine hands
+   every callback (:context :cluster :target :opts :announcement-data :ref
+   :object :refs :objects) nor bound by both maps.
+
    :refusal is the one guard. It runs before the confirmation, against the
    derived context with what :recheck returns merged over it, and again
    after the confirmation, against the context the subjects and :recheck
@@ -62,6 +80,22 @@
      :empty-message \"..\"  [:select :empty-message]
      :announce? false      :announce false; :announce? true is the default
                            and is dropped
+     :derive (fn)          the :values entry named `derive-entry`: a value
+                           whose result, a map, is merged into the context
+                           instead of bound under one name. It runs after
+                           every named value, once, as :derive always ran.
+     :recheck (fn)         the :reads entry named `recheck-entry`: a read
+                           whose result, a map, is merged over the context
+                           :refusal judges, before the confirmation and
+                           after it, and never into the context :items,
+                           :effect and :verify see. It runs after every
+                           named read, and receives the context with the
+                           values :derive returned, so it can compare them
+                           with what it reads.
+   Neither alias sits beside a named :reads or :values entry: the keys a
+   :derive or :recheck map binds are known only when it runs, so either
+   could hide a named entry, and the spec is refused instead of one of the
+   two winning.
    A nil alias is absent, except :announce?, which the runbook harness reads
    as given.
 
@@ -70,7 +104,10 @@
    canonical :subjects beside :subject or :pin, an unknown or repeated
    :from, two different empty messages, a changelog message beside
    :announce? false, a :recheck with nothing to judge it, a :subject on a
-   :many select, and :connect with any subject. mutation/book normalizes
+   :many select, :connect with any subject, :derive beside :values or
+   :recheck beside :reads, either alias beside a named entry, a :reads or
+   :values that is not a map of keyword to function, a name the engine
+   binds itself or both maps bind, and a reserved name in the wrong map. mutation/book normalizes
    when the book loads, so such a book fails the conformance gate.")
 
 (def unmet
@@ -79,6 +116,21 @@
   ::unmet)
 
 (def ^:private sources #{:pick :target :reads})
+
+(def derive-entry
+  "The name of the :values entry a :derive alias becomes: a value whose map
+   is merged into the context."
+  ::derive)
+
+(def recheck-entry
+  "The name of the :reads entry a :recheck alias becomes: a read whose map
+   is merged over the context :refusal judges."
+  ::recheck)
+
+(def context-keys
+  "The keys the engine binds in every callback's context itself, which no
+   :reads or :values entry may hide."
+  #{:context :cluster :target :opts :announcement-data :ref :object :refs :objects})
 
 (defn- invalid!
   [message data]
@@ -154,11 +206,61 @@
                   {})
         :else false))))
 
+(defn- check-named!
+  "Refuses an entry map of key that is not {keyword -> function}, or that
+   binds a name the engine binds itself or a reserved name other than
+   reserved."
+  [key entries reserved]
+  (when-not (map? entries)
+    (invalid! (format "%s is a map of name to (fn [ctx] -> value), not %s" key (pr-str entries))
+              {key entries}))
+  (doseq [[name f] entries]
+    (when-not (keyword? name)
+      (invalid! (format "%s names its entries with keywords, not %s" key (pr-str name)) {key name}))
+    (when-not (and (ifn? f) (not (coll? f)))
+      (invalid! (format "the %s entry %s is a function of the context, not %s" key name (pr-str f))
+                {key name}))
+    (when (and (= (namespace ::here) (namespace name)) (not= reserved name))
+      (invalid! (format "%s is reserved and is not a %s entry" name key) {key name}))
+    (when (context-keys name)
+      (invalid! (format "the %s entry %s would hide the %s the engine hands every callback - name it otherwise"
+                        key name name)
+                {key name}))))
+
+(defn- named-of
+  "The canonical entry map of key: its own, checked, or {reserved alias}
+   for the alias spelling; nil when the spec has neither. Both spellings
+   are refused."
+  [spec key alias reserved]
+  (let [entries (get spec key)
+        f (get spec alias)]
+    (when (some? entries) (check-named! key entries reserved))
+    (cond
+      (nil? f) (not-empty entries)
+      (some? entries)
+      (invalid! (format "the spec has %s and %s - write what %s returns as %s entries" alias key alias key)
+                {:alias alias})
+      :else {reserved f})))
+
+(defn- check-entries-apart!
+  "Refuses an alias entry beside a named entry, and a name both maps bind."
+  [{:keys [reads values]}]
+  (let [named (concat (keys (dissoc reads recheck-entry)) (keys (dissoc values derive-entry)))]
+    (doseq [[reserved alias] [[derive-entry :derive] [recheck-entry :recheck]]
+            :when (and (or (contains? values reserved) (contains? reads reserved)) (seq named))]
+      (invalid! (format "the spec has %s beside the named entries %s, which a %s map could hide - write what %s returns as named :values and :reads"
+                        alias (pr-str (vec (sort named))) alias alias)
+                {:alias alias :named (vec named)}))
+    (when-let [both (seq (filter (set (keys reads)) (keys values)))]
+      (invalid! (format "%s is both a read and a value - a read is read again after the confirmation, a value never, so name one of them otherwise"
+                        (first (sort both)))
+                {:both (vec both)}))))
+
 (defn- check-runnable!
-  [{:keys [select subjects refusal recheck connect]}]
-  (when (and recheck (nil? refusal))
+  [{:keys [select subjects refusal reads connect]}]
+  (when (and (contains? reads recheck-entry) (nil? refusal))
     (invalid! "a :recheck is judged by :refusal or :precondition, and the spec has neither"
-              {:recheck recheck}))
+              {:recheck (get reads recheck-entry)}))
   (when (and connect (seq subjects))
     (invalid! "a :subject, :subjects or :pin reads its objects with kubectl, so a spec with :connect takes neither"
               {:subjects subjects}))
@@ -178,12 +280,18 @@
         refusal (refusal-of spec)
         select (select-of spec)
         announce (announce-of spec)
+        reads (named-of spec :reads :recheck recheck-entry)
+        values (named-of spec :values :derive derive-entry)
         canonical (cond-> (dissoc spec :subject :subjects :pin :precondition :refusal
-                                  :empty-message :announce? :announce :select)
+                                  :empty-message :announce? :announce :select
+                                  :derive :recheck :reads :values)
                     (seq subjects) (assoc :subjects subjects)
+                    (seq reads) (assoc :reads reads)
+                    (seq values) (assoc :values values)
                     (some? refusal) (assoc :refusal refusal)
                     (some? select) (assoc :select select)
                     (some? announce) (assoc :announce announce))]
+    (check-entries-apart! canonical)
     (check-runnable! canonical)
     canonical))
 
@@ -202,3 +310,25 @@
    declared."
   [spec]
   (:ref (subject spec :reads)))
+
+(defn reads
+  "The named live reads of a canonical spec, {name -> (fn [ctx] -> value)},
+   without the entry a :recheck alias became."
+  [spec]
+  (not-empty (dissoc (:reads spec) recheck-entry)))
+
+(defn values
+  "The named per-run values of a canonical spec, {name -> (fn [ctx] ->
+   value)}, without the entry a :derive alias became."
+  [spec]
+  (not-empty (dissoc (:values spec) derive-entry)))
+
+(defn derive-alias
+  "The function a canonical spec's :derive alias declared, or nil."
+  [spec]
+  (get-in spec [:values derive-entry]))
+
+(defn recheck-alias
+  "The function a canonical spec's :recheck alias declared, or nil."
+  [spec]
+  (get-in spec [:reads recheck-entry]))

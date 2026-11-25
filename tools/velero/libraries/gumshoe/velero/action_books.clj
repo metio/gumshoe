@@ -30,6 +30,12 @@
   "What every Schedule book's select shares; each adds the candidates it offers."
   {:mode :one :label "Schedule" :flag :schedule})
 
+(defn- namespace-locations
+  "The :reads entry of the BackupStorageLocations in the pick's namespace,
+   live state a backup or a deletion rests on."
+  [{:keys [context ref]}]
+  (locations context (:namespace ref)))
+
 (def ^:private schedule-option
   (select/options schedule-select {:schedule {:desc "\"<namespace>/<schedule>\" - interactive selection when omitted"}}))
 
@@ -79,12 +85,11 @@
    :confirm {:action "start a backup from a schedule's template" :destructive? false}
    :subject {:type velero/schedule-type :parse actions/parse-pick
              :invalid "the pick is not \"<namespace>/<schedule>\""}
-   :derive (fn [{:keys [object]}]
-             {:backup-name (when object (actions/backup-name object (java.time.Instant/now)))})
+   :reads {:locations namespace-locations}
+   :values {:backup-name (fn [{:keys [object]}] (when object (actions/backup-name object (java.time.Instant/now))))}
    :items (fn [{:keys [object backup-name target]}]
             (if object (actions/backup-items object backup-name) [(str "back up from " target)]))
-   :refusal (fn [{:keys [context ref object]}]
-              (actions/backup-refusal object (locations context (:namespace ref))))
+   :refusal (fn [{:keys [object locations]}] (actions/backup-refusal object locations))
    :announce (fn [{:keys [target backup-name]}] (format "Back up from Schedule %s as %s" target backup-name))
    :effect (fn [{:keys [context object backup-name]}]
              (if object
@@ -113,13 +118,14 @@
    :confirm {:action "delete a backup and its data" :destructive? true}
    :subject {:type velero/backup-type :parse actions/parse-pick
              :invalid "the pick is not \"<namespace>/<backup>\""}
-   :derive (fn [{:keys [context ref object]}]
-             {:uid (-> object :metadata :uid)
-              :restores (when object (kubectl/get-namespaced context (:namespace ref) velero/restore-type))})
+   :reads {:locations namespace-locations}
+   ;; the restores are what the confirmation shows, read once
+   :values {:uid (fn [{:keys [object]}] (-> object :metadata :uid))
+            :restores (fn [{:keys [context ref object]}]
+                        (when object (kubectl/get-namespaced context (:namespace ref) velero/restore-type)))}
    :items (fn [{:keys [object restores target]}]
             (if object (actions/delete-items object restores) [(str "delete " target)]))
-   :refusal (fn [{:keys [context ref object]}]
-              (actions/delete-refusal object (locations context (:namespace ref))))
+   :refusal (fn [{:keys [object locations]}] (actions/delete-refusal object locations))
    :announce (fn [{:keys [target]}] (format "Delete Backup %s" target))
    :effect (fn [{:keys [context object]}]
              (if object

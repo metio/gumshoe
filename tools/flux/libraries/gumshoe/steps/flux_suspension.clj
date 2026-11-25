@@ -25,7 +25,7 @@
            :subject {:parse flux/parse-delivery-pick
                      :invalid "the pick is not \"<Kind> <namespace>/<name>\" of a HelmRelease, Kustomization, GitRepository or OCIRepository"}
            ;; one timestamp, shared by the plan and its announcement
-           :derive (fn [_] {:timestamp (str (.truncatedTo (java.time.Instant/now) java.time.temporal.ChronoUnit/SECONDS))})}
+           :values {:timestamp (fn [_] (str (.truncatedTo (java.time.Instant/now) java.time.temporal.ChronoUnit/SECONDS)))}}
     :candidates (fn [context wanted]
                   (flux/delivery-picks (into {} (for [[kind type] flux/suspendable] [kind (kubectl/get-all context type)])) wanted))
     :refusal flux/suspend-refusal

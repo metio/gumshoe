@@ -206,6 +206,38 @@
         (is (= {["nodes" "w-1" :derive] 1 ["nodes" "w-1" :judge] 1} (frequencies @gets))
             "the step's :derive phase is the one judged before the playbook's confirmation")))))
 
+(deftest a-judged-change-computes-its-values-once-and-reads-again-after-the-confirmation
+  (let [gets (atom [])
+        minted (atom [])
+        stamped (atom [])
+        node {:metadata {:name "w-1" :uid "u" :generation 1}}
+        step (fn [verb]
+               {:select {:mode :one :label "Node"}
+                :confirm {:action verb}
+                :reads {:node (fn [{:keys [context target]}] (kubectl/get-cluster-resource context "nodes" target))}
+                :values {:stamp (fn [_] (swap! minted conj [verb mutation/*phase*]) (str verb "-" (count @minted)))}
+                :refusal (fn [{:keys [node]}] (when-not node "gone"))
+                :effect (fn [{:keys [stamp]}] (swap! stamped conj stamp) (effect/plan (effect/note stamp)))})]
+    (with-redefs [kubectl/current-context (constantly "ctx")
+                  kubectl/current-cluster (constantly "cluster")
+                  shell/execute (fn [& argv]
+                                  (let [[_ type name] (drop-while #(not= "get" %) argv)]
+                                    (swap! gets conj [type name mutation/*phase*])
+                                    (answer {["nodes" "w-1"] node} [type name])))
+                  interact/confirm! (constantly true)
+                  effect/run! (constantly true)]
+      (let [out (java.io.StringWriter.)
+            result (binding [*out* out *err* out]
+                     (playbook/run-on! {:select {:mode :one :label "Node"} :confirm {:action "maintain"}
+                                        :steps [(step "cordon") (step "drain")]}
+                                       "w-1" {} nil))]
+        (is (true? result) (str out))
+        (is (= [["cordon" :derive] ["drain" :derive]] @minted)
+            "the judged first change mints its value once, before the playbook's confirmation, and so does the second when reached")
+        (is (= ["cordon-1" "drain-2"] @stamped) "each effect stamps the value its change minted")
+        (is (= {["nodes" "w-1" :derive] 2 ["nodes" "w-1" :judge] 2} (frequencies @gets))
+            "each change reads its node once before its confirmation and once after it")))))
+
 (deftest a-judgement-that-passes-prints-nothing-before-the-confirmation
   (let [world (atom {})
         noisy (assoc (cordon world) :precondition (fn [_] (println "what the cordon is about to change") true))

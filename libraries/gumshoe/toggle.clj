@@ -11,7 +11,7 @@
      (toggle/pair
       {:spec       {:options .. :prerequisites ..
                     :select  {:mode :one :label \"Schedule\" :flag :schedule}
-                    :subject {:type \"schedules.velero.io\"}}  ; and :derive, ..
+                    :subject {:type \"schedules.velero.io\"}}  ; and :reads, :values, ..
        :candidates (fn [context wanted] -> picks)   ; optional, see below
        :refusal    (fn [object wanted] -> reason or nil)
        :items      (fn [ctx wanted] -> items)       ; once the subject was read

@@ -30,7 +30,7 @@
   :confirm {:action "sync an Application - the cluster is changed to match its source" :destructive? true}
   :subject {:type argocd/application-type :parse actions/parse-pick :invalid "the pick is not \"<namespace>/<name>\""}
   ;; taken before the change, so the operation it starts is newer
-  :derive (fn [_] {:requested (java.time.Instant/now)})
+  :values {:requested (fn [_] (java.time.Instant/now))}
   :items (fn [{:keys [object target opts]}]
            (if object (actions/sync-items object (boolean (:prune opts))) [(str "sync " target)]))
   :refusal (fn [{:keys [object]}] (actions/sync-refusal object))

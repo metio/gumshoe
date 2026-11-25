@@ -274,14 +274,15 @@
 (defn- run-change!
   "Runs a change step through gumshoe.mutation, keeping the plan its :effect
    built in `plan`, so the run can name what the step applied. A step judged
-   before the confirmation carries the read cache of that judgement, so its
-   :derive phase is the one judged and reads nothing again."
+   before the confirmation carries the read cache and the context of that
+   judgement, so its :derive phase is the one judged, reads nothing again
+   and computes its :values once."
   [step {:keys [target opts announcement-data]} plan]
-  (mutation/run-on! (-> (dissoc step ::derive-cache)
+  (mutation/run-on! (-> (dissoc step ::derive-cache ::derived)
                         (assoc :confirmed? (not (separately? step)))
                         (update :effect (fn [effect] (fn [ctx] (vreset! plan (effect ctx))))))
                     target opts announcement-data
-                    {:derive-cache (::derive-cache step)}))
+                    {:derive-cache (::derive-cache step) :derived (::derived step)}))
 
 ;; --- judging before the confirmation ----------------------------------------------
 
@@ -314,7 +315,8 @@
    alone, and the refusal of each prejudgeable change, over what its
    :derive phase reads now (gumshoe.mutation/prejudge). Prints the first
    refusal under its step's title and returns nil; otherwise returns the
-   steps, each judged change carrying the read cache its judgement filled.
+   steps, each judged change carrying the read cache its judgement filled
+   and the context it derived.
    A rehearsal asks for no confirmation and judges every step as it
    reaches it, so it returns the steps as they are. `ctx` is the run's
    context and `waits-first?` as prejudgeable takes it. A driver that
@@ -336,9 +338,10 @@
                       (cond
                         refusal (reduced (refused! step {:refusal refusal}))
                         (not (judged i)) steps
-                        :else (let [{:keys [cache] :as verdict} (mutation/prejudge step target opts announcement-data)]
+                        :else (let [{:keys [cache derived] :as verdict} (mutation/prejudge step target opts announcement-data)]
                                 (if cache
-                                  (cond-> steps (not (separately? step)) (assoc-in [i ::derive-cache] cache))
+                                  (cond-> steps
+                                    (not (separately? step)) (update i assoc ::derive-cache cache ::derived derived))
                                   (reduced (refused! step verdict)))))))))
               steps
               (range (count steps))))))
