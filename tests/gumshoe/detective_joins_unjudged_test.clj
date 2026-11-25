@@ -103,6 +103,7 @@
 (def ^:private template-references
   {:check (check-named references/detectives "template-references")
    :joins ["deployments" "statefulsets" "daemonsets" "cronjobs"]
+   :consults ["services" "serviceaccounts" "secret-names" "namespaces"]
    :unguarded :partial
    :answered {"deployments" (items {:metadata (meta-of "web" "a") :spec {:template (template :service-account "ghost")}})
               "statefulsets" (items {:metadata (meta-of "web" "db") :spec {:template (template :pull-secret "ghost")}})
@@ -302,6 +303,10 @@
    version-drift tls-secrets template-drift kubelet-apiserver-skew cnpg-primary-labels cnpg-storage-pending
    cnpg-pooler-stale cnpg-pooler-rollout cnpg-pooler-resources succeeded-over-broken])
 
+(def ^:private consulting-cases
+  "The cases whose check consults several reads of which any one is enough."
+  (filterv :consults cases))
+
 (defn- label [case] (:name (:check case)))
 
 ;; --- declarations -----------------------------------------------------------------
@@ -311,6 +316,14 @@
     (testing (label case)
       (is (= joins (:joins check)))
       (is (every? (set (:requires check)) joins) "every joined read is also required"))))
+
+(deftest every-consulting-check-declares-the-reads-it-consults
+  (is (= ["template-references"] (map label consulting-cases)))
+  (doseq [{:keys [check consults joins] :as case} consulting-cases]
+    (testing (label case)
+      (is (= consults (:consults check)))
+      (is (every? (set (:requires check)) consults) "every consulted read is also required")
+      (is (not-any? (set joins) consults) "a consulted read is not also joined"))))
 
 (deftest no-check-judges-its-subjects
   ;; an empty list of subjects is an answered read whose verdict is that
@@ -459,3 +472,77 @@
                              :when (seq ((:detect check) evidence))]
                          (:name check)))]
     (is (= (set (map label cases)) reporting))))
+
+;; --- consulted reads ----------------------------------------------------------------
+;;
+;; template-references judges each template against the ServiceAccount,
+;; Secret, Service and namespace reads, each only when it answered. Any one of
+;; them is enough to judge on, so none is joined; with none of them answered
+;; there is nothing to judge a template against, and the check is unread.
+
+(deftest no-consulted-read-answered-judges-nothing
+  (doseq [{:keys [check consults answered] :as case} consulting-cases]
+    (testing (label case)
+      (let [evidence (joins/without answered consults)]
+        (is (= {:unread? true :findings []} (joins/judgement check evidence)))
+        (is (empty? ((:detect check) evidence)) "the detect function itself reports nothing")))))
+
+(deftest every-consulted-read-answering-alone-is-judged
+  (doseq [{:keys [check consults answered] :as case} consulting-cases
+          [present evidence] (butlast (joins/consulted-read-cases consults answered))]
+    (testing (str (label case) ": " present)
+      (is (not (:unread? (joins/judgement check evidence))))
+      (is (not-any? #(= "detective failed to run - investigate its input" (:summary %))
+                    (:findings (joins/judgement check evidence)))))))
+
+(defn- summaries-on [{:keys [check]} evidence]
+  (sort (map (juxt :component :summary) ((:detect check) evidence))))
+
+(deftest a-consulted-read-answering-alone-reports-what-it-alone-judges
+  ;; the Service read alone reports nothing: telling a namespace from a host
+  ;; in an address needs the namespace read, and the namespace read alone has
+  ;; no Services to look an address up in
+  (let [{:keys [consults answered]} template-references
+        alone (into {} (butlast (joins/consulted-read-cases consults answered)))]
+    (is (= [] (summaries-on template-references (alone "only services answered"))))
+    (is (= [["web/a" "Deployment uses ServiceAccount ghost, which does not exist"]
+            ["web/job" "CronJob uses ServiceAccount ghost, which does not exist"]]
+           (summaries-on template-references (alone "only serviceaccounts answered"))))
+    (is (= [["web/db" "StatefulSet pulls images with Secret ghost, which does not exist"]]
+           (summaries-on template-references (alone "only secret-names answered"))))
+    (is (= [] (summaries-on template-references (alone "only namespaces answered"))))))
+
+(deftest every-consulted-read-answered-empty-is-still-judged
+  ;; an empty list answers the read, so the check is read and judges every
+  ;; template against nothing: each named ServiceAccount and Secret is missing
+  (let [{:keys [check answered]} template-references
+        evidence (assoc answered "services" (items) "serviceaccounts" (items) "secret-names" [] "namespaces" (items))]
+    (is (not (:unread? (joins/judgement check evidence))))
+    (is (= [["web/a" "Deployment uses ServiceAccount ghost, which does not exist"]
+            ["web/db" "StatefulSet pulls images with Secret ghost, which does not exist"]
+            ["web/job" "CronJob uses ServiceAccount ghost, which does not exist"]]
+           (summaries-on template-references evidence)))))
+
+(deftest no-unconsulted-check-yields-a-pass-or-a-finding
+  (let [result (tc/quick-check trials (joins/no-unconsulted-check-judges consulting-cases) :seed seed)]
+    (is (:pass? result) (pr-str (select-keys result [:shrunk :fail])))))
+
+(deftest the-property-catches-a-check-that-forgets-what-it-consults
+  ;; positive control: without :consults the answered workload reads keep the
+  ;; check from being unread, so it counts as read on no context at all
+  (doseq [case consulting-cases]
+    (testing (label case)
+      (is (not (:pass? (tc/quick-check trials
+                                       (joins/no-unconsulted-check-judges [(update case :check dissoc :consults)])
+                                       :seed seed))))
+      (is (= {:unread? false :findings []}
+             (joins/judgement (dissoc (:check case) :consults) (joins/without (:answered case) (:consults case))))))))
+
+(deftest every-consulting-detect-function-consults-the-guard
+  ;; positive control for the guard inside the detect function: told that
+  ;; none of its consulted reads answered, it reports nothing on evidence
+  ;; that otherwise reports something
+  (with-redefs [evidence/consulted? (constantly false)]
+    (doseq [{:keys [check answered] :as case} consulting-cases]
+      (testing (label case)
+        (is (empty? ((:detect check) answered)))))))

@@ -224,22 +224,27 @@
 
 (def template-reference-joins
   "The workload reads the pod template check joins: without one of them its
-   templates would go unjudged while the check reads as passed. The
-   ServiceAccount, Secret, Service and namespace reads are each judged only
-   when they answered."
+   templates would go unjudged while the check reads as passed."
   (mapv first template-types))
+
+(def template-reference-consults
+  "The reads the pod template check judges each template against. Each is
+   judged only when it answered, so any one is enough; with none answered
+   there is nothing to judge a template against."
+  ["services" "serviceaccounts" "secret-names" "namespaces"])
 
 (defn detect-template-references
   "Pod templates naming a ServiceAccount, image pull Secret or Service
    address that does not exist. Nothing is judged when a joined read did not
-   answer."
+   answer, or when none of the consulted reads did."
   [evidence]
   (let [context {:services (some-> (get evidence "services") by-key)
                  :service-accounts (some-> (get evidence "serviceaccounts") names-in)
                  :secrets (some-> (get evidence "secret-names") set)
                  :namespaces (some-> (get evidence "namespaces") cluster-names)}]
     (for [[type kind path] template-types
-          :when (evidence/joined? evidence template-reference-joins)
+          :when (and (evidence/joined? evidence template-reference-joins)
+                     (evidence/consulted? evidence template-reference-consults))
           workload (kubectl/items-of (get evidence type))
           finding (template-findings kind workload (get-in workload path) context)]
       (assoc finding
@@ -361,8 +366,9 @@
     :detect detect-ingress-references}
    {:name "template-references"
     :description "Pod templates using missing ServiceAccounts, imagePullSecrets or Service addresses"
-    :requires (into template-reference-joins ["services" "serviceaccounts" "secret-names" "namespaces"])
+    :requires (into template-reference-joins template-reference-consults)
     :joins template-reference-joins
+    :consults template-reference-consults
     :detect detect-template-references}
    {:name "storageclass-references"
     :description "PersistentVolumeClaims using a StorageClass that does not exist"

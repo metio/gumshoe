@@ -6,6 +6,7 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.detective :as detective]
+            [gumshoe.evidence :as ev]
             [gumshoe.detectives.registry :as registry]
             [gumshoe.plugin :as plugin]
             [gumshoe.tools.argocd]
@@ -76,6 +77,24 @@
   (is (detective/unread? {:requires ["never-collected"]} evidence) "a key missing from the evidence")
   (is (not (detective/unread? {:requires []} evidence)) "a detective that requires nothing probes on its own")
   (is (not (detective/unread? {} evidence))))
+
+(deftest a-detective-consulting-reads-is-unread-only-when-none-of-them-answered
+  (let [check {:requires ["pods" "applications.argoproj.io" "applicationsets.argoproj.io"]
+               :consults ["applications.argoproj.io" "applicationsets.argoproj.io"]}]
+    (is (detective/unread? check evidence) "every consulted read is nil, though pods answered")
+    (is (not (detective/unread? check (assoc evidence "applications.argoproj.io" {:items []})))
+        "one consulted read answered empty")
+    (is (not (detective/unread? check (assoc evidence "applicationsets.argoproj.io" {:items [{}]})))
+        "one consulted read answered")
+    (is (detective/unread? (assoc check :consults ["never-collected"]) evidence) "a key missing from the evidence")
+    (is (not (detective/unread? (assoc check :consults []) evidence)) "no consulted reads declares nothing")))
+
+(deftest consulted?-holds-when-any-read-answered
+  (is (not (ev/consulted? evidence ["applications.argoproj.io" "applicationsets.argoproj.io"])))
+  (is (not (ev/consulted? evidence ["never-collected"])))
+  (is (ev/consulted? evidence ["applications.argoproj.io" "pods"]) "an empty list is an answer")
+  (is (ev/consulted? evidence ["nodes"]))
+  (is (not (ev/consulted? evidence [])) "nothing to consult is nothing answered"))
 
 (deftest marking-keeps-the-detectives-in-order
   (is (= [{:name "a" :requires ["pods"]}
