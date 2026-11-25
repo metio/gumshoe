@@ -2,10 +2,19 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.storage
-  "Pure planning and validation for volume enlargements - shared by every
-   book that grows PVCs, whatever controller owns them. All the ways an
-   enlargement can go wrong are caught before anything touches the cluster."
-  (:require [gumshoe.kubectl :as kubectl]))
+  "Planning, validation and effect plans for volume enlargements - shared by
+   every book that grows PVCs, whatever controller owns them. All the ways an
+   enlargement can go wrong are caught before anything touches the cluster.
+
+   A resize runs as a plan of steps, each {:effect <one effect> :stage
+   <keyword>}, a claim's step also naming its :claim. The steps are data, so
+   the same vector gives the plan to run or rehearse and, once a run stopped
+   after some of its effects, says what it left behind (see `progress`)."
+  (:require [cheshire.core :as json]
+            [clojure.string :as str]
+            [gumshoe.effect :as effect]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.watch :as watch]))
 
 (defn normalize-capacity
   "A bare number means Gi: '100' -> '100Gi'."
@@ -121,3 +130,154 @@
                              (assoc-in template [:spec :resources :requests :storage] capacity)
                              template))
                          templates)))))
+
+;; --- the resize as a plan --------------------------------------------------------
+
+(defn claim-patch
+  "The merge patch that requests capacity on a claim."
+  [capacity]
+  {:spec {:resources {:requests {:storage capacity}}}})
+
+(defn resize-claim-steps
+  "One step per claim of plan, in plan order, merge-patching its request to
+   capacity. Kubernetes never shrinks a claim, so a step that ran cannot be
+   undone."
+  [context namespace plan capacity]
+  (vec (for [{:keys [pvc]} plan]
+         {:stage :claims
+          :claim pvc
+          :effect (apply effect/kubectl context
+                         (kubectl/merge-patch-args namespace "persistentvolumeclaims" pvc (claim-patch capacity)))})))
+
+(defn resize-claim-effects
+  "The effects of resize-claim-steps."
+  [context namespace plan capacity]
+  (mapv :effect (resize-claim-steps context namespace plan capacity)))
+
+(defn plan-of
+  "The effect plan of steps."
+  [steps]
+  (mapv :effect steps))
+
+(defn progress
+  "Where a run of steps stands after `applied` of their effects ran.
+   gumshoe.effect/run! applies a plan in order and stops at the first effect
+   that fails, so the first `applied` steps ran and the next one is where it
+   stopped. Returns :resized, the claims whose step ran; :unresized, those
+   whose step did not; :stages, the stages a step of which ran; and :stopped,
+   the step it stopped at, nil when every step ran."
+  [steps applied]
+  (let [applied (or applied 0)
+        [ran rest] (split-at applied steps)]
+    {:resized (vec (keep :claim ran))
+     :unresized (vec (keep :claim rest))
+     :stages (set (map :stage ran))
+     :stopped (first rest)}))
+
+(defn- listed
+  [claims]
+  (map #(str "  " %) claims))
+
+(defn claims-left
+  "The lines naming which claims a stopped resize enlarged and which it did
+   not."
+  [{:keys [resized unresized]}]
+  (concat
+   (when (seq resized)
+     (cons "Enlarged, and they stay so - a claim cannot shrink, so this cannot be undone:" (listed resized)))
+   (when (seq unresized)
+     (cons "Not enlarged:" (listed unresized)))))
+
+(defn claims-capacity-check
+  "The post-check that every claim of plan reports capacity. It is best
+   effort: on a storage class that resizes the filesystem offline the
+   capacity only updates on a pod restart, and the resize itself already
+   succeeded. The namespace's Warning events and the claims' resize
+   conditions are watched while it waits, so a resizer error surfaces live."
+  [context cluster namespace plan capacity]
+  {:description (format "all %d PVCs report capacity %s" (count plan) capacity)
+   :timeout 300 :interval 15 :soft? true
+   :watch (watch/resize-watchers context cluster namespace (map :pvc plan))
+   :check (fn []
+            (every? (fn [{:keys [pvc]}]
+                      (= capacity (-> (kubectl/get-namespaced-resource context namespace
+                                                                       "persistentvolumeclaims" pvc)
+                                      :status :capacity :storage)))
+                    plan))})
+
+;; --- a StatefulSet's volumes -----------------------------------------------------
+
+(defn statefulset-resize-steps
+  "The steps that grow the claims of `template-name` of statefulset to
+   capacity: enlarge every claim of plan, delete the StatefulSet with its pods
+   orphaned, since a volumeClaimTemplate is immutable, and apply it again with
+   the new template."
+  [context statefulset template-name capacity plan]
+  (let [namespace (kubectl/namespace-of statefulset)
+        name (kubectl/name-of statefulset)
+        manifest (json/encode (recreate-manifest statefulset template-name capacity))]
+    (conj (resize-claim-steps context namespace plan capacity)
+          {:stage :delete
+           :effect (effect/kubectl context (str "--namespace=" namespace)
+                                   "delete" "statefulset" name "--cascade=orphan")}
+          {:stage :recreate
+           :manifest manifest
+           :effect (effect/kubectl-stdin context manifest "apply" "--filename" "-")})))
+
+(defn statefulset-recovery
+  "What a run of statefulset-resize-steps left behind after `applied` of its
+   effects ran, and what to do about it; nil when none ran. target names the
+   StatefulSet as namespace/name."
+  [{:keys [context target]} steps applied]
+  (let [{:keys [stopped stages] :as where} (progress steps applied)
+        manifest (:manifest (last steps))]
+    (when (seq stages)
+      (str/join
+       "\n"
+       (case (:stage stopped)
+         :claims
+         (concat [(format "StatefulSet %s was not touched, and its pods keep running." target)]
+                 (claims-left where)
+                 [(format "Find in the kubectl output above why %s could not be patched, then run this book again" (:claim stopped))
+                  "with the same capacity: a claim that already requests it is patched to the same value."])
+
+         :delete
+         (concat [(format "StatefulSet %s could not be deleted: it still exists with its old volume claim template," target)
+                  "and its pods were not touched."]
+                 (claims-left where)
+                 ["Find why in the kubectl output above, then run this book again with the same capacity."])
+
+         :recreate
+         (concat [(format "THE STATEFULSET %s IS DELETED and could not be recreated. Its pods were orphaned:" target)
+                  "they keep running, but nothing replaces a pod that stops."]
+                 (claims-left where)
+                 ["Re-apply it now, with the new volume claim template:"
+                  (format "  kubectl --context=%s apply --filename - <<'EOF'" context)
+                  (str "  " manifest)
+                  "  EOF"])
+
+         (concat [(format "Every effect ran: StatefulSet %s was recreated with the new volume claim template." target)]
+                 (claims-left where)
+                 ["Nothing was rolled back. The post-check messages above name what did not hold."]))))))
+
+(defn statefulset-checks
+  "The post-checks of a StatefulSet's resize: the claims report capacity,
+   the StatefulSet exists again with the new template, and every replica is
+   ready."
+  [context cluster namespace name template-name capacity plan]
+  [(claims-capacity-check context cluster namespace plan capacity)
+   {:description (format "StatefulSet %s/%s exists again with the new template" namespace name)
+    :timeout 60
+    :check (fn []
+             (let [recreated (kubectl/get-namespaced-resource context namespace "statefulsets" name)]
+               (boolean
+                (some #(and (= template-name (-> % :metadata :name))
+                            (= capacity (-> % :spec :resources :requests :storage)))
+                      (-> recreated :spec :volumeClaimTemplates)))))}
+   {:description "every pod of the StatefulSet is Running"
+    :timeout 300
+    :interval 10
+    :check (fn []
+             (let [recreated (kubectl/get-namespaced-resource context namespace "statefulsets" name)]
+               (= (-> recreated :spec :replicas)
+                  (-> recreated :status :readyReplicas))))}])

@@ -2,7 +2,12 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.storage-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [cheshire.core :as json]
+            [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [gumshoe.effect :as effect]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.shell :as shell]
             [gumshoe.storage :as storage]))
 
 (def statefulset
@@ -95,3 +100,124 @@
 (deftest the-claims-start-at-the-start-ordinal
   (is (= ["data-db-1" "data-db-2"]
          (storage/statefulset-pvc-names {:metadata {:name "db"} :spec {:replicas 2 :ordinals {:start 1}}} "data"))))
+
+;; --- the resize as a plan ----------------------------------------------------------
+
+(def two-claims
+  [{:pvc "data-postgres-0" :current "50Gi" :target "80Gi"}
+   {:pvc "data-postgres-1" :current "50Gi" :target "80Gi"}])
+
+(deftest a-planned-patch-runs-the-command-patch!-runs
+  (let [seen (atom nil)]
+    (with-redefs [shell/execute (fn [& argv] (reset! seen (vec argv)) {:exit 0})]
+      (kubectl/patch! "ctx" "databases" "persistentvolumeclaims" "data-postgres-0" (storage/claim-patch "80Gi")))
+    (is (= @seen
+           (into ["kubectl" "--context=ctx"]
+                 (kubectl/merge-patch-args "databases" "persistentvolumeclaims" "data-postgres-0"
+                                           (storage/claim-patch "80Gi")))))
+    (is (= (drop 2 @seen)
+           (drop 2 (first (storage/resize-claim-effects "ctx" "databases" two-claims "80Gi"))))
+        "the effect hands kubectl the same arguments after the context")))
+
+(deftest one-patch-per-claim-in-plan-order
+  (let [steps (storage/resize-claim-steps "ctx" "databases" two-claims "80Gi")]
+    (is (= ["data-postgres-0" "data-postgres-1"] (mapv :claim steps)))
+    (is (every? #(= :claims (:stage %)) steps))
+    (is (= [[:kubectl "ctx" "--namespace=databases" "patch" "persistentvolumeclaims" "data-postgres-0"
+             "--type=merge" "--patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"80Gi\"}}}}"]
+            [:kubectl "ctx" "--namespace=databases" "patch" "persistentvolumeclaims" "data-postgres-1"
+             "--type=merge" "--patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"80Gi\"}}}}"]]
+           (effect/collect (storage/plan-of steps))))
+    (is (= (storage/plan-of steps) (storage/resize-claim-effects "ctx" "databases" two-claims "80Gi")))))
+
+(deftest an-empty-plan-has-no-claim-steps
+  (is (= [] (storage/resize-claim-steps "ctx" "databases" [] "80Gi"))))
+
+(def steps
+  (storage/statefulset-resize-steps "ctx" statefulset "data" "80Gi" two-claims))
+
+(deftest the-statefulset-is-resized-claims-first-then-deleted-orphaned-then-applied
+  (is (= [:claims :claims :delete :recreate] (mapv :stage steps)))
+  (is (= [:kubectl "ctx" "--namespace=databases" "delete" "statefulset" "postgres" "--cascade=orphan"]
+         (:effect (nth steps 2))))
+  (let [[op context manifest & args] (:effect (nth steps 3))]
+    (is (= [:kubectl-stdin "ctx" ["apply" "--filename" "-"]] [op context (vec args)]))
+    (is (= (storage/recreate-manifest statefulset "data" "80Gi") (json/parse-string manifest true))
+        "the manifest applied is the recreate manifest of the StatefulSet the steps were built from")
+    (is (= manifest (:manifest (nth steps 3))) "the step names its manifest for the recovery"))
+  (is (every? effect/effect? (storage/plan-of steps)) "every step carries exactly one effect"))
+
+(deftest progress-names-what-ran-and-where-it-stopped
+  (testing "nothing ran"
+    (is (= {:resized [] :unresized ["data-postgres-0" "data-postgres-1"] :stages #{} :stopped (first steps)}
+           (storage/progress steps 0)))
+    (is (= (storage/progress steps 0) (storage/progress steps nil)) "an absent count is none"))
+  (testing "stopped at the second claim"
+    (let [{:keys [resized unresized stopped stages]} (storage/progress steps 1)]
+      (is (= ["data-postgres-0"] resized))
+      (is (= ["data-postgres-1"] unresized))
+      (is (= #{:claims} stages))
+      (is (= "data-postgres-1" (:claim stopped)))))
+  (testing "stopped at the delete"
+    (let [{:keys [resized unresized stopped]} (storage/progress steps 2)]
+      (is (= ["data-postgres-0" "data-postgres-1"] resized))
+      (is (= [] unresized))
+      (is (= :delete (:stage stopped)))))
+  (testing "every step ran"
+    (let [{:keys [stopped stages]} (storage/progress steps 4)]
+      (is (nil? stopped))
+      (is (= #{:claims :delete :recreate} stages)))))
+
+(defn- recovery
+  [applied]
+  (storage/statefulset-recovery {:context "ctx" :target "databases/postgres"} steps applied))
+
+(deftest no-recovery-when-nothing-was-applied
+  (is (nil? (recovery 0)))
+  (is (nil? (recovery nil))))
+
+(deftest a-stop-among-the-claims-names-the-enlarged-and-the-rest
+  (let [text (recovery 1)]
+    (is (str/includes? text "StatefulSet databases/postgres was not touched"))
+    (is (str/includes? text "cannot be undone:\n  data-postgres-0\nNot enlarged:\n  data-postgres-1"))
+    (is (str/includes? text "why data-postgres-1 could not be patched"))
+    (is (str/includes? text "run this book again"))
+    (is (not (str/includes? text "DELETED")))))
+
+(deftest a-stop-at-the-delete-says-the-statefulset-still-exists
+  (let [text (recovery 2)]
+    (is (str/includes? text "could not be deleted: it still exists with its old volume claim template"))
+    (is (str/includes? text "cannot be undone:\n  data-postgres-0\n  data-postgres-1"))
+    (is (not (str/includes? text "Not enlarged")))))
+
+(deftest a-stop-at-the-recreate-hands-over-the-manifest
+  (let [text (recovery 3)
+        manifest (:manifest (last steps))]
+    (is (str/starts-with? text "THE STATEFULSET databases/postgres IS DELETED"))
+    (is (str/includes? text "kubectl --context=ctx apply --filename - <<'EOF'"))
+    (is (str/includes? text (str "  " manifest "\n  EOF")) "the manifest is printed whole, ready to paste")))
+
+(deftest a-run-that-applied-everything-says-nothing-was-rolled-back
+  (let [text (recovery 4)]
+    (is (str/starts-with? text "Every effect ran: StatefulSet databases/postgres was recreated"))
+    (is (str/includes? text "Nothing was rolled back"))))
+
+(deftest the-statefulset-checks-keep-their-names-and-timeouts
+  (let [checks (storage/statefulset-checks "ctx" "cluster" "databases" "postgres" "data" "80Gi" two-claims)]
+    (is (= [["all 2 PVCs report capacity 80Gi" 300 15 true]
+            ["StatefulSet databases/postgres exists again with the new template" 60 nil nil]
+            ["every pod of the StatefulSet is Running" 300 10 nil]]
+           (mapv (juxt :description :timeout :interval :soft?) checks)))
+    (is (fn? (:watch (first checks))) "the capacity check watches the resize")))
+
+(deftest the-template-check-holds-only-for-the-new-capacity
+  (let [[_ template-check pods-check] (storage/statefulset-checks "ctx" "cluster" "databases" "postgres" "data" "80Gi" two-claims)
+        answer (fn [object] (fn [& _] {:exit 0 :out (json/generate-string object) :err ""}))]
+    (with-redefs [shell/execute (answer (assoc-in statefulset [:spec :volumeClaimTemplates 0 :spec :resources :requests :storage] "80Gi"))]
+      (is (true? ((:check template-check)))))
+    (with-redefs [shell/execute (answer statefulset)]
+      (is (false? ((:check template-check)))))
+    (with-redefs [shell/execute (answer (assoc statefulset :status {:readyReplicas 2}))]
+      (is (true? ((:check pods-check)))))
+    (with-redefs [shell/execute (answer (assoc statefulset :status {:readyReplicas 1}))]
+      (is (false? ((:check pods-check)))))))

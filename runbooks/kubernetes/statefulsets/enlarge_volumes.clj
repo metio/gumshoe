@@ -3,20 +3,20 @@
 
 (ns runbooks.kubernetes.statefulsets.enlarge-volumes
   "Grows the volumes of any StatefulSet. A volumeClaimTemplate is immutable,
-   so the StatefulSet is deleted with its pods orphaned, the PVCs are
-   enlarged, and the StatefulSet is recreated with the new template - after
-   which everything matches again. The full plan is validated first, and the
-   result is verified volume by volume."
-  (:require [cheshire.core :as json]
-            [gumshoe.flow :as flow]
-            [gumshoe.interact :as interact]
+   so the PVCs are enlarged, the StatefulSet is deleted with its pods
+   orphaned, and it is recreated with the new template - after which
+   everything matches again. The full plan is validated first, the change
+   runs as an effect plan (so --dry-run shows it), the StatefulSet is pinned
+   between the confirmation and the effect, a failure part-way prints what
+   it left behind, and the result is verified volume by volume."
+  (:require [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.announce :as announce]
+            [gumshoe.mutation :as mutation]
+            [gumshoe.outcome :as outcome]
             [gumshoe.runbook :as runbook]
-            [gumshoe.shell :as shell]
+            [gumshoe.select :as select]
             [gumshoe.stdout :as stdout]
-            [gumshoe.storage :as storage]
-            [gumshoe.watch :as watch]))
+            [gumshoe.storage :as storage]))
 
 (def options
   {:namespace {:desc "The namespace of the StatefulSet - interactive selection when omitted"
@@ -41,113 +41,108 @@
    :kubectl-can-create ["statefulsets"]
    :kubectl-can-delete ["statefulsets"]})
 
-(defn- execute-enlargement!
-  [context namespace statefulset template-name capacity plan]
-  (let [manifest (storage/recreate-manifest statefulset template-name capacity)
-        resizes (for [{:keys [pvc]} plan]
-                  (do (stdout/print-command "kubectl" "patch" "persistentvolumeclaim" pvc)
-                      (kubectl/patch! context namespace "persistentvolumeclaims" pvc
-                                      {:spec {:resources {:requests {:storage capacity}}}})))]
-    (if-not (every? #(zero? (:exit %)) (doall resizes))
-      (do (stdout/error "could not enlarge every PVC - nothing was deleted, resolve manually") false)
-      (let [name (kubectl/name-of statefulset)
-            deleted (shell/execute "kubectl" (str "--context=" context) (str "--namespace=" namespace)
-                                   "delete" "statefulset" name "--cascade=orphan")]
-        (if-not (zero? (:exit deleted))
-          (do (stdout/error (format "could not delete the StatefulSet:\n%s" (:err deleted))) false)
-          (let [applied (shell/execute-with-stdin (json/encode manifest)
-                                                  "kubectl" (str "--context=" context)
-                                                  "apply" "--filename" "-")]
-            (if (zero? (:exit applied))
-              (do (stdout/ok "StatefulSet recreated with the new volume claim template") true)
-              (do (stdout/error (format "THE STATEFULSET IS DELETED but could not be recreated:\n%s\nre-apply this manifest immediately:\n%s"
-                                        (:err applied) (json/encode manifest)))
-                  false))))))))
+(def statefulset-select
+  {:mode :namespaced
+   :label "StatefulSet"
+   :candidates (fn [context] (kubectl/namespaces-names (kubectl/get-all context "statefulsets")))
+   :namespace-flag :namespace
+   :name-flag :statefulset
+   :empty-message "there is no StatefulSet to enlarge"
+   :on-empty :fail})
+
+(defn- read-strictly
+  "{:values <what read returns>} or {:unread <why>}, read as mutation/derived
+   reads, so a read that did not answer is never planned from as an absent
+   object."
+  [read]
+  (mutation/derived (fn [_] (read)) nil))
+
+(defn- unread!
+  [why]
+  (stdout/error (format "could not read what the change rests on - %s" why))
+  false)
+
+(defn- planned
+  "The expansion plan for the claims of template-name, with every problem
+   that must stop it, read strictly."
+  [context cluster namespace statefulset template-name capacity]
+  (read-strictly
+   #(let [plan (storage/expansion-plan
+                {:pvc-names (storage/statefulset-pvc-names statefulset template-name)
+                 :pvcs {:items (kubectl/filter-list
+                                (kubectl/get-all context "persistentvolumeclaims")
+                                (fn [pvc] (= namespace (kubectl/namespace-of pvc))))}
+                 :storage-classes (kubectl/get-all context "storageclasses")
+                 :capacity capacity})]
+      ;; Second-level prerequisites: the book's :prerequisites already proved
+      ;; the generic ability to do this (get PVCs/storage classes, patch
+      ;; PVCs). These are the checks that depend on WHAT was selected - the
+      ;; chosen PVCs' storage class allows expansion, the sizes are sane, and
+      ;; the storage backend (a ceph pool's free capacity) has room for this
+      ;; growth. They fail closed, so an unverifiable backend blocks the resize.
+      {:plan plan
+       :problems (into (storage/expansion-problems plan)
+                       (storage/resize-preflight-problems
+                        {:context context :cluster cluster :namespace namespace :plan plan}))})))
+
+(defn change
+  "The confirmed change that grows the claims of plan to capacity. The
+   StatefulSet is the change's subject: read again right before the
+   confirmation, so the manifest applied again is the one confirmed, and
+   pinned, so it is refused when the StatefulSet changed meanwhile."
+  [{:keys [context cluster target template capacity plan applied-before]}]
+  (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
+        steps (fn [object] (storage/statefulset-resize-steps context object template capacity plan))]
+    {:title "enlarge volumes"
+     :select statefulset-select
+     :subject {:type "statefulsets"}
+     :confirm {:action (format "enlarge the volumes of StatefulSet %s to %s - the StatefulSet is deleted (pods orphaned) and recreated"
+                               target capacity)
+               :destructive? true}
+     :items (fn [_] (map :pvc plan))
+     :announce (fn [_] (format "Enlarge volumes of StatefulSet %s to %s" target capacity))
+     :effect (fn [{:keys [object]}] (storage/plan-of (steps object)))
+     :verify (fn [_] (storage/statefulset-checks context cluster namespace name template capacity plan))
+     :recovery (fn [{:keys [object applied]}]
+                 (storage/statefulset-recovery {:context context :target target}
+                                               (steps object)
+                                               (- (or applied 0) applied-before)))}))
 
 (defn- enlarge
   [opts {:keys [announcement-data]}]
   (let [context (kubectl/current-context)
         cluster (kubectl/current-cluster)
-        capacity (storage/normalize-capacity (:capacity opts))
-        candidates (kubectl/namespaces-names (kubectl/get-all context "statefulsets"))
-        target (interact/choose-namespaced "StatefulSet" candidates (:namespace opts) (:statefulset opts))]
-    (if (nil? target)
-      (do (stdout/error "no StatefulSet selected") false)
+        capacity (storage/normalize-capacity (:capacity opts))]
+    (if-let [target (select/pick statefulset-select opts context)]
       (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
-            statefulset (kubectl/get-namespaced-resource context namespace "statefulsets" name)
-            templates (mapv #(-> % :metadata :name) (-> statefulset :spec :volumeClaimTemplates))
-            template (interact/choose-one "Template" templates (:template opts))]
+            {statefulset :values unread :unread}
+            (read-strictly #(kubectl/get-namespaced-resource context namespace "statefulsets" name))
+            templates (mapv #(-> % :metadata :name) (-> statefulset :spec :volumeClaimTemplates))]
         (cond
+          unread (unread! unread)
+
           (empty? templates)
           (do (stdout/error (format "StatefulSet %s has no volume claim templates" target)) false)
 
-          (nil? template)
-          (do (stdout/error "no volume claim template selected") false)
-
           :else
-          (let [pvc-names (storage/statefulset-pvc-names statefulset template)
-                plan (storage/expansion-plan {:pvc-names pvc-names
-                                              :pvcs {:items (kubectl/filter-list
-                                                             (kubectl/get-all context "persistentvolumeclaims")
-                                                             #(= namespace (kubectl/namespace-of %)))}
-                                              :storage-classes (kubectl/get-all context "storageclasses")
-                                              :capacity capacity})
-                problems (into (storage/expansion-problems plan)
-                               ;; storage-provider preflights (a ceph pool's free
-                               ;; capacity); fail closed, so an unverifiable backend
-                               ;; blocks the resize
-                               (storage/resize-preflight-problems
-                                {:context context :cluster cluster :namespace namespace :plan plan}))]
-            ;; Second-level prerequisites: the book's :prerequisites already proved
-            ;; the generic ability to do this (get PVCs/storage classes, patch
-            ;; PVCs). These are the checks that depend on WHAT was selected - the
-            ;; chosen PVCs' storage class allows expansion, the sizes are sane, and
-            ;; the storage backend has capacity for this growth. They fail closed.
-            (stdout/print-section "📋 Preflight")
-            (doseq [{:keys [pvc current target]} plan]
-              (stdout/err-println (format "  plan: %s: %s -> %s" pvc current target)))
-            (if (seq problems)
-              (do (doseq [problem problems] (stdout/error problem))
-                  (stdout/err-println "Refusing: a second-level prerequisite failed - nothing was changed.")
-                  false)
-              (flow/change!
-               {:confirmation {:action (format "enlarge volumes to %s - the StatefulSet is deleted (pods orphaned) and recreated" capacity)
-                               :target (format "%s (%s)" target cluster)
-                               :items (map :pvc plan)
-                               :destructive? true}
-                :announce! #(announce/announce! cluster announcement-data
-                                                             (format "Enlarge volumes of StatefulSet %s to %s" target capacity))
-                :execute! #(execute-enlargement! context namespace statefulset template capacity plan)
-                :post-checks (concat
-                              ;; best-effort: on offline-resize storage classes the capacity only
-                              ;; updates on a pod restart, and the resize already succeeded. We watch
-                              ;; the namespace events and PVC resize conditions while waiting, so a
-                              ;; resizer error is surfaced live.
-                              [{:description (format "all %d PVCs report capacity %s" (count plan) capacity)
-                                :timeout 300 :interval 15 :soft? true
-                                :watch (watch/resize-watchers context cluster namespace (map :pvc plan))
-                                :check (fn []
-                                         (every? (fn [{:keys [pvc]}]
-                                                   (= capacity (-> (kubectl/get-namespaced-resource context namespace
-                                                                                                    "persistentvolumeclaims" pvc)
-                                                                   :status :capacity :storage)))
-                                                 plan))}]
-                              [{:description (format "StatefulSet %s exists again with the new template" target)
-                                :timeout 60
-                                :check (fn []
-                                         (let [recreated (kubectl/get-namespaced-resource context namespace
-                                                                                          "statefulsets" name)]
-                                           (some #(and (= template (-> % :metadata :name))
-                                                       (= capacity (-> % :spec :resources :requests :storage)))
-                                                 (-> recreated :spec :volumeClaimTemplates))))}
-                               {:description "every pod of the StatefulSet is Running"
-                                :timeout 300
-                                :interval 10
-                                :check (fn []
-                                         (let [recreated (kubectl/get-namespaced-resource context namespace
-                                                                                          "statefulsets" name)]
-                                           (= (-> recreated :spec :replicas)
-                                              (-> recreated :status :readyReplicas))))}])}))))))))
+          (if-let [template (interact/choose-one "Template" templates (:template opts))]
+            (let [{{:keys [plan problems]} :values unread :unread}
+                  (planned context cluster namespace statefulset template capacity)]
+              (if unread
+                (unread! unread)
+                (do (stdout/print-section "📋 Preflight")
+                    (doseq [{:keys [pvc current target]} plan]
+                      (stdout/err-println (format "  plan: %s: %s -> %s" pvc current target)))
+                    (if (seq problems)
+                      (do (doseq [problem problems] (stdout/error problem))
+                          (stdout/err-println "Refusing: a second-level prerequisite failed - nothing was changed.")
+                          false)
+                      (mutation/run-on! (change {:context context :cluster cluster :target target
+                                                 :template template :capacity capacity :plan plan
+                                                 :applied-before (outcome/applied-count)})
+                                        target opts announcement-data)))))
+            (do (stdout/error "no volume claim template selected") false))))
+      false)))
 
 (runbook/execute!
  {:description "Grows the volumes of any StatefulSet via orphan-delete and recreate"

@@ -644,11 +644,19 @@
   (apply shell/stdout-of "kubectl" (str "--context=" context) (str "--namespace=" namespace) request-timeout
          "exec" pod "-c" container "--" command))
 
+(defn merge-patch-args
+  "The kubectl arguments after --context that merge-patch a namespaced
+   resource with patch, a map encoded as JSON. patch! runs them, and an effect
+   plan hands them to gumshoe.effect/kubectl, so a planned patch and a direct
+   one run the same command."
+  [namespace type name patch]
+  [(str "--namespace=" namespace) "patch" type name "--type=merge"
+   (str "--patch=" (cheshire/generate-string patch))])
+
 (defn patch!
   "Merge-patches a resource. Returns the full process map."
   [context namespace type name patch]
-  (shell/execute "kubectl" (str "--context=" context) (str "--namespace=" namespace)
-                 "patch" type name "--type=merge" (str "--patch=" (cheshire/generate-string patch))))
+  (apply shell/execute "kubectl" (str "--context=" context) (merge-patch-args namespace type name patch)))
 
 (defn- port-open?
   [port]

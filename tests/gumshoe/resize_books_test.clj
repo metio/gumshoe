@@ -441,3 +441,42 @@
             [scenario transcript] scenarios]
       (testing (str path " " scenario)
         (is (= (get-in golden [path scenario]) transcript))))))
+
+;; --- the change each book hands the mutation engine ------------------------------------
+
+(defn- change-of
+  "The `change` function of the book at path."
+  [path sym]
+  (load-config path)
+  (requiring-resolve sym))
+
+(def ^:private claims-plan
+  [{:pvc "data-web-0" :current "10Gi" :target "20Gi"}
+   {:pvc "data-web-1" :current "10Gi" :target "20Gi"}])
+
+(deftest the-statefulset-change-pins-the-statefulset-and-counts-only-its-own-effects
+  (let [change (change-of "runbooks/kubernetes/statefulsets/enlarge_volumes.clj"
+                          'runbooks.kubernetes.statefulsets.enlarge-volumes/change)
+        spec (change {:context "ctx" :cluster "cluster" :target "shop/web" :template "data"
+                      :capacity "20Gi" :plan claims-plan :applied-before 3})
+        recovery (:recovery spec)]
+    (is (= {:type "statefulsets"} (:subject spec)))
+    (is (true? (get-in spec [:confirm :destructive?])))
+    (is (= ["data-web-0" "data-web-1"] (vec ((:items spec) {}))))
+    (testing "the plan is built from the StatefulSet read right before the confirmation"
+      (is (= (storage/plan-of (storage/statefulset-resize-steps "ctx" web "data" "20Gi" claims-plan))
+             ((:effect spec) {:object web}))))
+    (testing "effects another change of the run applied before it are not its own"
+      (is (nil? (recovery {:object web :applied 3})))
+      (is (str/includes? (recovery {:object web :applied 4}) "Not enlarged:\n  data-web-1")))))
+
+(deftest the-prometheus-change-pins-the-prometheus-and-counts-only-its-own-effects
+  (let [change (change-of "tools/prometheus/runbooks/set_capacity.clj" 'runbooks.prometheus.set-capacity/change)
+        spec (change {:context "ctx" :cluster "cluster" :target "monitoring/k8s"
+                      :capacity "20Gi" :plan claims-plan :applied-before 2})
+        recovery (:recovery spec)]
+    (is (= {:type prometheus-type} (:subject spec)))
+    (is (true? (get-in spec [:confirm :destructive?])))
+    (is (= 5 (count ((:effect spec) {}))))
+    (is (nil? (recovery {:applied 2})))
+    (is (str/starts-with? (recovery {:applied 3}) "Prometheus monitoring/k8s is PAUSED"))))
