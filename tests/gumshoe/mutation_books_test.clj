@@ -237,6 +237,20 @@
              operation (assoc :operationState {:phase "Running"}))
    :operation (when operation {:sync {}})})
 
+;; Flux HelmReleases: apps/podinfo Ready, failing, or parked after its upgrade
+;; retries ran out.
+
+(def ^:private helmrelease-type "helmreleases.helm.toolkit.fluxcd.io")
+
+(defn- helmrelease
+  [name & {:keys [ready parked?] :or {ready "True"}}]
+  {:metadata (meta-of "apps" name)
+   :spec (cond-> {:interval "10m" :chart {:spec {:chart name}}}
+           parked? (assoc :upgrade {:retries 0}))
+   :status (cond-> {:conditions [{:type "Ready" :status ready :reason (if (= "True" ready) "Succeeded" "UpgradeFailed")
+                                  :message "release reconciliation"}]}
+             parked? (assoc :upgradeFailures 1))})
+
 (def ^:private scheduled-backup-type "scheduledbackups.postgresql.cnpg.io")
 (def ^:private schedule-type "schedules.velero.io")
 
@@ -366,6 +380,17 @@
    "tools/flux/runbooks/flux/resume.clj"
    (standard {:target "Kustomization flux-system/apps" :invalid "Bucket flux-system/apps"
               :permitted [[flux-type (kustomization true)]] :refused [[flux-type (kustomization false)]]})
+
+   "tools/flux/runbooks/flux/reconcile.clj"
+   (standard {:target "apps/podinfo"
+              :permitted [[helmrelease-type (helmrelease "podinfo")]]
+              :refused [[helmrelease-type (helmrelease "podinfo" :ready "False")]]})
+
+   "tools/flux/runbooks/flux/reset.clj"
+   (standard {:target "apps/podinfo"
+              :permitted [[helmrelease-type (helmrelease "podinfo" :ready "False" :parked? true)]
+                          [helmrelease-type (helmrelease "alpha")]]
+              :refused [[helmrelease-type (helmrelease "podinfo" :ready "False")]]})
 
    "tools/cnpg/runbooks/suspend_scheduled_backup.clj"
    (standard {:target "db/nightly" :invalid "nightly"

@@ -3948,6 +3948,308 @@
      :timeout 60,
      :interval 5,
      :holds true}]}},
+ "tools/flux/runbooks/flux/reconcile.clj"
+ {:absent
+  {:action "trigger a flux reconciliation",
+   :destructive? false,
+   :items ["apps/podinfo"],
+   :step "trigger a flux reconciliation",
+   :plan
+   [[:cmd
+     "flux"
+     "reconcile"
+     "helmrelease"
+     "podinfo"
+     "--context=ctx"
+     "--namespace=apps"]],
+   :precondition nil,
+   :announce "Reconcile HelmRelease apps/podinfo",
+   :checks
+   [{:description "HelmRelease apps/podinfo is Ready",
+     :timeout 120,
+     :interval 10,
+     :holds false}]},
+  :permitted
+  {:action "trigger a flux reconciliation",
+   :destructive? false,
+   :items ["apps/podinfo"],
+   :step "trigger a flux reconciliation",
+   :plan
+   [[:cmd
+     "flux"
+     "reconcile"
+     "helmrelease"
+     "podinfo"
+     "--context=ctx"
+     "--namespace=apps"]],
+   :precondition nil,
+   :announce "Reconcile HelmRelease apps/podinfo",
+   :checks
+   [{:description "HelmRelease apps/podinfo is Ready",
+     :timeout 120,
+     :interval 10,
+     :holds true}]},
+  :refused
+  {:action "trigger a flux reconciliation",
+   :destructive? false,
+   :items ["apps/podinfo"],
+   :step "trigger a flux reconciliation",
+   :plan
+   [[:cmd
+     "flux"
+     "reconcile"
+     "helmrelease"
+     "podinfo"
+     "--context=ctx"
+     "--namespace=apps"]],
+   :precondition nil,
+   :announce "Reconcile HelmRelease apps/podinfo",
+   :checks
+   [{:description "HelmRelease apps/podinfo is Ready",
+     :timeout 120,
+     :interval 10,
+     :holds false}]},
+  :spec-changed
+  {:action "trigger a flux reconciliation",
+   :destructive? false,
+   :items ["apps/podinfo"],
+   :step "trigger a flux reconciliation",
+   :plan
+   [[:cmd
+     "flux"
+     "reconcile"
+     "helmrelease"
+     "podinfo"
+     "--context=ctx"
+     "--namespace=apps"]],
+   :precondition nil,
+   :announce "Reconcile HelmRelease apps/podinfo",
+   :checks
+   [{:description "HelmRelease apps/podinfo is Ready",
+     :timeout 120,
+     :interval 10,
+     :holds true}]},
+  :surface
+  {:description
+   "Triggers a flux reconciliation of a single HelmRelease",
+   :options
+   {:namespace
+    {:desc
+     "The namespace of the HelmRelease - interactive selection when omitted",
+     :alias :n,
+     :coerce :string},
+    :name
+    {:desc
+     "The name of the HelmRelease - interactive selection when omitted",
+     :alias :r,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["flux" "kubectl" "fzf"],
+    :cluster-capabilities [],
+    :kubectl-can-get ["helmreleases.helm.toolkit.fluxcd.io"],
+    :kubectl-can-patch ["helmreleases.helm.toolkit.fluxcd.io"]},
+   :select
+   {:mode :namespaced,
+    :label "HelmRelease",
+    :namespace-flag :namespace,
+    :name-flag :name},
+   :empty-message nil,
+   :confirm {:action "trigger a flux reconciliation"},
+   :details
+   ["What it does:"
+    "  picks one HelmRelease by namespace and name (--namespace and --name, or interactively)"
+    "  asks to confirm: trigger a flux reconciliation"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: flux, kubectl, fzf"
+    "  kubectl get: helmreleases.helm.toolkit.fluxcd.io"
+    "  kubectl patch: helmreleases.helm.toolkit.fluxcd.io"],
+   :candidates
+   {:permitted ["apps/podinfo"], :refused ["apps/podinfo"]}},
+  :unanswered
+  {:action "trigger a flux reconciliation",
+   :destructive? false,
+   :items ["apps/podinfo"],
+   :step "trigger a flux reconciliation",
+   :plan
+   [[:cmd
+     "flux"
+     "reconcile"
+     "helmrelease"
+     "podinfo"
+     "--context=ctx"
+     "--namespace=apps"]],
+   :precondition nil,
+   :announce "Reconcile HelmRelease apps/podinfo",
+   :checks
+   [{:description "HelmRelease apps/podinfo is Ready",
+     :timeout 120,
+     :interval 10,
+     :holds false}]}},
+ "tools/flux/runbooks/flux/reset.clj"
+ {:absent
+  {:action "clear the failure counters and reconcile",
+   :destructive? false,
+   :items ["apps/podinfo"],
+   :step "clear the failure counters and reconcile",
+   :plan
+   [[:note "clearing the failure counters of apps/podinfo"]
+    [:kubectl
+     "ctx"
+     "-n"
+     "apps"
+     "annotate"
+     "helmreleases.helm.toolkit.fluxcd.io"
+     "podinfo"
+     "--overwrite"
+     "reconcile.fluxcd.io/resetAt=<instant>"
+     "reconcile.fluxcd.io/requestedAt=<instant>"]],
+   :precondition nil,
+   :announce "Reset HelmRelease apps/podinfo",
+   :checks
+   [{:description "HelmRelease apps/podinfo is Ready",
+     :timeout 300,
+     :interval 15,
+     :holds false}]},
+  :permitted
+  {:action "clear the failure counters and reconcile",
+   :destructive? false,
+   :items ["apps/podinfo"],
+   :step "clear the failure counters and reconcile",
+   :plan
+   [[:note "clearing the failure counters of apps/podinfo"]
+    [:kubectl
+     "ctx"
+     "-n"
+     "apps"
+     "annotate"
+     "helmreleases.helm.toolkit.fluxcd.io"
+     "podinfo"
+     "--overwrite"
+     "reconcile.fluxcd.io/resetAt=<instant>"
+     "reconcile.fluxcd.io/requestedAt=<instant>"]],
+   :precondition nil,
+   :announce "Reset HelmRelease apps/podinfo",
+   :checks
+   [{:description "HelmRelease apps/podinfo is Ready",
+     :timeout 300,
+     :interval 15,
+     :holds false}]},
+  :refused
+  {:action "clear the failure counters and reconcile",
+   :destructive? false,
+   :items ["apps/podinfo"],
+   :step "clear the failure counters and reconcile",
+   :plan
+   [[:note "clearing the failure counters of apps/podinfo"]
+    [:kubectl
+     "ctx"
+     "-n"
+     "apps"
+     "annotate"
+     "helmreleases.helm.toolkit.fluxcd.io"
+     "podinfo"
+     "--overwrite"
+     "reconcile.fluxcd.io/resetAt=<instant>"
+     "reconcile.fluxcd.io/requestedAt=<instant>"]],
+   :precondition nil,
+   :announce "Reset HelmRelease apps/podinfo",
+   :checks
+   [{:description "HelmRelease apps/podinfo is Ready",
+     :timeout 300,
+     :interval 15,
+     :holds false}]},
+  :spec-changed
+  {:action "clear the failure counters and reconcile",
+   :destructive? false,
+   :items ["apps/podinfo"],
+   :step "clear the failure counters and reconcile",
+   :plan
+   [[:note "clearing the failure counters of apps/podinfo"]
+    [:kubectl
+     "ctx"
+     "-n"
+     "apps"
+     "annotate"
+     "helmreleases.helm.toolkit.fluxcd.io"
+     "podinfo"
+     "--overwrite"
+     "reconcile.fluxcd.io/resetAt=<instant>"
+     "reconcile.fluxcd.io/requestedAt=<instant>"]],
+   :precondition nil,
+   :announce "Reset HelmRelease apps/podinfo",
+   :checks
+   [{:description "HelmRelease apps/podinfo is Ready",
+     :timeout 300,
+     :interval 15,
+     :holds false}]},
+  :surface
+  {:description
+   "Clears a parked HelmRelease's failure counters and reconciles it",
+   :options
+   {:namespace
+    {:desc
+     "The namespace of the HelmRelease - interactive selection when omitted",
+     :alias :n,
+     :coerce :string},
+    :name
+    {:desc
+     "The name of the HelmRelease - interactive selection when omitted",
+     :alias :r,
+     :coerce :string}},
+   :prerequisites
+   {:installed-tools ["kubectl" "fzf"],
+    :cluster-capabilities [:flux],
+    :kubectl-can-get ["helmreleases.helm.toolkit.fluxcd.io"],
+    :kubectl-can-patch ["helmreleases.helm.toolkit.fluxcd.io"]},
+   :select
+   {:mode :namespaced,
+    :label "HelmRelease",
+    :namespace-flag :namespace,
+    :name-flag :name},
+   :empty-message nil,
+   :confirm {:action "clear the failure counters and reconcile"},
+   :details
+   ["What it does:"
+    "  picks one HelmRelease by namespace and name (--namespace and --name, or interactively)"
+    "  asks to confirm: clear the failure counters and reconcile"
+    "  announces the change to the changelog"
+    "  verifies the result before it reports success"
+    ""
+    "Needs:"
+    "  tools: kubectl, fzf"
+    "  kubectl get: helmreleases.helm.toolkit.fluxcd.io"
+    "  kubectl patch: helmreleases.helm.toolkit.fluxcd.io"
+    "  cluster capabilities: flux"],
+   :candidates
+   {:permitted ["apps/podinfo" "apps/alpha"],
+    :refused ["apps/podinfo"]}},
+  :unanswered
+  {:action "clear the failure counters and reconcile",
+   :destructive? false,
+   :items ["apps/podinfo"],
+   :step "clear the failure counters and reconcile",
+   :plan
+   [[:note "clearing the failure counters of apps/podinfo"]
+    [:kubectl
+     "ctx"
+     "-n"
+     "apps"
+     "annotate"
+     "helmreleases.helm.toolkit.fluxcd.io"
+     "podinfo"
+     "--overwrite"
+     "reconcile.fluxcd.io/resetAt=<instant>"
+     "reconcile.fluxcd.io/requestedAt=<instant>"]],
+   :precondition nil,
+   :announce "Reset HelmRelease apps/podinfo",
+   :checks
+   [{:description "HelmRelease apps/podinfo is Ready",
+     :timeout 300,
+     :interval 15,
+     :holds false}]}},
  "tools/flux/runbooks/flux/resume.clj"
  {:absent
   {:action "resume a Flux object",
