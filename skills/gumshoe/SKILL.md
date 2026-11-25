@@ -547,12 +547,23 @@ mostly data:
   `--dry-run` shows either and changes nothing. After the ignite the
   burning check runs the `:expect` detectives over fresh evidence until
   one reports a finding `:fire?` accepts about an object of the drill
-  namespace; after the extinguish the out check waits until none does,
-  and evidence a detective read nothing from never passes either check.
-  Any other drill declares `:derive`, `:ignite`, `:extinguish` (with its
-  `:recovery`) and an `:expect :collect` that throws `(firebook/unread
-  msg)` when it could not read; `firebooks/fabric/stale_fdb_entry.clj` is
-  the example;
+  namespace; after the extinguish the out check waits until none does.
+  Evidence a detective read nothing from never passes either check, and
+  the out check never passes on evidence whose required keys all came
+  back empty (an fdb table with no rows, a listing with no items) unless
+  the drill says why that shows the fire is out, as `:expect
+  {:empty-is-out "why"}`; a kubernetes drill says so because its
+  extinguish first confirms the namespace is gone. Every expected
+  detective therefore declares `:requires`. Both stages are mutation
+  specs (`firebook/stages`) run by `mutation/run-on!`, so a drill's
+  `:reads` and `:refusal` guard both stages before and after the
+  confirmation; a kubernetes drill refuses a `fire-drill` namespace that
+  lacks gumshoe's `app.kubernetes.io/managed-by` label, and conformance
+  judges each stage as it judges any change spec. Any other drill
+  declares `:derive` (returning `:target`, `:system` and, for kubectl,
+  `:context`), `:ignite`, `:extinguish` (with its `:recovery`) and an
+  `:expect :collect` that throws `(firebook/unread msg)` when it could
+  not read; `firebooks/fabric/stale_fdb_entry.clj` is the example;
 - a dispatcher is `(dispatch/book {:select … :classify (fn [ctx target] key)
   :routes {key {:playbook …}}})`, one front door that runs the playbook a
   subject's kind routes to;
