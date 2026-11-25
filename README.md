@@ -305,11 +305,14 @@ PodDisruptionBudgets and HPAs, ResourceQuotas, cluster CPU/memory overcommit
 calico (tigera-operator), the prometheus-operator monitoring stack, Warning
 events, and - over ssh rather than kubectl - an EVPN-VXLAN fabric's MAC
 ownership (guest MACs the fabric attributes to a VTEP that is not their host's,
-hosts holding both a local tap and a remote entry for one MAC - each with how
+guest MACs no scanned host owns that only a gateway VTEP reaches, hosts holding both a local tap and a remote entry for one MAC - each with how
 long FRR has held the MAC local and whether a BGP route from the stale VTEP still
 stands behind it, so an orphan reads apart from a live misadvertisement - and
 static fdb entries that outrank what EVPN learns; see
-`runbooks/detectives/fabric.clj`).
+`runbooks/detectives/fabric.clj`). Its hosts, VNIs, gateway VTEPs and guest MAC
+prefixes come from `--hosts`, `--vni`, `--gateway-vteps` and
+`--guest-mac-prefixes`, else from env.edn's `:evpn` block; without gateway VTEPs
+the gateway check is reported as unjudged, never as clean.
 The findings map onto the canonical
 [kube-prometheus runbook](https://runbooks.prometheus-operator.dev/) alerts
 (KubeControllerManagerDown, KubeQuotaFullyUsed, KubeCPUOvercommit, and so on)

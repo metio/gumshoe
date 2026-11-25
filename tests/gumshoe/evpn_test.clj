@@ -10,6 +10,7 @@
   gateway's route is MAC+IP and outranks a MAC-only route."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [gumshoe.detective :as detective]
             [gumshoe.detectives.evpn :as evpn]
             [gumshoe.evpn :as collect]))
 
@@ -20,8 +21,8 @@
 (def ^:private healthy "02:00:0a:18:00:06")
 
 (def ^:private config
-  {"config" {:evpn {:gateway-vteps [gateway]
-                    :guest-mac-prefixes ["02:00:"]}}})
+  {"evpn-gateway-vteps" [gateway]
+   "evpn-guest-mac-prefixes" ["02:00:"]})
 
 (defn- summaries
   [findings]
@@ -116,6 +117,86 @@
     (is (= :warning (:severity (first findings))))
     (is (str/includes? (:hint (first findings)) "incomplete"))))
 
+(deftest the-gateway-check-judges-nothing-without-gateway-vteps
+  (let [macs {"evpn-macs" [{:host "host-a" :host-vtep host-a-vtep :vni 4208
+                            :mac "02:00:0a:18:00:08" :type :remote :vtep gateway}]}]
+    (testing "with gateway VTEPs the unclaimed guest is reported"
+      (is (= 1 (count (evpn/detect-gateway-only-macs (merge config macs))))))
+    (testing "without them nothing is judged, and the check is unread through its :judges"
+      (is (empty? (evpn/detect-gateway-only-macs macs)))
+      (is (empty? (evpn/detect-gateway-only-macs (assoc macs "evpn-gateway-vteps" []))))
+      (let [check (some #(when (= "evpn-gateway-only-mac" (:name %)) %) evpn/detectives)]
+        (is (detective/unread? check macs))
+        (is (detective/unread? check (assoc macs "evpn-gateway-vteps" [])))
+        (is (not (detective/unread? check (merge config macs))))))))
+
+(deftest the-two-ownership-judgements-are-separate-checks
+  (let [evidence (merge config
+                        {"evpn-macs"
+                         [{:host "host-a" :host-vtep host-a-vtep :vni 4208 :mac hijacked
+                           :type :local :intf "one-256-0"}
+                          {:host "host-b" :host-vtep host-b-vtep :vni 4208 :mac hijacked
+                           :type :remote :vtep gateway}
+                          {:host "host-b" :host-vtep host-b-vtep :vni 4208
+                           :mac "02:00:0a:18:00:08" :type :remote :vtep gateway}]})]
+    (is (= [:critical] (map :severity (evpn/detect-ownership-conflicts evidence))))
+    (is (= [:warning] (map :severity (evpn/detect-gateway-only-macs evidence))))
+    (testing "detect-mac-ownership still returns both"
+      (is (= [:critical :warning] (map :severity (evpn/detect-mac-ownership evidence)))))))
+
+(deftest a-missing-judged-input-is-a-finding-naming-what-it-leaves-unjudged
+  (let [row (fn [input source]
+              {:input input :option (str "--" input) :env-path [:evpn (keyword input)] :source source})
+        detect-missing-inputs (fn [evidence] (evpn/detect-missing-inputs (assoc evidence "evpn-macs" [])))]
+    (testing "without the MAC tables nothing depends on the inputs, so nothing is reported"
+      (is (empty? (evpn/detect-missing-inputs {"evpn-inputs" [(row "gateway-vteps" "missing")]}))))
+    (testing "a supplied input is no finding"
+      (is (empty? (detect-missing-inputs {"evpn-inputs" [(row "gateway-vteps" "option")
+                                                              (row "guest-mac-prefixes" "env.edn")]}))))
+    (testing "hosts and VNIs are never judged here"
+      (is (empty? (detect-missing-inputs {"evpn-inputs" [(row "hosts" "missing") (row "vnis" "missing")]}))))
+    (testing "missing gateway VTEPs leave a check unjudged, a warning"
+      (is (= [{:severity :warning :component "--gateway-vteps"}]
+             (map #(select-keys % [:severity :component])
+                  (detect-missing-inputs {"evpn-inputs" [(row "gateway-vteps" "missing")]})))))
+    (testing "missing prefixes widen a check, info"
+      (is (= [:info] (map :severity (detect-missing-inputs {"evpn-inputs" [(row "guest-mac-prefixes" "missing")]})))))
+    (testing "stderr lines follow the same inputs"
+      (is (= ["no gateway VTEPs - pass --gateway-vteps or set :evpn :gateway-vteps in env.edn; evpn-gateway-only-mac cannot judge without them and is reported as unjudged"]
+             (evpn/missing-input-lines {"evpn-inputs" [(row "gateway-vteps" "missing")]})))
+      (is (empty? (evpn/missing-input-lines {"evpn-inputs" [(row "gateway-vteps" "option")]}))))))
+
+(deftest resolving-the-values-a-scan-judges-against
+  (let [env {[:evpn :hosts] ["env-host"] [:evpn :vnis] [4201]
+             [:evpn :gateway-vteps] ["10.21.0.1"] [:evpn :guest-mac-prefixes] ["02:00:"]}
+        lookup (fn [path] (get env path))
+        none (constantly nil)]
+    (testing "an option's items win over env.edn"
+      (is (= {"hosts" {:value ["h1" "h2"] :source "option"}
+              "vnis" {:value [4208] :source "option"}
+              "gateway-vteps" {:value ["10.0.0.9"] :source "option"}
+              "guest-mac-prefixes" {:value ["aa:"] :source "option"}}
+             (collect/resolve-inputs {:hosts "h1, h2" :vni "4208,x" :gateway-vteps "10.0.0.9"
+                                      :guest-mac-prefixes "aa:"}
+                                     lookup))))
+    (testing "env.edn answers what no option names"
+      (is (= {:value ["10.21.0.1"] :source "env.edn"}
+             (get (collect/resolve-inputs {} lookup) "gateway-vteps"))))
+    (testing "a blank option, or one whose items do not parse, falls through"
+      (is (= "env.edn" (get-in (collect/resolve-inputs {:gateway-vteps " , " :vni "x"} lookup) ["gateway-vteps" :source])))
+      (is (= {:value [4201] :source "env.edn"} (get (collect/resolve-inputs {:vni "x"} lookup) "vnis"))))
+    (testing "neither is missing, and so is an empty env.edn list"
+      (is (= {:source "missing"} (get (collect/resolve-inputs {} none) "gateway-vteps")))
+      (is (= {:source "missing"} (get (collect/resolve-inputs {} (constantly [])) "gateway-vteps"))))
+    (testing "the evidence carries each judged value and where every value came from"
+      (let [evidence (collect/input-evidence (collect/resolve-inputs {:hosts "h1" :vni "1"} none))]
+        (is (nil? (get evidence "evpn-gateway-vteps")))
+        (is (contains? evidence "evpn-gateway-vteps"))
+        (is (= ["option" "option" "missing" "missing"] (map :source (get evidence "evpn-inputs"))))
+        (is (= ["--hosts" "--vni" "--gateway-vteps" "--guest-mac-prefixes"]
+               (map :option (get evidence "evpn-inputs")))))
+      (is (= ["10.21.0.1"] (get (collect/input-evidence (collect/resolve-inputs {} lookup)) "evpn-gateway-vteps"))))))
+
 (deftest a-clean-fabric-produces-nothing
   (is (empty? (evpn/detect-mac-ownership (merge config {"evpn-macs" []}))))
   (is (empty? (evpn/detect-fdb-conflicts {"evpn-fdb" []})))
@@ -127,7 +208,8 @@
     (is (empty? (evpn/detect-mac-ownership {})))
     (is (empty? (evpn/detect-fdb-conflicts {})))
     (is (empty? (evpn/detect-static-fdb {})))
-    (is (empty? (evpn/detect-host-problems {})))))
+    (is (empty? (evpn/detect-host-problems {})))
+    (is (empty? (evpn/detect-missing-inputs {})))))
 
 ;; --- parsers -----------------------------------------------------------------
 

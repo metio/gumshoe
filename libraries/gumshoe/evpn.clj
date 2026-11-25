@@ -298,3 +298,59 @@
     (cond-> {:host host :needs-sudo? (if (nil? needs-sudo?) true needs-sudo?)}
       user (assoc :user user)
       timeout-ms (assoc :timeout-ms timeout-ms))))
+
+;; --- the values a scan judges against -----------------------------------------
+
+(def inputs
+  "The values a fabric scan reads from its options or from env.edn: the
+  option that supplies each, where env.edn keeps it, how one option item is
+  read, and the evidence key a detective judges it under. A value an option
+  names wins over env.edn, so a shell without a kubectl context - which
+  selects no env.edn environment - can still supply every one."
+  [{:input "hosts" :option :hosts :env-path [:evpn :hosts]}
+   {:input "vnis" :option :vni :env-path [:evpn :vnis] :parse parse-long}
+   {:input "gateway-vteps" :option :gateway-vteps :env-path [:evpn :gateway-vteps]
+    :evidence "evpn-gateway-vteps"}
+   {:input "guest-mac-prefixes" :option :guest-mac-prefixes :env-path [:evpn :guest-mac-prefixes]
+    :evidence "evpn-guest-mac-prefixes"}])
+
+(defn split-list
+  "The items of a comma-separated option value, trimmed, blanks dropped."
+  [s]
+  (when-not (nil? s)
+    (->> (str/split (str s) #",")
+         (map str/trim)
+         (remove str/blank?)
+         vec)))
+
+(defn resolve-input
+  "One input's value and where it came from: {:value (..) :source \"option\"}
+  when its option names any item, else {:value (..) :source \"env.edn\"} when
+  env-lookup (a (fn [path])) holds a non-empty list, else {:source
+  \"missing\"}. An item :parse cannot read is dropped."
+  [{:keys [option env-path parse]} opts env-lookup]
+  (let [from-option (seq (keep (or parse identity) (split-list (get opts option))))
+        from-env (seq (env-lookup env-path))]
+    (cond from-option {:value from-option :source "option"}
+          from-env {:value from-env :source "env.edn"}
+          :else {:source "missing"})))
+
+(defn resolve-inputs
+  "Every input resolved against opts and env-lookup, keyed by input name."
+  [opts env-lookup]
+  (into {} (for [declared inputs]
+             [(:input declared) (resolve-input declared opts env-lookup)])))
+
+(defn input-evidence
+  "The evidence the resolved inputs give the detectives: each judged value as
+  a vector under its evidence key, nil when missing, and \"evpn-inputs\"
+  recording where every value came from."
+  [resolved]
+  (into {"evpn-inputs" (vec (for [{:keys [input option env-path]} inputs]
+                              {:input input
+                               :option (str "--" (name option))
+                               :env-path env-path
+                               :source (get-in resolved [input :source])}))}
+        (for [{:keys [input evidence]} inputs
+              :when evidence]
+          [evidence (some-> (get-in resolved [input :value]) vec)])))
