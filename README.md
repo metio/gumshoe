@@ -576,8 +576,10 @@ unifying convenience.
   every book that changes something, including mutation books that post nothing
   to the changelog; a bespoke book that posts nothing declares `:change? true`,
   or `:change? (fn [opts] …)` when only a flag makes it change something. Both are bounded; pre-hooks fail *open*
-  so a broken gate never blocks emergency response. Distinct from announcers
-  (fire on confirmation) and prerequisites (a single book declares its own).
+  so a broken gate never blocks emergency response. A post-hook runs after a
+  scan printed its report on stdout, so hooks, like announcers, print to
+  stderr. Distinct from announcers (fire on confirmation) and prerequisites (a
+  single book declares its own).
 - **Secrets** - which password manager reads secrets at runtime. `:gopass`,
   `:pass`, `:passage`, and `:pasejo` are built in (select with `env.edn :secrets
   {:provider …}`); a `:command` provider drives any other CLI by templates, and

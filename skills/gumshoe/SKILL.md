@@ -90,6 +90,11 @@ tasks needs them, as in `casebook-example/bb.edn`:
 `:override-builtin true` silences babashka's warning that the task replaces
 its built-in `run`.
 
+Without a path, `bb run` and `bb gumshoe` take search terms for the fuzzy
+finder. An option after a search term (`bb run --no-color drain --dry-run`)
+exits 1 with `"--dry-run" was not read`, so the book chosen by the search
+never runs without it; put the options first, or run the book by its path.
+
 Filter the list with `grep`, then read the book's options:
 
 ```sh
@@ -416,8 +421,10 @@ mostly data:
   such as a bare `(effect/note …)`, runs as a plan of one; anything else
   that is not a plan, a keyword, a map or a plan holding a non-effect, is
   refused with an error naming the step and the fix, `effect/plan`, before
-  the step asks for confirmation or runs any of it. In a playbook the steps
-  before it have already run. Its `:derive` reads the cluster
+  the step asks for confirmation or runs any of it. A plan holding an op no
+  interpreter knows (a typo, or a custom effect whose plugin did not load)
+  is refused the same way, naming the op, under `--dry-run` too. In a
+  playbook the steps before it have already run. Its `:derive` reads the cluster
   under `kubectl/*strict-reads*`, as `:select` does, so a read there that
   did not answer stops the book with "could not read what the change rests
   on" before the confirmation, and the `:precondition` never judges an
@@ -828,7 +835,8 @@ mostly data:
 A plugin calls `gumshoe.plugin/provide!` once with any of the seams:
 announcers, detectives, capabilities, tools, pre- and post-hooks, secrets,
 themes, prerequisites, drill-down probes, kinds and fetched edges.
-`examples/example/plugin.clj` uses every one. In the gumshoe repository,
+`examples/example/plugin.clj` uses every one. Hooks and announcers print to
+stderr, because a post-hook runs after a scan printed its report on stdout. In the gumshoe repository,
 `bb test` runs the unit and conformance suites; the conformance suite
 requires that every file parses, and a license header, a namespace
 docstring, one harness entry point and a description on every book and
