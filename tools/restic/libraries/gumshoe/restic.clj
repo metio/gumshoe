@@ -8,6 +8,7 @@
    the RESTIC_PASSWORD environment variable, never in process arguments."
   (:require [cheshire.core :as json]
             [clojure.string :as str]
+            [gumshoe.concurrent :as concurrent]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
@@ -47,11 +48,10 @@
   "Queries every repository. thresholds are the staleness limits in days."
   [{:keys [repositories password warn-days critical-days]}]
   (stdout/print-section "🔍 Evidence (restic)")
-  (let [probes (mapv (fn [repository]
-                       (stdout/err-println (format "  %s %s" (stdout/blue "▸") repository))
-                       (future [repository (snapshots-of repository password)]))
-                     repositories)]
+  (run! #(stdout/err-println (format "  %s %s" (stdout/blue "▸") %)) repositories)
+  (let [probes (concurrent/map-all (fn [repository] [repository (snapshots-of repository password)])
+                                   repositories)]
     {:now (java.time.Instant/now)
      :warn-days warn-days
      :critical-days critical-days
-     "repositories" (into {} (map deref) probes)}))
+     "repositories" (into {} probes)}))

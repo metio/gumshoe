@@ -6,6 +6,7 @@
    transport selection. nil means the server did not answer at all, an empty
    vector means it answered with no records - the difference matters."
   (:require [clojure.string :as str]
+            [gumshoe.concurrent :as concurrent]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
@@ -121,26 +122,27 @@
   (stdout/print-section "🔍 Evidence (dig)")
   (stdout/err-println (str "  " (stdout/blue "▸") " zone " zone " via " server))
   (let [nameservers (some->> (query {:server server} "NS" zone) (mapv strip-dot))
-        transports (future {:ipv4 (answers? {:server server :transport :ipv4} zone)
-                            :ipv6 (answers? {:server server :transport :ipv6} zone)})
-        addresses (mapv (fn [ns]
-                          (future [ns {:a (query {:server server} "A" ns)
-                                       :aaaa (query {:server server} "AAAA" ns)}]))
-                        nameservers)
-        serials (mapv (fn [ns] (future [ns (soa-serial {:server ns} zone)])) nameservers)
-        probed (mapv (fn [probe]
-                       (future [probe (into {} (map (fn [ns] [ns (query {:server ns} "A" probe)])
-                                                    nameservers))]))
-                     probes)]
-    (doseq [ns nameservers]
-      (stdout/err-println (str "  " (stdout/blue "▸") " nameserver " ns)))
+        _ (doseq [ns nameservers]
+            (stdout/err-println (str "  " (stdout/blue "▸") " nameserver " ns)))
+        [transports addresses serials probed]
+        (concurrent/all
+         [(fn [] {:ipv4 (answers? {:server server :transport :ipv4} zone)
+                  :ipv6 (answers? {:server server :transport :ipv6} zone)})
+          #(into {} (concurrent/map-all (fn [ns] [ns {:a (query {:server server} "A" ns)
+                                                      :aaaa (query {:server server} "AAAA" ns)}])
+                                        nameservers))
+          #(into {} (concurrent/map-all (fn [ns] [ns (soa-serial {:server ns} zone)]) nameservers))
+          #(into {} (concurrent/map-all (fn [probe]
+                                          [probe (into {} (map (fn [ns] [ns (query {:server ns} "A" probe)])
+                                                               nameservers))])
+                                        probes))])]
     ;; without the NS answer there is no nameserver to ask, so the reads
     ;; that ask each nameserver stay unanswered rather than empty
     {:now (java.time.Instant/now)
      "zone" zone
      "server" server
-     "transports" @transports
+     "transports" transports
      "nameservers" nameservers
-     "addresses" (when nameservers (into {} (map deref) addresses))
-     "serials" (when nameservers (into {} (map deref) serials))
-     "probes" (when nameservers (into {} (map deref) probed))}))
+     "addresses" (when nameservers addresses)
+     "serials" (when nameservers serials)
+     "probes" (when nameservers probed)}))

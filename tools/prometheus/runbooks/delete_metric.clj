@@ -35,9 +35,8 @@
                    :port-name {:desc "The service port serving the Prometheus API"
                                :default prometheus/default-port-name
                                :coerce :string}
-                   :port {:desc "The local port used for the port-forward"
+                   :port {:desc "The local port used for the port-forward - a free port when omitted"
                           :alias :p
-                          :default 46372
                           :coerce :long}
                    :delete-timeout {:desc "Seconds the delete_series call may take - a large TSDB can need minutes"
                                     :default 600
@@ -96,7 +95,8 @@
     (if (nil? target)
       false
       (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
-            remote-port (prometheus/api-port (kubectl/find-item @services target) (:port-name opts))]
+            remote-port (prometheus/api-port (kubectl/find-item @services target) (:port-name opts))
+            local-port (delay (kubectl/local-port-or-free (:port opts)))]
         (cond
           (nil? remote-port)
           (do (stdout/error (format "service %s has no port named '%s' - check --port-name" target (:port-name opts))) false)
@@ -112,10 +112,10 @@
             :execute! #(kubectl/with-port-forward {:context context
                                                    :namespace namespace
                                                    :service name
-                                                   :local-port (:port opts)
+                                                   :local-port @local-port
                                                    :remote-port remote-port}
                          (fn []
-                           (and (delete-series! (:port opts) metric (:delete-timeout opts))
+                           (and (delete-series! @local-port metric (:delete-timeout opts))
                                 (do (stdout/print-section "🔎 Post-check")
                                     ;; best-effort: /api/v1/series can lag behind the delete until
                                     ;; tombstone cleanup, and the delete already returned success.
@@ -124,7 +124,8 @@
                                      [{:description (format "no series of '%s' are queryable anymore" metric)
                                        :timeout 60 :soft? true
                                        :watch (watch/namespace-warning-events context namespace)
-                                       :check (fn [] (series-gone? (:port opts) metric))}])))))}))))))
+                                       :check (fn [] (and (kubectl/port-forward-alive?)
+                                                          (series-gone? @local-port metric)))}])))))}))))))
 
 (runbook/execute!
  {:description "Deletes every series of a metric from a Prometheus TSDB"

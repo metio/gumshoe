@@ -2713,9 +2713,9 @@
     :coerce :string,
     :alias :i},
    :port
-   {:desc "The local port used for the port-forward",
+   {:desc
+    "The local port used for the port-forward - a free port when omitted",
     :alias :p,
-    :default 42538,
     :coerce :long}},
   :help
   ["Opens an interactive psql session as the admin user of a DbInstance"
@@ -2726,7 +2726,8 @@
    "Options:"
    "  -i, --instance  The DbInstance to connect to - interactive selection when"
    "                  omitted"
-   "  -p, --port      The local port used for the port-forward (default: 42538)"
+   "  -p, --port      The local port used for the port-forward - a free port when"
+   "                  omitted"
    "      --dry-run   Show what would change without changing anything"
    "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
    "  -h, --help      Show this help message"]},
@@ -2747,9 +2748,9 @@
     :alias :n,
     :coerce :string},
    :port
-   {:desc "The local port used for the port-forward",
+   {:desc
+    "The local port used for the port-forward - a free port when omitted",
     :alias :p,
-    :default 42538,
     :coerce :long}},
   :help
   ["Opens an interactive psql session on a db-operator managed database"
@@ -2763,7 +2764,8 @@
    "  -d, --database   The Database to connect to - interactive selection when"
    "                   omitted"
    "  -i, --ingress    A public ingress host, used to look up the namespace"
-   "  -p, --port       The local port used for the port-forward (default: 42538)"
+   "  -p, --port       The local port used for the port-forward - a free port when"
+   "                   omitted"
    "      --dry-run    Show what would change without changing anything"
    "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
    "  -h, --help       Show this help message"]},
@@ -2788,9 +2790,9 @@
     :alias :n,
     :coerce :string},
    :port
-   {:desc "The local port used for the port-forward",
+   {:desc
+    "The local port used for the port-forward - a free port when omitted",
     :alias :p,
-    :default 42538,
     :coerce :long}},
   :help
   ["Dumps a db-operator managed database to a local file"
@@ -2804,7 +2806,8 @@
    "  -d, --database   The Database to dump - interactive selection when omitted"
    "  -i, --ingress    A public ingress host, used to look up the namespace"
    "  -r, --dump       The file to write the dump to (required)"
-   "  -p, --port       The local port used for the port-forward (default: 42538)"
+   "  -p, --port       The local port used for the port-forward - a free port when"
+   "                   omitted"
    "      --dry-run    Show what would change without changing anything"
    "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
    "  -h, --help       Show this help message"]},
@@ -2830,9 +2833,9 @@
     :alias :n,
     :coerce :string},
    :port
-   {:desc "The local port used for the port-forward",
+   {:desc
+    "The local port used for the port-forward - a free port when omitted",
     :alias :p,
-    :default 42538,
     :coerce :long}},
   :help
   ["Restores a dump into a db-operator managed database"
@@ -2847,7 +2850,8 @@
    "                   omitted"
    "  -i, --ingress    A public ingress host, used to look up the namespace"
    "  -r, --dump       The dump file to restore (required)"
-   "  -p, --port       The local port used for the port-forward (default: 42538)"
+   "  -p, --port       The local port used for the port-forward - a free port when"
+   "                   omitted"
    "      --dry-run    Show what would change without changing anything"
    "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
    "  -h, --help       Show this help message"]},
@@ -3408,9 +3412,9 @@
     :validate {:pred :fn, :ex-msg :fn},
     :coerce :string},
    :port
-   {:desc "The local port used for the port-forward",
+   {:desc
+    "The local port used for the port-forward - a free port when omitted",
     :alias :p,
-    :default 13100,
     :coerce :long},
    :port-name
    {:desc "The distributor service port to forward for the ring check",
@@ -3434,7 +3438,8 @@
    "                   app.kubernetes.io/name=loki)"
    "      --port-name  The distributor service port to forward for the ring check"
    "                   (default: http-metrics)"
-   "  -p, --port       The local port used for the port-forward (default: 13100)"
+   "  -p, --port       The local port used for the port-forward - a free port when"
+   "                   omitted"
    "  -o, --output     Report format: text, json, edn, or a plugin-registered format"
    "                   (default: text)"
    "      --dry-run    Show what would change without changing anything"
@@ -3611,9 +3616,9 @@
     :coerce :string,
     :alias :n},
    :port
-   {:desc "The local port used for the port-forward",
+   {:desc
+    "The local port used for the port-forward - a free port when omitted",
     :alias :p,
-    :default 46372,
     :coerce :long},
    :port-name
    {:desc "The service port serving the Prometheus API",
@@ -3645,8 +3650,8 @@
    "                        (default: operated-prometheus=true)"
    "      --port-name       The service port serving the Prometheus API (default:"
    "                        web)"
-   "  -p, --port            The local port used for the port-forward (default:"
-   "                        46372)"
+   "  -p, --port            The local port used for the port-forward - a free port"
+   "                        when omitted"
    "      --delete-timeout  Seconds the delete_series call may take - a large TSDB"
    "                        can need minutes (default: 600)"
    "      --dry-run         Show what would change without changing anything"
@@ -3659,7 +3664,6 @@
    {:opts
     {:selector "operated-prometheus=true",
      :port-name "web",
-     :port 46372,
      :delete-timeout 600,
      :metric "query"},
     :notes []},
@@ -4091,9 +4095,9 @@
     :validate {:pred :fn, :ex-msg :fn},
     :coerce :string},
    :port
-   {:desc "The local port used for the port-forward",
+   {:desc
+    "The local port used for the port-forward - a free port when omitted",
     :alias :p,
-    :default 19090,
     :coerce :long},
    :port-name
    {:desc "The service port to forward",
@@ -4123,7 +4127,8 @@
    "  -l, --selector   Label selector used to find Thanos Query services (default:"
    "                   app.kubernetes.io/name=thanos-query)"
    "      --port-name  The service port to forward (default: http)"
-   "  -p, --port       The local port used for the port-forward (default: 19090)"
+   "  -p, --port       The local port used for the port-forward - a free port when"
+   "                   omitted"
    "  -o, --output     Report format: text, json, edn, or a plugin-registered format"
    "                   (default: text)"
    "      --dry-run    Show what would change without changing anything"
@@ -4134,7 +4139,6 @@
    {:opts
     {:selector "app.kubernetes.io/name=thanos-query",
      :port-name "http",
-     :port 19090,
      :output "text",
      :service "query"},
     :notes []},
@@ -4142,7 +4146,6 @@
    {:opts
     {:selector "app.kubernetes.io/name=thanos-query",
      :port-name "http",
-     :port 19090,
      :output "text",
      :service "query"},
     :notes ["-m is a deprecated alias of --service; use -s"]},
@@ -4150,7 +4153,6 @@
    {:opts
     {:selector "app.kubernetes.io/name=thanos-query",
      :port-name "http",
-     :port 19090,
      :output "text",
      :service "query"},
     :notes []}}},

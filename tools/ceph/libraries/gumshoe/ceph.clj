@@ -9,6 +9,7 @@
    command is wrapped in 'sudo cephadm shell -- ...' instead."
   (:require [cheshire.core :as json]
             [clojure.string :as str]
+            [gumshoe.concurrent :as concurrent]
             [gumshoe.effect :as effect]
             [gumshoe.shell :as shell]
             [gumshoe.ssh :as ssh]
@@ -289,9 +290,6 @@
   (stdout/print-section "🔍 Evidence (ceph via SSH)")
   (doseq [[key command] (sort-by first evidence-commands)]
     (stdout/err-println (str "  " (stdout/blue "▸") " ceph " (str/join " " command) " (" key ")")))
-  (let [fetches (mapv (fn [[key command]]
-                        (future [key (apply ceph-json connection command)]))
-                      evidence-commands)]
-    (into {:now (java.time.Instant/now)}
-          (map deref)
-          fetches)))
+  (into {:now (java.time.Instant/now)}
+        (concurrent/map-all (fn [[key command]] [key (apply ceph-json connection command)])
+                            evidence-commands)))

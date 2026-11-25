@@ -209,12 +209,17 @@
 
 (defn- bounded-collect
   "The value collector returns for key within timeout-ms, or ::timed-out after
-   cancelling it. Exceptions from the collector reach the caller."
+   cancelling it. Exceptions from the collector reach the caller. A caller
+   interrupted while it waits - a post-check attempt abandoned at its deadline
+   - cancels the collector too: an interrupt reaches only the thread it was
+   sent to, so the collector's own thread would otherwise run on, command
+   after command, after the attempt was given up."
   [collect timeout-ms]
-  (let [work (future (collect))
-        value (deref work timeout-ms ::timed-out)]
-    (when (= ::timed-out value) (future-cancel work))
-    value))
+  (let [work (future (collect))]
+    (try
+      (deref work timeout-ms ::timed-out)
+      (finally
+        (when-not (realized? work) (future-cancel work))))))
 
 (defn timed-out-message
   "The warning naming the evidence keys whose collector did not return in time."

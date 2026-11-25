@@ -58,10 +58,13 @@
    the post-check, and the book, forever."
   [check limit-ms]
   (let [work (future (attempt check))
-        result (deref work limit-ms ::timed-out)]
+        result (try (deref work limit-ms ::timed-out)
+                    (finally
+                      ;; also when this thread is interrupted while it waits,
+                      ;; which reaches only this thread, not the attempt's
+                      (when-not (realized? work) (future-cancel work))))]
     (if (= ::timed-out result)
-      (do (future-cancel work)
-          (format "the check did not return within %ds" (quot limit-ms 1000)))
+      (format "the check did not return within %ds" (quot limit-ms 1000))
       result)))
 
 (defn- abort-reason

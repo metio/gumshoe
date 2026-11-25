@@ -14,6 +14,7 @@
   becomes evidence rather than an aborted scan, because the unreachable host is
   often the symptom being investigated."
   (:require [clojure.string :as str]
+            [gumshoe.concurrent :as concurrent]
             [gumshoe.shell :as shell]
             [gumshoe.ssh :as ssh]))
 
@@ -265,14 +266,13 @@
     (->> (for [{:keys [host vni mac]} conflicts
                :let [connection (get by-host host)]
                :when (and connection vni)]
-           (future
-             (binding [shell/*timeout-ms* (or (:timeout-ms connection) 30000)]
-               (let [cmds (conflict-commands connection vni mac)]
-                 [[host vni mac]
-                  {:mac-detail (parse-mac-detail (run connection (:mac-detail cmds)))
-                   :bgp-route (parse-bgp-mac-route (run connection (:bgp-route cmds)))}]))))
-         doall
-         (into {} (map deref)))))
+           #(binding [shell/*timeout-ms* (or (:timeout-ms connection) 30000)]
+              (let [cmds (conflict-commands connection vni mac)]
+                [[host vni mac]
+                 {:mac-detail (parse-mac-detail (run connection (:mac-detail cmds)))
+                  :bgp-route (parse-bgp-mac-route (run connection (:bgp-route cmds)))}])))
+         concurrent/all
+         (into {}))))
 
 (defn collect-evidence!
   "Fan out across every host and VNI, then flatten into the evidence a detective
@@ -280,10 +280,7 @@
   as the sum of its hosts, and a partitioned fabric is when speed matters. The
   fdb conflicts found get a second, bounded round of reads for their context."
   [connections vnis]
-  (let [results (->> (for [c connections vni vnis]
-                       (future (collect-host c vni)))
-                     doall
-                     (mapv deref))
+  (let [results (concurrent/all (for [c connections vni vnis] #(collect-host c vni)))
         fdb (vec (mapcat :fdb results))]
     {"evpn-macs" (vec (mapcat :macs results))
      "evpn-fdb" fdb

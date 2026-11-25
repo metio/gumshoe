@@ -24,6 +24,14 @@
 (defn- message-of [^Throwable e]
   (or (ex-message e) (.getName (class e))))
 
+(defn- keep-interrupt!
+  "Sets the interrupt flag again when e is an interrupt: these functions
+   never throw, and a cancelled caller that got an answer instead must still
+   refuse its next command."
+  [e]
+  (when (instance? InterruptedException e)
+    (.interrupt (Thread/currentThread))))
+
 (defn- close-quietly [^java.io.Closeable c]
   (try (.close c) (catch Exception _ nil)))
 
@@ -46,10 +54,11 @@
                             {:error (format "the body exceeded %d bytes" max-bytes)}
                             :else (do (.write out buffer 0 n) (recur))))))
                     (catch Exception e {:error (message-of e)})))
-        result (deref reading (max 0 deadline-ms) ::timed-out)]
-    (when (= ::timed-out result)
-      (future-cancel reading))
-    (close-quietly stream)
+        result (try (deref reading (max 0 deadline-ms) ::timed-out)
+                    (finally
+                      ;; also when the caller is interrupted while it waits
+                      (when-not (realized? reading) (future-cancel reading))
+                      (close-quietly stream)))]
     (if (= ::timed-out result)
       {:error (format "the body did not arrive within %d ms" deadline-ms)}
       result)))
@@ -85,6 +94,7 @@
            :body (:body read)
            :json (try (json/parse-string (:body read) true) (catch Exception _ nil))}))
       (catch Exception e
+        (keep-interrupt! e)
         {:reachable false :error (message-of e)}))))
 
 (defn fetch
@@ -138,9 +148,11 @@
                                        :while (< (count @collected) max-lines)]
                                  (swap! collected conj line)))
                              (catch Exception _ nil)))]
-             (deref reading (max 0 (remaining-ms started deadline-ms)) nil)
-             (future-cancel reading)
-             (close-quietly body)
+             (try (deref reading (max 0 (remaining-ms started deadline-ms)) nil)
+                  (finally
+                    (future-cancel reading)
+                    (close-quietly body)))
              {:reachable true :status status :lines @collected})))
        (catch Exception e
+         (keep-interrupt! e)
          {:reachable false :error (message-of e)})))))

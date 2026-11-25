@@ -13,6 +13,7 @@
    over IPv4 and IPv6, or by two replicas - still counts once; cores count
    distinct `cpu` labels for the same reason."
   (:require [clojure.string :as str]
+            [gumshoe.concurrent :as concurrent]
             [gumshoe.promql :as promql])
   (:import (java.time Instant)))
 
@@ -109,4 +110,5 @@
 (defn read!
   "Runs every query of `opts` against the endpoint and returns the answers."
   [ep opts]
-  (into {} (pmap (fn [[q promql]] [q (promql/query! ep promql)]) (queries opts))))
+  (into {} (concurrent/map-all (fn [[q promql]] [q (promql/query! ep promql)]) (queries opts)
+                               {:parallelism concurrent/default-parallelism})))

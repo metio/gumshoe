@@ -26,9 +26,8 @@
           :alias :r
           :require true
           :coerce :string}
-   :port {:desc "The local port used for the port-forward"
+   :port {:desc "The local port used for the port-forward - a free port when omitted"
           :alias :p
-          :default 42538
           :coerce :long}})
 
 (def prerequisites
@@ -60,7 +59,7 @@
                                       :dump file})
             (stdout/print-section "⚡ Action")
             (and (postgres/with-postgres context connection (:port opts)
-                   (fn [] (postgres/pg-dump! connection (:port opts) file)))
+                   (fn [port] (postgres/pg-dump! connection port file)))
                  (do (stdout/print-section "🔎 Post-check")
                      (verify/all
                       [{:description (format "%s ends with pg_dump's completion marker" file)

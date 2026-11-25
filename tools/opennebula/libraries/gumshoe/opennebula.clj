@@ -6,6 +6,7 @@
    its configured credentials, so nothing but ssh is assumed here. Every list
    command is asked for --json and normalized into a flat seq."
   (:require [cheshire.core :as json]
+            [gumshoe.concurrent :as concurrent]
             [gumshoe.shell :as shell]
             [gumshoe.ssh :as ssh]
             [gumshoe.stdout :as stdout]))
@@ -43,10 +44,10 @@
   (stdout/print-section "🔍 Evidence (OpenNebula via SSH)")
   (doseq [command ["onehost" "onevm" "onedatastore"]]
     (stdout/err-println (str "  " (stdout/blue "▸") " " command " list --json")))
-  (let [hosts (future (one-json connection "onehost" :HOST_POOL :HOST))
-        vms (future (one-json connection "onevm" :VM_POOL :VM))
-        datastores (future (one-json connection "onedatastore" :DATASTORE_POOL :DATASTORE))]
+  (let [[hosts vms datastores] (concurrent/all [#(one-json connection "onehost" :HOST_POOL :HOST)
+                                                #(one-json connection "onevm" :VM_POOL :VM)
+                                                #(one-json connection "onedatastore" :DATASTORE_POOL :DATASTORE)])]
     {:now (java.time.Instant/now)
-     "hosts" @hosts
-     "vms" @vms
-     "datastores" @datastores}))
+     "hosts" hosts
+     "vms" vms
+     "datastores" datastores}))

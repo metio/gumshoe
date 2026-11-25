@@ -20,9 +20,8 @@
 (def options
   (select/options instance-select
                   {:instance {:desc "The DbInstance to connect to - interactive selection when omitted"}
-                   :port {:desc "The local port used for the port-forward"
+                   :port {:desc "The local port used for the port-forward - a free port when omitted"
                           :alias :p
-                          :default 42538
                           :coerce :long}}))
 
 (def prerequisites
@@ -52,7 +51,7 @@
               :announce! #(announce/announce! cluster announcement-data
                                                            (format "Admin psql session on DbInstance %s" instance))
               :execute! #(postgres/with-postgres context connection (:port opts)
-                           (fn [] (postgres/psql! connection (:port opts))))})))))))
+                           (fn [port] (postgres/psql! connection port)))})))))))
 
 (runbook/execute!
  {:description "Opens an interactive psql session as the admin user of a DbInstance"

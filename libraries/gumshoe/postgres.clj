@@ -80,14 +80,17 @@
 ;; running clients against a port-forward
 
 (defn with-postgres
-  "Runs f while the connection's postgres service is forwarded to local-port."
+  "Runs (f port) while the connection's postgres service is forwarded to a
+   local port: local-port when the operator chose one, else a free port, so
+   two books run at once never share one."
   [context connection local-port f]
-  (kubectl/with-port-forward {:context context
-                              :namespace (:namespace connection)
-                              :service (:service connection)
-                              :local-port local-port
-                              :remote-port 5432}
-    f))
+  (let [port (kubectl/local-port-or-free local-port)]
+    (kubectl/with-port-forward {:context context
+                                :namespace (:namespace connection)
+                                :service (:service connection)
+                                :local-port port
+                                :remote-port 5432}
+      #(f port))))
 
 (defn- psql-args
   [{:keys [user database]} local-port extra]

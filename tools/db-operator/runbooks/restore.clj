@@ -27,9 +27,8 @@
           :alias :r
           :require true
           :coerce :string}
-   :port {:desc "The local port used for the port-forward"
+   :port {:desc "The local port used for the port-forward - a free port when omitted"
           :alias :p
-          :default 42538
           :coerce :long}})
 
 (def prerequisites
@@ -70,9 +69,9 @@
                   :announce! #(announce/announce! cluster announcement-data
                                                                (format "Restore dump into database %s" target))
                   :execute! #(postgres/with-postgres context connection (:port opts)
-                               (fn [] (postgres/psql! connection (:port opts)
-                                                      "--set" "ON_ERROR_STOP=on"
-                                                      "--file" file)))})))))))))
+                               (fn [port] (postgres/psql! connection port
+                                                          "--set" "ON_ERROR_STOP=on"
+                                                          "--file" file)))})))))))))
 
 (runbook/execute!
  {:description "Restores a dump into a db-operator managed database"
