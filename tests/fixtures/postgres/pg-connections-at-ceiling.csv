@@ -1,0 +1,10 @@
+client_addr,usename,application_name,state,backend_type,backends,total,max_connections,superuser_reserved_connections,reserved_connections,read_only,in_recovery
+127.0.0.1,app,pgbouncer,active,client backend,6,18,12,3,0,on,f
+,,,,io worker,3,18,12,3,0,on,f
+127.0.0.1,app,"moodle, php",idle,client backend,3,18,12,3,0,on,f
+,postgres,,,logical replication launcher,1,18,12,3,0,on,f
+,postgres,psql,active,client backend,1,18,12,3,0,on,f
+,,,,autovacuum launcher,1,18,12,3,0,on,f
+,,,,background writer,1,18,12,3,0,on,f
+,,,,checkpointer,1,18,12,3,0,on,f
+,,,,walwriter,1,18,12,3,0,on,f

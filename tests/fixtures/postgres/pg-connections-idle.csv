@@ -1,0 +1,8 @@
+client_addr,usename,application_name,state,backend_type,backends,total,max_connections,superuser_reserved_connections,reserved_connections,read_only,in_recovery
+,,,,io worker,3,9,100,3,0,on,f
+,postgres,,,logical replication launcher,1,9,100,3,0,on,f
+,postgres,psql,active,client backend,1,9,100,3,0,on,f
+,,,,autovacuum launcher,1,9,100,3,0,on,f
+,,,,background writer,1,9,100,3,0,on,f
+,,,,checkpointer,1,9,100,3,0,on,f
+,,,,walwriter,1,9,100,3,0,on,f

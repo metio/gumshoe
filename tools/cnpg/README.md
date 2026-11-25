@@ -50,6 +50,24 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
   0 instances is not a finding. The check joins the Pooler, Service and
   EndpointSlice reads, and when any of them did not answer it is marked unread
   instead of reporting zero endpoints.
+- **Connection ceiling detective** - once a cluster's client backends reach
+  `max_connections` less `superuser_reserved_connections` and
+  `reserved_connections`, PostgreSQL refuses every ordinary role with
+  `remaining connection slots are reserved`, while the Cluster, its pods and
+  its poolers all read healthy. `pg_stat_activity` is not in the resource API,
+  so this one brings its own collector: it runs one constant read-only
+  statement with `psql` in the primary's `postgres` container over `kubectl
+  exec`, on the local socket as `postgres` with peer authentication, so no
+  Secret is read. The primary is the pod `status.currentPrimary` names, else the
+  pod of the cluster labelled `cnpg.io/instanceRole=primary`. A cluster at the
+  ceiling is critical, and the finding names the holders by client address,
+  split into addresses a Running pod holds, addresses no Running pod holds (a
+  client that vanished mid-query, such as a replaced pooler pod, keeps its
+  backend active until `client_connection_check_interval` reclaims it), and
+  backends on the local socket. A cluster that could not be read - exec denied,
+  no answer, no primary found, or a pod that answered from recovery - is a
+  warning naming why, and when no cluster could be read the check is unread.
+  The scan book needs `create` on `pods/exec` for it.
 - **Pooler login detective** - a pooler whose backend rejects the login it
   makes for each client is healthy in every field of the resource API: the pods
   are ready and the Pooler phase is active while no client reaches the database.

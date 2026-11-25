@@ -191,7 +191,7 @@ The detectives compose from one domain to the whole cluster:
 | `runbooks/detectives/apiversions.clj` | CRD discovery drift |
 | `runbooks/detectives/security.clj`, `rbac.clj` | RBAC, pod security, network segmentation |
 | `runbooks/detectives/posture.clj` | probes, image tags, replicas, PDBs, deprecated APIs, template drift |
-| `runbooks/detectives/databases.clj` | CloudNativePG and db-operator; a CNPG Pooler declaring instances whose Service resolves to no ready EndpointSlice address is critical (`cnpg-pooler-endpoints`, component the Pooler), and the check is unread when the Pooler, Service or EndpointSlice read did not answer |
+| `runbooks/detectives/databases.clj` | CloudNativePG and db-operator; a CNPG Pooler declaring instances whose Service resolves to no ready EndpointSlice address is critical (`cnpg-pooler-endpoints`, component the Pooler), and the check is unread when the Pooler, Service or EndpointSlice read did not answer; a CNPG cluster whose client backends reach `max_connections` less the superuser-reserved and reserved slots is critical (`cnpg-connections`, component the Cluster), naming the holders split into Running pods, addresses no Running pod holds and the local socket. It reads `pg_stat_activity` with one constant read-only `psql` statement through `kubectl exec` into the primary's `postgres` container, so it needs `create` on `pods/exec`; a cluster it could not read is a warning naming why (exec denied or unanswered, no primary, answered from recovery), and the check is unread when no cluster was read or the Cluster, pod or connection read did not answer |
 | `runbooks/detectives/observability.clj` | Prometheus, Alertmanager, ThanosRuler |
 | `runbooks/detectives/dns.clj` | nameservers, SOA replication, answer consistency |
 | `runbooks/detectives/mail.clj` | MX, SPF, DKIM, DMARC, rDNS, live SMTP/POP3/IMAP with TLS |
@@ -326,7 +326,10 @@ mostly data:
   nil, an empty list still counts, and its `:detect` guards with
   `(gumshoe.evidence/consulted? evidence reads)`.
   A collection reading a command's output out of a container uses
-  `kubectl/exec-answer`, nil unless the command exited 0; `exec-stdout`
+  `kubectl/exec-answer`, nil unless the command exited 0 (a PostgreSQL
+  server's connections come from `gumshoe.postgres/connection-reading`,
+  which runs the constant `connection-sql` read-only and parses it with
+  `parse-connections`, nil unless the rows add up to the total); `exec-stdout`
   returns whatever reached stdout, so a failed command reads as an empty
   answer. Keep a value nobody read nil in the evidence rather than
   substituting the program's default for it, and apply the default only

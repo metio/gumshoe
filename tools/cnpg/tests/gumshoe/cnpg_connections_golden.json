@@ -1,0 +1,59 @@
+{
+  "a cluster at its ceiling held mostly by addresses with no running pod, beside one below it and one unread" : {
+    "findings" : [ {
+      "severity" : "critical",
+      "component" : "db/pg",
+      "summary" : "1500 of max_connections 1500 in use, at or above the 1497 left for ordinary roles: 1446 from 3 addresses with no running pod, 50 from 1 running pod, 4 without a client address (local socket)",
+      "hint" : "10.25.234.87 (no running pod) holds 498: 498 active; user app; application pgbouncer; 10.25.198.195 (no running pod) holds 483: 483 active; user app; application pgbouncer; 10.0.0.9 (no running pod) holds 465: 465 active; user app; application pgbouncer; 10.0.0.5 (pod db/pooler-rw-a) holds 50: 50 idle; user app; application pgbouncer; the local socket holds 4: 4 active; user app; application pgbouncer. 9 background processes hold no connection slot. A backend whose client vanished mid-query stays active and is never reclaimed unless client_connection_check_interval is set; confirm no running pod holds an address before ending its backends with pg_terminate_backend",
+      "detective" : "cnpg-connections"
+    }, {
+      "severity" : "warning",
+      "component" : "shop/carts",
+      "summary" : "connections unread: kubectl exec into pod shop/carts-1, container postgres, did not answer",
+      "hint" : "exec may be denied (create on pods/exec), psql may have failed, or every slot including the superuser-reserved ones is taken; a read that did not answer is not zero connections",
+      "detective" : "cnpg-connections"
+    } ],
+    "checked" : [ {
+      "name" : "cnpg-connections",
+      "description" : "Clusters at their connection ceiling, a total outage for ordinary roles, with the holders split into running pods, addresses no running pod holds and the local socket"
+    } ],
+    "summary" : {
+      "critical" : 1,
+      "warning" : 1,
+      "info" : 0
+    }
+  },
+  "exec denied on the only cluster" : {
+    "findings" : [ {
+      "severity" : "warning",
+      "component" : "db/pg",
+      "summary" : "connections unread: kubectl exec into pod db/pg-1, container postgres, did not answer",
+      "hint" : "exec may be denied (create on pods/exec), psql may have failed, or every slot including the superuser-reserved ones is taken; a read that did not answer is not zero connections",
+      "detective" : "cnpg-connections"
+    } ],
+    "checked" : [ {
+      "name" : "cnpg-connections",
+      "description" : "Clusters at their connection ceiling, a total outage for ordinary roles, with the holders split into running pods, addresses no running pod holds and the local socket",
+      "unread" : true
+    } ],
+    "summary" : {
+      "critical" : 0,
+      "warning" : 1,
+      "info" : 0
+    }
+  },
+  "the connection read did not answer" : {
+    "findings" : [ ],
+    "checked" : [ {
+      "name" : "cnpg-connections",
+      "description" : "Clusters at their connection ceiling, a total outage for ordinary roles, with the holders split into running pods, addresses no running pod holds and the local socket",
+      "unread" : true
+    } ],
+    "summary" : {
+      "critical" : 0,
+      "warning" : 0,
+      "info" : 0
+    },
+    "nothing-checked" : true
+  }
+}

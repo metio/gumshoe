@@ -132,6 +132,7 @@
                    [gumshoe.cnpg-storage-test]
                    [gumshoe.cnpg-recoverability-test]
                    [gumshoe.cnpg-pooler-logs-test]
+                   [gumshoe.cnpg-connections-test]
                    [gumshoe.cnpg.pooler-logs-test]
                     [gumshoe.cnpg.verifier-churn-test]
                    [gumshoe.db-operator-test]
@@ -185,6 +186,7 @@
                    [gumshoe.dispatch-test]
                    [gumshoe.prerequisites-test]
                    [gumshoe.postgres-test]
+                   [gumshoe.postgres-connections-test]
                    [gumshoe.progress-test]
                    [gumshoe.prometheus-test]
                    [gumshoe.rightsizing-test]
@@ -330,6 +332,7 @@
                                                          'gumshoe.cnpg-storage-test
                                                          'gumshoe.cnpg-recoverability-test
                                                          'gumshoe.cnpg-pooler-logs-test
+                                                         'gumshoe.cnpg-connections-test
                                                          'gumshoe.cnpg.verifier-churn-test
                              'gumshoe.cnpg.pooler-logs-test
                                                          'gumshoe.db-operator-test
@@ -384,6 +387,7 @@
                                                          'gumshoe.dispatch-test
                                                          'gumshoe.prerequisites-test
                                                          'gumshoe.postgres-test
+                                                         'gumshoe.postgres-connections-test
                                                          'gumshoe.progress-test
                                                          'gumshoe.prometheus-test
                                                          'gumshoe.rightsizing-test
