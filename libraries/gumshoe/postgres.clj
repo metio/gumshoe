@@ -117,13 +117,54 @@
         true
         (do (stdout/error (format "pg_dump failed:\n%s" (:err result))) false)))))
 
+(def dump-header
+  "The comment pg_dump opens a plain dump with."
+  "-- PostgreSQL database dump")
+
+(def dump-marker
+  "The comment pg_dump closes a successful plain dump with."
+  "PostgreSQL database dump complete")
+
+(def ^:private window
+  "Bytes read from each end of a dump. pg_dump writes its header on the first
+   lines and its completion marker on the last few, so a window of this size
+   holds both with room for the few lines a release may add around them."
+  65536)
+
+(defn dump-ends
+  "{:head <the first bytes> :tail <the last bytes>} of file as text, reading
+   at most `window` bytes from each end, so judging a dump costs the same for
+   any size and never holds the whole file in memory."
+  ([file] (dump-ends file window))
+  ([file size]
+   (with-open [raf (java.io.RandomAccessFile. (str file) "r")]
+     (let [length (.length raf)
+           chunk (fn [offset n]
+                   (let [buffer (byte-array n)]
+                     (.seek raf offset)
+                     (.readFully raf buffer)
+                     (String. buffer java.nio.charset.StandardCharsets/UTF_8)))
+           n (int (min size length))]
+       {:head (chunk 0 n)
+        :tail (chunk (- length n) n)}))))
+
+(defn dump-ends-complete?
+  "Whether the ends of a plain dump show a complete one: pg_dump's header in
+   its head and its completion marker in its tail."
+  [{:keys [head tail]}]
+  (boolean (and (string? head) (string? tail)
+                (str/includes? head dump-header)
+                (str/includes? tail dump-marker))))
+
 (defn dump-complete?
   "pg_dump ends a successful plain dump with a completion marker - its absence
-   means the dump is truncated and must not be trusted."
+   means the dump is truncated and must not be trusted. Only the two ends of
+   the file are read, so a dump of any size is judged. Any failure to read
+   them, an Error included, counts as incomplete."
   [file]
   (try
-    (str/includes? (slurp file) "PostgreSQL database dump complete")
-    (catch Exception _ false)))
+    (dump-ends-complete? (dump-ends file))
+    (catch Throwable _ false)))
 
 ;; ---------------------------------------------------------------------------
 ;; reading who holds the connections, from inside the server's pod
