@@ -3,8 +3,8 @@
 
 (ns gumshoe.change-books-test
   "Characterises the change books whose effect is not a kubectl call against
-   the cluster the kube context names, or which do not announce: the ceph OSD
-   book that acts over SSH and the netshoot debug books. Each book runs its
+   the cluster the kube context names, or which do not announce: the ceph
+   books that act over SSH and the netshoot debug books. Each book runs its
    whole :action against a recorded ceph cluster and a recorded kube cluster,
    with gumshoe.shell/execute answering for ssh and kubectl, the fuzzy finder
    answering as an operator who picks nothing, and flow/change! captured. A
@@ -52,14 +52,22 @@
   [argv]
   (vec (rest (drop-while #(not= "--" %) argv))))
 
+(def ^:private ceph-unanswered
+  {:exit 1 :out "" :err "Error initializing cluster client: ObjectNotFound('RADOS object not found (error calling conf_read_file)')"})
+
 (defn- answer-ssh
-  [{:keys [osds answering?]} argv]
+  "The far end of an ssh argv: the host answers while :answering?, and its
+   ceph CLI answers while :ceph-answering? is not false, so a scenario can
+   reach a host whose ceph does not answer."
+  [{:keys [osds crashes answering? ceph-answering?]} argv]
   (let [[_host & command] (remote-command argv)
         command (vec (remove #{"sudo" "cephadm" "shell" "--"} command))]
     (cond
       (not answering?) unanswered
       (#{["exit" "0"] ["-n" "true"]} command) {:exit 0 :out "" :err ""}
+      (and (false? ceph-answering?) (= "ceph" (first command))) ceph-unanswered
       (= ["ceph" "osd" "dump" "--format" "json"] command) {:exit 0 :out (json/generate-string {:osds osds}) :err ""}
+      (= ["ceph" "crash" "ls-new" "--format" "json"] command) {:exit 0 :out (json/generate-string (or crashes [])) :err ""}
       :else {:exit 0 :out "" :err ""})))
 
 (defn- answer-kubectl
@@ -181,11 +189,37 @@
 
 (def ^:private out-osd [(osd 1 true) (osd 3 false)])
 
+(defn- crash
+  [id entity]
+  {:crash_id id :entity entity :timestamp "2026-11-24T10:00:00.000000Z"})
+
+(def ^:private crashes
+  [(crash "2026-11-24T10:00:00.000000Z_1a2b" "osd.3")
+   (crash "2026-11-24T11:00:00.000000Z_3c4d" "mgr.ceph-1")])
+
+(def ^:private later-crash (crash "2026-11-24T12:00:00.000000Z_5e6f" "mon.ceph-2"))
+
 (defn- node [name] {:metadata {:name name}})
 (defn- pod [namespace name] {:metadata {:namespace namespace :name name}})
 
 (def books
-  {"tools/ceph/runbooks/osd_in.clj"
+  {"tools/ceph/runbooks/archive_crashes.clj"
+   {:argv ["--host" "mgr-1"]
+    :scenarios
+    {:permitted {:state {:crashes crashes} :after {:crashes []} :opts {:host "mgr-1"}}
+     :cephadm {:state {:crashes crashes} :after {:crashes []}
+               :opts {:host "mgr-1" :user "admin" :cephadm-shell true}}
+     :none {:state {:crashes []} :opts {:host "mgr-1"}}
+     :ceph-unanswered {:state {:crashes crashes :ceph-answering? false} :opts {:host "mgr-1"}}
+     :unreachable {:state {:crashes crashes :answering? false} :opts {:host "mgr-1"}}
+     :unanswered-meanwhile {:state {:crashes crashes} :between {:ceph-answering? false} :opts {:host "mgr-1"}}
+     :new-crash-meanwhile {:state {:crashes crashes} :between {:crashes (conj crashes later-crash)}
+                           :after {:crashes [later-crash]} :opts {:host "mgr-1"}}
+     :still-unarchived {:state {:crashes crashes} :after {:crashes crashes} :opts {:host "mgr-1"}}}
+    :failing
+    {:failed-after-applying {:state {:crashes crashes} :opts {:host "mgr-1"}}}}
+
+   "tools/ceph/runbooks/osd_in.clj"
    {:argv ["--host" "mgr-1" "--osd" "3"]
     :scenarios
     {:permitted {:state {:osds out-osd} :after {:osds [(osd 1 true) (osd 3 true)]}
