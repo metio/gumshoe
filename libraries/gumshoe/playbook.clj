@@ -84,6 +84,7 @@
    steps, refusing an unknown position as the book loads."
   (:refer-clojure :exclude [run!])
   (:require [clojure.string :as str]
+            [gumshoe.change :as change]
             [gumshoe.effect :as effect]
             [gumshoe.flow :as flow]
             [gumshoe.interact :as interact]
@@ -109,9 +110,10 @@
 ;; --- positions -------------------------------------------------------------------
 
 (defn destructive?
-  "Whether the step is a change whose confirmation calls it destructive."
+  "Whether the step is a change whose confirmation calls it destructive or
+   whose effect is marked destructive (gumshoe.change/destructive?)."
   [step]
-  (true? (get-in step [:confirm :destructive?])))
+  (change/destructive? step))
 
 (defn positions
   "The positions `anchored` offers, in run order. `anchored` is a vector of
@@ -245,7 +247,7 @@
                                 (when (separately? step) " (asks again)"))))
                        steps))
    :destructive? (boolean (or (:destructive? confirm)
-                              (some #(and (= :change (kind %)) (get-in % [:confirm :destructive?]))
+                              (some #(and (= :change (kind %)) (destructive? %))
                                     steps)))})
 
 (defn- attended?
@@ -603,7 +605,7 @@
                 "; --from-segment " (::segment step) " continues here")
     :change (str "  " (::title step)
                  (when (:title step) (str " - " (label step)))
-                 (when (get-in step [:confirm :destructive?]) " (destructive)")
+                 (when (destructive? step) " (destructive)")
                  (when (:verify step) ", verified")
                  (when (or (:done step) (:satisfied? step)) ", skipped when already done")
                  (when (separately? step) ", asks again"))))

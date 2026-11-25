@@ -9,8 +9,14 @@
    prerequisites, reads, values, :refusal and :recovery through
    gumshoe.change/compose (see gumshoe.playbook). The objects come from a function of the step's
    context, so a step reads them from whatever its reads and values
-   observed."
-  (:require [gumshoe.effect :as effect]
+   observed.
+
+   A builder whose effect destroys what it acts on marks the effect with
+   gumshoe.change/destructive instead of returning a :confirm, so the step
+   is confirmed with a typed yes whatever the caller's :confirm says, and a
+   caller that merges its own :confirm with the fragment keeps its action."
+  (:require [gumshoe.change :as change]
+            [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]))
 
 (defn line
@@ -40,7 +46,9 @@
 
 (defn delete
   "The :items, :effect and :verify of a step that deletes the objects
-   `(objects ctx)` returns and proves each one gone.
+   `(objects ctx)` returns and proves each one gone. The effect is marked
+   destructive (gumshoe.change/destructive), so the step always asks for a
+   typed yes.
 
      :objects  (fn [ctx] -> [{:type :namespace :name} ..])
      :none     what there is when there are no objects, as in
@@ -55,7 +63,8 @@
     {:items (fn [ctx]
               (or (seq (map (comp item line) (objects ctx)))
                   [(str none " to delete")]))
-     :effect (fn [{:keys [context] :as ctx}]
-               (delete-effect context (objects ctx) none))
+     :effect (change/destructive
+              (fn [{:keys [context] :as ctx}]
+                (delete-effect context (objects ctx) none)))
      :verify (fn [{:keys [context] :as ctx}]
                (gone-checks context (objects ctx) (timeout-of ctx) interval))}))
