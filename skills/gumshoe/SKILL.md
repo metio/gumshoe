@@ -180,7 +180,7 @@ The detectives compose from one domain to the whole cluster:
 
 | Book | Looks at |
 | --- | --- |
-| `runbooks/detectives/cluster.clj` | every registered detective, except posture and the checks that exec into pods; takes `--hpa-grace-minutes` like `workloads.clj` |
+| `runbooks/detectives/cluster.clj` | every registered detective, except posture, the checks that exec into pods, and the mail and fabric checks, whose evidence only their own books collect; takes `--hpa-grace-minutes` like `workloads.clj` |
 | `runbooks/detectives/workloads.clj` | controllers, jobs, pods, Services, their storage; an Ingress backend Service that is missing is critical, and info when ingress-nginx redirects every request of that Ingress (`permanent-redirect`, `temporal-redirect`, or a top-level catch-all redirecting `rewrite` or `return 30x` in `configuration-snippet`); an HPA whose AbleToScale or ScalingActive condition is False is critical once it has held for `--hpa-grace-minutes` (default 10, read from the condition's `lastTransitionTime` at collection time) and a warning naming its age before that, while one whose age cannot be read stays critical |
 | `runbooks/detectives/pods.clj` | restart loops, image pulls, OOM kills, Pending and Failed pods |
 | `runbooks/detectives/nodes.clj` | readiness, pressure, cordoned nodes |
@@ -202,7 +202,9 @@ Posture findings describe risks that may be deliberate choices, so they run
 only when posture is asked for. A check that execs into a pod registers into
 the opt-in `:exec` scope, so neither its scope's book nor the whole-cluster
 scan runs it; the one book that adds it with `:detectives` beside its `:scope`
-declares `:kubectl-can-exec ["pods"]`.
+declares `:kubectl-can-exec ["pods"]`. The `:mail` and `:fabric` scopes are
+opt-in as well: their evidence comes from dig, openssl and SSH in their own
+books, and a cluster scan has no collector for it.
 
 Each tool package under `tools/<name>/` brings a `scan.clj` for its system,
 registers its detectives into the scopes above, and adds runbooks for its

@@ -304,15 +304,19 @@
 (defonce ^:private resource-kinds-cache (atom nil))
 
 (defn resource-kinds
-  "A map from resource name to Kind, discovered once from `kubectl api-resources`
-   and cached for the run. Empty when the API is unreachable, so a caller falls
-   back to the raw resource name instead of guessing a Kind."
+  "A map from resource name to Kind, discovered from `kubectl api-resources`
+   and cached for the run once a discovery answered. Empty when the API is
+   unreachable, so a caller falls back to the raw resource name instead of
+   guessing a Kind; a failed discovery is not cached, so the next call asks
+   again once the API recovers."
   []
   (or @resource-kinds-cache
-      (reset! resource-kinds-cache
-              (parse-api-resources
-               (shell/stdout-of "kubectl" "api-resources" "--no-headers"
-                                "--request-timeout=5s")))))
+      (let [{:keys [exit out]} (shell/execute "kubectl" "api-resources" "--no-headers"
+                                              "--request-timeout=5s")
+            kinds (when (zero? exit) (parse-api-resources out))]
+        (if (seq kinds)
+          (reset! resource-kinds-cache kinds)
+          {}))))
 
 (defn resource-kind
   "The Kind the cluster reports for a resource name - \"pods\" -> \"Pod\",
@@ -496,13 +500,17 @@
                          type)))))
 
 (defn custom-resources
-  "Every object of the status-carrying CRDs not in covered, or nil when the
-   CRDs cannot be listed. Each type is read on its own, so one type the
-   caller may not list leaves the others readable."
+  "Every object of the status-carrying CRDs not in covered as a list document
+   {:items [..] :unread [..]}, or nil when the CRDs cannot be listed. Each
+   type is read on its own, so one type the caller may not list leaves the
+   others readable; the types whose read did not answer are named under
+   :unread, so a reader can tell them from types without objects."
   [context covered]
   (when-let [crds (get-all context "customresourcedefinitions")]
-    (vec (mapcat #(or (:items %) [])
-                 (pmap #(get-all context %) (status-types crds covered))))))
+    (let [types (status-types crds covered)
+          reads (map vector types (pmap #(get-all context %) types))]
+      {:items (vec (mapcat (comp :items second) reads))
+       :unread (vec (for [[type result] reads :when (nil? result)] type))})))
 
 (defn secret-names
   "The namespace/name of every Secret, or nil when they cannot be listed. Only

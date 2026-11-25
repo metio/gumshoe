@@ -12,6 +12,7 @@
    controller's other findings: its missing replicas follow from it."
   (:require [clojure.string :as str]
             [gumshoe.detectives.services :as services]
+            [gumshoe.evidence :as evidence]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.subject :as subject]))
 
@@ -115,9 +116,18 @@
             {}
             (concat from-conditions from-events))))
 
+(def refusal-reads
+  "The reads refusals come from. The webhook configurations, Services and
+   pods only add to a refusal's hint, so with neither of these answered there
+   is nothing to judge."
+  ["events" "replicasets"])
+
 (defn detect-pod-creation-failures
+  "Every controller's latest pod-creation refusal, classified by its cause.
+   Nothing is judged when no read refusals come from answered."
   [evidence]
-  (for [[[kind namespace name] [_ message]] (sort-by key (refusals evidence))
+  (for [[[kind namespace name] [_ message]] (when (evidence/consulted? evidence refusal-reads)
+                                              (sort-by key (refusals evidence)))
         :let [[cause explain] (classify message)
               webhook (when (#{:webhook-timeout :webhook-unavailable :webhook-denied} cause)
                         (some->> (webhook-name message) (webhook-facts evidence)))]]
@@ -132,6 +142,6 @@
 (def detectives
   [{:name "pod-creation"
     :description "Controllers whose pods the API server refuses: webhooks, quota, PodSecurity, LimitRange, RBAC"
-    :requires ["events" "replicasets" "validatingwebhookconfigurations" "mutatingwebhookconfigurations"
-               "services" "pods"]
+    :requires (into refusal-reads ["validatingwebhookconfigurations" "mutatingwebhookconfigurations" "services" "pods"])
+    :consults refusal-reads
     :detect detect-pod-creation-failures}])

@@ -203,7 +203,7 @@
     (is (empty? ((:detect detective) {:now (java.time.Instant/now)})) (:name detective)))
   (testing "with a domain, a missing record is still reported"
     (let [mx (first (filter #(= "mail-mx" (:name %)) detectives/detectives))]
-      (is (= ["domain has no MX records"] (map :summary ((:detect mx) {"domain" "example.org"})))))))
+      (is (= ["domain has no MX records"] (map :summary ((:detect mx) {"domain" "example.org" "mx" []})))))))
 
 (deftest a-port-openssl-connected-to-is-reachable
   (let [connected? #'gumshoe.mail/connected?]

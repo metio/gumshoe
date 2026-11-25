@@ -11,16 +11,16 @@
   (set (map :summary findings)))
 
 (deftest dig-args-test
-  (testing "queries are short-answer with tight timeouts"
-    (is (= ["dig" "+short" "+time=3" "+tries=1" "@dns.example.org" "SOA" "example.org"]
+  (testing "queries print the header and answer with tight timeouts, type and name as option values"
+    (is (= ["dig" "+noall" "+comments" "+answer" "+time=3" "+tries=1" "@dns.example.org" "-t" "SOA" "-q" "example.org"]
            (dns/dig-args {:server "dns.example.org"} "SOA" "example.org"))))
   (testing "transports are forced explicitly"
-    (is (= ["dig" "+short" "+time=3" "+tries=1" "-4" "@dns.example.org" "SOA" "example.org"]
+    (is (= ["dig" "+noall" "+comments" "+answer" "+time=3" "+tries=1" "-4" "@dns.example.org" "-t" "SOA" "-q" "example.org"]
            (dns/dig-args {:server "dns.example.org" :transport :ipv4} "SOA" "example.org")))
-    (is (= ["dig" "+short" "+time=3" "+tries=1" "-6" "@dns.example.org" "SOA" "example.org"]
+    (is (= ["dig" "+noall" "+comments" "+answer" "+time=3" "+tries=1" "-6" "@dns.example.org" "-t" "SOA" "-q" "example.org"]
            (dns/dig-args {:server "dns.example.org" :transport :ipv6} "SOA" "example.org"))))
   (testing "a reverse lookup uses -x, not the bare IP as a PTR name"
-    (is (= ["dig" "+short" "+time=3" "+tries=1" "@dns.example.org" "-x" "203.0.113.5"]
+    (is (= ["dig" "+noall" "+comments" "+answer" "+time=3" "+tries=1" "@dns.example.org" "-x" "203.0.113.5"]
            (dns/dig-args {:server "dns.example.org" :reverse? true} "PTR" "203.0.113.5")))))
 
 (deftest parsing-test
@@ -98,13 +98,14 @@
                    "nameservers return different answers for this name"))))
 
 (deftest dig-diagnostics-are-not-records
-  (testing "dig prints ;; lines on stdout even with +short; they are not answers"
+  (testing "dig prints ; lines besides the records; they are not answers"
     (is (= ["ns1.example.org. hostmaster.example.org. 2026070401 3600 900 1209600 300"]
            (dns/parse-answer (str ";; communications error to 192.0.2.1#53: timed out\n"
-                                  "ns1.example.org. hostmaster.example.org. 2026070401 3600 900 1209600 300\n"))))
+                                  "example.org.\t300\tIN\tSOA\tns1.example.org. hostmaster.example.org. 2026070401 3600 900 1209600 300\n"))))
     (is (= [] (dns/parse-answer ";; communications error to 192.0.2.1#53: timed out\n"))))
   (testing "the SOA serial comes from the record, not from the error line"
     (with-redefs [gumshoe.shell/execute
                   (fn [& _] {:exit 0 :out (str ";; communications error to 192.0.2.1#53: timed out\n"
-                                               "ns1. host. 2026070401 3600 900 1209600 300\n")})]
+                                               ";; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 1\n"
+                                               "example.org. 300 IN SOA ns1. host. 2026070401 3600 900 1209600 300\n")})]
       (is (= "2026070401" (dns/soa-serial {} "example.org"))))))

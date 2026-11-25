@@ -33,7 +33,9 @@
 
 (defn detect-nameserver-problems
   "A zone without nameservers or with a single one, and nameservers without
-   an A or AAAA record. Nothing is judged when a joined read is missing."
+   an A or AAAA record. An address query that did not answer (nil) is
+   reported as unresolved, never as a missing record. Nothing is judged when
+   a joined read is missing."
   [evidence]
   (let [zone (get evidence "zone")
         nameservers (get evidence "nameservers")
@@ -51,13 +53,23 @@
            :summary "zone has a single nameserver - no redundancy"
            :hint "one maintenance window away from a full DNS outage"}])
        (for [ns nameservers
-             :when (empty? (:a (get addresses ns)))]
+             :let [{:keys [a aaaa]} (get addresses ns)]
+             :when (or (nil? a) (nil? aaaa))]
+         {:severity :warning
+          :component ns
+          :summary (format "could not resolve the nameserver's %s"
+                           (str/join " and " (concat (when (nil? a) ["A record"]) (when (nil? aaaa) ["AAAA record"]))))
+          :hint "the entry server did not answer the address query - whether the record exists is unknown"})
+       (for [ns nameservers
+             :let [a (:a (get addresses ns))]
+             :when (and (some? a) (empty? a))]
          {:severity :critical
           :component ns
           :summary "nameserver has no A record"
           :hint "v4-only resolvers can not reach this nameserver"})
        (for [ns nameservers
-             :when (empty? (:aaaa (get addresses ns)))]
+             :let [aaaa (:aaaa (get addresses ns))]
+             :when (and (some? aaaa) (empty? aaaa))]
          {:severity :warning
           :component ns
           :summary "nameserver has no AAAA record"
@@ -117,6 +129,7 @@
    {:name "dns-replication"
     :description "Every nameserver answers and serves the same SOA serial"
     :requires ["serials" "zone"]
+    :joins ["serials"]
     :detect detect-replication-problems}
    {:name "dns-probes"
     :description "Probe names resolve identically on every nameserver"

@@ -3,7 +3,6 @@
 
 (ns gumshoe.expectations-test
   (:require [clojure.test :refer [deftest is testing]]
-            [gumshoe.capabilities :as capabilities]
             [gumshoe.detectives.expectations :as expectations]))
 
 (deftest missing-capabilities-test
@@ -22,14 +21,14 @@
     (is (= [] (expectations/missing-capabilities [] #{:calico} #{})))))
 
 (deftest detect-missing-capabilities-test
-  (with-redefs [capabilities/registered (constantly #{:calico :ceph})
-                capabilities/detect-present (constantly #{:ceph})]
+  (let [answers {:present [:ceph] :absent [:calico] :unanswered []}
+        crds {:items []}]
     (testing "a declared-but-absent capability becomes a critical finding named by capability"
       (let [findings (expectations/detect-missing-capabilities
-                      {"config" {:capabilities [:calico :ceph]}})]
+                      {"config" {:capabilities [:calico :ceph]} "capabilities" answers "customresourcedefinitions" crds})]
         (is (= 1 (count findings)))
         (is (= "calico" (:component (first findings))))
         (is (= :critical (:severity (first findings))))))
     (testing "when every declared capability is present, there are no findings"
       (is (empty? (expectations/detect-missing-capabilities
-                   {"config" {:capabilities [:ceph]}}))))))
+                   {"config" {:capabilities [:ceph]} "capabilities" answers "customresourcedefinitions" crds}))))))

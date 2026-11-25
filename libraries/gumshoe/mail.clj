@@ -141,12 +141,18 @@
   (boolean (re-matches #"\d{1,3}(\.\d{1,3}){3}|[0-9A-Fa-f:]*:[0-9A-Fa-f:.]*" s)))
 
 (defn ptr-evidence
-  "Each address the host resolves to, paired with its first PTR name. dig
-   +short lists a CNAME's target before the addresses it leads to; that name
-   is no address and has no reverse record of its own, so it is skipped."
+  "Each address the host resolves to, paired with its first PTR name: \"\"
+   when the server answered with no PTR record, nil when it did not answer.
+   nil as a whole when the address query did not answer, so the reverse-DNS
+   check is unread instead of passing on no addresses. dig lists a CNAME's
+   target before the addresses it leads to; that name is no address and has
+   no reverse record of its own, so it is skipped."
   [server host]
-  (mapv #(vector % (first (dns/ptr-records {:server server} %)))
-        (filter address? (dns/query {:server server} "A" host))))
+  (when-let [answers (dns/query {:server server} "A" host)]
+    (mapv (fn [address]
+            [address (when-let [names (dns/ptr-records {:server server} address)]
+                       (or (first names) ""))])
+          (filter address? answers))))
 
 (defn collect-evidence!
   "Collects deliverability records and live protocol probes in parallel."

@@ -191,6 +191,10 @@
                    [gumshoe.prometheus-test]
                    [gumshoe.rightsizing-test]
                    [gumshoe.rbac-test]
+                   [gumshoe.rbac-public-identities-test]
+                   [gumshoe.unanswered-reads-test]
+                   [gumshoe.dig-answers-test]
+                   [gumshoe.discovery-answers-test]
                    [gumshoe.report-test]
                    [gumshoe.runbook-test]
                    [gumshoe.secrets-test]
@@ -392,6 +396,10 @@
                                                          'gumshoe.prometheus-test
                                                          'gumshoe.rightsizing-test
                                                          'gumshoe.rbac-test
+                                                         'gumshoe.rbac-public-identities-test
+                                                         'gumshoe.unanswered-reads-test
+                                                         'gumshoe.dig-answers-test
+                                                         'gumshoe.discovery-answers-test
                                                          'gumshoe.report-test
                                                          'gumshoe.secrets-test
                                                          'gumshoe.security-test

@@ -34,11 +34,22 @@
                                       ["" apiversion])]]
           [[group plural] version])))
 
+(defn discovery-answer
+  "The parsed discovery of one `kubectl api-resources` run, or nil unless it
+   exited 0. kubectl exits non-zero when the API server does not answer, the
+   read times out or discovery is refused, and also when one aggregated API
+   is down, printing what it did read; every one of those leaves resources
+   out, so nothing is judged on it."
+  [{:keys [exit out]}]
+  (when (zero? exit)
+    (parse-api-resources out)))
+
 (defn advertised-versions
   "The discovery view: {[group plural] version} the API server advertises per
-   resource. Registered as the custom evidence source for the \"api-resources\"
-   key, so the standard collector can supply it to a composed scan."
+   resource, or nil when discovery did not answer in full. Registered as the
+   custom evidence source for the \"api-resources\" key, so the standard
+   collector can supply it to a composed scan."
   [context]
-  (parse-api-resources
-   (shell/stdout-of "kubectl" (str "--context=" context)
-                    "api-resources" "--no-headers")))
+  (discovery-answer
+   (shell/execute "kubectl" (str "--context=" context) "--request-timeout=30s"
+                  "api-resources" "--no-headers")))

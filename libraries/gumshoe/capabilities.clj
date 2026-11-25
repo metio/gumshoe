@@ -42,4 +42,16 @@
        sort
        vec))
 
-
+(defn detect-answers
+  "Runs every registered detector against the current cluster and sorts the
+   capabilities into those found (:present), those not found (:absent) and
+   those whose detector threw (:unanswered), each a sorted vector. Unlike
+   detect-present, a detector that throws is no evidence of absence, so a
+   health check judging absences reads only :absent."
+  []
+  (let [answers (for [[capability detect] @detectors]
+                  [capability (try (if (detect) :present :absent)
+                                   (catch Throwable _ :unanswered))])
+        by-answer (group-by second answers)]
+    (into {} (for [answer [:present :absent :unanswered]]
+               [answer (vec (sort (map first (get by-answer answer))))]))))
