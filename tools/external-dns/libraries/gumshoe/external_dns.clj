@@ -65,6 +65,16 @@
                   (gateway-hosts gateways)
                   (dnsendpoint-hosts endpoints))))
 
+(defn answered-sources
+  "The hostname sources of reads, a map of each source kind's read to its
+   document, or nil when any read did not answer (nil). A kind the cluster
+   does not serve answers with no objects; a read that did not answer would
+   drop its hostnames from the judgement unseen, so the check is unread
+   instead of judging the rest as if they were all."
+  [reads]
+  (when (every? some? (vals reads))
+    (hostname-sources reads)))
+
 (defn probe-name
   "Wildcard hostnames are resolved through a synthesized label."
   [hostname]
@@ -73,21 +83,41 @@
 ;; ---------------------------------------------------------------------------
 ;; evidence collection
 
+(defn- read-source
+  "Every object of one source kind: the document when the read answered, an
+   empty list when the cluster does not serve the kind, and nil when the read
+   did not answer. A strict read tells the last two apart, which a plain read
+   collapses into the same nil."
+  [context type]
+  (try
+    (binding [kubectl/*strict-reads* true]
+      (let [{:keys [ok? doc]} (kubectl/get-json-result context type "--all-namespaces")]
+        (if ok? doc {:items []})))
+    (catch clojure.lang.ExceptionInfo e
+      (if (::kubectl/unread (ex-data e)) nil (throw e)))))
+
+(def ^:private source-types
+  "Each source kind's key in hostname-sources' argument and the type read for
+   it. A vector of pairs: conformance reads a library map with a :routes key
+   as a dispatcher's routes."
+  [[:ingresses "ingresses"]
+   [:routes httproute-type]
+   [:gateways gateway-type]
+   [:endpoints dnsendpoint-type]])
+
 (defn collect-evidence!
   [context server]
   (stdout/print-section "🔍 Evidence (cluster + dig)")
-  (let [ingresses (future (kubectl/get-all context "ingresses"))
-        routes (future (kubectl/get-all context httproute-type))
-        gateways (future (kubectl/get-all context gateway-type))
-        endpoints (future (kubectl/get-all context dnsendpoint-type))
-        sources (hostname-sources {:ingresses @ingresses
-                                   :routes @routes
-                                   :gateways @gateways
-                                   :endpoints @endpoints})
+  (let [reads (into {} (map (fn [[k f]] [k @f]))
+                    (mapv (fn [[k type]] [k (future (read-source context type))]) source-types))
+        unread (sort (keep (fn [[k type]] (when (nil? (get reads k)) type)) source-types))
+        sources (answered-sources reads)
         resolutions (mapv (fn [host]
                             (future [host {:a (dns/query {:server server} "A" (probe-name host))
                                            :aaaa (dns/query {:server server} "AAAA" (probe-name host))}]))
                           (keys sources))]
+    (when (seq unread)
+      (stdout/err-println (format "  %s could not read %s - nothing is judged" (stdout/red "✗") (str/join ", " unread))))
     (stdout/err-println (format "  %s %d hostnames via %s" (stdout/blue "▸") (count sources) server))
     {:now (java.time.Instant/now)
      "server" server

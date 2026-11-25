@@ -35,4 +35,7 @@
   [{:name "external-dns"
     :description "Cluster-declared hostnames that do not resolve in DNS"
     :requires ["sources" "resolved" "server"]
+    ;; "server" is always set, so only a join marks the check unread when the
+    ;; cluster reads behind "sources" did not answer
+    :joins ["sources"]
     :detect detect-unresolved-hostnames}])
