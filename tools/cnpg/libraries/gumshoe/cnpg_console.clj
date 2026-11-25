@@ -194,3 +194,49 @@
         :let [state (slot-state slot)]
         :when state]
     (slot-line slot state)))
+
+;; ---------------------------------------------------------------------------
+;; readings
+
+(defn instance-reading
+  "One instance's position from the answer of its position query, nil when
+   the exec did not answer. An exec that fails - the container of a
+   crashlooping pod does not exist - leaves the instance unreadable rather
+   than silently absent, because an unread instance may be the furthest
+   ahead of all."
+  [pod answer]
+  (if (str/blank? answer)
+    {:instance pod :readable? false}
+    (let [[recovery receive replay lag] (str/split answer #"\|" -1)]
+      {:instance pod
+       :readable? true
+       :in-recovery? (= "t" recovery)
+       :receive-lsn receive
+       :replay-lsn replay
+       :replay-lag lag})))
+
+(defn slot-reading
+  "One instance's replication slots from the answer of its slot query:
+   {:instance :readable? true :slots [..]}, or {:instance :readable? false}
+   when the exec did not answer (nil). An answered query with no rows is an
+   instance without slots; an unanswered one says nothing about its slots, so
+   it must not read as none."
+  [pod answer]
+  (if (nil? answer)
+    {:instance pod :readable? false}
+    {:instance pod
+     :readable? true
+     :slots (vec (for [line (str/split-lines (str/trim answer))
+                       :when (not (str/blank? line))
+                       :let [[slot-name active wal-status safe] (str/split line #"\|" -1)]]
+                   {:instance pod :slot-name slot-name :active (= "t" active)
+                    :wal-status wal-status :safe-wal-size safe}))}))
+
+(defn unread-slot-lines
+  "One warning per instance whose slots could not be read, so a missing slot
+   warning is never taken for a slot that is fine."
+  [slot-readings]
+  (for [{:keys [instance readable?]} slot-readings
+        :when (not readable?)]
+    (format "could not read the replication slots on %s - a slot there that lost WAL would not be shown"
+            instance)))

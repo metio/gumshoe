@@ -16,7 +16,6 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.runbook :as runbook]
             [gumshoe.select :as select]
-            [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
 (def cluster-select
@@ -52,34 +51,18 @@
        "coalesce(pg_size_pretty(safe_wal_size), '') from pg_replication_slots"))
 
 (defn- psql
+  "The answer of a query on one instance, nil unless the exec exited 0."
   [context namespace pod sql]
-  (shell/stdout-of "kubectl" (str "--context=" context) (str "--namespace=" namespace)
-                   "exec" pod "-c" "postgres" "--"
-                   "psql" "-U" "postgres" "-tAF|" "-c" sql))
+  (kubectl/exec-answer context namespace pod "postgres"
+                       ["psql" "-U" "postgres" "-tAF|" "-c" sql]))
 
 (defn- read-instance
-  "One instance's position. An exec that fails - the container of a crashlooping
-   pod does not exist - leaves the instance unreadable rather than silently
-   absent, because an unread instance may be the furthest ahead of all."
   [context namespace pod]
-  (let [out (str/trim (str (psql context namespace pod instance-sql)))]
-    (if (str/blank? out)
-      {:instance pod :readable? false}
-      (let [[recovery receive replay lag] (str/split out #"\|" -1)]
-        {:instance pod
-         :readable? true
-         :in-recovery? (= "t" recovery)
-         :receive-lsn receive
-         :replay-lsn replay
-         :replay-lag lag}))))
+  (console/instance-reading pod (psql context namespace pod instance-sql)))
 
 (defn- read-slots
   [context namespace pod]
-  (for [line (str/split-lines (str/trim (str (psql context namespace pod slot-sql))))
-        :when (not (str/blank? line))
-        :let [[slot-name active wal-status safe] (str/split line #"\|" -1)]]
-    {:instance pod :slot-name slot-name :active (= "t" active)
-     :wal-status wal-status :safe-wal-size safe}))
+  (console/slot-reading pod (psql context namespace pod slot-sql)))
 
 (defn- print-readings!
   [readings]
@@ -141,8 +124,9 @@
         (if (empty? instances)
           (do (stdout/error (format "no instance pods found for cluster %s" chosen)) false)
           (let [readings (mapv #(read-instance context namespace %) instances)
-                slots (mapcat #(read-slots context namespace %)
-                              (map :instance (filter :readable? readings)))
+                slot-readings (mapv #(read-slots context namespace %)
+                                    (map :instance (filter :readable? readings)))
+                slots (mapcat :slots slot-readings)
                 current (-> cluster :status :currentPrimary)
                 proposal (console/proposal
                           readings
@@ -162,6 +146,7 @@
                                           :active (str active) :wal-status wal-status
                                           :safe-wal-size (console/describe-safe-wal-size slot)}))
               (doseq [line (console/slot-lines slots current)] (stdout/warn line)))
+            (doseq [line (console/unread-slot-lines slot-readings)] (stdout/warn line))
             (stdout/print-section "Promotion proposal")
             (doseq [line (console/proposal-lines proposal)] (stdout/warn line))
             (if-let [instance (:promote opts)]

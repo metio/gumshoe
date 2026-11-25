@@ -208,3 +208,21 @@
 (deftest with-no-primary-every-slot-is-read-test
   (is (= 2 (count (console/slot-lines mirrored-slots nil)))
       "a cluster with no primary is where the slots matter most, so none are filtered"))
+
+(deftest an-unanswered-position-query-leaves-the-instance-unreadable-test
+  (is (= {:instance "pg-1" :readable? false} (console/instance-reading "pg-1" nil)))
+  (is (= {:instance "pg-1" :readable? false} (console/instance-reading "pg-1" "")))
+  (is (= {:instance "pg-1" :readable? true :in-recovery? true :receive-lsn "0/3000000"
+          :replay-lsn "0/3000060" :replay-lag ""}
+         (console/instance-reading "pg-1" "t|0/3000000|0/3000060|"))))
+
+(deftest an-unanswered-slot-query-is-not-an-instance-without-slots-test
+  (is (= {:instance "pg-1" :readable? false} (console/slot-reading "pg-1" nil)))
+  (is (= {:instance "pg-1" :readable? true :slots []} (console/slot-reading "pg-1" "")))
+  (is (= [{:instance "pg-1" :slot-name "_cnpg_pg_2" :active false :wal-status "lost" :safe-wal-size ""}]
+         (:slots (console/slot-reading "pg-1" "_cnpg_pg_2|f|lost|\n")))))
+
+(deftest unread-slots-are-named-test
+  (is (= ["could not read the replication slots on pg-2 - a slot there that lost WAL would not be shown"]
+         (console/unread-slot-lines [{:instance "pg-1" :readable? true :slots []}
+                                     {:instance "pg-2" :readable? false}]))))
