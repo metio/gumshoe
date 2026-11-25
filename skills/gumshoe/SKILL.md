@@ -381,8 +381,31 @@ mostly data:
   at the confirmation refuses, and so does an optional one that appeared
   after it. It composes with `:subject` and `:pin`; a post-check reads the
   set with `(mutation/read-subjects context refs)`;
-- a change whose judgement rests on reads no `:subject` or `:subjects`
-  covers - which adoptees exist, whether a listener drifted - reads them
+- a change splits what it derives by when it is true. `:reads {name (fn
+  [ctx] -> value)}` are live state the change rests on and no `:subject` or
+  `:subjects` covers (which storage locations are available, whether a
+  listener drifted): each is read strictly before the confirmation, after
+  the subjects, all at once, bound in `ctx` under its name, and, when the
+  spec has a `:refusal`, read again after the confirmation so the refusal
+  judges the fresh value under the same name. `:items`, `:announce`,
+  `:effect` and `:verify` keep the value the confirmation showed; a
+  post-check reads the live one with `(mutation/read-again ctx :name)`.
+  `:values {name (fn [ctx] -> value)}` are fixed by the run - a timestamp, a
+  generated backup name, an operator's choice, a snapshot the confirmation
+  lists - and computed once, after the reads, never again; a value sees the
+  subjects and the reads, never another value. In a playbook the first
+  change keeps the values its judgement before the playbook's confirmation
+  computed. Classify a read that only feeds the confirmation items as a
+  value, so it is not read again for nothing
+  (`tools/velero/libraries/gumshoe/velero/action_books.clj` has both). A
+  name is a keyword, never one the engine binds itself (`:context`,
+  `:target`, `:ref`, `:object`, `:refs`, `:objects`, …), and never in both
+  maps;
+- `:derive (fn [ctx] -> map)` and `:recheck (fn [ctx] -> map)` are the
+  older spelling and keep working; a spec writes them or named `:reads` and
+  `:values`, never both, since a map they return could hide a named entry.
+  A change whose judgement rests on reads no `:subject` or `:subjects`
+  covers reads them
   again after the confirmation with `:recheck (fn [ctx] -> map)`. `:derive`
   runs once, before the confirmation, so without it `:refusal` and
   `:precondition` judge the state the operator was shown, not the state the
@@ -429,12 +452,16 @@ mostly data:
   `:from :pick`, `:target` or `:reads`; `:precondition` becomes part of
   `:refusal`, refusing in flow's generic words; a top-level `:empty-message`
   moves into `:select` (so a select's own `:empty-message` now shows for a
-  mutation book too); `:announce? false` becomes `:announce false`. Old keys
+  mutation book too); `:announce? false` becomes `:announce false`; `:derive`
+  and `:recheck` become the reserved entries `change/derive-entry` of
+  `:values` and `change/recheck-entry` of `:reads`. Old keys
   keep working. A spec naming one thing two ways - a canonical `:subjects`
   beside `:subject` or `:pin`, two different empty messages, an `:announce`
   message beside `:announce? false` - or one the engine cannot run (a
   `:recheck` with no `:refusal` or `:precondition`, a `:subject` on a `:many`
-  select, `:connect` with any subject) is refused when the book loads, and
+  select, `:connect` with any subject, `:derive` or `:recheck` beside named
+  `:reads`/`:values`, a name both maps bind or one the engine binds) is
+  refused when the book loads, and
   the conformance gate reports it as `is refused: …`;
 - a pair of books that set one boolean state and set it back - suspend and
   resume, pause and resume - is one `(toggle/pair {…})` declaration from

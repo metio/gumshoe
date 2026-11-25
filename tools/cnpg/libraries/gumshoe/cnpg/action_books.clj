@@ -48,7 +48,7 @@
    :empty-message empty-message
    :confirm confirm
    :subject (assoc cluster-subject :facts #(select-keys (:metadata %) [:annotations]))
-   :derive (fn [_] {:stamp (when stamp? (str (java.time.Instant/now)))})
+   :values {:stamp (fn [_] (when stamp? (str (java.time.Instant/now))))}
    :items (fn [{:keys [object target]}] (if object (items object) [(str verb " " target)]))
    :refusal (fn [{:keys [object]}] (refusal object))
    :announce (fn [{:keys [target]}] (format "%s %s" verb target))
@@ -115,8 +115,7 @@
    :empty-message "no healthy cluster configures a backup destination"
    :confirm {:action "start an on-demand backup" :destructive? false}
    :subject cluster-subject
-   :derive (fn [{:keys [object]}]
-             {:backup-name (when object (actions/backup-name object (java.time.Instant/now)))})
+   :values {:backup-name (fn [{:keys [object]}] (when object (actions/backup-name object (java.time.Instant/now))))}
    :items (fn [{:keys [object backup-name opts target]}]
             (if object (actions/backup-items object (:method opts) backup-name) [(str "back up " target)]))
    :refusal (fn [{:keys [object opts]}] (actions/backup-refusal object (:method opts)))

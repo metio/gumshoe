@@ -30,8 +30,8 @@
   :select selection
   :subject {:type stageset/stageset-type}
   ;; a held stage is picked by name among those the StageSet declares
-  :derive (fn [{:keys [object opts]}]
-            {:stage (interact/choose-one "Stage" (stageset/declared-stages object) (:stage opts))})
+  :values {:stage (fn [{:keys [object opts]}]
+                    (interact/choose-one "Stage" (stageset/declared-stages object) (:stage opts)))}
   :refusal (fn [{:keys [target object stage opts]}]
              (stageset/promotion-refusal target object stage (:stage opts)))
   :confirm {:action "promote a StageSet stage" :destructive? false}

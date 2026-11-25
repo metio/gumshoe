@@ -13,8 +13,8 @@
    book, run!, run-on!, parse-pick and details first map a spec onto the
    canonical change map with gumshoe.change/normalize, and the engine reads
    only that map. The keys below are what books write; :subject, a
-   :subjects function, :pin, :precondition, a top-level :empty-message and
-   :announce? are aliases normalize keeps indefinitely, and a spec naming
+   :subjects function, :pin, :precondition, :derive, :recheck, a top-level
+   :empty-message and :announce? are aliases normalize keeps indefinitely, and a spec naming
    one thing two ways is refused when the book loads (see gumshoe.change).
 
    Spec:
@@ -49,11 +49,15 @@
                                                   ; anything else is refused naming
                                                   ; the step (:title, else the action)
       :verify   (fn [ctx] -> seq of post-check maps)   ; optional
-      :derive   (fn [ctx] -> map)   ; optional, values merged into ctx once so a
-                                    ; per-run value is shared by :effect and :verify;
+      :reads    {name (fn [ctx] -> value)}   ; optional, live reads, read before the
+                                    ; confirmation and again after it for :refusal;
+                                    ; strict, see below
+      :values   {name (fn [ctx] -> value)}   ; optional, computed once per run and
+                                    ; shared by :items, :effect and :verify, see below
+      :derive   (fn [ctx] -> map)   ; optional, alias: values merged into ctx once;
                                     ; its reads are strict, see below
-      :recheck  (fn [ctx] -> map)   ; optional, read again after the confirmation and
-                                    ; merged over ctx for :refusal and :precondition
+      :recheck  (fn [ctx] -> map)   ; optional, alias: read again after the confirmation
+                                    ; and merged over ctx for :refusal and :precondition
                                     ; only, see below
       :items    (fn [ctx] -> seq)   ; optional, overrides the confirmation items
       :pin      (fn [ctx] -> {:type :name :namespace? :facts?})  ; optional, see below
@@ -69,11 +73,27 @@
       :confirmed? true}  ; set by a playbook whose confirmation covered this step
 
    The :refusal, :precondition, :announce, :effect, :verify, :derive,
-   :recheck and :items callbacks each receive one context map, so a book destructures exactly what
-   it needs:
+   :recheck and :items callbacks, and every :reads and :values entry, each
+   receive one context map, so a book destructures exactly what it needs:
      {:context .. :cluster .. :target <the pick(s)> :opts <parsed flags>
       :ref .. :object ..     ; with a :subject
-      :refs .. :objects ..}  ; with :subjects
+      :refs .. :objects ..   ; with :subjects
+      <name> ..}             ; each of :reads and :values
+
+   :reads and :values split what a change derives by when it is true. A
+   read is live state the change rests on (which locations are available,
+   whether a listener drifted): it is read before the confirmation, after
+   the subjects, all reads at once, and again after the confirmation, after
+   the subjects are read again, when the spec has a :refusal, which judges
+   the fresh value under the same name. :items, :announce, :effect and
+   :verify keep the value read before the confirmation, which the operator
+   approved and the plan was computed from; a post-check that needs the
+   live value calls read-again. A value is fixed by the run (a timestamp, a
+   generated name, an operator's choice, a snapshot the confirmation
+   shows): it is computed once, after the reads, and never again, so the
+   effect stamps and the post-check waits for the same token. A spec writes
+   either these or the :derive and :recheck aliases, never both (see
+   gumshoe.change).
 
    :subject declares the one object a change acts on. :parse turns the pick
    into a ref {:type :namespace :name}, plus whatever else the pick carries
@@ -134,8 +154,9 @@
 
    *phase* names the phase whose reads are running: :derive for the reads
    before the confirmation (the subject and subjects reads, :subjects,
-   :derive and the fingerprint of a :pin), :judge for the reads after it (those reads again, :recheck,
-   :refusal, :precondition and the drift checks of every pin). Each phase
+   :reads, :values, :derive and the fingerprint of a :pin), :judge for the
+   reads after it (those reads and :reads again, :recheck, :refusal,
+   :precondition and the drift checks of every pin). Each phase
    runs inside one binding of it, so no read after the confirmation runs
    inside the binding of the reads before it.
 
@@ -154,8 +175,9 @@
    Independent reads run concurrently: read-subjects reads its refs at
    once, and the :judge phase starts by fetching every object it is about
    to judge (the subject, the pinned object and the subjects) at once into
-   its cache. A :derive or :recheck that makes several independent reads
-   issues them together with gumshoe.concurrent/values, whose futures
+   its cache. The named :reads of a phase are read at once, too. A :derive
+   or :recheck that makes several independent reads issues them together
+   with gumshoe.concurrent/values, whose futures
    carry *phase*, the cache and kubectl/*strict-reads* along.
 
    :refusal returns why the change must not run, or nil. The engine prints
@@ -187,7 +209,7 @@
    playbook judged before its own confirmation where its evidence existed
    (see gumshoe.playbook).
 
-   The subject read, :derive, :refusal and :precondition run under
+   The subject read, :reads, :values, :derive, :refusal and :precondition run under
    kubectl/*strict-reads* (the :subjects reads and the :subjects function
    too), as the
    candidate query of :select and every post-check do. A read in :derive that
@@ -474,33 +496,77 @@
         (if (and ref (named? target)) {:ref ref} refused))
       (if (accepted? select target) {:ref nil} refused))))
 
+(defn- realized
+  "(f ctx), realized, so a lazy seq runs its reads inside the caller's
+   bindings."
+  [f ctx]
+  (walk/postwalk identity (f ctx)))
+
+(defn read-named
+  "{name -> value} for the named reads of a spec, each read for ctx, all at
+   once (gumshoe.concurrent/values), in the caller's phase, cache and
+   strictness."
+  [reads ctx]
+  (concurrent/values (into {} (map (fn [[name read]] [name #(realized read ctx)])) reads)))
+
+(defn- compute-values
+  "{name -> value} for the named values of a spec, each computed once for
+   ctx, one after the other in the calling thread, so a value that asks the
+   operator asks in the order declared."
+  [values ctx]
+  (into {} (map (fn [[name value]] [name (realized value ctx)])) values))
+
+(defn read-again
+  "The named read `name` of the change whose context ctx is, read now, for
+   a post-check: the value the confirmation showed is (name ctx), what the
+   cluster holds now is this. A name the change does not read throws."
+  [ctx name]
+  (if-let [read (get-in ctx [::reads name])]
+    (realized read ctx)
+    (throw (ex-info (format "the change reads nothing named %s" name)
+                    {:name name :reads (vec (keys (::reads ctx)))}))))
+
 (defn- subject-derive
-  "derive preceded by the reads of the :pick and :target subjects, as one
-   function of the base context, which holds the :ref parse-pick made:
-   {:ref :object} and {:refs :objects} merged with what derive returns for
-   the context holding them. nil when the spec has none of them."
-  [{:keys [derive] :as spec}]
-  (if (or (change/subject spec :pick) (change/subject spec :target))
-    (fn [{:keys [ref context] :as base}]
-      (let [values (when (change/subject spec :pick)
-                     {:ref ref :object (read-subject base)})
-            values (if (change/subject spec :target)
-                     (let [refs (subjects-of spec (merge base values))]
-                       (assoc values :refs refs :objects (read-subjects context refs)))
-                     values)]
-        (merge values (when derive (derive (merge base values))))))
-    derive))
+  "The reads of the :derive phase as one function of the base context, which
+   holds the :ref parse-pick made: the :pick and :target subjects ({:ref
+   :object}, {:refs :objects}), then the named :reads, then the named
+   :values, then what a :derive alias returns for the context holding them
+   all, merged in that order. nil when the spec has none of them."
+  [spec]
+  (let [derive (change/derive-alias spec)
+        reads (change/reads spec)
+        values (change/values spec)
+        pick? (some? (change/subject spec :pick))
+        target? (some? (change/subject spec :target))]
+    (if (or pick? target? reads values)
+      (fn [{:keys [ref context] :as base}]
+        (let [found (when pick? {:ref ref :object (read-subject base)})
+              found (if target?
+                      (let [refs (subjects-of spec (merge base found))]
+                        (assoc found :refs refs :objects (read-subjects context refs)))
+                      found)
+              found (if reads
+                      (merge found (read-named reads (merge base found)) {::reads reads})
+                      found)
+              found (if values
+                      (merge found (compute-values values (merge base found)))
+                      found)]
+          (merge found (when derive (derive (merge base found))))))
+      derive)))
 
 (defn- rechecked
   "ctx as :refusal and :precondition judge it: the subject and the subjects
-   read again, then what :recheck returns for that merged over it. The
-   value :recheck returns is realized here, so its reads run in the caller's
-   bindings."
-  [{:keys [recheck]} {:keys [ref refs context] :as ctx}]
-  (let [ctx (if ref (assoc ctx :object (read-subject ctx)) ctx)
-        ctx (if (seq refs) (assoc ctx :objects (read-subjects context refs)) ctx)]
+   read again, then the named :reads read again and merged over it, then
+   what a :recheck alias returns for that merged over it. Every value is
+   realized here, so its reads run in the caller's bindings."
+  [spec {:keys [ref refs context] :as ctx}]
+  (let [reads (change/reads spec)
+        recheck (change/recheck-alias spec)
+        ctx (if ref (assoc ctx :object (read-subject ctx)) ctx)
+        ctx (if (seq refs) (assoc ctx :objects (read-subjects context refs)) ctx)
+        ctx (if reads (merge ctx (read-named reads ctx)) ctx)]
     (if recheck
-      (merge ctx (walk/postwalk identity (recheck ctx)))
+      (merge ctx (realized recheck ctx))
       ctx)))
 
 (defn- judged-precondition
@@ -610,13 +676,14 @@
    read :derive already made is served from cache and a read that did not
    answer refuses with its reason. Then gone-before-confirmation judges
    the pinned object and the subjects."
-  [{:keys [refusal recheck]} ctx pinned cache]
+  [{:keys [refusal] :as spec} ctx pinned cache]
   (or (when refusal
         (try
           ((in-phase :derive cache
                      #(binding [kubectl/*strict-reads* true]
-                        (let [judged (if recheck
-                                       (merge ctx (walk/postwalk identity (recheck ctx)))
+                        (let [recheck (change/recheck-alias spec)
+                              judged (if recheck
+                                       (merge ctx (realized recheck ctx))
                                        ctx)
                               why (refusal judged)]
                           (if (= change/unmet why) unmet-before-confirmation why)))))
@@ -767,11 +834,16 @@
 
 (defn- run-connected!
   "Runs spec against target, whose ref parse-pick made, on the connection.
-   cache is the :derive phase's read cache, a fresh one when nil."
+   cache is the :derive phase's read cache, a fresh one when nil; derived,
+   when given, is the context that phase already made, which the change
+   then runs on instead of deriving it again, so its :values are computed
+   once."
   [{:keys [select confirm announce effect verify] :as spec}
-   {:keys [context cluster announce-as] :as connection} target ref opts announcement-data cache]
+   {:keys [context cluster announce-as] :as connection} target ref opts announcement-data cache derived]
   (let [derive-cache (or cache (kubectl/read-cache))
-        {:keys [ctx unread]} (prepared spec connection target ref opts announcement-data derive-cache)]
+        {:keys [ctx unread]} (if derived
+                               {:ctx derived}
+                               (prepared spec connection target ref opts announcement-data derive-cache))]
     (if unread
       (unread! unread)
       (let [applied-before (outcome/applied-count)
@@ -819,8 +891,9 @@
    refusing judgement held back (see held), {:unread <why>} when a read of
    its :derive phase did not answer, nil when what :connect names could
    not be reached (connect said why), else {:cache <the :derive phase's
-   read cache>}. Handing that cache to run-on! makes the step's :derive
-   phase the one judged here, so the step reads nothing twice. Prints
+   read cache> :derived <the context it made>}. Handing both to run-on!
+   makes the step's :derive phase the one judged here, so the step reads
+   nothing twice and computes its :values once. Prints
    nothing; prejudge-printed prints what it returned."
   [spec target opts announcement-data]
   (let [spec (change/normalize spec)
@@ -836,7 +909,7 @@
                   [why chunks] (held #(prejudgement spec ctx pinned cache))]
               (if why
                 {:refusal why :printed chunks}
-                {:cache cache}))))))))
+                {:cache cache :derived ctx}))))))))
 
 (defn prejudge-printed
   "Prints what prejudge returned the way a standalone run prints it - what
@@ -859,17 +932,18 @@
 
    `opts` is the parsed CLI flags; `announcement-data` is the value the runbook
    action receives in its ctx (nil when the book does not announce).
-   `:derive-cache`, in the last argument, is the read cache prejudge filled
-   for this change, which its :derive phase then reads through."
+   `:derive-cache` and `:derived`, in the last argument, are the read cache
+   prejudge filled for this change and the context it derived, which the
+   change then runs on without deriving it again."
   ([spec target opts announcement-data]
    (run-on! spec target opts announcement-data nil))
-  ([spec target opts announcement-data {:keys [derive-cache]}]
+  ([spec target opts announcement-data {:keys [derive-cache derived]}]
    (let [spec (change/normalize spec)
          {:keys [ref refusal]} (parse-pick spec target)]
      (if refusal
        (refuse! refusal)
        (if-let [connection (connect spec opts)]
-         (run-connected! spec connection target ref opts announcement-data derive-cache)
+         (run-connected! spec connection target ref opts announcement-data derive-cache derived)
          false)))))
 
 (defn run!
@@ -897,7 +971,7 @@
           (let [{:keys [ref refusal]} (parse-pick spec target)]
             (if refusal
               (refuse! refusal)
-              (run-connected! spec connection target ref opts announcement-data nil)))))
+              (run-connected! spec connection target ref opts announcement-data nil nil)))))
       false)))
 
 (defn picks
@@ -918,7 +992,8 @@
 (defn details
   "What --help says a mutation book does, generated from its spec."
   [spec]
-  (let [{:keys [select confirm refusal recheck subjects announce verify prerequisites]} (change/normalize spec)]
+  (let [{:keys [select confirm refusal subjects announce verify prerequisites] :as spec} (change/normalize spec)
+        recheck (change/recheck-alias spec)]
     (concat
      ["What it does:"
       (str "  picks " (picks select))

@@ -31,11 +31,12 @@
                            :kubectl-can-patch ["deployments"]}
            :select deployment-select
            :subject {:parse deployment-pick :invalid "the pick is not \"Deployment <namespace>/<name>\""}
-           :derive (fn [{:keys [context ref object]}]
-                     (let [hpa (when object
-                                 (workloads/managing-hpa (kubectl/get-namespaced context (:namespace ref) "horizontalpodautoscalers")
-                                                         "Deployment" object))]
-                       {:hpa (some-> hpa kubectl/name-of)}))}
+           ;; the autoscaler is what the confirmation shows, read once
+           :values {:hpa (fn [{:keys [context ref object]}]
+                           (when object
+                             (some-> (workloads/managing-hpa (kubectl/get-namespaced context (:namespace ref) "horizontalpodautoscalers")
+                                                             "Deployment" object)
+                                     kubectl/name-of)))}}
     :candidates (fn [context wanted]
                   (workloads/picks [["Deployment" (kubectl/get-all context "deployments")]]
                                    (fn [_ deployment] (not= wanted (workloads/paused? deployment)))))
