@@ -44,6 +44,9 @@
       :derive   (fn [ctx] -> map)   ; optional, values merged into ctx once so a
                                     ; per-run value is shared by :effect and :verify;
                                     ; its reads are strict, see below
+      :recheck  (fn [ctx] -> map)   ; optional, read again after the confirmation and
+                                    ; merged over ctx for :refusal and :precondition
+                                    ; only, see below
       :items    (fn [ctx] -> seq)   ; optional, overrides the confirmation items
       :pin      (fn [ctx] -> {:type :name :namespace? :facts?})  ; optional, see below
       :recovery \"...\" or (fn [ctx] -> string)   ; optional, printed under the
@@ -57,8 +60,8 @@
                         ; session) runs as a read-only book does
       :confirmed? true}  ; set by a playbook whose confirmation covered this step
 
-   The :refusal, :precondition, :announce, :effect, :verify, :derive and :items
-   callbacks each receive one context map, so a book destructures exactly what
+   The :refusal, :precondition, :announce, :effect, :verify, :derive,
+   :recheck and :items callbacks each receive one context map, so a book destructures exactly what
    it needs:
      {:context .. :cluster .. :target <the pick(s)> :opts <parsed flags>
       :ref .. :object ..     ; with a :subject
@@ -96,6 +99,30 @@
    refusal names the object, as \"refusing: <type> <namespace>/<name>:
    <why>\". :subjects composes with :subject and :pin; each is pinned.
    read-subjects reads them again, for a post-check.
+
+   :recheck reads again, after the confirmation, the live state :refusal and
+   :precondition judge, for a change whose judgement rests on reads no
+   :subject or :subjects declares (which adoptees exist, whether a listener
+   drifted). It runs right before :refusal, after the subject and subjects
+   are read again, and receives the context they judge: the derived values,
+   the fresh :object and :objects. The map it returns is merged over that
+   context for :refusal and :precondition alone; :items, :announce, :effect
+   and :verify keep what :derive returned, which is what the confirmation
+   showed and what the effect plan was computed from. A spec whose reads
+   are all reads of the live state can name one function as both :derive
+   and :recheck; one that needs the value it confirmed next to the value now
+   returns the new one under its own key. Its reads are strict, as those of
+   :precondition are: a read that did not answer refuses the change with
+   the reason and no judgement runs. :recheck composes with :subject,
+   :subjects and :pin, whose drift checks still follow the judgement, and a
+   spec with :recheck needs a :refusal or a :precondition to judge it.
+
+   *phase* names the phase whose reads are running: :derive for the reads
+   before the confirmation (the subject and subjects reads, :subjects,
+   :derive and the fingerprint of a :pin), :judge for the reads after it (those reads again, :recheck,
+   :refusal, :precondition and the drift checks of every pin). Each phase
+   runs inside one binding of it, so no read after the confirmation runs
+   inside the binding of the reads before it.
 
    :refusal returns why the change must not run, or nil. The engine prints
    the reason as \"refusing: <reason>\" and stops, and only a change no
@@ -221,17 +248,29 @@
                        "it could not be read when the change was confirmed")]
              (if why (refuse! why) true))))))
 
+(def ^:dynamic *phase*
+  "The phase of a change whose reads are running: :derive before the
+   confirmation, :judge after it, nil outside both (see the namespace doc)."
+  nil)
+
+(defn- in-phase
+  "thunk running with *phase* bound to phase, or nil without a thunk."
+  [phase thunk]
+  (when thunk
+    (fn [] (binding [*phase* phase] (thunk)))))
+
 (defn derived
   "{:values <what derive returned>} or {:unread <reason>}. derive runs under
-   kubectl/*strict-reads* and its result is realized inside the binding, so a
-   lazy seq cannot run its reads after it, and a read that did not answer
-   surfaces as its message instead of as nil - the same contract as the
-   candidate listing of a select. A read that answered that its object does
-   not exist still derives nil."
+   kubectl/*strict-reads*, in the :derive *phase*, and its result is realized
+   inside the binding, so a lazy seq cannot run its reads after it, and a
+   read that did not answer surfaces as its message instead of as nil - the
+   same contract as the candidate listing of a select. A read that answered
+   that its object does not exist still derives nil."
   [derive base]
   (try
     {:values (when derive
-               (binding [kubectl/*strict-reads* true]
+               (binding [kubectl/*strict-reads* true
+                         *phase* :derive]
                  (walk/postwalk identity (derive base))))}
     (catch clojure.lang.ExceptionInfo e
       (if (::kubectl/unread (ex-data e)) {:unread (ex-message e)} (throw e)))))
@@ -349,25 +388,37 @@
         (merge values (when derive (derive (merge base values))))))
     derive))
 
+(defn- rechecked
+  "ctx as :refusal and :precondition judge it: the subject and the subjects
+   read again, then what :recheck returns for that merged over it. The
+   value :recheck returns is realized here, so its reads run in the caller's
+   bindings."
+  [{:keys [recheck]} {:keys [ref refs context] :as ctx}]
+  (let [ctx (if ref (assoc ctx :object (read-subject ctx)) ctx)
+        ctx (if (seq refs) (assoc ctx :objects (read-subjects context refs)) ctx)]
+    (if recheck
+      (merge ctx (walk/postwalk identity (recheck ctx)))
+      ctx)))
+
 (defn- judged-precondition
   "The :refusal and :precondition of a spec as one thunk over ctx, or nil
    when the spec has neither and no :subject. With a :subject, a pick that
-   does not parse is refused, and both judge the object read again; with
-   :subjects, both judge every object read again."
-  [{:keys [subject select refusal precondition]} ctx]
+   does not parse is refused before anything is read; otherwise both judge
+   ctx as rechecked makes it."
+  [{:keys [subject select refusal precondition recheck] :as spec} {:keys [ref target] :as ctx}]
+  (when (and recheck (not (or refusal precondition)))
+    (throw (ex-info "a :recheck is judged by :refusal or :precondition, and the spec has neither"
+                    {:recheck recheck})))
   (when (or subject refusal precondition)
     (fn []
-      (let [{:keys [ref refs target context]} ctx
-            judge? (or refusal precondition)
-            ctx (if (and subject ref judge?) (assoc ctx :object (read-subject ctx)) ctx)
-            ctx (if (and (seq refs) judge?) (assoc ctx :objects (read-subjects context refs)) ctx)
-            why (cond
-                  (and subject (nil? ref)) (invalid-pick subject select target)
-                  refusal (refusal ctx))]
-        (cond
-          why (refuse! why)
-          precondition (boolean (precondition ctx))
-          :else true)))))
+      (if (and subject (nil? ref))
+        (refuse! (invalid-pick subject select target))
+        (let [ctx (if (or refusal precondition) (rechecked spec ctx) ctx)
+              why (when refusal (refusal ctx))]
+          (cond
+            why (refuse! why)
+            precondition (boolean (precondition ctx))
+            :else true))))))
 
 (defn- pin-of
   "The ref the change pins and its fingerprint at the confirmation: the
@@ -460,7 +511,7 @@
                          (when-let [guidance (left-behind spec ctx (effect/as-plan @plan) applied-before)]
                            (outcome/fallback! guidance ctx))))
             ok? (try
-                  (let [{:keys [ref before]} (pin-of spec ctx)
+                  (let [{:keys [ref before]} (binding [*phase* :derive] (pin-of spec ctx))
                         refs (:refs ctx)
                         subjects-before (subjects-fingerprints refs (:objects ctx))
                         items-fn (:items spec)]
@@ -469,11 +520,12 @@
                                      :target cluster
                                      :items (if items-fn (items-fn ctx) (select/items (:mode select) target))
                                      :destructive? (:destructive? confirm)}
-                      :precondition (strict-precondition
-                                     (subjects-precondition
-                                      (pinned-precondition (judged-precondition spec ctx)
-                                                           ref before #(fetch-pinned context %))
-                                      refs subjects-before #(read-subjects context %)))
+                      :precondition (in-phase :judge
+                                              (strict-precondition
+                                               (subjects-precondition
+                                                (pinned-precondition (judged-precondition spec ctx)
+                                                                     ref before #(fetch-pinned context %))
+                                                refs subjects-before #(read-subjects context %))))
                       :confirmed? (:confirmed? spec)
                       :announce! (when announce
                                    #(announce/announce! announce-as announcement-data (announce ctx)))
@@ -540,13 +592,13 @@
 
 (defn details
   "What --help says a mutation book does, generated from its spec."
-  [{:keys [select confirm precondition refusal subject subjects announce verify pin prerequisites]}]
+  [{:keys [select confirm precondition refusal recheck subject subjects announce verify pin prerequisites]}]
   (concat
    ["What it does:"
     (str "  picks " (picks select))
     (str "  asks to confirm: " (:action confirm)
          (when (:destructive? confirm) " (destructive - type yes)"))]
-   (when (or precondition refusal subject subjects pin)
+   (when (or precondition refusal recheck subject subjects pin)
      ["  checks again right before acting that what was confirmed still holds"])
    (when announce ["  announces the change to the changelog"])
    [(if verify

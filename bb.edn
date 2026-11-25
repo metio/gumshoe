@@ -58,6 +58,7 @@
                    [gumshoe.mutation-connect-test]
                    [gumshoe.mutation-subject-test]
                    [gumshoe.mutation-subjects-test]
+                   [gumshoe.mutation-recheck-test]
                    [gumshoe.pick-test]
                    [gumshoe.deletion-test]
                    [gumshoe.workloads-ops-test]
@@ -225,6 +226,7 @@
                                                          'gumshoe.mutation-connect-test
                                                          'gumshoe.mutation-subject-test
                                                          'gumshoe.mutation-subjects-test
+                                                         'gumshoe.mutation-recheck-test
                                                          'gumshoe.pick-test
                                                          'gumshoe.deletion-test
                                                          'gumshoe.workloads-ops-test

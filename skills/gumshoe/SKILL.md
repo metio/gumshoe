@@ -326,6 +326,24 @@ mostly data:
   at the confirmation refuses, and so does an optional one that appeared
   after it. It composes with `:subject` and `:pin`; a post-check reads the
   set with `(mutation/read-subjects context refs)`;
+- a change whose judgement rests on reads no `:subject` or `:subjects`
+  covers - which adoptees exist, whether a listener drifted - reads them
+  again after the confirmation with `:recheck (fn [ctx] -> map)`. `:derive`
+  runs once, before the confirmation, so without it `:refusal` and
+  `:precondition` judge the state the operator was shown, not the state the
+  change meets. `:recheck` runs right before `:refusal`, after the subject
+  and subjects are read again, receives that context (the derived values
+  and the fresh `:object`/`:objects`), and its map is merged over it for
+  `:refusal` and `:precondition` only; `:items`, `:announce`, `:effect` and
+  `:verify` keep the derived values the plan was built from. Where every
+  derived value is a live read, name one function as both `:derive` and
+  `:recheck`; to compare the confirmed value with the current one, return
+  the current one under its own key. Its reads are strict, so a read that
+  did not answer refuses before any judgement, and a spec with `:recheck`
+  needs a `:refusal` or `:precondition` (else it throws). The drift checks
+  of `:subject`, `:subjects` and `:pin` still follow the judgement. Reads
+  before the confirmation run with `mutation/*phase*` bound to `:derive`,
+  reads after it to `:judge`;
 - a change that acts on something other than the cluster of the kube context
   - an SSH host, a storage cluster - names it with `:connect (fn [opts] …)`,
   which checks the connection and returns `{:context … :cluster …

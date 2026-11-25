@@ -633,7 +633,10 @@ the same machine-enforced contract:
   `:subject` and says why it must not run with `:refusal`; the engine parses
   the pick, reads and pins the object, and prints the refusal. A change to
   several objects declares them as `:subjects`, and each is read, pinned and,
-  when it moved after the confirmation, named in the refusal. A suspend/resume
+  when it moved after the confirmation, named in the refusal. Live state the
+  judgement rests on that no subject covers is read again after the
+  confirmation with `:recheck`, whose map `:refusal` and `:precondition` see
+  over what `:derive` read before it. A suspend/resume
   or pause/resume pair is one `gumshoe.toggle/pair` declaration whose `:on` and
   `:off` specs differ only in the wanted state and their words
   (`gumshoe.steps.workloads/cronjob-suspending`). A change acting over SSH or another API
