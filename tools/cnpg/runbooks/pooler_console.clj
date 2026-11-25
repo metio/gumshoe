@@ -9,7 +9,6 @@
             [gumshoe.pooler-console :as console]
             [gumshoe.runbook :as runbook]
             [gumshoe.select :as select]
-            [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
 (def pooler-select
@@ -34,15 +33,10 @@
    :kubectl-can-get [pooler/pooler-type "pods"]})
 
 (defn- admin-query
+  "The answer of one admin console command, nil unless the exec exited 0."
   [context namespace pod sql]
-  (shell/stdout-of "kubectl" (str "--context=" context) (str "--namespace=" namespace)
-                   "exec" pod "-c" "pgbouncer" "--"
-                   "psql" "-p" "5432" "-U" "pgbouncer" "-d" "pgbouncer" "-c" sql))
-
-(defn- recent-log
-  [context namespace pod lines]
-  (shell/stdout-of "kubectl" (str "--context=" context) (str "--namespace=" namespace)
-                   "logs" pod "-c" "pgbouncer" (str "--tail=" lines)))
+  (kubectl/exec-answer context namespace pod "pgbouncer"
+                       ["psql" "-p" "5432" "-U" "pgbouncer" "-d" "pgbouncer" "-c" sql]))
 
 (defn- pod-of
   [context namespace pooler]
@@ -71,16 +65,21 @@
                                       :pod pod})
             (doseq [sql ["SHOW DATABASES" "SHOW POOLS" "SHOW SERVERS"]]
               (stdout/print-section sql)
-              (println (admin-query context namespace pod sql)))
-            (let [log (recent-log context namespace pod (:lines opts))
-                  verdict (console/classify log)]
-              (stdout/print-section "Recent log, health checks removed")
-              (doseq [line (take-last 20 (console/interesting-lines log))] (println line))
-              (stdout/print-section "Verdict")
-              (stdout/print-data-table (select-keys verdict [:verdict :authentication
-                                                             :unreachable :lines]))
-              (doseq [line (console/guidance verdict pooler)] (stdout/warn line))
-              true)))))))
+              (if-let [answer (admin-query context namespace pod sql)]
+                (println answer)
+                (stdout/warn (format "could not run %s on the admin console of %s" sql pod))))
+            (let [{:keys [read? log]} (kubectl/container-logs context namespace pod "pgbouncer" (:lines opts))]
+              (if-not read?
+                (do (stdout/error (format "could not read the pgbouncer log of %s - no verdict without it" pod))
+                    false)
+                (let [verdict (console/classify log)]
+                  (stdout/print-section "Recent log, health checks removed")
+                  (doseq [line (take-last 20 (console/interesting-lines log))] (println line))
+                  (stdout/print-section "Verdict")
+                  (stdout/print-data-table (select-keys verdict [:verdict :authentication
+                                                                 :unreachable :lines]))
+                  (doseq [line (console/guidance verdict pooler)] (stdout/warn line))
+                  true)))))))))
 
 (runbook/execute!
  {:description "Reads a Pooler's PgBouncer admin console and says which fault the log shows"

@@ -2,9 +2,13 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.pooler-console-test
-  (:require [clojure.string :as str]
+  (:require [cheshire.core :as json]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is]]
-            [gumshoe.pooler-console :as console]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.pooler-console :as console]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.shell :as shell]))
 
 (def ^:private health-check
   "C-0x1: pgbouncer/pgbouncer@unix(1):5432 closing because: client close request (age=0s)")
@@ -137,3 +141,47 @@
   (let [verdict (console/classify connect-failure)]
     (is (nil? (:window-end verdict)))
     (is (not (:stale? verdict)))))
+
+(def ^:private pooler-book
+  (binding [runbook/*loading* true]
+    (load-file "tools/cnpg/runbooks/pooler_console.clj")))
+
+(defn- run-pooler-console
+  "Runs the pooler console against a cluster holding one Pooler and its pod,
+   with every exec answered by exec and the log read answered by logs.
+   Returns the action's result and what it printed."
+  [exec logs]
+  (let [pooler {:metadata {:namespace "db" :name "pg-rw"} :spec {:cluster {:name "pg"}}}
+        pod {:metadata {:namespace "db" :name "pg-rw-0"}}
+        printed (java.io.StringWriter.)]
+    (with-redefs [kubectl/current-context (constantly "ctx")
+                  shell/execute (fn [& argv]
+                                  (cond
+                                    (some #{"exec"} argv) exec
+                                    (some #{"logs"} argv) logs
+                                    (some #(= "poolers.postgresql.cnpg.io" %) argv)
+                                    {:exit 0 :out (json/generate-string {:items [pooler]}) :err ""}
+                                    (some #{"pods"} argv)
+                                    {:exit 0 :out (json/generate-string {:items [pod]}) :err ""}
+                                    :else {:exit 1 :out "" :err "unexpected"}))]
+      (let [result (binding [*out* printed *err* printed]
+                     ((:action pooler-book) {:namespace "db" :pooler "pg-rw" :lines 200} {}))]
+        {:result result :out (str printed)}))))
+
+(deftest an-unread-log-gives-no-verdict-test
+  (let [{:keys [result out]} (run-pooler-console {:exit 0 :out "database list" :err ""}
+                                                 {:exit 1 :out "" :err "container not found"})]
+    (is (false? result))
+    (is (str/includes? out "could not read the pgbouncer log of pg-rw-0"))
+    (is (not (str/includes? out "No login failure")))))
+
+(deftest a-failed-admin-command-is-named-test
+  (let [{:keys [result out]} (run-pooler-console {:exit 1 :out "" :err "exec failed"}
+                                                 {:exit 0 :out "" :err ""})]
+    (is (true? result) "the log answered, so the verdict stands")
+    (is (str/includes? out "could not run SHOW SERVERS on the admin console of pg-rw-0"))))
+
+(deftest a-read-empty-log-reads-quiet-test
+  (let [{:keys [result out]} (run-pooler-console {:exit 0 :out "x" :err ""} {:exit 0 :out "" :err ""})]
+    (is (true? result))
+    (is (str/includes? out "No login failure"))))

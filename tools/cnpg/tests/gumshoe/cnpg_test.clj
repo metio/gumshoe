@@ -5,6 +5,7 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is]]
             [gumshoe.capabilities :as capabilities]
+            [gumshoe.detective :as detective]
             [gumshoe.detectives.cnpg :as cnpg]
             [gumshoe.detectives.registry :as registry]
             [gumshoe.tools.cnpg]))
@@ -211,3 +212,17 @@
     (is (some #(= "the primary cloudnative-pg-cluster-general-2 is not healthy (listed as replicating)"
                   (:summary %))
               findings))))
+
+(defn- crashloop-unread?
+  [evidence]
+  (detective/unread? (first (filter #(= "cnpg-instance-crashloop" (:name %)) cnpg/detectives)) evidence))
+
+(deftest the-crashloop-check-is-unread-when-the-pods-read-did-not-answer-test
+  (is (crashloop-unread? {cnpg/cluster-type {:items []} "pods" nil})
+      "clusters answered, pods did not")
+  (is (crashloop-unread? {cnpg/cluster-type nil "pods" nil}) "neither answered"))
+
+(deftest the-crashloop-check-reads-pods-without-the-cluster-read-test
+  (is (not (crashloop-unread? {cnpg/cluster-type nil "pods" {:items []}}))
+      "the Cluster read only feeds the hint")
+  (is (not (crashloop-unread? {cnpg/cluster-type {:items []} "pods" {:items []}}))))

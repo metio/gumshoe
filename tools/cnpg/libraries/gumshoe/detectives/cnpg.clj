@@ -311,6 +311,9 @@
    {:name "cnpg-instance-crashloop"
     :description "Postgres instance pods stuck in CrashLoopBackOff"
     :requires [cluster-type "pods"]
+    ;; the pods are what the check judges; the Cluster read only names the
+    ;; designated primary in the hint, so it stays optional
+    :joins ["pods"]
     :detect detect-crashlooping-instances}
    {:name "cnpg-certificates"
     :description "CloudNativePG certificates that expired or expire within a week"
