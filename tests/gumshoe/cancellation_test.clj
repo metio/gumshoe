@@ -159,3 +159,31 @@
         (finally
           (when forward (process/shell {:continue true :err :string} "kill" "-KILL" (str forward)))
           (process/destroy-tree book))))))
+
+(defn- recorded-with
+  "Whether the reproducer's recording holds a command line containing token."
+  [token]
+  (boolean (some #(str/includes? % token) (shell/recording))))
+
+(deftest a-command-refused-on-a-cancelled-thread-is-not-recorded
+  (let [token (str "refused-" (random-uuid))
+        outcome (promise)
+        worker (Thread. ^Runnable
+                (fn []
+                  (.interrupt (Thread/currentThread))
+                  (deliver outcome
+                           (try (shell/execute "echo" token)
+                                (catch InterruptedException _ :refused)))))]
+    (.start worker)
+    (is (= :refused (deref outcome 5000 :no-answer)))
+    (is (not (recorded-with token)) "the reproducer lists only commands that ran")))
+
+(deftest a-command-that-could-not-be-launched-is-not-recorded
+  (let [binary (str "this-binary-does-not-exist-" (random-uuid))]
+    (is (= 127 (:exit (shell/execute binary))))
+    (is (not (recorded-with binary)))))
+
+(deftest a-command-that-ran-is-recorded
+  (let [token (str "ran-" (random-uuid))]
+    (is (= 0 (:exit (shell/execute "echo" token))))
+    (is (recorded-with token))))

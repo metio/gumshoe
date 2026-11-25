@@ -131,15 +131,19 @@
    deadline cancelled it - destroys the process tree and rethrows the
    InterruptedException with the interrupt flag set, so the cancelled work
    stops instead of reading the interrupt as a failed launch and running its
-   next command."
+   next command.
+
+   Only a command that started is recorded: one refused on a cancelled
+   thread, or one that could not be launched, contributed nothing to what the
+   operator saw, and the reproducer would replay it as if it had."
   [opts args]
-  (record! args)
   (refuse-when-interrupted! args)
   (let [proc (try (apply process/process opts args)
                   (catch Exception e e))]
     (if (instance? Exception proc)
       (launch-failure args proc)
       (do
+        (record! args)
         (track-child! proc)
         (try
           (if-let [ms *timeout-ms*]
