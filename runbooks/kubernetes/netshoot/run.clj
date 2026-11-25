@@ -5,10 +5,9 @@
   "Starts a standalone interactive netshoot pod in a namespace."
   (:require [gumshoe.effect :as effect]
             [gumshoe.flow :as flow]
-            [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.runbook :as runbook]
-            [gumshoe.stdout :as stdout]))
+            [gumshoe.select :as select]))
 
 (def options
   {:namespace {:desc "The namespace to run netshoot in - interactive selection when omitted"
@@ -28,11 +27,14 @@
   [opts _ctx]
   (let [context (kubectl/current-context)
         cluster (kubectl/current-cluster)
-        namespaces (kubectl/names-of (kubectl/get-all context "namespaces"))
-        namespace (interact/choose-one "Namespace" namespaces (:namespace opts))
+        namespace (select/pick {:mode :one :label "Namespace" :flag :namespace
+                                :candidates #(kubectl/names-of (kubectl/get-all % "namespaces"))
+                                :empty-message "the cluster has no namespaces"
+                                :on-empty :fail}
+                               opts context)
         host-network (boolean (:host-network opts))]
     (if (nil? namespace)
-      (do (stdout/error "no namespace selected") false)
+      false
       (flow/change!
        {:confirmation {:action (if host-network
                                  "start a netshoot pod ON THE NODE NETWORK - it sees all node traffic"

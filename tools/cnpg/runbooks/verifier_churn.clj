@@ -6,9 +6,9 @@
    apart, and says whether something is re-deriving them behind the poolers."
   (:require [gumshoe.cnpg.verifier-churn :as churn]
             [gumshoe.detectives.pooler :as pooler]
-            [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.runbook :as runbook]
+            [gumshoe.select :as select]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
@@ -46,14 +46,16 @@
 (defn- churn-check
   [opts _ctx]
   (let [context (kubectl/current-context)
-        clusters (kubectl/items-of (kubectl/get-all context pooler/cluster-type))
-        candidates (mapv kubectl/namespace-name-of clusters)
-        chosen (interact/choose-namespaced "Cluster" candidates
-                                           (:namespace opts) (:cluster opts))]
+        clusters (delay (kubectl/items-of (kubectl/get-all context pooler/cluster-type)))
+        chosen (select/pick {:mode :namespaced :label "Cluster" :namespace-flag :namespace :name-flag :cluster
+                             :candidates (fn [_] (mapv kubectl/namespace-name-of @clusters))
+                             :empty-message "no CloudNativePG Cluster exists"
+                             :on-empty :fail}
+                            opts context)]
     (if (nil? chosen)
-      (do (stdout/error "no cluster selected") false)
+      false
       (let [{:keys [namespace]} (kubectl/namespace-name-map chosen)
-            primary (-> (kubectl/find-item clusters chosen) :status :currentPrimary)
+            primary (-> (kubectl/find-item @clusters chosen) :status :currentPrimary)
             window (:window opts)]
         (if (nil? primary)
           (do (stdout/error (format "cluster %s names no currentPrimary" chosen)) false)

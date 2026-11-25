@@ -12,9 +12,9 @@
    changed between manifests, so an upgrade never corrects it."
   (:require [clojure.string :as str]
             [gumshoe.conditions :as conditions]
-            [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.runbook :as runbook]
+            [gumshoe.select :as select]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]
             [gumshoe.tools.flux :as flux]))
@@ -78,10 +78,13 @@
 (defn- show-drift
   [opts _ctx]
   (let [context (kubectl/current-context)
-        target (interact/choose-namespaced "HelmRelease" (drifted-first context)
-                                           (:namespace opts) (:name opts))]
+        target (select/pick {:mode :namespaced :label "HelmRelease" :namespace-flag :namespace :name-flag :name
+                             :candidates drifted-first
+                             :empty-message "no HelmRelease exists"
+                             :on-empty :fail}
+                            opts context)]
     (if (nil? target)
-      (do (stdout/error "no HelmRelease selected") false)
+      false
       (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
             release (kubectl/get-namespaced-resource context namespace helmrelease-type name)
             ;; targetNamespace renames the release and moves its objects,

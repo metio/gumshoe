@@ -8,32 +8,21 @@
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.runbook :as runbook]
+            [gumshoe.select :as select]
             [gumshoe.stdout :as stdout]))
 
 (def options
-  {:namespace {:desc "The namespace of the etcd pod - interactive selection when omitted"
-               :alias :n
-               :coerce :string}
-   :pod {:desc "The etcd pod to use - interactive selection when omitted"
-         :alias :p
-         :coerce :string}
-   :key {:desc "The etcd key to read - interactive selection when omitted"
-         :alias :k
-         :coerce :string}})
-
-(def prerequisites
-  {:installed-tools ["kubectl" "fzf"]
-   :cluster-capabilities []
-   :kubectl-can-get ["pods"]
-   :kubectl-can-exec ["pods"]})
+  (merge etcd/pod-options
+         {:key {:desc "The etcd key to read - interactive selection when omitted"
+                :alias :k
+                :coerce :string}}))
 
 (defn- get-value
   [opts _ctx]
   (let [context (kubectl/current-context)
-        pods (kubectl/namespaces-names (kubectl/get-selected context "pods" etcd/pod-selector))
-        target (interact/choose-namespaced "Pod" pods (:namespace opts) (:pod opts))]
+        target (select/pick etcd/pod-select opts context)]
     (if (nil? target)
-      (do (stdout/error "no etcd pod selected") false)
+      false
       (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
             keys (->> (etcd/etcdctl-stdout context namespace name "get" "--from-key" "" "--keys-only")
                       str/split-lines
@@ -47,6 +36,6 @@
 (runbook/execute!
  {:description "Reads a single key from etcd through one etcd pod"
   :options options
-  :prerequisites prerequisites
+  :prerequisites etcd/pod-prerequisites
   :announce? false
   :action get-value})

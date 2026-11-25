@@ -8,9 +8,9 @@
    actually maxes out at - and which layer is the bottleneck."
   (:require [gumshoe.detective :as detective]
             [gumshoe.detectives.upload :as upload]
-            [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.phpstack :as phpstack]
+            [gumshoe.select :as select]
             [gumshoe.stdout :as stdout]))
 
 (def options
@@ -30,10 +30,13 @@
    chosen or neither an nginx nor a php-fpm container answered."
   [opts]
   (let [context (kubectl/current-context)
-        namespaces (kubectl/names-of (kubectl/get-all context "namespaces"))
-        namespace (interact/choose-one "Namespace" namespaces (:namespace opts))]
+        namespace (select/pick {:mode :one :label "Namespace" :flag :namespace
+                                :candidates #(kubectl/names-of (kubectl/get-all % "namespaces"))
+                                :empty-message "the cluster has no namespaces"
+                                :on-empty :fail}
+                               opts context)]
     (if (nil? namespace)
-      (do (stdout/error "no namespace selected") nil)
+      nil
       (let [evidence (phpstack/collect-evidence! context namespace)]
         (if-not (or (:found-nginx? evidence) (:found-php? evidence))
           (do (stdout/error (format "found no nginx or php-fpm container in %s - is this an nginx+php-fpm app?" namespace))

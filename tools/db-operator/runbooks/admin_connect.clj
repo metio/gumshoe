@@ -4,11 +4,11 @@
 (ns runbooks.db-operator.admin-connect
   "Opens an interactive psql session as the admin user of a DbInstance."
   (:require [gumshoe.flow :as flow]
-            [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.announce :as announce]
             [gumshoe.postgres :as postgres]
             [gumshoe.runbook :as runbook]
+            [gumshoe.select :as select]
             [gumshoe.stdout :as stdout]))
 
 (def options
@@ -29,10 +29,13 @@
   [opts {:keys [announcement-data]}]
   (let [context (kubectl/current-context)
         cluster (kubectl/current-cluster)
-        instances (kubectl/names-of (kubectl/get-all context postgres/instance-type))
-        instance (interact/choose-one "DbInstance" instances (:instance opts))]
+        instance (select/pick {:mode :one :label "DbInstance" :flag :instance
+                               :candidates #(kubectl/names-of (kubectl/get-all % postgres/instance-type))
+                               :empty-message "no DbInstance exists"
+                               :on-empty :fail}
+                              opts context)]
     (if (nil? instance)
-      (do (stdout/error "no DbInstance selected") false)
+      false
       (let [connection (postgres/admin-connection context instance)]
         (if-not (postgres/connection-complete? connection)
           (do (stdout/error (format "could not resolve the admin credentials of %s" instance)) false)

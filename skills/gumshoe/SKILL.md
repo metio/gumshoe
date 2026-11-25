@@ -387,6 +387,15 @@ mostly data:
 - a dispatcher is `(dispatch/book {:select … :classify (fn [ctx target] key)
   :routes {key {:playbook …}}})`, one front door that runs the playbook a
   subject's kind routes to;
+- a bespoke or read-only book picks its subject from a cluster read with
+  `(select/pick {:mode … :label … :candidates (fn [context] names)
+  :empty-message … :on-empty :fail} opts context)`, which lists the
+  candidates under strict reads and returns the pick or nil after printing
+  why: "could not list the … candidates", the `:empty-message` (as an error
+  with `:on-empty :fail`), or "no … selected". A book that needs the objects
+  behind the names reads them in a `delay` its `:candidates` derefs and
+  derefs it again after the pick; `gumshoe.etcd/pod-select` and
+  `etcdctl-action` are the example;
 - a library playbook that takes a caller's steps does so at named
   positions, never by matching a title: it pairs each step with the position
   that follows it, `[[position step] …]`, and builds its steps with

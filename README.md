@@ -653,7 +653,10 @@ the same machine-enforced contract:
 - **A bespoke book** calls `runbook/execute!` directly with its own `:action`,
   for the handful with genuinely custom flow (multi-step orchestration,
   port-forwards, two-step selection). Even these express their change as an
-  `:effect` plan where they can, so they dry-run and their mutation is tested.
+  `:effect` plan where they can, so they dry-run and their mutation is tested,
+  and pick their subject with `(select/pick spec opts context)`, which lists
+  the candidates under strict reads, so a cluster that did not answer is
+  reported as such and never as one with nothing to pick.
 
 A change is a plan of **effects as data** (`[[:kubectl "cordon" node]]`),
 interpreted three ways: run it, show it (`--dry-run`), or collect it in a test.
