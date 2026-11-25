@@ -6,6 +6,7 @@
             [gumshoe.effect :as effect]
             [gumshoe.flow :as flow]
             [gumshoe.outcome :as outcome]
+            [gumshoe.shell]
             [gumshoe.interact :as interact]))
 
 (def ^:private valid
@@ -84,3 +85,39 @@
                 outcome/*record* record]
         (flow/change! (assoc valid :precondition (constantly true))))
       (is (nil? (:unmet @record))))))
+
+(defn- unknown-op-change
+  "A change whose plan cordons a node through a known op and then calls one
+   nothing registers."
+  []
+  {:confirmation {:action "cordon and notify" :target "cluster" :items ["n1"]}
+   :effect [(effect/kubectl "ctx" "cordon" "n1") [:no-such-hook "url" "event"]]})
+
+(deftest a-plan-with-an-unknown-op-is-refused-before-anything-runs-test
+  (doseq [dry-run? [false true]]
+    (testing (if dry-run? "under --dry-run" "in a real run")
+      (let [ran (atom []) asked (atom false) err (java.io.StringWriter.)
+            thrown (with-redefs [gumshoe.shell/run-with-output (fn [& args] (swap! ran conj (vec args)) 0)
+                                 interact/confirm! (fn [& _] (reset! asked true) true)]
+                     (binding [flow/*dry-run* dry-run? *err* err]
+                       (try (flow/change! (unknown-op-change)) nil
+                            (catch clojure.lang.ExceptionInfo e e))))]
+        (is (some? thrown))
+        (is (= [:no-such-hook] (:unknown-ops (ex-data thrown))))
+        (is (re-find #":no-such-hook" (ex-message thrown)) (ex-message thrown))
+        (is (re-find #"Nothing of this step was run" (ex-message thrown)))
+        (is (= [] @ran) "the effect before the unknown one never ran")
+        (is (false? @asked) "the operator was never asked")
+        (is (not (re-find #"would run" (str err))) "the rehearsal showed nothing")))))
+
+(deftest a-registered-custom-op-passes-the-check-test
+  (let [performed (atom nil)]
+    (try
+      (effect/register-effect-type! :no-such-hook {:describe (fn [[u]] (str "post to " u))
+                                                     :perform (fn [[u]] (reset! performed u) true)})
+      (with-redefs [gumshoe.shell/run-with-output (fn [& _] 0)
+                    interact/confirm! (constantly true)]
+        (binding [*err* (java.io.StringWriter.)]
+          (is (true? (flow/change! (unknown-op-change))))))
+      (is (= "url" @performed))
+      (finally (reset! @#'effect/effect-types {})))))

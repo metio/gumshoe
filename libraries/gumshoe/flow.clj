@@ -66,6 +66,18 @@
                      (abbreviated returned))
              {:step step :book book :returned returned})))
 
+(defn unknown-effects
+  "The error for a step whose plan holds effects no interpreter knows, named
+   by their ops: a typo, or a custom op whose plugin did not load."
+  [step ops]
+  (let [book (System/getProperty "babashka.file")]
+    (ex-info (format "the step \"%s\"%s plans the effect%s %s, which no interpreter knows - a typo, or a custom effect whose plugin is not listed in env.edn :plugins or did not load (see the warnings above). Nothing of this step was run."
+                     step
+                     (if book (str " of " book) "")
+                     (if (next ops) "s" "")
+                     (str/join ", " (map pr-str ops)))
+             {:step step :book book :unknown-ops ops})))
+
 (defn- do-work!
   "Runs the declared work - the effect plan when present, otherwise the thunk."
   [effect execute!]
@@ -89,7 +101,8 @@
    :effect        a plan of effect data (preferred - composes and dry-runs);
                   one effect is run as a plan of one, and anything else is
                   refused with an error naming the step, before the
-                  confirmation and before any of it runs
+                  confirmation and before any of it runs, as is a plan
+                  holding an op no interpreter knows (effect/unknown-ops)
    :step          optional name of the step for that error, defaulting to
                   the confirmation's :action
    :execute!      a thunk doing the work, truthy on success (legacy)
@@ -108,6 +121,11 @@
 
       (and (some? (:effect config)) (nil? effect))
       (throw (not-a-plan (or step (:action confirmation)) (:effect config)))
+
+      ;; checked before the dry run and the confirmation, so an operator never
+      ;; approves, and a rehearsal never shows, a plan that would stop halfway
+      (seq (some-> effect effect/unknown-ops))
+      (throw (unknown-effects (or step (:action confirmation)) (effect/unknown-ops effect)))
 
       ;; a dry run shows what would happen and changes nothing - no prompt, no
       ;; announcement, no post-check. A legacy thunk cannot be shown safely, so we

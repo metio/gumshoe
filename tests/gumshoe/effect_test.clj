@@ -76,3 +76,18 @@
     (doseq [x [:note {:kubectl "cordon"} "kubectl cordon n" 42 ["cordon" "n"] (list :note "a")
                [(effect/note "a") :oops] [(effect/note "a") nil]]]
       (is (nil? (effect/as-plan x)) (pr-str x)))))
+
+(deftest unknown-ops-test
+  (testing "every built-in op is known"
+    (is (= [] (effect/unknown-ops [(effect/kubectl "p" "cordon" "n") (effect/kubectl-plugin "p" "cnpg" "promote")
+                                   (effect/kubectl-stdin "p" "{}" "apply" "-f" "-") (effect/ssh {:host "h"} "true")
+                                   (effect/cmd "flux" "reconcile") (effect/note "a")]))))
+  (testing "an op nothing registers is named once, in plan order"
+    (is (= [:kubetcl :example-webhook]
+           (effect/unknown-ops [[:kubetcl "p" "cordon" "n"] (effect/note "a") [:example-webhook "u" "e"] [:kubetcl "p" "x"]]))))
+  (testing "a registered op is known while it is registered"
+    (try
+      (effect/register-effect-type! :spy {:describe (fn [_] "spy") :perform (fn [_] true)})
+      (is (= [] (effect/unknown-ops [[:spy "x"]])))
+      (finally (reset! @#'effect/effect-types {})))
+    (is (= [:spy] (effect/unknown-ops [[:spy "x"]])))))
