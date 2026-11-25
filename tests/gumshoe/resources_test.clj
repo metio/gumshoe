@@ -3,6 +3,9 @@
 
 (ns gumshoe.resources-test
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure.test.check :as tc]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
             [gumshoe.detectives.capacity :as capacity]
             [gumshoe.detectives.controlplane :as controlplane]
             [gumshoe.detectives.csi :as csi]
@@ -147,3 +150,62 @@
     (is (= ["CPU requests (4.5 cores) exceed capacity without the largest node (4.0 cores)"]
            (map :summary (capacity/detect-overcommit {"pods" {:items [pod]}
                                                       "nodes" {:items [(node "4") (node "4")]}}))))))
+
+(defn- close?
+  [expected actual]
+  (and (some? actual)
+       (<= (Math/abs (- (double expected) (double actual)))
+           (* 1e-9 (max 1.0 (Math/abs (double expected)))))))
+
+(deftest quantity-grammar-forms-test
+  (testing "the decimal exponent form apimachinery keeps when it serialises such a value"
+    (doseq [[text expected] [["129e6" 1.29e8] ["1E3" 1000.0] ["1e3" 1000.0] ["5e-1" 0.5]
+                             ["1.5E+2" 150.0] ["2e0" 2.0] ["0e9" 0.0] [".5e1" 5.0]]]
+      (is (close? expected (quantity/quantity->number text)) text)))
+  (testing "129e6 and 129M are the same memory request"
+    (is (= (quantity/quantity->number "129M") (quantity/quantity->number "129e6"))))
+  (testing "a bare E is the exa suffix, not an exponent"
+    (is (= 1e18 (quantity/quantity->number "1E")))
+    (is (close? 1.152921504606846976E18 (quantity/quantity->number "1Ei"))))
+  (testing "signs, a leading point and a trailing point"
+    (doseq [[text expected] [["+1" 1.0] ["-1" -1.0] [".5" 0.5] ["1." 1.0] ["+.5Gi" 5.36870912E8]
+                             ["-100m" -0.1] ["+2Ki" 2048.0]]]
+      (is (close? expected (quantity/quantity->number text)) text)))
+  (testing "malformed and non-finite values are nil, never an exception or infinity"
+    (doseq [text ["1e" "e3" "E" "1.2.3" "1Kii" "1 Mi" "--1" "+-1" "." "1e3Mi" "1ee3" "Mi"
+                  "1e400" "1e99999999999999999999" "" "  " "1e-400x"]]
+      (is (nil? (quantity/quantity->number text)) (pr-str text)))))
+
+(def ^:private suffixes
+  {"" 1.0 "m" 1e-3 "k" 1e3 "M" 1e6 "G" 1e9 "T" 1e12 "P" 1e15 "E" 1e18
+   "Ki" 1024.0 "Mi" 1048576.0 "Gi" 1073741824.0 "Ti" 1.099511627776E12})
+
+(deftest quantity-suffix-and-sign-property
+  (let [property (prop/for-all [whole gen/nat
+                                fraction (gen/choose 0 999)
+                                suffix (gen/elements (keys suffixes))
+                                sign (gen/elements ["" "+" "-"])]
+                   (let [text (str sign whole "." fraction suffix)
+                         expected (* (if (= "-" sign) -1 1)
+                                     (Double/parseDouble (str whole "." fraction))
+                                     (get suffixes suffix))]
+                     (close? expected (quantity/quantity->number text))))]
+    (is (:pass? (tc/quick-check 500 property :seed 20261125)))))
+
+(deftest quantity-exponent-property
+  (let [property (prop/for-all [mantissa (gen/choose 0 99999)
+                                exponent (gen/choose -9 18)
+                                e (gen/elements ["e" "E"])
+                                plus? gen/boolean]
+                   (let [text (str mantissa e (when (and plus? (not (neg? exponent))) "+") exponent)]
+                     (close? (* mantissa (Math/pow 10 exponent)) (quantity/quantity->number text))))]
+    (is (:pass? (tc/quick-check 500 property :seed 20261125)))))
+
+(deftest quantity-never-throws-property
+  (let [property (prop/for-all [text (gen/fmap #(apply str %)
+                                               (gen/vector (gen/elements ["1" "9" "0" "." "e" "E" "+" "-"
+                                                                          "Ki" "M" "m" "i" " " "x"])
+                                                           0 12))]
+                   (let [n (quantity/quantity->number text)]
+                     (or (nil? n) (Double/isFinite n))))]
+    (is (:pass? (tc/quick-check 1000 property :seed 20261125)))))

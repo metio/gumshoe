@@ -19,12 +19,26 @@
    "Pi" 1.125899906842624E15
    "Ei" 1.152921504606846976E18})
 
+(def ^:private quantity-pattern
+  ;; The grammar apimachinery's resource.ParseQuantity accepts: an optional
+  ;; sign, a decimal that may start or end with its point ('.5', '1.'), then
+  ;; either a decimal exponent ('129e6', '1E3', '5e-1') or an SI suffix. A bare
+  ;; 'E' with no digits after it is the exa suffix; with digits it is an
+  ;; exponent.
+  #"([+-]?(?:\d+(?:\.\d*)?|\.\d+))(?:([eE][+-]?\d+)|([a-zA-Z]*))")
+
 (defn quantity->number
-  "A Kubernetes quantity as a double, or nil when it can not be parsed."
+  "A Kubernetes quantity as a double, or nil when it can not be parsed. A value
+   too large for a double (an exponent of thousands) is nil as well, so a
+   comparison never runs against infinity."
   [value]
-  (when-let [[_ number suffix] (re-matches #"(\d+(?:\.\d+)?)([a-zA-Z]*)" (str/trim (str value)))]
-    (when-let [factor (get suffix-factors suffix)]
-      (* (Double/parseDouble number) factor))))
+  (when-let [[_ number exponent suffix] (re-matches quantity-pattern (str/trim (str value)))]
+    (let [result (if exponent
+                   (Double/parseDouble (str number exponent))
+                   (when-let [factor (get suffix-factors suffix)]
+                     (* (Double/parseDouble number) factor)))]
+      (when (and result (Double/isFinite result))
+        result))))
 
 (defn sum
   "Sums a seq of quantities, skipping any that do not parse."

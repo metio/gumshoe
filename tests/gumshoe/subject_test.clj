@@ -249,3 +249,22 @@
     (let [issue (get (into {} (#'gumshoe.subject/pod-facts pod)) "issue")]
       (is (clojure.string/includes? issue "migrate: CrashLoopBackOff"))
       (is (not (clojure.string/includes? issue "Completed")) "a finished init container is no issue"))))
+
+(deftest prefixed-keys-keep-their-prefix
+  (testing "a Service selector renders prefixed label keys as written, so it can be pasted into kubectl -l"
+    (is (= "app.kubernetes.io/name=web,app.kubernetes.io/instance=prod,tier=front"
+           (get (into {} (subject/facts "Service" {:spec {:selector {:app.kubernetes.io/name "web"
+                                                                     :app.kubernetes.io/instance "prod"
+                                                                     :tier "front"}}}))
+                "selector"))))
+  (testing "CSI volume attributes with a prefix stay distinguishable"
+    (let [f (into {} (subject/facts "PersistentVolume"
+                                    {:spec {:csi {:driver "rbd.csi.ceph.com"
+                                                  :volumeAttributes {:pool "rbd"
+                                                                     (keyword "csi.storage.k8s.io/pv/name") "pv-1"
+                                                                     :storage.kubernetes.io/csiProvisionerIdentity "x"}}}}))]
+      (is (= "rbd" (get f "csi pool")))
+      (is (= "pv-1" (get f "csi csi.storage.k8s.io/pv/name")))
+      (is (= "x" (get f "csi storage.kubernetes.io/csiProvisionerIdentity")))))
+  (testing "string keys render unchanged"
+    (is (= "a/b=c" (get (into {} (subject/facts "Service" {:spec {:selector {"a/b" "c"}}})) "selector")))))

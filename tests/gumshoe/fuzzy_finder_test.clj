@@ -30,3 +30,32 @@
       (is (some #(clojure.string/starts-with? % "--preview-window=") args)))
     (is (not (some #(clojure.string/starts-with? % "--preview")
                    (single-select-args "Node" {}))))))
+
+(def ^:private select #'fuzzy/select)
+
+(defn- fake-fzf
+  "A shell script standing in for fzf, so select runs against a real process."
+  [body]
+  (let [file (java.io.File/createTempFile "fake-fzf" ".sh")]
+    (spit file (str "#!/bin/sh\n" body "\n"))
+    (.setExecutable file true)
+    (.deleteOnExit file)
+    (str file)))
+
+(def ^:private many-candidates
+  ;; far beyond a pipe buffer, so a writer blocks until fzf reads or exits
+  (map #(str "namespace-" (mod % 97) "/pod-" %) (range 200000)))
+
+(deftest an-early-exit-selects-nothing
+  (testing "fzf leaving before it read every candidate (ESC, no terminal) is no selection, not an IOException"
+    (is (nil? (select [(fake-fzf "exit 130")] many-candidates)))
+    (is (nil? (select [(fake-fzf "exec 0<&-; exit 2")] many-candidates))))
+  (testing "a pick made before every candidate was read still comes back"
+    (is (= "namespace-1/pod-1" (select [(fake-fzf "head -n 2 | tail -n 1")] many-candidates))))
+  (testing "a pick after reading everything comes back trimmed"
+    (is (= "namespace-82/pod-199999" (select [(fake-fzf "tail -n 1")] many-candidates))))
+  (testing "a missing binary names what could not start"
+    (let [e (try (select ["this-fzf-does-not-exist-xyz"] ["a" "b"]) nil
+                 (catch clojure.lang.ExceptionInfo e e))]
+      (is (some? e))
+      (is (clojure.string/includes? (ex-message e) "this-fzf-does-not-exist-xyz")))))

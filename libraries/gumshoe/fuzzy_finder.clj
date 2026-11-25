@@ -10,13 +10,32 @@
             [clojure.string :as str]
             [gumshoe.ui :as ui]))
 
+(defn- start
+  [args]
+  (try
+    (process/process args)
+    (catch java.io.IOException e
+      (throw (ex-info (str "could not start " (first args) " for the selection - is it installed and on PATH?")
+                      {:command (vec args)}
+                      e)))))
+
 (defn- select
+  "Runs fzf over the values and returns its trimmed output, or nil when nothing
+   was picked. The candidates are written from a separate thread while stdout
+   is read: fzf may exit before it has read them all (ESC while they are still
+   streaming, or no terminal to draw on), and a write into its closed stdin is
+   then the normal end of a selection, not an error."
   [args values]
-  (let [fzf (process/process args)]
-    (with-open [writer (io/writer (:in fzf))]
-      (binding [*out* writer]
-        (run! println values)))
-    (not-empty (str/trim (slurp (:out fzf))))))
+  (let [fzf (start args)
+        writer (future
+                 (try
+                   (with-open [writer (io/writer (:in fzf))]
+                     (binding [*out* writer]
+                       (run! println values)))
+                   (catch java.io.IOException _ nil)))
+        output (slurp (:out fzf))]
+    @writer
+    (not-empty (str/trim output))))
 
 (def ^:private style
   ["--ansi" "--height=40%" "--reverse" "--cycle" "--border=rounded" "--info=inline"

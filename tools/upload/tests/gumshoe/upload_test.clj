@@ -3,6 +3,9 @@
 
 (ns gumshoe.upload-test
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure.test.check :as tc]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
             [gumshoe.detectives.upload :as upload]
             [gumshoe.phpstack :as phpstack]
             [gumshoe.size :as size]))
@@ -93,3 +96,30 @@
 (deftest a-commented-out-body-size-sets-no-limit
   (is (= ["512m"] (gumshoe.phpstack/nginx-body-sizes
                    "# configuration file /etc/nginx/nginx.conf:\n    #client_max_body_size 1m;\n    client_max_body_size 512m; # was 1m\n"))))
+
+(deftest size-parse-beyond-a-long-is-unknown
+  (testing "a digit run beyond a long is nil, not a NullPointerException"
+    (is (nil? (size/parse "99999999999999999999")))
+    (is (nil? (size/parse "99999999999999999999G"))))
+  (testing "a product that overflows a long is nil, not an ArithmeticException"
+    (is (nil? (size/parse "9999999999999999g")))
+    (is (nil? (size/parse "99999999999G")))
+    (is (nil? (size/parse "9223372036854775807k"))))
+  (testing "the largest values that fit still parse"
+    (is (= Long/MAX_VALUE (size/parse "9223372036854775807")))
+    (is (= (* 8589934591 1073741824) (size/parse "8589934591G")))))
+
+(def ^:private size-factors {"" 1 "k" 1024 "m" 1048576 "g" 1073741824})
+
+(deftest size-parse-property
+  (let [property (prop/for-all [digits (gen/fmap #(apply str %) (gen/vector (gen/elements "0123456789") 1 30))
+                                suffix (gen/elements ["" "k" "K" "m" "M" "g" "G" "kb" "MB" "Gb"])]
+                   (let [text (str digits suffix)
+                         n (bigint (BigInteger. digits))
+                         expected (* n (get size-factors (str (first (clojure.string/lower-case suffix)))))
+                         result (size/parse text)]
+                     (cond
+                       (= "0" text) (= :unlimited result)
+                       (<= expected Long/MAX_VALUE) (= expected result)
+                       :else (nil? result))))]
+    (is (:pass? (tc/quick-check 1000 property :seed 20261125)))))

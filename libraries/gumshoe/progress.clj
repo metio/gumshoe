@@ -8,8 +8,39 @@
    set of tasks running in parallel (a scan collecting evidence), and `checklist`
    for steps that run one after another. Off a terminal (a pipe, cron) it prints
    each item once with no cursor tricks."
-  (:require [gumshoe.stdout :as stdout]
+  (:require [clojure.string :as str]
+            [gumshoe.stdout :as stdout]
             [gumshoe.theme :as theme]))
+
+(defn animate?
+  "Whether the task list repaints in place. The repaint moves the cursor on
+   stderr, so stderr must be a terminal: `bb book 2> run.log` gets each item
+   once instead of a repaint every 90 ms, and FORCE_COLOR asks for colour, not
+   for cursor movement into a log. NO_COLOR turns it off as well. Colours off
+   while stdout is a terminal means --no-color, which also stops it; with
+   stdout captured (`-o json | jq`) colours are off for stdout's sake and the
+   terminal on stderr still gets the live list."
+  [{:keys [stderr-terminal? stdout-terminal? no-color? colors-enabled?]}]
+  (boolean (and stderr-terminal?
+                (not no-color?)
+                (or colors-enabled? (not stdout-terminal?)))))
+
+(defn- terminal?
+  "Whether fd points at a device. Where /proc is unavailable the target is
+   unknown, and like gumshoe.stdout we assume a terminal and leave NO_COLOR as
+   the escape hatch."
+  [fd]
+  (let [target (try (str (java.nio.file.Files/readSymbolicLink
+                          (.toPath (java.io.File. (str "/proc/self/fd/" fd)))))
+                    (catch Exception _ nil))]
+    (or (nil? target) (str/starts-with? target "/dev/"))))
+
+(defn- live?
+  []
+  (animate? {:stderr-terminal? (terminal? 2)
+             :stdout-terminal? (terminal? 1)
+             :no-color? (not (str/blank? (System/getenv "NO_COLOR")))
+             :colors-enabled? (stdout/colors-enabled?)}))
 
 (defn- spinner
   [frame]
@@ -50,7 +81,7 @@
     (cond
       (empty? labelled) []
 
-      (stdout/colors-enabled?)
+      (live?)
       (do
         (loop [frame 0 first? true]
           (redraw! (mapv (fn [label fut] (line (if (realized? fut) :done :running) frame label))
@@ -80,7 +111,7 @@
    (let [n (count steps)
          labels (atom (mapv first steps))
          statuses (atom (vec (repeat n :pending)))
-         animated? (stdout/colors-enabled?)
+         animated? (live?)
          paint! (fn [first? frame]
                   (when animated?
                     (redraw! (mapv (fn [i] (line (nth @statuses i) frame (nth @labels i))) (range n))
