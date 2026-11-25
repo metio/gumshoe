@@ -22,6 +22,7 @@
             [clojure.test :refer [deftest is testing]]
             [gumshoe.announce :as announce]
             [gumshoe.flow :as flow]
+            [gumshoe.streams-support :as streams]
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.outcome :as outcome]
@@ -140,6 +141,7 @@
                         :else (kubectl-answer state argv)))
         eventually verify/eventually
         out (java.io.StringWriter.)
+        err (java.io.StringWriter.)
         result (with-redefs [shell/execute (fn [& argv] (run-command argv))
                              shell/execute-with-stdin (fn [stdin & argv]
                                                         (run-command (concat argv [(str "<stdin " (count (get (json/parse-string stdin true) :items)) " items>")])))
@@ -154,20 +156,22 @@
                              verify/eventually (fn [check]
                                                  (swap! checks conj (select-keys check [:description :timeout :interval :soft?]))
                                                  (eventually (assoc check :timeout 0)))]
-                 (binding [*out* out *err* out
+                 (binding [*out* out *err* err
                            ssh/*user-config* nil
                            flow/*dry-run* (boolean dry-run?)
                            outcome/*record* record]
                    (try ((:action config) opts {:announcement-data {:cluster "cluster"}})
                         (catch Exception e (str "threw: " (ex-message e))))))]
     (normalise
-     {:result result
-      :confirmations @confirmations
-      :announcements @announcements
-      :calls @calls
-      :checks @checks
-      :record @record
-      :out (str/split-lines (stdout/strip-colors (str/trim (str out))))})))
+     (streams/with-stdout
+      {:result result
+       :confirmations @confirmations
+       :announcements @announcements
+       :calls @calls
+       :checks @checks
+       :record @record
+       :out (str/split-lines (stdout/strip-colors (str/trim (str err))))}
+      (str out) #(str/split-lines (stdout/strip-colors (str/trim %)))))))
 
 (defn surface
   [config]

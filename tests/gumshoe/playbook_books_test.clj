@@ -36,6 +36,7 @@
             [gumshoe.announce :as announce]
             [gumshoe.effect :as effect]
             [gumshoe.flow :as flow]
+            [gumshoe.streams-support :as streams]
             [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
@@ -222,6 +223,7 @@
         record (outcome/fresh)
         eventually verify/eventually
         out (java.io.StringWriter.)
+        err (java.io.StringWriter.)
         result (with-redefs-fn
                  {#'gumshoe.playbook/attended? (constantly (boolean attended?))
                   #'gumshoe.playbook/wait-for-operator! (fn [what] (swap! waited conj what) true)}
@@ -240,20 +242,21 @@
                                                       answer))
                                 announce/announce! (fn [_ _ message] message)
                                 verify/eventually (fn [check] (eventually (assoc check :timeout 0)))]
-                    (binding [*out* out *err* out
+                    (binding [*out* out *err* err
                               outcome/*record* record
                               flow/*dry-run* (boolean dry-run?)]
                       (try (action opts {:announcement-data nil})
-                           (catch Exception e (println "threw:" (ex-message e)) :threw)))))
+                           (catch Exception e (binding [*out* *err*] (println "threw:" (ex-message e))) :threw)))))
         {:keys [tone text]} (outcome/banner {:changes? true :outcome (if (true? result) :ok :failed)} @record)]
     (normalise
      (cond-> {:result result
-              :out (printed out)
+              :out (printed err)
               :confirmations @asked
               :writes (:writes @cluster)
               :banner text
               :recovery (vec (outcome/recovery-lines tone @record))}
-       (seq @waited) (assoc :waited @waited)))))
+       (seq @waited) (assoc :waited @waited)
+       (seq (printed out)) (assoc :stdout (printed out))))))
 
 (defn surface
   "What the playbook declares outside a run: its options, prerequisites,

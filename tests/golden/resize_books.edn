@@ -54,8 +54,6 @@
     "  plan: data-web-0: 10Gi -> 20Gi"
     "  plan: data-web-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "persistentvolumeclaims/data-web-0 patched"
-    "persistentvolumeclaims/data-web-1 patched"
     "Error from server (Forbidden): deleting statefulsets is denied"],
    :banner
    "FAILED after 2 effects - stopped at: kubectl --namespace=shop delete statefulset web --cascade=orphan - the effects before it stay applied",
@@ -104,7 +102,10 @@
       "statefulset"
       "web"
       "--cascade=orphan"],
-     :exit 1}]},
+     :exit 1}],
+   :stdout
+   ["persistentvolumeclaims/data-web-0 patched"
+    "persistentvolumeclaims/data-web-1 patched"]},
   :deleted-while-confirming
   {:result false,
    :out
@@ -145,33 +146,7 @@
    :banner "DRY RUN - nothing was changed, this was a rehearsal",
    :recovery []},
   :enlarged
-  {:result true,
-   :out
-   ["▸ StatefulSet: shop/web"
-    "▸ Template: data"
-    "── 📋 Preflight ─────────────────────────────────────────────────────────────────"
-    "  plan: data-web-0: 10Gi -> 20Gi"
-    "  plan: data-web-1: 10Gi -> 20Gi"
-    "── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "persistentvolumeclaims/data-web-0 patched"
-    "persistentvolumeclaims/data-web-1 patched"
-    "statefulsets deleted"
-    "statefulset.apps/web created"
-    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: all 2 PVCs report capacity 20Gi"
-    "✅ verified: StatefulSet shop/web exists again with the new template"
-    "✅ verified: every pod of the StatefulSet is Running"],
-   :banner "DONE - applied and verified",
-   :recovery [],
-   :confirmations
-   [{:action
-     "enlarge the volumes of StatefulSet shop/web to 20Gi - the StatefulSet is deleted (pods orphaned) and recreated",
-     :target "cluster",
-     :items ("data-web-0" "data-web-1"),
-     :destructive? true}],
-   :announced
-   [["cluster" "Enlarge volumes of StatefulSet shop/web to 20Gi"]],
-   :mutations
+  {:mutations
    [{:argv
      ["kubectl"
       "--context=ctx"
@@ -238,7 +213,34 @@
     {:description "every pod of the StatefulSet is Running",
      :timeout 300,
      :interval 10,
-     :watch? false}]},
+     :watch? false}],
+   :announced
+   [["cluster" "Enlarge volumes of StatefulSet shop/web to 20Gi"]],
+   :confirmations
+   [{:action
+     "enlarge the volumes of StatefulSet shop/web to 20Gi - the StatefulSet is deleted (pods orphaned) and recreated",
+     :target "cluster",
+     :items ("data-web-0" "data-web-1"),
+     :destructive? true}],
+   :out
+   ["▸ StatefulSet: shop/web"
+    "▸ Template: data"
+    "── 📋 Preflight ─────────────────────────────────────────────────────────────────"
+    "  plan: data-web-0: 10Gi -> 20Gi"
+    "  plan: data-web-1: 10Gi -> 20Gi"
+    "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
+    "✅ verified: all 2 PVCs report capacity 20Gi"
+    "✅ verified: StatefulSet shop/web exists again with the new template"
+    "✅ verified: every pod of the StatefulSet is Running"],
+   :result true,
+   :banner "DONE - applied and verified",
+   :recovery [],
+   :stdout
+   ["persistentvolumeclaims/data-web-0 patched"
+    "persistentvolumeclaims/data-web-1 patched"
+    "statefulsets deleted"
+    "statefulset.apps/web created"]},
   :first-claim-fails
   {:result false,
    :out
@@ -309,40 +311,7 @@
    :banner "FAILED - read the messages above; nothing was changed",
    :recovery []},
   :pods-not-ready
-  {:result false,
-   :out
-   ["▸ StatefulSet: shop/web"
-    "▸ Template: data"
-    "── 📋 Preflight ─────────────────────────────────────────────────────────────────"
-    "  plan: data-web-0: 10Gi -> 20Gi"
-    "  plan: data-web-1: 10Gi -> 20Gi"
-    "── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "persistentvolumeclaims/data-web-0 patched"
-    "persistentvolumeclaims/data-web-1 patched"
-    "statefulsets deleted"
-    "statefulset.apps/web created"
-    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: all 2 PVCs report capacity 20Gi"
-    "✅ verified: StatefulSet shop/web exists again with the new template"
-    "❌ NOT verified within 0s: every pod of the StatefulSet is Running"],
-   :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
-   :recovery
-   ["Recovery:"
-    "  Every effect ran: StatefulSet shop/web was recreated with the new volume claim template."
-    "  Enlarged, and they stay so - a claim cannot shrink, so this cannot be undone:"
-    "    data-web-0"
-    "    data-web-1"
-    "  Nothing was rolled back. The post-check messages above name what did not hold."],
-   :confirmations
-   [{:action
-     "enlarge the volumes of StatefulSet shop/web to 20Gi - the StatefulSet is deleted (pods orphaned) and recreated",
-     :target "cluster",
-     :items ("data-web-0" "data-web-1"),
-     :destructive? true}],
-   :announced
-   [["cluster" "Enlarge volumes of StatefulSet shop/web to 20Gi"]],
-   :mutations
+  {:mutations
    [{:argv
      ["kubectl"
       "--context=ctx"
@@ -409,7 +378,41 @@
     {:description "every pod of the StatefulSet is Running",
      :timeout 300,
      :interval 10,
-     :watch? false}]},
+     :watch? false}],
+   :announced
+   [["cluster" "Enlarge volumes of StatefulSet shop/web to 20Gi"]],
+   :confirmations
+   [{:action
+     "enlarge the volumes of StatefulSet shop/web to 20Gi - the StatefulSet is deleted (pods orphaned) and recreated",
+     :target "cluster",
+     :items ("data-web-0" "data-web-1"),
+     :destructive? true}],
+   :out
+   ["▸ StatefulSet: shop/web"
+    "▸ Template: data"
+    "── 📋 Preflight ─────────────────────────────────────────────────────────────────"
+    "  plan: data-web-0: 10Gi -> 20Gi"
+    "  plan: data-web-1: 10Gi -> 20Gi"
+    "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
+    "✅ verified: all 2 PVCs report capacity 20Gi"
+    "✅ verified: StatefulSet shop/web exists again with the new template"
+    "❌ NOT verified within 0s: every pod of the StatefulSet is Running"],
+   :result false,
+   :banner
+   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   :recovery
+   ["Recovery:"
+    "  Every effect ran: StatefulSet shop/web was recreated with the new volume claim template."
+    "  Enlarged, and they stay so - a claim cannot shrink, so this cannot be undone:"
+    "    data-web-0"
+    "    data-web-1"
+    "  Nothing was rolled back. The post-check messages above name what did not hold."],
+   :stdout
+   ["persistentvolumeclaims/data-web-0 patched"
+    "persistentvolumeclaims/data-web-1 patched"
+    "statefulsets deleted"
+    "statefulset.apps/web created"]},
   :preflight-refuses
   {:result false,
    :out
@@ -431,9 +434,6 @@
     "  plan: data-web-0: 10Gi -> 20Gi"
     "  plan: data-web-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "persistentvolumeclaims/data-web-0 patched"
-    "persistentvolumeclaims/data-web-1 patched"
-    "statefulsets deleted"
     "❌ Error from server (Forbidden): applying statefulsets web is denied"],
    :banner
    "FAILED after 3 effects - stopped at: kubectl apply --filename - (with stdin) - the effects before it stay applied",
@@ -509,36 +509,13 @@
          :spec
          {:storageClassName "slow",
           :accessModes ["ReadWriteOnce"],
-          :resources {:requests {:storage "1Gi"}}}}]}}}]},
-  :resize-pending
-  {:result true,
-   :out
-   ["▸ StatefulSet: shop/web"
-    "▸ Template: data"
-    "── 📋 Preflight ─────────────────────────────────────────────────────────────────"
-    "  plan: data-web-0: 10Gi -> 20Gi"
-    "  plan: data-web-1: 10Gi -> 20Gi"
-    "── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "persistentvolumeclaims/data-web-0 patched"
+          :resources {:requests {:storage "1Gi"}}}}]}}}],
+   :stdout
+   ["persistentvolumeclaims/data-web-0 patched"
     "persistentvolumeclaims/data-web-1 patched"
-    "statefulsets deleted"
-    "statefulset.apps/web created"
-    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "🔶 could not confirm within 0s (best effort): all 2 PVCs report capacity 20Gi"
-    "🔶 the operation itself reported no error - confirm by hand if in doubt"
-    "✅ verified: StatefulSet shop/web exists again with the new template"
-    "✅ verified: every pod of the StatefulSet is Running"],
-   :banner "DONE - applied and verified",
-   :recovery [],
-   :confirmations
-   [{:action
-     "enlarge the volumes of StatefulSet shop/web to 20Gi - the StatefulSet is deleted (pods orphaned) and recreated",
-     :target "cluster",
-     :items ("data-web-0" "data-web-1"),
-     :destructive? true}],
-   :announced
-   [["cluster" "Enlarge volumes of StatefulSet shop/web to 20Gi"]],
-   :mutations
+    "statefulsets deleted"]},
+  :resize-pending
+  {:mutations
    [{:argv
      ["kubectl"
       "--context=ctx"
@@ -605,7 +582,35 @@
     {:description "every pod of the StatefulSet is Running",
      :timeout 300,
      :interval 10,
-     :watch? false}]},
+     :watch? false}],
+   :announced
+   [["cluster" "Enlarge volumes of StatefulSet shop/web to 20Gi"]],
+   :confirmations
+   [{:action
+     "enlarge the volumes of StatefulSet shop/web to 20Gi - the StatefulSet is deleted (pods orphaned) and recreated",
+     :target "cluster",
+     :items ("data-web-0" "data-web-1"),
+     :destructive? true}],
+   :out
+   ["▸ StatefulSet: shop/web"
+    "▸ Template: data"
+    "── 📋 Preflight ─────────────────────────────────────────────────────────────────"
+    "  plan: data-web-0: 10Gi -> 20Gi"
+    "  plan: data-web-1: 10Gi -> 20Gi"
+    "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
+    "🔶 could not confirm within 0s (best effort): all 2 PVCs report capacity 20Gi"
+    "🔶 the operation itself reported no error - confirm by hand if in doubt"
+    "✅ verified: StatefulSet shop/web exists again with the new template"
+    "✅ verified: every pod of the StatefulSet is Running"],
+   :result true,
+   :banner "DONE - applied and verified",
+   :recovery [],
+   :stdout
+   ["persistentvolumeclaims/data-web-0 patched"
+    "persistentvolumeclaims/data-web-1 patched"
+    "statefulsets deleted"
+    "statefulset.apps/web created"]},
   :second-claim-fails
   {:result false,
    :out
@@ -615,7 +620,6 @@
     "  plan: data-web-0: 10Gi -> 20Gi"
     "  plan: data-web-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "persistentvolumeclaims/data-web-0 patched"
     "Error from server (Forbidden): patching persistentvolumeclaims data-web-1 is denied"],
    :banner
    "FAILED after 1 effect - stopped at: kubectl --namespace=shop patch persistentvolumeclaims data-web-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}} - the effects before it stay applied",
@@ -656,7 +660,8 @@
       "data-web-1"
       "--type=merge"
       "--patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"],
-     :exit 1}]},
+     :exit 1}],
+   :stdout ["persistentvolumeclaims/data-web-0 patched"]},
   :shrinking
   {:result false,
    :out
@@ -677,13 +682,13 @@
    {:namespace
     {:desc
      "The namespace of the StatefulSet - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :statefulset
     {:desc
      "The StatefulSet to enlarge - interactive selection when omitted",
-     :alias :s,
-     :coerce :string},
+     :coerce :string,
+     :alias :s},
     :template
     {:desc
      "The volume claim template to enlarge - interactive selection when omitted",
@@ -789,9 +794,6 @@
     "  prometheus-k8s-db-prometheus-k8s-0: 10Gi -> 20Gi"
     "  prometheus-k8s-db-prometheus-k8s-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "prometheuses.monitoring.coreos.com/k8s patched"
-    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-0 patched"
-    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-1 patched"
     "Error from server (Forbidden): deleting statefulsets is denied"],
    :banner
    "FAILED after 3 effects - stopped at: kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan - the effects before it stay applied",
@@ -852,7 +854,11 @@
       "statefulset"
       "--selector=operator.prometheus.io/name=k8s"
       "--cascade=orphan"],
-     :exit 1}]},
+     :exit 1}],
+   :stdout
+   ["prometheuses.monitoring.coreos.com/k8s patched"
+    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-0 patched"
+    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-1 patched"]},
   :dry-run
   {:result true,
    :out
@@ -931,41 +937,7 @@
       "--patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"],
      :exit 1}]},
   :pods-not-running
-  {:result false,
-   :out
-   ["▸ Prometheus: monitoring/k8s"
-    "── 📋 Resize plan ───────────────────────────────────────────────────────────────"
-    "  prometheus-k8s-db-prometheus-k8s-0: 10Gi -> 20Gi"
-    "  prometheus-k8s-db-prometheus-k8s-1: 10Gi -> 20Gi"
-    "── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "prometheuses.monitoring.coreos.com/k8s patched"
-    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-0 patched"
-    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-1 patched"
-    "statefulsets deleted"
-    "prometheuses.monitoring.coreos.com/k8s patched"
-    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: all 2 PVCs report capacity 20Gi"
-    "❌ NOT verified within 0s: every Prometheus pod is Running again"],
-   :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
-   :recovery
-   ["Recovery:"
-    "  Every effect ran: Prometheus monitoring/k8s was unpaused with the new volume claim template."
-    "  Enlarged, and they stay so - a claim cannot shrink, so this cannot be undone:"
-    "    prometheus-k8s-db-prometheus-k8s-0"
-    "    prometheus-k8s-db-prometheus-k8s-1"
-    "  Nothing was rolled back. The post-check messages above name what did not hold."],
-   :confirmations
-   [{:action
-     "resize the storage of Prometheus monitoring/k8s to 20Gi - the StatefulSet is recreated",
-     :target "cluster",
-     :items
-     ("prometheus-k8s-db-prometheus-k8s-0"
-      "prometheus-k8s-db-prometheus-k8s-1"),
-     :destructive? true}],
-   :announced
-   [["cluster" "Resize storage of Prometheus monitoring/k8s to 20Gi"]],
-   :mutations
+  {:mutations
    [{:argv
      ["kubectl"
       "--context=ctx"
@@ -1024,7 +996,42 @@
     {:description "every Prometheus pod is Running again",
      :timeout 300,
      :interval 15,
-     :watch? false}]},
+     :watch? false}],
+   :announced
+   [["cluster" "Resize storage of Prometheus monitoring/k8s to 20Gi"]],
+   :confirmations
+   [{:action
+     "resize the storage of Prometheus monitoring/k8s to 20Gi - the StatefulSet is recreated",
+     :target "cluster",
+     :items
+     ("prometheus-k8s-db-prometheus-k8s-0"
+      "prometheus-k8s-db-prometheus-k8s-1"),
+     :destructive? true}],
+   :out
+   ["▸ Prometheus: monitoring/k8s"
+    "── 📋 Resize plan ───────────────────────────────────────────────────────────────"
+    "  prometheus-k8s-db-prometheus-k8s-0: 10Gi -> 20Gi"
+    "  prometheus-k8s-db-prometheus-k8s-1: 10Gi -> 20Gi"
+    "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
+    "✅ verified: all 2 PVCs report capacity 20Gi"
+    "❌ NOT verified within 0s: every Prometheus pod is Running again"],
+   :result false,
+   :banner
+   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   :recovery
+   ["Recovery:"
+    "  Every effect ran: Prometheus monitoring/k8s was unpaused with the new volume claim template."
+    "  Enlarged, and they stay so - a claim cannot shrink, so this cannot be undone:"
+    "    prometheus-k8s-db-prometheus-k8s-0"
+    "    prometheus-k8s-db-prometheus-k8s-1"
+    "  Nothing was rolled back. The post-check messages above name what did not hold."],
+   :stdout
+   ["prometheuses.monitoring.coreos.com/k8s patched"
+    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-0 patched"
+    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-1 patched"
+    "statefulsets deleted"
+    "prometheuses.monitoring.coreos.com/k8s patched"]},
   :preflight-refuses
   {:result false,
    :out
@@ -1036,35 +1043,97 @@
    :banner "FAILED - read the messages above; nothing was changed",
    :recovery []},
   :resize-pending
-  {:result true,
+  {:mutations
+   [{:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=monitoring"
+      "patch"
+      "prometheuses.monitoring.coreos.com"
+      "k8s"
+      "--type=merge"
+      "--patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=monitoring"
+      "patch"
+      "persistentvolumeclaims"
+      "prometheus-k8s-db-prometheus-k8s-0"
+      "--type=merge"
+      "--patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=monitoring"
+      "patch"
+      "persistentvolumeclaims"
+      "prometheus-k8s-db-prometheus-k8s-1"
+      "--type=merge"
+      "--patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=monitoring"
+      "delete"
+      "statefulset"
+      "--selector=operator.prometheus.io/name=k8s"
+      "--cascade=orphan"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=monitoring"
+      "patch"
+      "prometheuses.monitoring.coreos.com"
+      "k8s"
+      "--type=merge"
+      "--patch={\"spec\":{\"paused\":false}}"],
+     :exit 0}],
+   :checks
+   [{:description "all 2 PVCs report capacity 20Gi",
+     :timeout 300,
+     :interval 15,
+     :soft? true,
+     :watch? true}
+    {:description "every Prometheus pod is Running again",
+     :timeout 300,
+     :interval 15,
+     :watch? false}],
+   :announced
+   [["cluster" "Resize storage of Prometheus monitoring/k8s to 20Gi"]],
+   :confirmations
+   [{:action
+     "resize the storage of Prometheus monitoring/k8s to 20Gi - the StatefulSet is recreated",
+     :target "cluster",
+     :items
+     ("prometheus-k8s-db-prometheus-k8s-0"
+      "prometheus-k8s-db-prometheus-k8s-1"),
+     :destructive? true}],
    :out
    ["▸ Prometheus: monitoring/k8s"
     "── 📋 Resize plan ───────────────────────────────────────────────────────────────"
     "  prometheus-k8s-db-prometheus-k8s-0: 10Gi -> 20Gi"
     "  prometheus-k8s-db-prometheus-k8s-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "prometheuses.monitoring.coreos.com/k8s patched"
-    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-0 patched"
-    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-1 patched"
-    "statefulsets deleted"
-    "prometheuses.monitoring.coreos.com/k8s patched"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "🔶 could not confirm within 0s (best effort): all 2 PVCs report capacity 20Gi"
     "🔶 the operation itself reported no error - confirm by hand if in doubt"
     "✅ verified: every Prometheus pod is Running again"],
+   :result true,
    :banner "DONE - applied and verified",
    :recovery [],
-   :confirmations
-   [{:action
-     "resize the storage of Prometheus monitoring/k8s to 20Gi - the StatefulSet is recreated",
-     :target "cluster",
-     :items
-     ("prometheus-k8s-db-prometheus-k8s-0"
-      "prometheus-k8s-db-prometheus-k8s-1"),
-     :destructive? true}],
-   :announced
-   [["cluster" "Resize storage of Prometheus monitoring/k8s to 20Gi"]],
-   :mutations
+   :stdout
+   ["prometheuses.monitoring.coreos.com/k8s patched"
+    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-0 patched"
+    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-1 patched"
+    "statefulsets deleted"
+    "prometheuses.monitoring.coreos.com/k8s patched"]},
+  :resized
+  {:mutations
    [{:argv
      ["kubectl"
       "--context=ctx"
@@ -1123,95 +1192,35 @@
     {:description "every Prometheus pod is Running again",
      :timeout 300,
      :interval 15,
-     :watch? false}]},
-  :resized
-  {:result true,
+     :watch? false}],
+   :announced
+   [["cluster" "Resize storage of Prometheus monitoring/k8s to 20Gi"]],
+   :confirmations
+   [{:action
+     "resize the storage of Prometheus monitoring/k8s to 20Gi - the StatefulSet is recreated",
+     :target "cluster",
+     :items
+     ("prometheus-k8s-db-prometheus-k8s-0"
+      "prometheus-k8s-db-prometheus-k8s-1"),
+     :destructive? true}],
    :out
    ["▸ Prometheus: monitoring/k8s"
     "── 📋 Resize plan ───────────────────────────────────────────────────────────────"
     "  prometheus-k8s-db-prometheus-k8s-0: 10Gi -> 20Gi"
     "  prometheus-k8s-db-prometheus-k8s-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "prometheuses.monitoring.coreos.com/k8s patched"
-    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-0 patched"
-    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-1 patched"
-    "statefulsets deleted"
-    "prometheuses.monitoring.coreos.com/k8s patched"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "✅ verified: all 2 PVCs report capacity 20Gi"
     "✅ verified: every Prometheus pod is Running again"],
+   :result true,
    :banner "DONE - applied and verified",
    :recovery [],
-   :confirmations
-   [{:action
-     "resize the storage of Prometheus monitoring/k8s to 20Gi - the StatefulSet is recreated",
-     :target "cluster",
-     :items
-     ("prometheus-k8s-db-prometheus-k8s-0"
-      "prometheus-k8s-db-prometheus-k8s-1"),
-     :destructive? true}],
-   :announced
-   [["cluster" "Resize storage of Prometheus monitoring/k8s to 20Gi"]],
-   :mutations
-   [{:argv
-     ["kubectl"
-      "--context=ctx"
-      "--namespace=monitoring"
-      "patch"
-      "prometheuses.monitoring.coreos.com"
-      "k8s"
-      "--type=merge"
-      "--patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"],
-     :exit 0}
-    {:argv
-     ["kubectl"
-      "--context=ctx"
-      "--namespace=monitoring"
-      "patch"
-      "persistentvolumeclaims"
-      "prometheus-k8s-db-prometheus-k8s-0"
-      "--type=merge"
-      "--patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"],
-     :exit 0}
-    {:argv
-     ["kubectl"
-      "--context=ctx"
-      "--namespace=monitoring"
-      "patch"
-      "persistentvolumeclaims"
-      "prometheus-k8s-db-prometheus-k8s-1"
-      "--type=merge"
-      "--patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"],
-     :exit 0}
-    {:argv
-     ["kubectl"
-      "--context=ctx"
-      "--namespace=monitoring"
-      "delete"
-      "statefulset"
-      "--selector=operator.prometheus.io/name=k8s"
-      "--cascade=orphan"],
-     :exit 0}
-    {:argv
-     ["kubectl"
-      "--context=ctx"
-      "--namespace=monitoring"
-      "patch"
-      "prometheuses.monitoring.coreos.com"
-      "k8s"
-      "--type=merge"
-      "--patch={\"spec\":{\"paused\":false}}"],
-     :exit 0}],
-   :checks
-   [{:description "all 2 PVCs report capacity 20Gi",
-     :timeout 300,
-     :interval 15,
-     :soft? true,
-     :watch? true}
-    {:description "every Prometheus pod is Running again",
-     :timeout 300,
-     :interval 15,
-     :watch? false}]},
+   :stdout
+   ["prometheuses.monitoring.coreos.com/k8s patched"
+    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-0 patched"
+    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-1 patched"
+    "statefulsets deleted"
+    "prometheuses.monitoring.coreos.com/k8s patched"]},
   :second-claim-fails
   {:result false,
    :out
@@ -1220,8 +1229,6 @@
     "  prometheus-k8s-db-prometheus-k8s-0: 10Gi -> 20Gi"
     "  prometheus-k8s-db-prometheus-k8s-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "prometheuses.monitoring.coreos.com/k8s patched"
-    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-0 patched"
     "Error from server (Forbidden): patching persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 is denied"],
    :banner
    "FAILED after 2 effects - stopped at: kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}} - the effects before it stay applied",
@@ -1276,7 +1283,10 @@
       "prometheus-k8s-db-prometheus-k8s-1"
       "--type=merge"
       "--patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"],
-     :exit 1}]},
+     :exit 1}],
+   :stdout
+   ["prometheuses.monitoring.coreos.com/k8s patched"
+    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-0 patched"]},
   :shrinking
   {:result false,
    :out
@@ -1295,13 +1305,13 @@
    {:namespace
     {:desc
      "The namespace of the Prometheus - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :prometheus
     {:desc
      "The Prometheus instance to resize - interactive selection when omitted",
-     :alias :p,
-     :coerce :string},
+     :coerce :string,
+     :alias :p},
     :capacity
     {:desc "The new storage capacity (bare numbers mean Gi)",
      :alias :c,
@@ -1334,10 +1344,6 @@
     "  prometheus-k8s-db-prometheus-k8s-0: 10Gi -> 20Gi"
     "  prometheus-k8s-db-prometheus-k8s-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "prometheuses.monitoring.coreos.com/k8s patched"
-    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-0 patched"
-    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-1 patched"
-    "statefulsets deleted"
     "Error from server (Forbidden): patching prometheuses.monitoring.coreos.com k8s is denied"],
    :banner
    "FAILED after 4 effects - stopped at: kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}} - the effects before it stay applied",
@@ -1409,7 +1415,12 @@
       "k8s"
       "--type=merge"
       "--patch={\"spec\":{\"paused\":false}}"],
-     :exit 1}]},
+     :exit 1}],
+   :stdout
+   ["prometheuses.monitoring.coreos.com/k8s patched"
+    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-0 patched"
+    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-1 patched"
+    "statefulsets deleted"]},
   :unpicked
   {:result false,
    :out
