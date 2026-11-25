@@ -350,7 +350,8 @@ mostly data:
   a book with more options writes them as `(flags/ordered :url {…} :flavor
   {…} …)` and joins option maps with `flags/merge-ordered`, never a plain
   `merge`; conformance notes a book whose options lost their order
-  (`:option-order`);
+  (`:option-order`), once per book file however many of the option maps
+  it declares or merges lost it, naming the size of each;
 - a uniform change is `(mutation/book {:select … :confirm … :effect …
   :verify …})`. Conformance requires each spec to carry a readable
   `:confirm {:action …}`, an explicit `:destructive?` true or false,
@@ -806,7 +807,9 @@ there is any; a file with an unbalanced form is reported as `unparseable`,
 and a vector binding of `namespace-name-map` or `split-namespace-name` as
 `destructuring`. It also prints advisories as `note:` lines, which never fail
 it: a mutation book whose spec is a literal map without `:recovery` is named
-(`conformance/advisories` returns them as data).
+(`conformance/advisories` returns them as data). After the notes it prints
+one count line per check, `note: 3 option-order advisories in 3 file(s), not
+gating`.
 `:license` names the SPDX identifier every file must carry; without it any
 identifier passes. A casebook that carries no SPDX headers passes
 `:license false`, which omits the header check and keeps every other one, so

@@ -8,7 +8,8 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.change :as change]
-            [gumshoe.conformance :as conformance]))
+            [gumshoe.conformance :as conformance]
+            [gumshoe.flags]))
 
 (def ^:private header
   (str ";; SPDX-FileCopyrightText: The casebook Authors\n"
@@ -623,3 +624,107 @@
         (is (some #(str/includes? % "option :a has no :desc") messages))
         (is (some #(str/includes? % "colliding option aliases") messages)))
       (finally (fs/delete file)))))
+
+;; --- the option-order advisory, once per book ---------------------------------------
+
+(defn- option-library
+  "A step library whose step carries nine options written as a map literal,
+   which reads as a hash map and so has lost their order."
+  [ns-name]
+  (str header
+       "(ns " ns-name " \"A check step carrying many flags.\")\n\n"
+       "(def options {" nine-options "})\n\n"
+       "(def step {:title \"Checks\" :options options :check (fn [_] true)})\n\n"
+       "(def playbook {:steps [step]})\n"))
+
+(defn- option-playbook
+  "A playbook in `ns-name` that merges `library`'s playbook and its step once
+   per title, and declares `own` as its options when given."
+  [ns-name library titles own]
+  (str header
+       "(ns " ns-name " \"Merges a step carrying options.\"\n"
+       "  (:require [" library " :as steps] [gumshoe.playbook :as playbook]))\n\n"
+       "(playbook/book\n"
+       " (merge steps/playbook\n"
+       "        {:description \"Merges\"\n"
+       (when own (str "         :options " own "\n"))
+       "         :steps [" (str/join " " (for [t titles] (format "(merge steps/step {:title %s})" (pr-str t)))) "]}))\n"))
+
+(defn- option-order-advisories
+  "{file name -> number of :option-order advisories} for the casebook at root."
+  [root]
+  (let [{:keys [advisories]} (conformance/report (merge (roots root) (conformance/files-in (roots root))
+                                                        {:license "Apache-2.0"
+                                                         :classpath [(str (fs/path root "libraries"))]}))]
+    (frequencies (for [{:keys [file check]} advisories :when (= :option-order check)]
+                   (str (fs/file-name file))))))
+
+(deftest a-playbook-merging-one-two-or-many-specs-with-options-is-advised-once
+  (doseq [[n lib] [[1 "casebook.order.one.steps"] [2 "casebook.order.two.steps"] [7 "casebook.order.many.steps"]]]
+    (testing (str n " merged specs")
+      (let [root (casebook! {(str "libraries/" (str/replace lib "." "/") ".clj") (option-library lib)
+                             "playbooks/adopt.clj" (option-playbook (str lib "-book") lib
+                                                                    (map #(str "step " %) (range n)) nil)})]
+        (try
+          (is (= {"adopt.clj" 1} (option-order-advisories root)))
+          (finally (fs/delete-tree root)))))))
+
+(deftest two-books-sharing-one-library-spec-are-each-advised-once
+  (let [lib "casebook.order.shared.steps"
+        root (casebook! {"libraries/casebook/order/shared/steps.clj" (option-library lib)
+                         "playbooks/first.clj" (option-playbook "casebook.order.shared.first" lib ["a" "b"] nil)
+                         "playbooks/second.clj" (option-playbook "casebook.order.shared.second" lib ["a" "b" "c"] nil)})]
+    (try
+      (is (= {"first.clj" 1 "second.clj" 1} (option-order-advisories root)))
+      (finally (fs/delete-tree root)))))
+
+(deftest a-book-whose-own-and-merged-option-maps-lost-order-is-advised-once
+  (let [lib "casebook.order.both.steps"
+        own (str "{" (str/join " " (for [i (range 1 11)] (format ":own%d {:desc \"Own %d\"}" i i))) "}")
+        root (casebook! {"libraries/casebook/order/both/steps.clj" (option-library lib)
+                         "playbooks/both.clj" (option-playbook "casebook.order.both.book" lib ["a"] own)})]
+    (try
+      (is (= {"both.clj" 1} (option-order-advisories root)))
+      (let [{:keys [advisories]} (conformance/report (merge (roots root) (conformance/files-in (roots root))
+                                                            {:license "Apache-2.0"}))
+            [{:keys [message]}] (filter #(= :option-order (:check %)) advisories)]
+        (is (str/includes? message "2 of its option maps (10 and 9 options)") message)
+        (is (str/includes? message "flags/ordered") message))
+      (finally (fs/delete-tree root)))))
+
+(deftest option-order-findings-name-each-book-once
+  (let [lost (into {} (for [i (range 9)] [(keyword (str "o" i)) {:desc "o"}]))
+        lost-ten (assoc lost :o9 {:desc "o"})
+        ordered (apply array-map (mapcat (fn [[k v]] [k v]) lost))]
+    (is (gumshoe.flags/order-lost? lost))
+    (is (= [] (vec (conformance/option-order-findings [{:file "a.clj" :option-maps [ordered ordered]}]))))
+    (is (= ["a.clj"] (mapv :file (conformance/option-order-findings [{:file "a.clj" :option-maps [lost]}]))))
+    (is (= ["a.clj"] (mapv :file (conformance/option-order-findings [{:file "a.clj" :option-maps [lost ordered lost]}]))))
+    (is (= ["a.clj"] (mapv :file (conformance/option-order-findings [{:file "a.clj" :option-maps (repeat 12 lost)}]))))
+    (is (= ["a.clj" "b.clj"] (mapv :file (conformance/option-order-findings [{:file "a.clj" :option-maps [lost lost]}
+                                                                            {:file "b.clj" :option-maps [lost]}
+                                                                            {:file "a.clj" :option-maps [lost-ten]}]))))
+    (testing "the message names the options of a single map, and the sizes of several distinct maps"
+      (is (str/includes? (:message (first (conformance/option-order-findings [{:file "a.clj" :option-maps [lost lost]}])))
+                         "lists its 9 options out of order"))
+      (is (str/includes? (:message (first (conformance/option-order-findings [{:file "a.clj" :option-maps [lost lost-ten]}])))
+                         "2 of its option maps (9 and 10 options)"))
+      (is (str/includes? (:message (first (conformance/option-order-findings
+                                           [{:file "a.clj" :option-maps [lost lost-ten lost (assoc lost-ten :o10 {:desc "o"})]}])))
+                         "3 of its option maps (9, 10 and 11 options)")))
+    (is (= [] (vec (conformance/option-order-findings [{:file "a.edn" :option-maps [lost]}]))))))
+
+(deftest verify-prints-the-option-order-count-as-the-number-of-books-advised
+  (let [lib "casebook.order.count.steps"
+        root (casebook! {"libraries/casebook/order/count/steps.clj" (option-library lib)
+                         "playbooks/first.clj" (option-playbook "casebook.order.count.first" lib ["a" "b" "c"] nil)
+                         "playbooks/second.clj" (option-playbook "casebook.order.count.second" lib ["a" "b"] nil)})
+        err (java.io.StringWriter.)]
+    (try
+      (binding [*out* (java.io.StringWriter.) *err* err]
+        (conformance/verify! (assoc (roots root) :license "Apache-2.0")))
+      (let [err (str err)
+            notes (filter #(str/includes? % "(option-order)") (str/split-lines err))]
+        (is (= 2 (count notes)) err)
+        (is (str/includes? err "note: 2 option-order advisories in 2 file(s), not gating") err))
+      (finally (fs/delete-tree root)))))
