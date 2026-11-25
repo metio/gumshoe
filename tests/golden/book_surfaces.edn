@@ -3726,7 +3726,7 @@
  {:options
   {:directory
    {:desc
-    "Directory with Prometheus rule files; defaults to env.edn :prometheus :rules-directory",
+    "Directory with Prometheus rule files, subdirectories included; defaults to env.edn :prometheus :rules-directory",
     :alias :d,
     :coerce :string},
    :grafana
@@ -3763,8 +3763,9 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -d, --directory            Directory with Prometheus rule files; defaults to"
-   "                             env.edn :prometheus :rules-directory"
+   "  -d, --directory            Directory with Prometheus rule files,"
+   "                             subdirectories included; defaults to env.edn"
+   "                             :prometheus :rules-directory"
    "  -g, --grafana              The Grafana base URL (e.g."
    "                             https://grafana.example.org); defaults to env.edn"
    "                             :grafana :url"

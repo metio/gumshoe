@@ -13,7 +13,7 @@
             [gumshoe.stdout :as stdout]))
 
 (def options
-  {:directory {:desc "Directory with Prometheus rule files; defaults to env.edn :prometheus :rules-directory"
+  {:directory {:desc "Directory with Prometheus rule files, subdirectories included; defaults to env.edn :prometheus :rules-directory"
                :alias :d
                :coerce :string}
    :grafana {:desc "The Grafana base URL (e.g. https://grafana.example.org); defaults to env.edn :grafana :url"
@@ -71,16 +71,29 @@
 
       :else
       (fs/with-temp-dir [workdir {}]
-        (let [workdir (str workdir)]
-          (if (and (mimirtool/analyze-rules! directory workdir)
-                   (mimirtool/analyze-grafana! (:grafana opts) grafana-token workdir))
+        (let [workdir (str workdir)
+              rules (mimirtool/analyze-rules! directory workdir)
+              dashboards (when rules (mimirtool/analyze-grafana! (:grafana opts) grafana-token workdir))
+              unparsed (mimirtool/parse-errors {:dashboards (:dashboards dashboards)
+                                                :ruleGroups (:ruleGroups rules)})]
+          (cond
+            (not (and rules dashboards))
+            false
+
+            (seq unparsed)
+            (do (stdout/error "mimirtool could not parse these queries, so the metrics only they use would be listed as unused - refusing to list candidates for deletion:")
+                (doseq [{:keys [source errors]} unparsed
+                        error errors]
+                  (stdout/error (format "  %s: %s" source error)))
+                false)
+
+            :else
             (if-let [analysis (mimirtool/analyze-prometheus! (:prometheus opts)
                                                              prometheus-user prometheus-pass
                                                              workdir)]
               (do (run! println (mimirtool/unused-metrics analysis))
                   true)
-              false)
-            false))))))
+              false)))))))
 
 (runbook/execute!
  {:description "Lists every metric in a Prometheus TSDB that neither dashboards nor rules use"
