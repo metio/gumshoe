@@ -312,8 +312,12 @@ mostly data:
   Service's EndpointSlices) names them as `:joins` and is unread when any
   one of them is nil, so a read that did not answer never reads as an empty
   side of the join. An unread check still runs, so its `:detect` returns
-  nothing when a joined key is nil. `(detective/check-step {:title …
-  :detectives … :blocking? false})` is the playbook step for the same;
+  nothing unless `(gumshoe.evidence/joined? evidence reads)` holds; name the
+  reads once in a var and use it for `:joins`, `:requires` and that guard.
+  Join every read whose absence would turn an object into a missing one, and
+  leave out a read that only adds to a hint or that a cluster may not
+  serve. `(detective/check-step {:title … :detectives … :blocking? false})`
+  is the playbook step for the same;
 - a book derives the options its select reads instead of writing them:
   `(def selection {:mode … :label … :flag …})` and `:options
   (select/options selection {…})`, where the map adds the book's own

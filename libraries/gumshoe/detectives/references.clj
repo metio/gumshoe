@@ -8,6 +8,7 @@
    refuses every request. Each detective here compares the names an object
    refers to with the objects that exist."
   (:require [clojure.string :as str]
+            [gumshoe.evidence :as evidence]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.subject :as subject]))
 
@@ -105,12 +106,20 @@
             ["permanent-redirect" "temporal-redirect"])
       (some snippet-redirect (top-level-statements (nginx-annotation ingress "configuration-snippet")))))
 
+(def ingress-reference-joins
+  "The reads the Ingress check joins: a backend names a Service, and without
+   the Service list every backend would read as missing. The IngressClass
+   and Secret reads are judged only when they answered."
+  ["ingresses" "services"])
+
 (defn detect-ingress-references
-  [{:strs [ingresses ingressclasses services secret-names]}]
+  "Ingresses whose backend Service or port, TLS Secret or IngressClass does
+   not exist. Nothing is judged when a joined read did not answer."
+  [{:strs [ingresses ingressclasses services secret-names] :as evidence}]
   (let [services (by-key services)
         classes (cluster-names ingressclasses)
         secrets (set secret-names)]
-    (for [ingress (kubectl/items-of ingresses)
+    (for [ingress (when (evidence/joined? evidence ingress-reference-joins) (kubectl/items-of ingresses))
           :let [namespace (kubectl/namespace-of ingress)
                 component (kubectl/namespace-name-of ingress)
                 class (-> ingress :spec :ingressClassName)
@@ -307,7 +316,8 @@
 (def detectives
   [{:name "ingress-references"
     :description "Ingresses pointing at missing Services, ports, TLS Secrets or IngressClasses"
-    :requires ["ingresses" "ingressclasses" "services" "secret-names"]
+    :requires (into ingress-reference-joins ["ingressclasses" "secret-names"])
+    :joins ingress-reference-joins
     :detect detect-ingress-references}
    {:name "template-references"
     :description "Pod templates using missing ServiceAccounts, imagePullSecrets or Service addresses"

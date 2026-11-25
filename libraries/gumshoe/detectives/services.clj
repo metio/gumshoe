@@ -9,6 +9,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as str]
             [gumshoe.conditions :as conditions]
+            [gumshoe.evidence :as evidence]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
@@ -135,12 +136,23 @@
              :summary (format "Service routes to unrelated workloads: %s" (str/join ", " backends))
              :hint "the selector is too broad - requests are spread across different applications"}]))))))
 
+(def backend-joins
+  "The reads the backend check joins: a Service selects pods, and a selector
+   that matches none is explained by a Deployment or StatefulSet scaled to
+   zero. Without the pods every Service would read as selecting nothing, and
+   without the workloads an intended scale-down would read as a broken
+   selector."
+  ["services" "pods" "deployments" "statefulsets"])
+
 (defn detect-broken-backends
+  "Services whose selector reaches no pod, only finished or unready pods, an
+   undeclared port, or unrelated workloads. Nothing is judged when a joined
+   read did not answer."
   [evidence]
   (let [pods (kubectl/items-of (get evidence "pods"))
         workloads (concat (map #(assoc % :kind "Deployment") (kubectl/items-of (get evidence "deployments")))
                           (map #(assoc % :kind "StatefulSet") (kubectl/items-of (get evidence "statefulsets"))))]
-    (for [service (kubectl/items-of (get evidence "services"))
+    (for [service (when (evidence/joined? evidence backend-joins) (kubectl/items-of (get evidence "services")))
           :when (and (not= "ExternalName" (-> service :spec :type))
                      (seq (-> service :spec :selector)))
           :let [namespace (kubectl/namespace-of service)]
@@ -169,7 +181,8 @@
 (def detectives
   [{:name "services"
     :description "Services whose selector reaches no ready pod, an undeclared port, or unrelated workloads"
-    :requires ["services" "pods" "deployments" "statefulsets"]
+    :requires backend-joins
+    :joins backend-joins
     :detect detect-broken-backends}
    {:name "load-balancers"
     :description "LoadBalancer Services that never received an address"

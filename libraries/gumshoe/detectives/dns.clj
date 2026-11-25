@@ -6,7 +6,8 @@
    coherence, SOA serial replication, and answer consistency across every
    nameserver. Evidence comes from gumshoe.dns/collect-evidence! - the detect
    functions stay pure."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [gumshoe.evidence :as evidence]))
 
 (defn detect-transport-problems
   [evidence]
@@ -24,34 +25,43 @@
          :summary "server does not answer over IPv6"
          :hint "dual stack is broken - or this machine has no IPv6 connectivity"}]))))
 
+(def nameserver-joins
+  "The two reads the nameserver check joins: without the NS answer the zone
+   would read as having no nameserver, and without the address answers every
+   nameserver would read as having no A or AAAA record."
+  ["nameservers" "addresses"])
+
 (defn detect-nameserver-problems
+  "A zone without nameservers or with a single one, and nameservers without
+   an A or AAAA record. Nothing is judged when a joined read is missing."
   [evidence]
   (let [zone (get evidence "zone")
         nameservers (get evidence "nameservers")
         addresses (get evidence "addresses")]
-    (concat
-     (when (empty? nameservers)
-       [{:severity :critical
-         :component zone
-         :summary "zone has no NS records"
-         :hint "either the zone is broken or the entry server refused the query"}])
-     (when (= 1 (count nameservers))
-       [{:severity :warning
-         :component zone
-         :summary "zone has a single nameserver - no redundancy"
-         :hint "one maintenance window away from a full DNS outage"}])
-     (for [ns nameservers
-           :when (empty? (:a (get addresses ns)))]
-       {:severity :critical
-        :component ns
-        :summary "nameserver has no A record"
-        :hint "v4-only resolvers can not reach this nameserver"})
-     (for [ns nameservers
-           :when (empty? (:aaaa (get addresses ns)))]
-       {:severity :warning
-        :component ns
-        :summary "nameserver has no AAAA record"
-        :hint "dual stack expects every nameserver to be reachable over IPv6"}))))
+    (when (evidence/joined? evidence nameserver-joins)
+      (concat
+       (when (empty? nameservers)
+         [{:severity :critical
+           :component zone
+           :summary "zone has no NS records"
+           :hint "either the zone is broken or the entry server refused the query"}])
+       (when (= 1 (count nameservers))
+         [{:severity :warning
+           :component zone
+           :summary "zone has a single nameserver - no redundancy"
+           :hint "one maintenance window away from a full DNS outage"}])
+       (for [ns nameservers
+             :when (empty? (:a (get addresses ns)))]
+         {:severity :critical
+          :component ns
+          :summary "nameserver has no A record"
+          :hint "v4-only resolvers can not reach this nameserver"})
+       (for [ns nameservers
+             :when (empty? (:aaaa (get addresses ns)))]
+         {:severity :warning
+          :component ns
+          :summary "nameserver has no AAAA record"
+          :hint "dual stack expects every nameserver to be reachable over IPv6"})))))
 
 (defn detect-replication-problems
   [evidence]
@@ -101,7 +111,8 @@
     :detect detect-transport-problems}
    {:name "dns-nameservers"
     :description "The zone has redundant, dual-stack reachable nameservers"
-    :requires ["nameservers" "addresses" "zone"]
+    :requires (conj nameserver-joins "zone")
+    :joins nameserver-joins
     :detect detect-nameserver-problems}
    {:name "dns-replication"
     :description "Every nameserver answers and serves the same SOA serial"

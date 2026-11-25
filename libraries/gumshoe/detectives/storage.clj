@@ -5,6 +5,7 @@
   "Detectives for storage: claims without a volume, claims that lost theirs,
    resizes and modifications that failed, and claims nobody uses."
   (:require [clojure.string :as str]
+            [gumshoe.evidence :as evidence]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
@@ -95,9 +96,18 @@
         :summary "PersistentVolumeClaim waits for a pod to mount it to finish growing its filesystem"
         :hint "the volume is larger already; the filesystem grows the next time a pod mounts it"}))))
 
+(def storage-joins
+  "The reads the claim check joins: without the pods every claim would read
+   as unused, and without the StorageClasses a claim waiting for its first
+   consumer would read as stuck Pending. Events only add the provisioner's
+   message to a hint, so they are required but not joined."
+  ["persistentvolumeclaims" "pods" "storageclasses"])
+
 (defn detect-storage-problems
+  "Claims that are Pending, Lost, failed to resize or modify, or unused.
+   Nothing is judged when a joined read did not answer."
   [evidence]
-  (let [pvcs (get evidence "persistentvolumeclaims")
+  (let [pvcs (when (evidence/joined? evidence storage-joins) (get evidence "persistentvolumeclaims"))
         pods (get evidence "pods")
         context {:modes (binding-modes (get evidence "storageclasses"))
                  :pods pods :events (get evidence "events") :now (:now evidence)}]
@@ -122,5 +132,6 @@
 (def detectives
   [{:name "storage"
     :description "PersistentVolumeClaims that are pending, lost, failed to resize, or unused"
-    :requires ["persistentvolumeclaims" "pods" "storageclasses" "events"]
+    :requires (conj storage-joins "events")
+    :joins storage-joins
     :detect detect-storage-problems}])

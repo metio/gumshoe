@@ -70,20 +70,25 @@
   (is (= ["shop/one" "shop/default"]
          (map :component (posture/detect-single-replicas
                           {"deployments" {:items [(workload "one" :replicas 1) (workload "default")
-                                                  (workload "two" :replicas 2) (workload "off" :replicas 0)]}})))))
+                                                  (workload "two" :replicas 2) (workload "off" :replicas 0)]}
+                           "statefulsets" {:items []}
+                           "horizontalpodautoscalers" {:items []}})))))
 
 (deftest an-hpa-floor-above-one-counts
   (let [hpa (fn [kind name min] {:metadata {:namespace "shop" :name name}
                                  :spec (cond-> {:scaleTargetRef {:kind kind :name name}} min (assoc :minReplicas min))})]
     (is (empty? (posture/detect-single-replicas
                  {"deployments" {:items [(workload "web" :replicas 1)]}
+                  "statefulsets" {:items []}
                   "horizontalpodautoscalers" {:items [(hpa "Deployment" "web" 2)]}})))
     (is (= 1 (count (posture/detect-single-replicas
                      {"deployments" {:items [(workload "web" :replicas 1)]}
+                      "statefulsets" {:items []}
                       "horizontalpodautoscalers" {:items [(hpa "Deployment" "web" nil)]}})))
         "an HPA without minReplicas keeps one")
     (is (= 1 (count (posture/detect-single-replicas
                      {"deployments" {:items [(workload "web" :replicas 1)]}
+                      "statefulsets" {:items []}
                       "horizontalpodautoscalers" {:items [(hpa "StatefulSet" "web" 3)]}})))
         "an HPA for another kind of the same name")))
 
@@ -114,6 +119,7 @@
   (let [pdb (fn [namespace selector] {:metadata {:namespace namespace :name "pdb"} :spec {:selector selector}})
         run (fn [budgets] (posture/detect-unprotected-workloads
                            {"deployments" {:items [(workload "web" :replicas 3) (workload "solo" :replicas 1 :labels {:app "solo"})]}
+                            "statefulsets" {:items []}
                             "poddisruptionbudgets" {:items budgets}}))]
     (is (= ["Deployment with 3 replicas has no PodDisruptionBudget"] (summaries (run []))))
     (is (empty? (run [(pdb "shop" {:matchLabels {:app "web"}})])))
