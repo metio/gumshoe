@@ -31,7 +31,9 @@
             [gumshoe.promql :as promql]
             [gumshoe.restic :as restic]
             [gumshoe.runbook :as runbook]
+            [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.secrets :as secrets]
+            [gumshoe.shell :as shell]
             [gumshoe.ssh :as ssh]
             [gumshoe.stdout :as stdout]
             [gumshoe.synapse :as synapse]
@@ -93,6 +95,20 @@
   {:metadata {:name "loki-distributor" :namespace "loki"
               :labels {(keyword "app.kubernetes.io/component") "distributor"}}})
 
+(defn- candidate-reads
+  "Stubs that put the real candidate read and pick back in place over a
+   cluster answering kubectl with answer, the operator picking nothing."
+  [answer readers]
+  (merge (into {} (for [v readers] [v @v]))
+         {#'shell/execute (fn [& _] answer)
+          #'fuzzy/select-single (constantly nil)}))
+
+(def ^:private kubectl-unanswered
+  {:exit 1 :out "" :err "Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"})
+
+(def ^:private kubectl-empty
+  {:exit 0 :out "{\"items\": []}" :err ""})
+
 (def scenarios
   "Every scan with its stubs. :evidence is what collection hands the
    detectives, shaped as the real collector returns it."
@@ -144,7 +160,11 @@
            :refusals {"no namespace" {:opts {:selector "x"}
                                       :stubs {#'kubectl/get-selected (recording :get-selected {:items []})
                                               #'interact/choose-one (recording :choose-one nil)}}
-                      "no distributor" {:stubs {#'kubectl/get-selected (recording :get-selected {:items []})}}}}
+                      "no distributor" {:stubs {#'kubectl/get-selected (recording :get-selected {:items []})}}
+                      "candidates unanswered" {:opts {:selector "x"}
+                                               :stubs (candidate-reads kubectl-unanswered [#'kubectl/get-selected #'interact/choose-one])}
+                      "no candidates" {:opts {:selector "x"}
+                                       :stubs (candidate-reads kubectl-empty [#'kubectl/get-selected #'interact/choose-one])}}}
    "matrix" {:path "tools/matrix/runbooks/scan.clj"
              :opts {:domain "example.org" :host "matrix.example.org" :admin-secret "matrix/admin"}
              :stubs (fn [evidence] {#'secrets/password (recording :password "token")
@@ -186,7 +206,9 @@
                                     #'thanos/collect-evidence! (recording :collect evidence)})
              :evidence {"url" "http://localhost:19090" "ready" true "stores" [] "rules" []}
              :detective "thanos-stores"
-             :refusals {"no service" {:stubs {#'interact/choose-namespaced (recording :choose nil)}}}}
+             :refusals {"no service" {:stubs {#'interact/choose-namespaced (recording :choose nil)}}
+                        "candidates unanswered" {:stubs (candidate-reads kubectl-unanswered [#'kubectl/get-selected #'interact/choose-namespaced #'kubectl/find-item])}
+                        "no candidates" {:stubs (candidate-reads kubectl-empty [#'kubectl/get-selected #'interact/choose-namespaced #'kubectl/find-item])}}}
    "upload" {:path "tools/upload/runbooks/scan.clj"
              :opts {:namespace "moodle"}
              :stubs (fn [evidence] {#'kubectl/get-all (constantly {:items []})
@@ -197,6 +219,8 @@
                         :nginx-body-size 1048576 :upload-max 1048576 :post-max 1048576 :memory-limit 134217728}
              :detective "upload-limits"
              :refusals {"no namespace" {:stubs {#'interact/choose-one (recording :choose-one nil)}}
+                        "candidates unanswered" {:stubs (candidate-reads kubectl-unanswered [#'kubectl/get-all #'kubectl/names-of #'interact/choose-one])}
+                        "no candidates" {:stubs (candidate-reads kubectl-empty [#'kubectl/get-all #'kubectl/names-of #'interact/choose-one])}
                         "no containers" {:stubs {#'phpstack/collect-evidence! (recording :collect {:component "moodle" :found-nginx? false :found-php? false})}}
                         "nginx only" {:stubs {#'phpstack/collect-evidence! (recording :collect {:component "moodle" :found-nginx? true :found-php? false
                                                                                                 :nginx-body-size 1048576})}}}}})
