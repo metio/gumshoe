@@ -128,7 +128,10 @@
   (let [evidence {"services" {:items [(object "cache" "redis" {:spec {:ports [{:port 6379}]}})]}
                   "serviceaccounts" {:items [(object "shop" "default") (object "shop" "web")]}
                   "secret-names" ["shop/registry"]
-                  "namespaces" {:items [(object nil "shop") (object nil "cache")]}}
+                  "namespaces" {:items [(object nil "shop") (object nil "cache")]}
+                  "statefulsets" {:items []}
+                  "daemonsets" {:items []}
+                  "cronjobs" {:items []}}
         run #(references/detect-template-references (assoc evidence "deployments" {:items [(deployment %)]}))]
     (is (empty? (run {:serviceAccountName "web"
                       :imagePullSecrets [{:name "registry"}]
@@ -178,9 +181,11 @@
                                          :clientConfig {:service {:namespace "policy" :name "webhook"}}}
                                         {:name "url.example" :clientConfig {:url "https://hook.example"}}]})
         run #(references/detect-webhook-references {"validatingwebhookconfigurations" {:items [(config %)]}
+                                                    "mutatingwebhookconfigurations" {:items []}
                                                     "services" {:items []}})]
     (is (= [:critical] (map :severity (run nil))) "failurePolicy defaults to Fail")
     (is (= [:warning] (map :severity (run "Ignore"))))
     (is (empty? (references/detect-webhook-references
                  {"validatingwebhookconfigurations" {:items [(config "Fail")]}
+                  "mutatingwebhookconfigurations" {:items []}
                   "services" {:items [(object "policy" "webhook")]}})))))

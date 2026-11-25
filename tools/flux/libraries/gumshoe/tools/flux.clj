@@ -11,6 +11,7 @@
   (:require [clojure.string]
             [gumshoe.conditions :as conditions]
             [gumshoe.effect :as effect]
+            [gumshoe.evidence :as evidence]
             [gumshoe.investigation :as investigation]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]
@@ -242,16 +243,22 @@
         :when (contains? #{"CrashLoopBackOff" "CreateContainerConfigError" "RunContainerError"} reason)]
     {:container (:name status) :reason reason :restarts (or (:restartCount status) 0)}))
 
+(def succeeded-over-broken-joins
+  "The HelmReleases and the pods in the namespaces they install into."
+  [helmrelease-type "pods"])
+
 (defn detect-succeeded-over-broken
   "The contradiction worth surfacing: a release whose last Helm operation
    succeeded, over a workload that cannot run. `Ready` on a HelmRelease is a
    statement about Helm, not about the software - so a green delivery and a
-   crash-looping pod coexist happily, and every dashboard reads fine."
+   crash-looping pod coexist happily, and every dashboard reads fine.
+   Nothing is judged when a joined read did not answer."
   [evidence]
   (let [pods (kubectl/items-of (get evidence "pods"))
         broken (group-by kubectl/namespace-of
                          (filter #(seq (crash-looping %)) pods))]
-    (for [release (kubectl/items-of (get evidence helmrelease-type))
+    (for [release (when (evidence/joined? evidence succeeded-over-broken-joins)
+                    (kubectl/items-of (get evidence helmrelease-type)))
           :let [ready (conditions/condition release "Ready")
                 ;; the workload runs where the release installed it
                 casualties (get broken (release-namespace release))]
@@ -311,7 +318,8 @@
     :detect detect-inert-deliveries}
    {:name "succeeded-over-broken"
     :description "HelmReleases reporting success over pods that cannot start"
-    :requires [helmrelease-type "pods"]
+    :requires succeeded-over-broken-joins
+    :joins succeeded-over-broken-joins
     :detect detect-succeeded-over-broken}
    {:name "drifted-releases"
     :description "HelmReleases whose live objects no longer match what they applied"

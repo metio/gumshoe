@@ -141,13 +141,20 @@
              value (:values expression)]
          value)))
 
+(def orphaned-local-volume-joins
+  "A local volume names its node, so the check needs both lists."
+  ["persistentvolumes" "nodes"])
+
 (defn detect-orphaned-local-volumes
+  "Local volumes pinned to nodes that no longer exist. Nothing is judged
+   when a joined read did not answer."
   [evidence]
   (let [node-names (set (kubectl/names-of (get evidence "nodes")))]
-    ;; with no node evidence (a failed nodes fetch yields nil) every hostname
-    ;; would look absent and every local PV would be flagged - so a missing node
-    ;; list means "can't tell", not "all orphaned".
-    (for [volume (when (seq node-names) (kubectl/items-of (get evidence "persistentvolumes")))
+    ;; with no node evidence every hostname would look absent and every local
+    ;; PV would be flagged - so an unanswered or empty node list means "can't
+    ;; tell", not "all orphaned".
+    (for [volume (when (and (evidence/joined? evidence orphaned-local-volume-joins) (seq node-names))
+                   (kubectl/items-of (get evidence "persistentvolumes")))
           :let [hostnames (affinity-hostnames volume)]
           :when (and (seq hostnames)
                      (not-any? node-names hostnames))]
@@ -172,5 +179,6 @@
     :detect detect-driver-registration}
    {:name "local-volumes"
     :description "Local volumes pinned to nodes that no longer exist"
-    :requires ["persistentvolumes" "nodes"]
+    :requires orphaned-local-volume-joins
+    :joins orphaned-local-volume-joins
     :detect detect-orphaned-local-volumes}])

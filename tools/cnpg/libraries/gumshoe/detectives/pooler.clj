@@ -26,6 +26,7 @@
             [gumshoe.cnpg.instances :as inst]
             [gumshoe.conditions :as conditions]
             [gumshoe.endpointslices :as endpointslices]
+            [gumshoe.evidence :as evidence]
             [gumshoe.kubectl :as kubectl]))
 
 (def pooler-type "poolers.postgresql.cnpg.io")
@@ -89,13 +90,20 @@
   (first (filter #(and (= namespace (kubectl/namespace-of %)) (= name (kubectl/name-of %)))
                  clusters)))
 
+(def stale-pooler-joins
+  "The Poolers, their clusters' health and the pods of both: the pooler and
+   instance pods are compared by age, and only under a healthy cluster."
+  [pooler-type cluster-type "pods"])
+
 (defn detect-stale-poolers
   "Pooler pods created before every instance pod of their cluster, which is what
-   a rebuild leaves behind. Quiet while the cluster itself is unhealthy."
+   a rebuild leaves behind. Quiet while the cluster itself is unhealthy.
+   Nothing is judged when a joined read did not answer."
   [evidence]
   (let [pods (kubectl/items-of (get evidence "pods"))
         clusters (kubectl/items-of (get evidence cluster-type))]
-    (for [pooler (kubectl/items-of (get evidence pooler-type))
+    (for [pooler (when (evidence/joined? evidence stale-pooler-joins)
+                   (kubectl/items-of (get evidence pooler-type)))
           :let [namespace (kubectl/namespace-of pooler)
                 cluster (cluster-of pooler)
                 instances (keep created-at (inst/instance-pods pods namespace cluster))
@@ -117,13 +125,19 @@
                   "` until the next re-derivation; `connect failed` is the backend "
                   "being unreachable")})))
 
+(def pooler-pod-joins
+  "The Poolers and the pods that run them."
+  [pooler-type "pods"])
+
 (defn detect-unfinished-rollouts
   "Ready pooler pods from more than one generation: a rollout whose old pods
    have not drained, so the Service fans out across both. Session-mode poolers
-   do not drain while clients hold their sessions, so this can persist."
+   do not drain while clients hold their sessions, so this can persist.
+   Nothing is judged when a joined read did not answer."
   [evidence]
   (let [pods (kubectl/items-of (get evidence "pods"))]
-    (for [pooler (kubectl/items-of (get evidence pooler-type))
+    (for [pooler (when (evidence/joined? evidence pooler-pod-joins)
+                   (kubectl/items-of (get evidence pooler-type)))
           :let [ready (filter ready? (pooler-pods pods (kubectl/namespace-of pooler)
                                                   (kubectl/name-of pooler)))
                 generations (set (keep #(get (labels-of %) template-hash-label) ready))]
@@ -138,10 +152,12 @@
 (defn detect-poolers-without-resources
   "Pooler pods with a container missing requests or limits. The operator's
    generated pod template carries none unless the Pooler spec sets them, which
-   leaves PgBouncer in BestEffort QoS, first to be evicted under node pressure."
+   leaves PgBouncer in BestEffort QoS, first to be evicted under node pressure.
+   Nothing is judged when a joined read did not answer."
   [evidence]
   (let [pods (kubectl/items-of (get evidence "pods"))]
-    (for [pooler (kubectl/items-of (get evidence pooler-type))
+    (for [pooler (when (evidence/joined? evidence pooler-pod-joins)
+                   (kubectl/items-of (get evidence pooler-type)))
           :let [unbounded (filter without-resources?
                                   (pooler-pods pods (kubectl/namespace-of pooler)
                                                (kubectl/name-of pooler)))]
@@ -230,15 +246,18 @@
 (def detectives
   [{:name "cnpg-pooler-stale"
     :description "Poolers left behind by an instance rebuild"
-    :requires [pooler-type cluster-type "pods"]
+    :requires stale-pooler-joins
+    :joins stale-pooler-joins
     :detect detect-stale-poolers}
    {:name "cnpg-pooler-rollout"
     :description "Poolers serving traffic from more than one pod generation"
-    :requires [pooler-type "pods"]
+    :requires pooler-pod-joins
+    :joins pooler-pod-joins
     :detect detect-unfinished-rollouts}
    {:name "cnpg-pooler-resources"
     :description "Pooler pods without resource requests or limits"
-    :requires [pooler-type "pods"]
+    :requires pooler-pod-joins
+    :joins pooler-pod-joins
     :detect detect-poolers-without-resources}
    {:name "cnpg-pooler-endpoints"
     :description "Poolers declaring instances whose Service resolves to no ready address, a total outage for their clients"

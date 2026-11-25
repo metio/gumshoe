@@ -34,15 +34,9 @@
 (def ^:private now (java.time.Instant/parse "2026-11-25T12:00:00Z"))
 (def ^:private long-ago "2026-01-01T00:00:00Z")
 
-(defn- items [& objects] {:items (vec objects)})
-
-(defn- meta-of
-  ([name] {:name name})
-  ([namespace name] {:namespace namespace :name name}))
-
-(defn- check-named [detectives name]
-  (or (first (filter #(= name (:name %)) detectives))
-      (throw (ex-info "no such check" {:name name}))))
+(def ^:private items joins/items)
+(def ^:private meta-of joins/meta-of)
+(def ^:private check-named joins/check-named)
 
 (defn- ready-pod [namespace name labels & {:as spec}]
   {:metadata (assoc (meta-of namespace name) :labels labels)

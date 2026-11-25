@@ -222,13 +222,24 @@
                       (format "env %s points at Service %s/%s, which does not exist" name target-namespace service))
            :hint (str "container " (:name container) " reaches " value " - fix the address or create the Service")}))))))
 
+(def template-reference-joins
+  "The workload reads the pod template check joins: without one of them its
+   templates would go unjudged while the check reads as passed. The
+   ServiceAccount, Secret, Service and namespace reads are each judged only
+   when they answered."
+  (mapv first template-types))
+
 (defn detect-template-references
+  "Pod templates naming a ServiceAccount, image pull Secret or Service
+   address that does not exist. Nothing is judged when a joined read did not
+   answer."
   [evidence]
   (let [context {:services (some-> (get evidence "services") by-key)
                  :service-accounts (some-> (get evidence "serviceaccounts") names-in)
                  :secrets (some-> (get evidence "secret-names") set)
                  :namespaces (some-> (get evidence "namespaces") cluster-names)}]
     (for [[type kind path] template-types
+          :when (evidence/joined? evidence template-reference-joins)
           workload (kubectl/items-of (get evidence type))
           finding (template-findings kind workload (get-in workload path) context)]
       (assoc finding
@@ -237,9 +248,15 @@
 
 ;; --- storage ------------------------------------------------------------------
 
+(def storage-class-reference-joins
+  "A claim names a StorageClass, so the check needs both lists."
+  ["persistentvolumeclaims" "storageclasses"])
+
 (defn detect-storage-class-references
-  [{:strs [persistentvolumeclaims storageclasses]}]
-  (when storageclasses
+  "Claims naming a StorageClass that does not exist. Nothing is judged when a
+   joined read did not answer."
+  [{:strs [persistentvolumeclaims storageclasses] :as evidence}]
+  (when (evidence/joined? evidence storage-class-reference-joins)
     (let [classes (cluster-names storageclasses)]
       (for [claim (kubectl/items-of persistentvolumeclaims)
             :let [class (-> claim :spec :storageClassName)]
@@ -255,9 +272,17 @@
 
 ;; --- RBAC ---------------------------------------------------------------------
 
+(def role-reference-joins
+  "Both kinds of binding and both kinds of role: a binding of either kind
+   left unread would go unjudged, and a role list left unread would make
+   every binding to it dangle."
+  ["rolebindings" "clusterrolebindings" "roles" "clusterroles"])
+
 (defn detect-role-references
-  [{:strs [rolebindings clusterrolebindings roles clusterroles]}]
-  (when (and roles clusterroles)
+  "Bindings granting a Role or ClusterRole that does not exist. Nothing is
+   judged when a joined read did not answer."
+  [{:strs [rolebindings clusterrolebindings roles clusterroles] :as evidence}]
+  (when (evidence/joined? evidence role-reference-joins)
     (let [roles (names-in roles)
           clusterroles (cluster-names clusterroles)
           exists? (fn [namespace {:keys [kind name]}]
@@ -274,9 +299,15 @@
 
 ;; --- admission webhooks -------------------------------------------------------
 
+(def webhook-reference-joins
+  "Both kinds of webhook configuration and the Services they call."
+  ["validatingwebhookconfigurations" "mutatingwebhookconfigurations" "services"])
+
 (defn detect-webhook-references
-  [{:strs [validatingwebhookconfigurations mutatingwebhookconfigurations services]}]
-  (when services
+  "Admission webhooks calling a Service that does not exist. Nothing is
+   judged when a joined read did not answer."
+  [{:strs [validatingwebhookconfigurations mutatingwebhookconfigurations services] :as evidence}]
+  (when (evidence/joined? evidence webhook-reference-joins)
     (let [services (names-in services)]
       (for [[kind list] [["ValidatingWebhookConfiguration" validatingwebhookconfigurations]
                          ["MutatingWebhookConfiguration" mutatingwebhookconfigurations]]
@@ -297,9 +328,18 @@
 (def ^:private scalable-targets
   {"Deployment" "deployments" "StatefulSet" "statefulsets"})
 
+(def hpa-target-reference-joins
+  "The autoscalers and every kind of target they may name: an unread target
+   list would leave its autoscalers unjudged while the check reads as
+   passed."
+  ["horizontalpodautoscalers" "deployments" "statefulsets"])
+
 (defn detect-hpa-target-references
+  "HorizontalPodAutoscalers whose Deployment or StatefulSet does not exist.
+   Nothing is judged when a joined read did not answer."
   [evidence]
-  (for [hpa (kubectl/items-of (get evidence "horizontalpodautoscalers"))
+  (for [hpa (when (evidence/joined? evidence hpa-target-reference-joins)
+              (kubectl/items-of (get evidence "horizontalpodautoscalers")))
         :let [{:keys [kind name]} (-> hpa :spec :scaleTargetRef)
               type (scalable-targets kind)]
         :when (and type name (get evidence type))
@@ -321,26 +361,30 @@
     :detect detect-ingress-references}
    {:name "template-references"
     :description "Pod templates using missing ServiceAccounts, imagePullSecrets or Service addresses"
-    :requires ["deployments" "statefulsets" "daemonsets" "cronjobs" "services" "serviceaccounts"
-               "secret-names" "namespaces"]
+    :requires (into template-reference-joins ["services" "serviceaccounts" "secret-names" "namespaces"])
+    :joins template-reference-joins
     :detect detect-template-references}
    {:name "storageclass-references"
     :description "PersistentVolumeClaims using a StorageClass that does not exist"
-    :requires ["persistentvolumeclaims" "storageclasses"]
+    :requires storage-class-reference-joins
+    :joins storage-class-reference-joins
     :detect detect-storage-class-references}
    {:name "hpa-target-references"
     :description "HorizontalPodAutoscalers whose scale target does not exist"
-    :requires ["horizontalpodautoscalers" "deployments" "statefulsets"]
+    :requires hpa-target-reference-joins
+    :joins hpa-target-reference-joins
     :detect detect-hpa-target-references}])
 
 (def security-detectives
   [{:name "role-references"
     :description "RoleBindings and ClusterRoleBindings granting a role that does not exist"
-    :requires ["rolebindings" "clusterrolebindings" "roles" "clusterroles"]
+    :requires role-reference-joins
+    :joins role-reference-joins
     :detect detect-role-references}])
 
 (def platform-detectives
   [{:name "webhook-references"
     :description "Admission webhooks calling a Service that does not exist"
-    :requires ["validatingwebhookconfigurations" "mutatingwebhookconfigurations" "services"]
+    :requires webhook-reference-joins
+    :joins webhook-reference-joins
     :detect detect-webhook-references}])

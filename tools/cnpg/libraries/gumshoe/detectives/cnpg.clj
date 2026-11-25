@@ -17,6 +17,7 @@
             [gumshoe.cnpg.instances :as inst]
             [gumshoe.conditions :as conditions]
             [gumshoe.cron :as cron]
+            [gumshoe.evidence :as evidence]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
@@ -212,15 +213,22 @@
 
 (def ^:private moving-phases #{"Switchover in progress" "Failing over" "Setting up primary"})
 
+(def primary-label-joins
+  "The clusters name their designated primary, and the instance pods carry
+   the role labels compared against it."
+  [cluster-type "pods"])
+
 (defn detect-primary-label-mismatch
   "Instance pods whose primary role label disagrees with the cluster's
    designated primary. Services that select the primary by its role label
    then reach no pod, or a replica that refuses writes. A switchover or
-   failover relabels pods on its way, so a cluster in one is left alone."
+   failover relabels pods on its way, so a cluster in one is left alone.
+   Nothing is judged when a joined read did not answer."
   [evidence]
   (let [pods (group-by (juxt kubectl/namespace-of inst/cluster-of)
                        (filter inst/instance-pod? (kubectl/items-of (get evidence "pods"))))]
-    (for [cluster (kubectl/items-of (get evidence cluster-type))
+    (for [cluster (when (evidence/joined? evidence primary-label-joins)
+                    (kubectl/items-of (get evidence cluster-type)))
           :let [primary (-> cluster :status :currentPrimary)
                 instances (get pods [(kubectl/namespace-of cluster) (kubectl/name-of cluster)])
                 labelled (set (map kubectl/name-of (filter labelled-primary? instances)))]
@@ -310,7 +318,8 @@
     :detect detect-certificate-expiry}
    {:name "cnpg-primary-labels"
     :description "Instance pods whose primary role label disagrees with the designated primary"
-    :requires [cluster-type "pods"]
+    :requires primary-label-joins
+    :joins primary-label-joins
     :detect detect-primary-label-mismatch}
    {:name "cnpg-scheduled-backups"
     :description "CloudNativePG ScheduledBackups that stopped running"

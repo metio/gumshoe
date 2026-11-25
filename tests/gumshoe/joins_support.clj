@@ -12,6 +12,22 @@
             [clojure.test.check.properties :as prop]
             [gumshoe.detective :as detective]))
 
+(defn items
+  "A kubectl list document holding the objects."
+  [& objects]
+  {:items (vec objects)})
+
+(defn meta-of
+  "Object metadata: a cluster-scoped name, or a namespace and a name."
+  ([name] {:name name})
+  ([namespace name] {:namespace namespace :name name}))
+
+(defn check-named
+  "The check of that name among the detectives, or a throw naming it."
+  [detectives name]
+  (or (first (filter #(= name (:name %)) detectives))
+      (throw (ex-info "no such check" {:name name}))))
+
 (defn without
   "The evidence with each named read unanswered."
   [evidence reads]
