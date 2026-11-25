@@ -14,12 +14,6 @@
   [context]
   (kubectl/namespaces-names (kubectl/get-all context stageset/stageset-type)))
 
-(defn stage-names
-  "The declared stage names of a StageSet, so a held stage can be picked by name."
-  [context namespace name]
-  (let [resource (kubectl/get-namespaced-resource context namespace stageset/stageset-type name)]
-    (mapv :name (or (seq (-> resource :status :stages))
-                    (-> resource :spec :stages)))))
 
 (mutation/book
  {:description "Manually promotes a held StageSet stage via stagesetctl"
@@ -34,15 +28,19 @@
                   :kubectl-can-get [stageset/stageset-type]}
   :select {:mode :namespaced :label "StageSet" :namespace-flag :namespace :name-flag :name
            :candidates stagesets}
-  :derive (fn [{:keys [context target opts]}]
-            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
-              {:stage (interact/choose-one "Stage" (stage-names context namespace name) (:stage opts))}))
+  :subject {:type stageset/stageset-type}
+  ;; a held stage is picked by name among those the StageSet declares
+  :derive (fn [{:keys [object opts]}]
+            {:stage (interact/choose-one "Stage" (stageset/declared-stages object) (:stage opts))})
+  :refusal (fn [{:keys [target object stage opts]}]
+             (stageset/promotion-refusal target object stage (:stage opts)))
   :confirm {:action "promote a StageSet stage" :destructive? false}
   :announce (fn [{:keys [target stage]}] (format "Promote stage %s of StageSet %s" stage target))
-  :effect (fn [{:keys [target stage]}]
-            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
-              (effect/plan (effect/cmd "stagesetctl" "promote" name "--stage" stage
-                                       (str "--namespace=" namespace)))))
+  :effect (fn [{:keys [ref stage]}]
+            (if stage
+              (effect/plan (effect/cmd "stagesetctl" "promote" (:name ref) "--stage" stage
+                                       (str "--namespace=" (:namespace ref))))
+              (effect/plan (effect/note "no stage was chosen; nothing is promoted"))))
   ;; stagesetctl's own --wait gives up after five minutes; so does this.
   :verify (fn [{:keys [context target stage]}]
             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]

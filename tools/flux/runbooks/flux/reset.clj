@@ -43,6 +43,8 @@
   :select {:mode :namespaced :label "HelmRelease" :namespace-flag :namespace :name-flag :name
            :candidates helmreleases}
   :confirm {:action "clear the failure counters and reconcile" :destructive? false}
+  :subject {:type flux/helmrelease-type}
+  :refusal (fn [{:keys [target object]}] (flux/helmrelease-refusal target object))
   :announce (fn [{:keys [target]}] (format "Reset HelmRelease %s" target))
   ;; one timestamp per run, so the two annotations agree and a recorded
   ;; reproducer replays the same command

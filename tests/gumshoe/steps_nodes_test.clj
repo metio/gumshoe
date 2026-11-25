@@ -71,3 +71,12 @@
 (deftest the-shared-node-steps-carry-no-recovery
   (testing "the cordon, drain and uncordon runbooks print what they always printed"
     (is (not-any? :recovery [nodes/cordon nodes/drain nodes/uncordon]))))
+
+(deftest every-node-step-pins-its-node-and-refuses-one-that-is-gone
+  (doseq [[name step] {"cordon" nodes/cordon "drain" nodes/drain "uncordon" nodes/uncordon}]
+    (testing name
+      (is (= {:type "nodes"} (:subject step)))
+      (is (= "node n1 no longer exists" ((:refusal step) {:target "n1" :object nil})))
+      (is (nil? ((:refusal step) {:target "n1" :object {:metadata {:name "n1"}}})))
+      (is (nil? ((:refusal step) {:target "n1" :object {:metadata {:name "n1"} :spec {:unschedulable true}}}))
+          "a node already in the state the step brings about is not refused"))))

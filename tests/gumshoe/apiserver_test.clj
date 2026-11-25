@@ -62,3 +62,13 @@
     (is (= "abc" (last (apiserver/started-at-command "abc")))))
   (testing "readyz is asked of this node rather than the load balancer"
     (is (some #(= "https://localhost:6443/readyz" %) (apiserver/readyz-command)))))
+
+(deftest a-restart-is-refused-on-a-node-the-cluster-does-not-list-as-control-plane
+  (let [cp (node "cp-1" {(keyword apiserver/control-plane-label) ""})]
+    (is (nil? (apiserver/restart-refusal "cp-1" cp)))
+    (is (= "the cluster no longer lists node cp-1, so it is not reached over SSH"
+           (apiserver/restart-refusal "cp-1" nil)))
+    (is (= "node w-1 carries no node-role.kubernetes.io/control-plane label"
+           (apiserver/restart-refusal "w-1" (node "w-1" {:kubernetes.io/os "linux"}))))
+    (is (apiserver/control-plane? cp))
+    (is (not (apiserver/control-plane? (node "w-1" nil))))))

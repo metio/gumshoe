@@ -250,3 +250,7 @@
             type [flux/helmrelease-type flux/kustomization-type]]
       (is (not (str/includes? (slurp file) (pr-str type)))
           (str file " spells out " type "; use the gumshoe.tools.flux var")))))
+
+(deftest a-change-to-a-helmrelease-that-is-gone-is-refused
+  (is (= "HelmRelease apps/podinfo no longer exists" (flux/helmrelease-refusal "apps/podinfo" nil)))
+  (is (nil? (flux/helmrelease-refusal "apps/podinfo" {:metadata {:name "podinfo"}}))))
