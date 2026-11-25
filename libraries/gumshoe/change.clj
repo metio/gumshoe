@@ -192,6 +192,32 @@
    :reads or :values entry may hide."
   #{:context :cluster :target :opts :announcement-data :ref :object :refs :objects})
 
+(defn destructive
+  "f, an :effect function, marked as one that destroys what it acts on. A
+   spec whose :effect is marked is destructive whatever its :confirm says:
+   normalize and compose set its :confirm :destructive? to true, and
+   destructive? reads the mark on a spec neither has seen. A builder marks
+   the effect rather than returning a :confirm of its own, so a caller that
+   merges its own :confirm with the builder's fragment, in either order,
+   keeps its action and cannot turn the confirmation into a bare keypress.
+   A caller that replaces the :effect replaces the mark with it."
+  [f]
+  (if (true? (::destructive (meta f)))
+    f
+    (vary-meta f assoc ::destructive true)))
+
+(defn destructive-effect?
+  "Whether f is an :effect function marked by destructive."
+  [f]
+  (and (fn? f) (true? (::destructive (meta f)))))
+
+(defn destructive?
+  "Whether a spec, canonical or not, is destructive: its :confirm says so,
+   or its :effect is marked by destructive."
+  [spec]
+  (or (true? (get-in spec [:confirm :destructive?]))
+      (destructive-effect? (:effect spec))))
+
 (defn- invalid!
   [message data]
   (throw (ex-info message (assoc data ::invalid true))))
@@ -385,7 +411,8 @@
                     (some? refusal) (assoc :refusal refusal)
                     (some? select) (assoc :select select)
                     (some? announce) (assoc :announce announce)
-                    (some? done) (assoc :done done))]
+                    (some? done) (assoc :done done)
+                    (destructive-effect? (:effect spec)) (assoc-in [:confirm :destructive?] true))]
     (check-entries-apart! canonical)
     canonical))
 
