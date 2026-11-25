@@ -20,6 +20,7 @@
   (:require [babashka.fs :as fs]
             [clojure.string :as str]
             [gumshoe.ceph :as ceph]
+            [gumshoe.files :as files]
             [gumshoe.flow :as flow]
             [gumshoe.announce :as announce]
             [gumshoe.runbook :as runbook]
@@ -56,21 +57,44 @@
   (.format (java.time.LocalDateTime/now)
            (java.time.format.DateTimeFormatter/ofPattern "yyyyMMdd-HHmmss")))
 
-(defn- take-backups!
+(def secret-backups
+  "The backups that hold secrets: auth export carries the key of every ceph
+   client and daemon, client.admin included."
+  #{"auth-export"})
+
+(defn take-backups!
   "Captures every backup to a local file. Returns true only when all of them
-   produced content - an empty dump means an upgrade would run without a net."
+   produced content - an empty dump means an upgrade would run without a net.
+   The directory is created rwx------ and must not exist yet, and every file
+   is created rw-------, because auth-export holds the cluster's keys."
   [connection directory]
-  (fs/create-dirs directory)
-  (every? true?
-          (mapv (fn [[name args]]
-                  (let [output (apply ceph/ceph-stdout connection args)]
-                    (if (str/blank? output)
-                      (do (stdout/error (format "backup '%s' produced no output - refusing to upgrade without it" name))
-                          false)
-                      (do (spit (str (fs/path directory (str name ".txt"))) output)
-                          (stdout/check-ok "backed up" name)
-                          true))))
-                backup-commands)))
+  (if-let [problem (try (files/create-private-directory! directory) nil
+                        (catch Exception e (or (ex-message e) (str e))))]
+    (do (stdout/error (format "could not create the backup directory %s owner-only - refusing to upgrade without backups: %s"
+                              directory problem))
+        false)
+    (every? true?
+            (mapv (fn [[name args]]
+                    (let [output (apply ceph/ceph-stdout connection args)
+                          file (str (fs/path directory (str name ".txt")))
+                          problem (when-not (str/blank? output)
+                                    (try (files/write-private! file output) nil
+                                         (catch Exception e (or (ex-message e) (str e)))))]
+                      (cond
+                        (str/blank? output)
+                        (do (stdout/error (format "backup '%s' produced no output - refusing to upgrade without it" name))
+                            false)
+
+                        problem
+                        (do (stdout/error (format "could not write backup %s - refusing to upgrade without it: %s" file problem))
+                            false)
+
+                        :else
+                        (do (stdout/check-ok "backed up" name)
+                            (when (secret-backups name)
+                              (stdout/warn (format "%s.txt holds the keys of every ceph client, client.admin included - keep it owner-only and never commit it" name)))
+                            true))))
+                  backup-commands))))
 
 (defn- watch-upgrade!
   [connection timeout]
