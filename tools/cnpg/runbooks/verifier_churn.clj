@@ -12,17 +12,21 @@
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
+(def cluster-select
+  "The cluster to read. Its candidates come from the run's one read of the
+   clusters, so the action adds them."
+  {:mode :namespaced :label "Cluster" :namespace-flag :namespace :name-flag :cluster
+   :empty-message "no CloudNativePG Cluster exists"
+   :on-empty :fail})
+
 (def options
-  {:namespace {:desc "Namespace of the cluster - interactive selection when omitted"
-               :alias :n
-               :coerce :string}
-   :cluster {:desc "Name of the cluster - interactive selection when omitted"
-             :alias :c
-             :coerce :string}
-   :window {:desc "Seconds between the two readings - cover one reconcile interval"
-            :alias :w
-            :default churn/default-window-seconds
-            :coerce :long}})
+  (select/options cluster-select
+                  {:namespace {:desc "Namespace of the cluster - interactive selection when omitted"}
+                   :cluster {:desc "Name of the cluster - interactive selection when omitted"}
+                   :window {:desc "Seconds between the two readings - cover one reconcile interval"
+                            :alias :w
+                            :default churn/default-window-seconds
+                            :coerce :long}}))
 
 (def prerequisites
   {:installed-tools ["kubectl" "fzf"]
@@ -47,10 +51,7 @@
   [opts _ctx]
   (let [context (kubectl/current-context)
         clusters (delay (kubectl/items-of (kubectl/get-all context pooler/cluster-type)))
-        chosen (select/pick {:mode :namespaced :label "Cluster" :namespace-flag :namespace :name-flag :cluster
-                             :candidates (fn [_] (mapv kubectl/namespace-name-of @clusters))
-                             :empty-message "no CloudNativePG Cluster exists"
-                             :on-empty :fail}
+        chosen (select/pick (assoc cluster-select :candidates (fn [_] (mapv kubectl/namespace-name-of @clusters)))
                             opts context)]
     (if (nil? chosen)
       false

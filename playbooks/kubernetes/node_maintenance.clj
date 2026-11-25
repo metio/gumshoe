@@ -21,6 +21,7 @@
             [gumshoe.detectives.disruption :as disruption]
             [gumshoe.detectives.nodes :as node-detectives]
             [gumshoe.playbook :as playbook]
+            [gumshoe.select :as select]
             [gumshoe.steps.nodes :as nodes]))
 
 (def disruption-check
@@ -38,12 +39,13 @@
    :check (fn [{:keys [context]}] (detective/investigate! context node-detectives/detectives))
    :recovery nodes/verification-recovery})
 
+(def selection
+  {:mode :one :label "Node" :flag :node :candidates nodes/all-nodes})
+
 (playbook/book
  {:description "Playbook: cordon, drain, maintain, uncordon, and verify a node"
-  :options {:node {:desc "The node to maintain - interactive selection when omitted"
-                   :alias :n
-                   :coerce :string}}
-  :select {:mode :one :label "Node" :flag :node :candidates nodes/all-nodes}
+  :options (select/options selection {:node {:desc "The node to maintain - interactive selection when omitted"}})
+  :select selection
   :confirm {:action "take a node out of service for maintenance and bring it back"}
   :recovery nodes/maintenance-recovery
   :steps [disruption-check

@@ -12,17 +12,21 @@
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
+(def pooler-select
+  "The pooler to open. Its candidates come from the run's one read of the
+   poolers, so the action adds them."
+  {:mode :namespaced :label "Pooler" :namespace-flag :namespace :name-flag :pooler
+   :empty-message "no CloudNativePG Pooler exists"
+   :on-empty :fail})
+
 (def options
-  {:namespace {:desc "Namespace of the pooler - interactive selection when omitted"
-               :alias :n
-               :coerce :string}
-   :pooler {:desc "Name of the pooler - interactive selection when omitted"
-            :alias :p
-            :coerce :string}
-   :lines {:desc "How many log lines to read"
-           :alias :l
-           :default 400
-           :coerce :long}})
+  (select/options pooler-select
+                  {:namespace {:desc "Namespace of the pooler - interactive selection when omitted"}
+                   :pooler {:desc "Name of the pooler - interactive selection when omitted"}
+                   :lines {:desc "How many log lines to read"
+                           :alias :l
+                           :default 400
+                           :coerce :long}}))
 
 (def prerequisites
   {:installed-tools ["kubectl" "fzf"]
@@ -52,10 +56,7 @@
   [opts _ctx]
   (let [context (kubectl/current-context)
         poolers (delay (kubectl/items-of (kubectl/get-all context pooler/pooler-type)))
-        chosen (select/pick {:mode :namespaced :label "Pooler" :namespace-flag :namespace :name-flag :pooler
-                             :candidates (fn [_] (mapv kubectl/namespace-name-of @poolers))
-                             :empty-message "no CloudNativePG Pooler exists"
-                             :on-empty :fail}
+        chosen (select/pick (assoc pooler-select :candidates (fn [_] (mapv kubectl/namespace-name-of @poolers)))
                             opts context)]
     (if (nil? chosen)
       false

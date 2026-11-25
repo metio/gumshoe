@@ -151,6 +151,10 @@
     (map? options-form) [options-form]
     (and (seq? options-form) (= 'merge (first options-form)))
     (mapcat option-maps (rest options-form))
+    ;; (select/options select {..}): the select's own options are derived
+    ;; complete, so only the book's explicit map is read here
+    (and (seq? options-form) (= 'select/options (first options-form)))
+    (mapcat option-maps (drop 2 options-form))
     (symbol? options-form) [(get shared-options options-form {})]
     :else []))
 

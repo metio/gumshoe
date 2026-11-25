@@ -8,18 +8,21 @@
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]
             [gumshoe.verify :as verify]))
+
+(def selection
+  {:mode :one :label "Unfence" :flag :pick
+   :candidates (fn [context] (operations/unfence-picks (kubectl/get-all context cnpg/cluster-type)))})
 
 (mutation/book
  {:description "Lifts the fence on a CloudNativePG instance, or on every instance with *"
-  :options {:pick {:desc "\"<namespace>/<cluster> <instance>\" (by name, by number, or *) - interactive selection when omitted"
-                   :alias :p :coerce :string}}
+  :options (select/options selection {:pick {:desc "\"<namespace>/<cluster> <instance>\" (by name, by number, or *) - interactive selection when omitted"}})
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities []
                   :kubectl-can-get [cnpg/cluster-type]
                   :kubectl-can-patch [cnpg/cluster-type]}
-  :select {:mode :one :label "Unfence" :flag :pick
-           :candidates (fn [context] (operations/unfence-picks (kubectl/get-all context cnpg/cluster-type)))}
+  :select selection
   :empty-message "no cluster has a fenced instance"
   :confirm {:action "lift the fence - the operator takes the instance back into service"
             :destructive? true}

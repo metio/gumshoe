@@ -7,22 +7,26 @@
             [gumshoe.detectives.argocd :as argocd]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.mutation :as mutation]))
+            [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]))
 
 (defn- refresh-type [opts] (if (:hard opts) "hard" "normal"))
+(def selection
+  {:mode :one :label "Application" :flag :application
+   :candidates (fn [context]
+                 (vec (for [app (sort-by kubectl/namespace-name-of (kubectl/items-of (kubectl/get-all context argocd/application-type)))
+                            :when (nil? (actions/refresh-refusal app "normal"))]
+                        (kubectl/namespace-name-of app))))})
+
 (mutation/book
  {:description "Refreshes an Argo CD Application, comparing it with its source again"
-  :options {:application {:desc "\"<namespace>/<name>\" - interactive selection when omitted" :alias :a :coerce :string}
-            :hard {:desc "Regenerate the manifests instead of reading the manifest cache" :coerce :boolean}}
+  :options (select/options selection {:application {:desc "\"<namespace>/<name>\" - interactive selection when omitted"}
+                                      :hard {:desc "Regenerate the manifests instead of reading the manifest cache" :coerce :boolean}})
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities []
                   :kubectl-can-get [argocd/application-type]
                   :kubectl-can-patch [argocd/application-type]}
-  :select {:mode :one :label "Application" :flag :application
-           :candidates (fn [context]
-                         (vec (for [app (sort-by kubectl/namespace-name-of (kubectl/items-of (kubectl/get-all context argocd/application-type)))
-                                    :when (nil? (actions/refresh-refusal app "normal"))]
-                                (kubectl/namespace-name-of app))))}
+  :select selection
   :empty-message "every Application has a refresh pending"
   :confirm {:action "refresh an Application" :destructive? false}
   :subject {:type argocd/application-type :parse actions/parse-pick :invalid "the pick is not \"<namespace>/<name>\""}

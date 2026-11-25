@@ -9,13 +9,19 @@
             [gumshoe.runbook :as runbook]
             [gumshoe.select :as select]))
 
+(def namespace-select
+  {:mode :one :label "Namespace" :flag :namespace
+   :candidates #(kubectl/names-of (kubectl/get-all % "namespaces"))
+   :empty-message "the cluster has no namespaces"
+   :on-empty :fail})
+
 (def options
-  {:namespace {:desc "The namespace to run netshoot in - interactive selection when omitted"
-               :alias :n
-               :coerce :string}
-   :host-network {:desc "Run netshoot in the node's network namespace"
-                  :alias :r
-                  :coerce :boolean}})
+  (select/options
+   namespace-select
+   {:namespace {:desc "The namespace to run netshoot in - interactive selection when omitted"}
+    :host-network {:desc "Run netshoot in the node's network namespace"
+                   :alias :r
+                   :coerce :boolean}}))
 
 (def prerequisites
   {:installed-tools ["kubectl" "kubectl-netshoot" "fzf"]
@@ -27,11 +33,7 @@
   [opts _ctx]
   (let [context (kubectl/current-context)
         cluster (kubectl/current-cluster)
-        namespace (select/pick {:mode :one :label "Namespace" :flag :namespace
-                                :candidates #(kubectl/names-of (kubectl/get-all % "namespaces"))
-                                :empty-message "the cluster has no namespaces"
-                                :on-empty :fail}
-                               opts context)
+        namespace (select/pick namespace-select opts context)
         host-network (boolean (:host-network opts))]
     (if (nil? namespace)
       false

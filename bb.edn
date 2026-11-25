@@ -57,6 +57,7 @@
                    [gumshoe.resize-books-test]
                    [gumshoe.pick-books-test]
                    [gumshoe.book-surfaces-test]
+                   [gumshoe.select-flags-test]
                    [gumshoe.mutation-connect-test]
                    [gumshoe.mutation-subject-test]
                    [gumshoe.change-test]
@@ -237,6 +238,7 @@
                                                          'gumshoe.resize-books-test
                                                          'gumshoe.pick-books-test
                                                          'gumshoe.book-surfaces-test
+                                                         'gumshoe.select-flags-test
                                                          'gumshoe.mutation-connect-test
                                                          'gumshoe.mutation-subject-test
                                                          'gumshoe.change-test

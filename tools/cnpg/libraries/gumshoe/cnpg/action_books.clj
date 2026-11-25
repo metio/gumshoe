@@ -12,6 +12,7 @@
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]
             [gumshoe.toggle :as toggle]))
 
 (defn- cluster-picks
@@ -20,8 +21,12 @@
              :when (nil? (refusal cluster))]
          (kubectl/namespace-name-of cluster))))
 
+(def ^:private cluster-select
+  "What every Cluster book's select shares; each adds the candidates it offers."
+  {:mode :one :label "Cluster" :flag :cluster})
+
 (def ^:private cluster-option
-  {:cluster {:desc "\"<namespace>/<cluster>\" - interactive selection when omitted" :alias :c :coerce :string}})
+  (select/options cluster-select {:cluster {:desc "\"<namespace>/<cluster>\" - interactive selection when omitted"}}))
 
 (defn- prerequisites
   [type & {:keys [list-pods?]}]
@@ -39,8 +44,7 @@
   [{:keys [verb empty-message confirm refusal items arg verify-description verify-timeout applied? pods? stamp?]}]
   {:options cluster-option
    :prerequisites (prerequisites cnpg/cluster-type :list-pods? pods?)
-   :select {:mode :one :label "Cluster" :flag :cluster
-            :candidates (fn [context] (cluster-picks context refusal))}
+   :select (assoc cluster-select :candidates (fn [context] (cluster-picks context refusal)))
    :empty-message empty-message
    :confirm confirm
    :subject (assoc cluster-subject :facts #(select-keys (:metadata %) [:annotations]))
@@ -107,8 +111,7 @@
                    :cluster-capabilities []
                    :kubectl-can-get [cnpg/cluster-type cnpg/backup-type]
                    :kubectl-can-create [cnpg/backup-type]}
-   :select {:mode :one :label "Cluster" :flag :cluster
-            :candidates (fn [context] (cluster-picks context #(actions/backup-refusal % nil)))}
+   :select (assoc cluster-select :candidates (fn [context] (cluster-picks context #(actions/backup-refusal % nil))))
    :empty-message "no healthy cluster configures a backup destination"
    :confirm {:action "start an on-demand backup" :destructive? false}
    :subject cluster-subject
@@ -130,13 +133,16 @@
                  :abort #(first (actions/backup-signals (current)))
                  :check #(actions/backup-completed? (current))}]))})
 
+(def ^:private scheduled-backup-select {:mode :one :label "ScheduledBackup" :flag :scheduled-backup})
+
 (def scheduled-backup-suspending
   "The suspend and resume books of a ScheduledBackup, as {:on :off} (see
    gumshoe.toggle)."
   (toggle/pair
-   {:spec {:options {:scheduled-backup {:desc "\"<namespace>/<name>\" - interactive selection when omitted" :alias :s :coerce :string}}
+   {:spec {:options (select/options scheduled-backup-select
+                                    {:scheduled-backup {:desc "\"<namespace>/<name>\" - interactive selection when omitted"}})
            :prerequisites (prerequisites cnpg/scheduled-backup-type)
-           :select {:mode :one :label "ScheduledBackup" :flag :scheduled-backup}
+           :select scheduled-backup-select
            :subject {:type cnpg/scheduled-backup-type
                      :parse actions/parse-pick
                      :invalid "the pick is not \"<namespace>/<name>\""}}

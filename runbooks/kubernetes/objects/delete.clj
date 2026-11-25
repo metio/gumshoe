@@ -7,6 +7,7 @@
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]
             [gumshoe.shell :as shell]
             [clojure.string :as str]))
 
@@ -21,16 +22,18 @@
   (into {} (for [type ["pods" "jobs" "ingresses" "deployments" "statefulsets" "daemonsets" "cronjobs"]]
              [type (kubectl/get-namespaced context namespace type)])))
 
+(def selection
+  {:mode :one :label "Object" :flag :pick
+   :candidates (fn [context] (deletion/picks (into {} (for [type deletion/types] [type (kubectl/get-all context type)]))))})
+
 (mutation/book
  {:description "Deletes one namespaced object after a server-side dry run accepted it"
-  :options {:pick {:desc "\"<type> <namespace>/<name>\" - interactive selection when omitted"
-                   :alias :p :coerce :string}}
+  :options (select/options selection {:pick {:desc "\"<type> <namespace>/<name>\" - interactive selection when omitted"}})
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities []
                   :kubectl-can-get deletion/types
                   :kubectl-can-delete deletion/types}
-  :select {:mode :one :label "Object" :flag :pick
-           :candidates (fn [context] (deletion/picks (into {} (for [type deletion/types] [type (kubectl/get-all context type)]))))}
+  :select selection
   :empty-message "nothing to delete"
   :confirm {:action "delete an object" :destructive? true}
   :subject {:parse deletion/parse-pick

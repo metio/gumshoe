@@ -8,6 +8,7 @@
   (:require [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]
             [gumshoe.tools.jaas :as jaas]))
 
 (defn snippets
@@ -20,18 +21,18 @@
    :timeout 60 :interval 5
    :check (fn [] (= "Suspended" (jaas/ready-reason context namespace name)))})
 
+(def selection
+  {:mode :namespaced :label "JsonnetSnippet" :namespace-flag :namespace :name-flag :name
+   :candidates snippets})
+
 (mutation/book
  {:description "Suspends a JsonnetSnippet so the operator stops re-evaluating it"
-  :options {:namespace {:desc "The namespace of the JsonnetSnippet - interactive selection when omitted"
-                        :alias :n :coerce :string}
-            :name {:desc "The name of the JsonnetSnippet - interactive selection when omitted"
-                   :alias :s :coerce :string}}
+  :options (select/options selection)
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities [:jaas]
                   :kubectl-can-get [jaas/jsonnetsnippet-type]
                   :kubectl-can-patch [jaas/jsonnetsnippet-type]}
-  :select {:mode :namespaced :label "JsonnetSnippet" :namespace-flag :namespace :name-flag :name
-           :candidates snippets}
+  :select selection
   :confirm {:action "suspend a JsonnetSnippet" :destructive? false}
   :announce (fn [{:keys [target]}] (format "Suspend JsonnetSnippet %s" target))
   :effect (fn [{:keys [context target]}]

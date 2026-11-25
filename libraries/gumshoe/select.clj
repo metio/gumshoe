@@ -17,8 +17,21 @@
       :name-flag :name                 ; :namespaced
       :preview \"kubectl describe node {}\"  ; :one, optional fzf side pane
       :empty-message \"every node is already cordoned\"  ; shown by pick when empty
-      :on-empty :ok | :fail}           ; how pick shows it, :ok by default"
-  (:require [gumshoe.interact :as interact]
+      :on-empty :ok | :fail}           ; how pick shows it, :ok by default
+
+   `options` derives the command-line options a select reads from the spec:
+   each flag with the short alias gumshoe.flags gives it, the coercion its
+   mode needs and a description from the :label. A book names only what it
+   wants to say differently:
+
+     :options (select/options select {:pick {:desc \"The workload to scale\"}
+                                      :replicas {:desc \"The replica count\" :alias :r :coerce :long}})
+
+   An explicit :alias on a select's flag overrides the convention. gumshoe's
+   own books never set one, so each select flag has one alias in all of them."
+  (:require [clojure.string :as str]
+            [gumshoe.flags :as flags]
+            [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.stdout :as stdout]))
 
@@ -98,3 +111,42 @@
       (empty? candidates) (do (empty! (or empty-message "nothing to select")) nil)
       (nothing-selected? mode target) (do (stdout/error (format "no %s selected" label)) nil)
       :else target)))
+
+;; --- the options a select reads ---------------------------------------------------
+
+(defn- flag-option
+  [mode flag desc]
+  (cond-> {:desc desc
+           :coerce (if (= :many mode) [:string] :string)}
+    (flags/aliases flag) (assoc :alias (flags/aliases flag))))
+
+(defn derived-options
+  "The option of each flag the select reads, as the convention gives it."
+  [{:keys [mode label flag namespace-flag name-flag]}]
+  (case mode
+    :one {flag (flag-option mode flag (format "The %s - interactive selection when omitted" label))}
+    :many {flag (flag-option mode flag (format "%s to pick, repeatable - interactive selection when omitted" label))}
+    :namespaced {namespace-flag (flag-option mode namespace-flag
+                                             (format "The namespace of the %s - interactive selection when omitted" label))
+                 name-flag (flag-option mode name-flag
+                                        (format "The name of the %s - interactive selection when omitted" label))}))
+
+(defn options
+  "The select's derived options with `explicit` merged over them, key by key
+   within each option, so a book can reword a flag's :desc and keep its
+   alias, or add options of its own. Throws when two options end up with
+   one alias, because babashka.cli would silently give the letter to one of
+   them."
+  ([select] (options select {}))
+  ([select explicit]
+   (let [merged (merge-with merge (derived-options select) explicit)
+         shared (for [[letter holders] (group-by (comp :alias val) merged)
+                      :when (and letter (< 1 (count holders)))]
+                  [letter (sort (map key holders))])]
+     (when (seq shared)
+       (throw (ex-info (str "options share an alias: "
+                            (str/join "; " (for [[letter holders] shared]
+                                             (str "-" (name letter) " for "
+                                                  (str/join " and " (map #(str "--" (name %)) holders))))))
+                       {:shared (into {} shared)})))
+     merged)))

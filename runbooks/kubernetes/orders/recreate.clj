@@ -7,7 +7,8 @@
             [gumshoe.cleanup :as cleanup]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.mutation :as mutation]))
+            [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]))
 
 (def order-type "orders.acme.cert-manager.io")
 
@@ -44,15 +45,17 @@
                 (not (contains? #{"invalid" "errored"} (-> o :status :state)))
                 (kubectl/confirmed-gone? context namespace order-type name)))}))
 
+(def selection
+  {:mode :many :label "Order" :flag :orders :candidates invalid-orders})
+
 (mutation/book
  {:description "Deletes invalid ACME orders so cert-manager recreates them"
-  :options {:orders {:desc "namespace/name of invalid orders to recreate, repeatable - interactive selection when omitted"
-                     :alias :o :coerce [:string]}}
+  :options (select/options selection {:orders {:desc "namespace/name of invalid orders to recreate, repeatable - interactive selection when omitted"}})
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities []
                   :kubectl-can-get [order-type]
                   :kubectl-can-delete [order-type]}
-  :select {:mode :many :label "Order" :flag :orders :candidates invalid-orders}
+  :select selection
   :empty-message "every ACME order is valid"
   :confirm {:action "delete ACME orders so cert-manager recreates them"
             :destructive? true}

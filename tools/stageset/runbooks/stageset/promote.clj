@@ -8,6 +8,7 @@
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]
             [gumshoe.tools.stageset :as stageset]))
 
 (defn stagesets
@@ -15,19 +16,18 @@
   (kubectl/namespaces-names (kubectl/get-all context stageset/stageset-type)))
 
 
+(def selection
+  {:mode :namespaced :label "StageSet" :namespace-flag :namespace :name-flag :name
+   :candidates stagesets})
+
 (mutation/book
  {:description "Manually promotes a held StageSet stage via stagesetctl"
-  :options {:namespace {:desc "The namespace of the StageSet - interactive selection when omitted"
-                        :alias :n :coerce :string}
-            :name {:desc "The name of the StageSet - interactive selection when omitted"
-                   :alias :s :coerce :string}
-            :stage {:desc "The stage to promote - interactive selection when omitted"
-                    :coerce :string}}
+  :options (select/options selection {:stage {:desc "The stage to promote - interactive selection when omitted"
+                                              :coerce :string}})
   :prerequisites {:installed-tools ["stagesetctl" "kubectl" "fzf"]
                   :cluster-capabilities [:stageset]
                   :kubectl-can-get [stageset/stageset-type]}
-  :select {:mode :namespaced :label "StageSet" :namespace-flag :namespace :name-flag :name
-           :candidates stagesets}
+  :select selection
   :subject {:type stageset/stageset-type}
   ;; a held stage is picked by name among those the StageSet declares
   :derive (fn [{:keys [object opts]}]

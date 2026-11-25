@@ -131,3 +131,53 @@
     (let [{:keys [exit out err]} (run-book dir "--checkout" (str dir))]
       (is (zero? exit) (str out err))
       (is (str/includes? out "ACTION RAN")))))
+
+(defn- run-named-book
+  "Runs a book with a --name option in a fresh bb, from a scratch directory
+   with no env.edn, with the given arguments."
+  [dir & args]
+  (let [script (str "(require '[gumshoe.runbook :as runbook])"
+                    "(binding [*command-line-args* " (pr-str (vec args)) "]"
+                    "  (runbook/execute! {:description \"names a release\" :announce? false"
+                    "                     :options {:name {:desc \"the release\" :alias :N :coerce :string}}"
+                    "                     :action (fn [opts _] (println (str \"NAME=\" (:name opts))) true)}))")]
+    @(process/process {:dir (str dir) :out :string :err :string :continue true
+                       :extra-env {"GUMSHOE_ENV" (str (fs/path dir "env.edn")) "NO_COLOR" "1"}}
+                      "bb" "-cp" (absolute-classpath) "-e" script)))
+
+(deftest a-deprecated-alias-runs-the-book-with-a-note-on-stderr-test
+  (fs/with-temp-dir [dir {}]
+    (let [{:keys [exit out err]} (run-named-book dir "-s" "web")]
+      (is (zero? exit) (str out err))
+      (is (str/includes? out "NAME=web") "the deprecated alias still reaches --name")
+      (is (str/includes? err "-s is a deprecated alias of --name; use -N") err)
+      (is (not (str/includes? out "deprecated")) "the note stays off stdout"))))
+
+(deftest the-current-alias-runs-the-book-without-a-note-test
+  (fs/with-temp-dir [dir {}]
+    (let [{:keys [exit out err]} (run-named-book dir "-N" "web")]
+      (is (zero? exit) (str out err))
+      (is (str/includes? out "NAME=web"))
+      (is (not (str/includes? (str out err) "deprecated"))))))
+
+(deftest arguments-test
+  (let [options {:name {:desc "the release" :alias :N :coerce :string}}]
+    (testing "the current alias and the long flag parse without a note"
+      (is (= {:opts {:name "web"} :notes []} (runbook/arguments options ["-N" "web"])))
+      (is (= {:opts {:name "web"} :notes []} (runbook/arguments options ["--name" "web"]))))
+    (testing "a deprecated alias parses to its option and names its successor"
+      (is (= {:opts {:name "web"} :notes ["-r is a deprecated alias of --name; use -N"]}
+             (runbook/arguments options ["-r" "web"]))))
+    (testing "an option that claims a deprecated letter keeps it"
+      (is (= {:opts {:name "web" :release "r1"} :notes []}
+             (runbook/arguments (assoc options :release {:desc "r" :alias :r :coerce :string})
+                                ["--name" "web" "-r" "r1"]))))
+    (testing "a book without the option refuses the letter"
+      (is (thrown-with-msg? Exception #"Unknown option: -s"
+                            (runbook/arguments {:host {:desc "h" :coerce :string}} ["-s" "web"]))))))
+
+(deftest help-lists-the-deprecated-aliases-test
+  (let [text (runbook/help {:description "names a release"
+                            :options {:name {:desc "The release" :alias :N :coerce :string}}})]
+    (is (str/includes? text "-N, --name"))
+    (is (str/includes? text "The release (deprecated alias: -r, -s)"))))

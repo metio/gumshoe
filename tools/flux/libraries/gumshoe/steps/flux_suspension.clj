@@ -6,19 +6,22 @@
    and resume it, as one gumshoe.toggle declaration, {:on <spec> :off <spec>}.
    The decisions live in gumshoe.tools.flux."
   (:require [gumshoe.kubectl :as kubectl]
+            [gumshoe.select :as select]
             [gumshoe.toggle :as toggle]
             [gumshoe.tools.flux :as flux]))
+
+(def ^:private delivery-select {:mode :one :flag :pick})
 
 (def suspending
   "Suspend a Flux object (:on) and resume it (:off)."
   (toggle/pair
-   {:spec {:options {:pick {:desc "\"<Kind> <namespace>/<name>\" - interactive selection when omitted"
-                            :alias :p :coerce :string}}
+   {:spec {:options (select/options delivery-select
+                                    {:pick {:desc "\"<Kind> <namespace>/<name>\" - interactive selection when omitted"}})
            :prerequisites {:installed-tools ["kubectl" "fzf"]
                            :cluster-capabilities []
                            :kubectl-can-get (vec (vals flux/suspendable))
                            :kubectl-can-patch (vec (vals flux/suspendable))}
-           :select {:mode :one :flag :pick}
+           :select delivery-select
            :subject {:parse flux/parse-delivery-pick
                      :invalid "the pick is not \"<Kind> <namespace>/<name>\" of a HelmRelease, Kustomization, GitRepository or OCIRepository"}
            ;; one timestamp, shared by the plan and its announcement

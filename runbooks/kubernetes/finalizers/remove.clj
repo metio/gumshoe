@@ -7,21 +7,24 @@
             [gumshoe.effect :as effect]
             [gumshoe.finalizers :as finalizers]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.mutation :as mutation]))
+            [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]))
 
 (defn- candidates
   [context]
   (finalizers/picks (for [[type] terminating/types] [type (kubectl/get-all context type)])))
 
+(def selection
+  {:mode :one :label "Finalizer" :flag :pick :candidates candidates})
+
 (mutation/book
  {:description "Removes one controller finalizer from an object stuck terminating"
-  :options {:pick {:desc "\"<type> <namespace>/<name> <finalizer>\" - interactive selection when omitted"
-                   :alias :p :coerce :string}}
+  :options (select/options selection {:pick {:desc "\"<type> <namespace>/<name> <finalizer>\" - interactive selection when omitted"}})
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities []
                   :kubectl-can-get (mapv first terminating/types)
                   :kubectl-can-patch (mapv first terminating/types)}
-  :select {:mode :one :label "Finalizer" :flag :pick :candidates candidates}
+  :select selection
   :empty-message "no object being deleted carries a controller finalizer"
   :confirm {:action (str "remove a finalizer - the cleanup its controller would do (deleting cloud resources, "
                          "backups, DNS records) is skipped for good; do this only when that controller is gone")

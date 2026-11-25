@@ -7,6 +7,7 @@
   (:require [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]
             [gumshoe.workloads :as workloads]))
 
 (defn- history
@@ -20,16 +21,18 @@
                      (fn [kind workload]
                        (nil? (workloads/rollback-refusal kind workload (histories (workloads/history-types kind)) nil))))))
 
+(def selection
+  {:mode :one :label "Workload" :flag :pick :candidates candidates})
+
 (mutation/book
  {:description "Rolls a Deployment, StatefulSet or DaemonSet back to its previous revision, or to a named one"
-  :options {:pick {:desc "\"<Kind> <namespace>/<name>\" - interactive selection when omitted"
-                   :alias :p :coerce :string}
-            :to-revision {:desc "The revision to go back to - the previous one when omitted" :coerce :long}}
+  :options (select/options selection {:pick {:desc "\"<Kind> <namespace>/<name>\" - interactive selection when omitted"}
+                                      :to-revision {:desc "The revision to go back to - the previous one when omitted" :coerce :long}})
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities []
                   :kubectl-can-get (into (mapv first workloads/types) ["replicasets" "controllerrevisions"])
                   :kubectl-can-patch (mapv first workloads/types)}
-  :select {:mode :one :label "Workload" :flag :pick :candidates candidates}
+  :select selection
   :empty-message "no workload has an earlier revision to go back to"
   :confirm {:action "roll a workload back" :destructive? true}
   :subject {:parse workloads/parse-pick :invalid "the pick is not \"<Kind> <namespace>/<name>\""}

@@ -10,7 +10,8 @@
             [gumshoe.cleanup :as cleanup]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.mutation :as mutation]))
+            [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]))
 
 (defn released-volumes
   [context]
@@ -40,15 +41,17 @@
      :timeout 120 :interval 10 :verifies-absence? true
      :check (fn [] (kubectl/confirmed-gone? context nil "persistentvolumes" volume))}))
 
+(def selection
+  {:mode :many :label "PersistentVolume" :flag :volumes :candidates released-volumes})
+
 (mutation/book
  {:description "Deletes PersistentVolumes stuck in Released"
-  :options {:volumes {:desc "Released PersistentVolumes to delete, repeatable - interactive selection when omitted"
-                      :alias :v :coerce [:string]}}
+  :options (select/options selection {:volumes {:desc "Released PersistentVolumes to delete, repeatable - interactive selection when omitted"}})
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities []
                   :kubectl-can-get ["persistentvolumes"]
                   :kubectl-can-delete ["persistentvolumes"]}
-  :select {:mode :many :label "PersistentVolume" :flag :volumes :candidates released-volumes}
+  :select selection
   :empty-message "no PersistentVolume is Released"
   :subjects volume-refs
   :items (fn [{:keys [target objects]}] (volume-items target objects))

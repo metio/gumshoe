@@ -33,15 +33,6 @@
   [context namespace pod & arguments]
   (apply shell/stdout-of (etcdctl-args context namespace pod arguments)))
 
-(def pod-options
-  "The flags that name the etcd pod."
-  {:namespace {:desc "The namespace of the etcd pod - interactive selection when omitted"
-               :alias :n
-               :coerce :string}
-   :pod {:desc "The etcd pod to use - interactive selection when omitted"
-         :alias :p
-         :coerce :string}})
-
 (def pod-prerequisites
   {:installed-tools ["kubectl" "fzf"]
    :cluster-capabilities []
@@ -63,6 +54,12 @@
    :candidates pod-candidates
    :empty-message (format "no pod matches %s - is this a kubeadm cluster with stacked etcd?" pod-selector)
    :on-empty :fail})
+
+(def pod-options
+  "The flags that name the etcd pod."
+  (select/options pod-select
+                  {:namespace {:desc "The namespace of the etcd pod - interactive selection when omitted"}
+                   :pod {:desc "The etcd pod to use - interactive selection when omitted"}}))
 
 (defn etcdctl-action
   "A runbook action that picks an etcd pod and streams etcdctl with arguments

@@ -11,14 +11,19 @@
             [gumshoe.select :as select]
             [gumshoe.stdout :as stdout]))
 
+(def instance-select
+  {:mode :one :label "DbInstance" :flag :instance
+   :candidates #(kubectl/names-of (kubectl/get-all % postgres/instance-type))
+   :empty-message "no DbInstance exists"
+   :on-empty :fail})
+
 (def options
-  {:instance {:desc "The DbInstance to connect to - interactive selection when omitted"
-              :alias :i
-              :coerce :string}
-   :port {:desc "The local port used for the port-forward"
-          :alias :p
-          :default 42538
-          :coerce :long}})
+  (select/options instance-select
+                  {:instance {:desc "The DbInstance to connect to - interactive selection when omitted"}
+                   :port {:desc "The local port used for the port-forward"
+                          :alias :p
+                          :default 42538
+                          :coerce :long}}))
 
 (def prerequisites
   {:installed-tools ["kubectl" "psql" "fzf"]
@@ -29,11 +34,7 @@
   [opts {:keys [announcement-data]}]
   (let [context (kubectl/current-context)
         cluster (kubectl/current-cluster)
-        instance (select/pick {:mode :one :label "DbInstance" :flag :instance
-                               :candidates #(kubectl/names-of (kubectl/get-all % postgres/instance-type))
-                               :empty-message "no DbInstance exists"
-                               :on-empty :fail}
-                              opts context)]
+        instance (select/pick instance-select opts context)]
     (if (nil? instance)
       false
       (let [connection (postgres/admin-connection context instance)]

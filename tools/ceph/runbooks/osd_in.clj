@@ -5,7 +5,8 @@
   "Brings a single OSD back into the cluster, so data migrates back onto it."
   (:require [gumshoe.ceph :as ceph]
             [gumshoe.effect :as effect]
-            [gumshoe.mutation :as mutation]))
+            [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]))
 
 (defn- osd-of
   "The OSD a pick names, read now, or nil when it is gone or the read did
@@ -13,19 +14,22 @@
   [{:keys [context target]}]
   (ceph/osd-numbered (ceph/osds context) (ceph/osd-id target)))
 
+(def selection
+  {:mode :one
+   :label "OSD"
+   :flag :osd
+   :candidates (fn [connection]
+                 (sort (map ceph/osd-name (remove ceph/osd-in? (ceph/osds connection)))))})
+
 (mutation/book
  {:description "Brings a single OSD back into the cluster"
   :options (merge ceph/ssh-options
-                  {:osd {:desc "The OSD to bring back in (3 or osd.3) - interactive selection when omitted"
-                         :alias :d
-                         :coerce ceph/osd-pick}})
+                  (select/options selection
+                                  {:osd {:desc "The OSD to bring back in (3 or osd.3) - interactive selection when omitted"
+                                         :coerce ceph/osd-pick}}))
   :prerequisites {:installed-tools ["ssh"]}
   :connect ceph/connect
-  :select {:mode :one
-           :label "OSD"
-           :flag :osd
-           :candidates (fn [connection]
-                         (sort (map ceph/osd-name (remove ceph/osd-in? (ceph/osds connection)))))}
+  :select selection
   :empty-message "every OSD is already in"
   :confirm {:action "bring an OSD back in - data migrates back onto it" :destructive? false}
   :precondition (fn [ctx] (some-> (osd-of ctx) ceph/osd-in? not))

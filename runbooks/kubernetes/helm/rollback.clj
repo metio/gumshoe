@@ -7,21 +7,25 @@
   (:require [gumshoe.effect :as effect]
             [gumshoe.helm-rollback :as rollback]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.mutation :as mutation]))
+            [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]))
 
 (defn- revisions
   [context pick]
   (rollback/history (kubectl/helm-releases context) pick))
 
+(def selection
+  {:mode :one :label "Release" :flag :release
+   :candidates (fn [context] (rollback/picks (kubectl/helm-releases context)))})
+
 (mutation/book
  {:description "Rolls a Helm release back to its newest earlier deployed revision, or to a named one"
-  :options {:release {:desc "\"<namespace>/<release>\" - interactive selection when omitted" :alias :r :coerce :string}
-            :to-revision {:desc "The revision to go back to - the newest earlier deployed one when omitted" :coerce :long}}
+  :options (select/options selection {:release {:desc "\"<namespace>/<release>\" - interactive selection when omitted"}
+                                      :to-revision {:desc "The revision to go back to - the newest earlier deployed one when omitted" :coerce :long}})
   :prerequisites {:installed-tools ["kubectl" "helm" "fzf"]
                   :cluster-capabilities []
                   :kubectl-can-get ["secrets"]}
-  :select {:mode :one :label "Release" :flag :release
-           :candidates (fn [context] (rollback/picks (kubectl/helm-releases context)))}
+  :select selection
   :empty-message "no Helm release has an earlier deployed revision to go back to"
   :confirm {:action "roll a Helm release back" :destructive? true}
   :derive (fn [{:keys [context target opts]}]
