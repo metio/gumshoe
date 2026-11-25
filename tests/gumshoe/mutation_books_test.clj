@@ -37,6 +37,7 @@
             [gumshoe.change :as change]
             [gumshoe.announce :as announce]
             [gumshoe.flow :as flow]
+            [gumshoe.streams-support :as streams]
             [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
@@ -136,19 +137,25 @@
 
 (defn- capture
   [thunk]
-  (let [out (java.io.StringWriter.)
-        result (binding [*out* out *err* out] (thunk))]
-    {:result result :out (str/trim (str out))}))
+  (let [{:keys [result err out]} (streams/separated thunk)]
+    (streams/with-stdout {:result result :out (str/trim err)} out str/trim)))
+
+(defn- threw
+  "Prints a harness's note of an exception on stderr, among the run's other
+   diagnostics."
+  [& parts]
+  (binding [*out* *err*] (apply println "threw:" parts)))
 
 (defn- attempt
   [f]
   (try (f) (catch Exception e (str "threw: " (ex-message e)))))
 
 (defn- reach-change
-  "(f out config state) after the book ran in one scenario up to its change,
-   with flow/change! captured and the recorded cluster still stubbed: what
-   the run printed, the config it handed flow/change! (nil when it stopped
-   before) and the cluster's state atom."
+  "(f out config state stdout) after the book ran in one scenario up to its
+   change, with flow/change! captured and the recorded cluster still stubbed:
+   what the run printed on stderr, the config it handed flow/change! (nil
+   when it stopped before), the cluster's state atom and what reached stdout
+   (nil when nothing did)."
   [spec {:keys [objects target opts dry-run ssh answering?] :or {answering? true}} f]
   (let [state (atom {:objects objects :answering? answering? :dry-run dry-run :ssh ssh :commands []})
         seen (atom nil)]
@@ -161,9 +168,9 @@
                   kubectl/current-cluster (constantly "cluster")
                   announce/announce! (fn [_ _ message] message)
                   flow/change! (fn [config] (reset! seen config) true)]
-      (let [{:keys [out]} (capture #(try (mutation/run-on! spec target (or opts {}) nil)
-                                         (catch Exception e (println "threw:" (type e) (ex-message e)))))]
-        (f out @seen state)))))
+      (let [{:keys [out stdout]} (capture #(try (mutation/run-on! spec target (or opts {}) nil)
+                                                (catch Exception e (threw (type e) (ex-message e)))))]
+        (f out @seen state stdout)))))
 
 (defn transcript
   "What the book does in one scenario. A post-check holds as
@@ -171,7 +178,7 @@
   [spec {:keys [between] :as scenario}]
   (reach-change
    spec scenario
-   (fn [out seen state]
+   (fn [out seen state stdout]
      (let [{:keys [confirmation precondition announce! effect step post-checks]} seen]
        (cond
          (= :spec-changed between) (swap! state update :objects bump-generation)
@@ -179,7 +186,7 @@
          (map? between) (swap! state assoc :objects (:objects between)))
        (normalise
         (if-not seen
-          {:stopped out}
+          (cond-> {:stopped out} stdout (assoc :stdout stdout))
           (cond-> {:action (:action confirmation)
                    :destructive? (boolean (:destructive? confirmation))
                    :items (vec (:items confirmation))
@@ -187,6 +194,7 @@
                    :plan effect
                    :precondition (when precondition (capture precondition))}
             (seq out) (assoc :out out)
+            stdout (assoc :stdout stdout)
             announce! (assoc :announce (announce!))
             post-checks (assoc :checks (vec (for [{:keys [description timeout interval check abort]} post-checks]
                                               (cond-> {:description description :timeout timeout :interval interval
@@ -213,16 +221,17 @@
                   interact/confirm! (constantly true)
                   announce/announce! (fn [_ _ message] message)
                   verify/eventually (fn [check] (eventually (assoc check :timeout 0)))]
-      (let [{:keys [result out]} (capture #(binding [outcome/*record* record
-                                                     flow/*dry-run* (boolean dry-run?)]
-                                             (try (mutation/run-on! spec target (or opts {}) nil)
-                                                  (catch Exception e (println "threw:" (type e) (ex-message e))))))
+      (let [{:keys [result out stdout]} (capture #(binding [outcome/*record* record
+                                                            flow/*dry-run* (boolean dry-run?)]
+                                                    (try (mutation/run-on! spec target (or opts {}) nil)
+                                                         (catch Exception e (threw (type e) (ex-message e))))))
             {:keys [tone text]} (outcome/banner {:changes? true :outcome (if result :ok :failed)} @record)]
         (normalise
-         {:result result
-          :out (str/split-lines (stdout/strip-colors out))
-          :banner text
-          :recovery (vec (outcome/recovery-lines tone @record))})))))
+         (cond-> {:result result
+                  :out (str/split-lines (stdout/strip-colors out))
+                  :banner text
+                  :recovery (vec (outcome/recovery-lines tone @record))}
+           stdout (assoc :stdout (str/split-lines (stdout/strip-colors stdout)))))))))
 
 (defn pick-transcript
   "What the book does when it picks its own subject from opts through
@@ -238,10 +247,11 @@
                   kubectl/current-cluster (constantly "cluster")
                   announce/announce! (fn [_ _ message] message)
                   flow/change! (fn [config] (reset! seen config) true)]
-      (let [{:keys [result out]} (capture #(attempt (fn [] (mutation/run! spec (or opts {}) nil))))
+      (let [{:keys [result out stdout]} (capture #(attempt (fn [] (mutation/run! spec (or opts {}) nil))))
             {:keys [confirmation effect]} @seen]
         (normalise
          (cond-> {:result result :out (stdout/strip-colors out)}
+           stdout (assoc :stdout (stdout/strip-colors stdout))
            @seen (assoc :action (:action confirmation)
                         :items (vec (:items confirmation))
                         :plan effect)))))))
@@ -1053,7 +1063,7 @@
 (defn post-checks-of
   "The post-checks the book hands flow/change! in its permitted scenario."
   [spec scenarios]
-  (reach-change spec (:permitted scenarios) (fn [_ seen _] (vec (:post-checks seen)))))
+  (reach-change spec (:permitted scenarios) (fn [_ seen & _] (vec (:post-checks seen)))))
 
 (deftest every-post-check-fails-closed
   (binding [ssh/*user-config* nil]
@@ -1082,7 +1092,7 @@
         path
         #(reach-change
           spec scenario
-          (fn [out {:keys [confirmation precondition effect] :as config} state]
+          (fn [out {:keys [confirmation precondition effect] :as config} state & _]
             (if (nil? config)
               {:result false :out out :before out :asked? false :plan nil :items nil
                :commands (:commands @state)}

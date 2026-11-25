@@ -7,11 +7,6 @@
    :out
    ["▸ HelmRelease: apps/podinfo"
     "── 1/10 🔬 Read the HelmRelease, its owner and its storage ──────────────────────"
-    "owner:     Kustomization flux-system/apps"
-    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
-    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
-    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
-    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"
     "── 2/10 ⏸  Suspend the owner (Kustomiza…urceSet) that renders the HelmRelease ──"
     "This will suspend the owner that renders the HelmRelease on 'cluster':"
     "  - suspend Kustomization flux-system/apps, so it does not re-apply the HelmRelease meanwhile"
@@ -103,17 +98,18 @@
     "-n flux-system patch kustomizations.kustomize.toolkit.fluxcd.io apps --type=merge --patch={\"spec\":{\"suspend\":false}}"
     "-n flux-system annotate kustomizations.kustomize.toolkit.fluxcd.io apps --overwrite reconcile.fluxcd.io/requestedAt=<instant>"],
    :banner "DONE - applied and verified",
-   :recovery []},
+   :recovery [],
+   :stdout
+   ["owner:     Kustomization flux-system/apps"
+    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
+    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
+    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
+    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"]},
   :failing-db-delete
   {:result false,
    :out
    ["▸ HelmRelease: apps/podinfo"
     "── 1/10 🔬 Read the HelmRelease, its owner and its storage ──────────────────────"
-    "owner:     Kustomization flux-system/apps"
-    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
-    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
-    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
-    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"
     "── 2/10 ⏸  Suspend the owner (Kustomiza…urceSet) that renders the HelmRelease ──"
     "This will suspend the owner that renders the HelmRelease on 'cluster':"
     "  - suspend Kustomization flux-system/apps, so it does not re-apply the HelmRelease meanwhile"
@@ -183,7 +179,13 @@
     "  The release's workloads, volumes and Helm storage stay as the steps before this one left them."
     "  Resume the HelmRelease once its Helm storage no longer holds the revision that blocked it, then the owner."
     "  Running this playbook again repeats every step, but no longer finds the claims a StatefulSet it"
-    "  already deleted made from its volumeClaimTemplates; delete those by hand."]},
+    "  already deleted made from its volumeClaimTemplates; delete those by hand."],
+   :stdout
+   ["owner:     Kustomization flux-system/apps"
+    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
+    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
+    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
+    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"]},
   :surface
   {:description "Resets a podinfo instance to a clean install",
    :options
@@ -261,13 +263,7 @@
     "  ▸ horizontalpodautoscalers"
     "  ▸ poddisruptionbudgets"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  pdbs (1 finding)"
-    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
-    "        shop/web"
-    "        hint: node drains will block on the pods this budget covers"
     "────────────────────────────────────────────────────────────────────────────────"
-    "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"
     "── 2/5 🚧 Cordon ────────────────────────────────────────────────────────────────"
     "This will cordon (mark unschedulable) a node on 'cluster':"
     "  - n1"
@@ -292,9 +288,6 @@
     "── 🔍 Evidence ──────────────────────────────────────────────────────────────────"
     "  ▸ nodes"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
-    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
-    "  ✓ Nodes running different kubelet minor versions"
     "────────────────────────────────────────────────────────────────────────────────"
     "✅ no issues found - 3 checks passed"],
    :confirmations
@@ -314,7 +307,17 @@
     "uncordon n1"],
    :banner "DONE - applied and verified",
    :recovery [],
-   :waited ["perform the maintenance on the node now"]},
+   :waited ["perform the maintenance on the node now"],
+   :stdout
+   ["  pdbs (1 finding)"
+    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
+    "        shop/web"
+    "        hint: node drains will block on the pods this budget covers"
+    "0 critical, 1 warning, 0 info"
+    "✓ 2 other checks came back clean: hpas, hpa-failures"
+    "  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
+    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
+    "  ✓ Nodes running different kubelet minor versions"]},
   :declined
   {:result false,
    :out
@@ -324,13 +327,7 @@
     "  ▸ horizontalpodautoscalers"
     "  ▸ poddisruptionbudgets"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  pdbs (1 finding)"
-    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
-    "        shop/web"
-    "        hint: node drains will block on the pods this budget covers"
-    "────────────────────────────────────────────────────────────────────────────────"
-    "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"],
+    "────────────────────────────────────────────────────────────────────────────────"],
    :confirmations
    [{:action
      "take a node out of service for maintenance and bring it back",
@@ -344,7 +341,14 @@
       "5/5 🔬 Verification"]}],
    :writes [],
    :banner "FAILED - read the messages above; nothing was changed",
-   :recovery []},
+   :recovery [],
+   :stdout
+   ["  pdbs (1 finding)"
+    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
+    "        shop/web"
+    "        hint: node drains will block on the pods this budget covers"
+    "0 critical, 1 warning, 0 info"
+    "✓ 2 other checks came back clean: hpas, hpa-failures"]},
   :dry-run
   {:result true,
    :out
@@ -354,13 +358,7 @@
     "  ▸ horizontalpodautoscalers"
     "  ▸ poddisruptionbudgets"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  pdbs (1 finding)"
-    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
-    "        shop/web"
-    "        hint: node drains will block on the pods this budget covers"
     "────────────────────────────────────────────────────────────────────────────────"
-    "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"
     "── 2/5 🚧 Cordon ────────────────────────────────────────────────────────────────"
     "────────────────────────────────────────────────────────────────────────────────"
     "  🔍 DRY RUN - nothing will be changed"
@@ -388,15 +386,22 @@
     "── 🔍 Evidence ──────────────────────────────────────────────────────────────────"
     "  ▸ nodes"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
-    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
-    "  ✓ Nodes running different kubelet minor versions"
     "────────────────────────────────────────────────────────────────────────────────"
     "✅ no issues found - 3 checks passed"],
    :confirmations [],
    :writes [],
    :banner "DONE - nothing was changed",
-   :recovery []},
+   :recovery [],
+   :stdout
+   ["  pdbs (1 finding)"
+    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
+    "        shop/web"
+    "        hint: node drains will block on the pods this budget covers"
+    "0 critical, 1 warning, 0 info"
+    "✓ 2 other checks came back clean: hpas, hpa-failures"
+    "  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
+    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
+    "  ✓ Nodes running different kubelet minor versions"]},
   :empty
   {:result true,
    :out ["✅ nothing to do"],
@@ -413,13 +418,7 @@
     "  ▸ horizontalpodautoscalers"
     "  ▸ poddisruptionbudgets"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  pdbs (1 finding)"
-    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
-    "        shop/web"
-    "        hint: node drains will block on the pods this budget covers"
     "────────────────────────────────────────────────────────────────────────────────"
-    "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"
     "── 2/5 🚧 Cordon ────────────────────────────────────────────────────────────────"
     "This will cordon (mark unschedulable) a node on 'cluster':"
     "  - n1"
@@ -451,7 +450,14 @@
     "  The drain stopped before every evictable pod left node n1. The pods it evicted are gone from the node: their controllers recreate them on other nodes, a pod without a controller is not recreated, and the emptyDir data of an evicted pod is deleted. A PodDisruptionBudget that allows no disruption blocks a drain; the disruption check above names those. Remove the blocker and run the playbook again, or bring the node back as below."
     "  Node n1 stays cordoned: nothing new is scheduled on it."
     "  It still runs 1 pod(s) a drain evicts: shop/web-1"
-    "  Bring it back into service once it is fit to run pods: kubectl --context=ctx uncordon n1"]},
+    "  Bring it back into service once it is fit to run pods: kubectl --context=ctx uncordon n1"],
+   :stdout
+   ["  pdbs (1 finding)"
+    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
+    "        shop/web"
+    "        hint: node drains will block on the pods this budget covers"
+    "0 critical, 1 warning, 0 info"
+    "✓ 2 other checks came back clean: hpas, hpa-failures"]},
   :from-segment-2
   {:result true,
    :out
@@ -467,9 +473,6 @@
     "── 🔍 Evidence ──────────────────────────────────────────────────────────────────"
     "  ▸ nodes"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
-    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
-    "  ✓ Nodes running different kubelet minor versions"
     "────────────────────────────────────────────────────────────────────────────────"
     "✅ no issues found - 3 checks passed"],
    :confirmations
@@ -483,7 +486,11 @@
       "5/5 🔬 Verification"]}],
    :writes ["uncordon n1"],
    :banner "DONE - applied and verified",
-   :recovery []},
+   :recovery [],
+   :stdout
+   ["  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
+    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
+    "  ✓ Nodes running different kubelet minor versions"]},
   :from-segment-9
   {:result false,
    :out
@@ -502,13 +509,7 @@
     "  ▸ horizontalpodautoscalers"
     "  ▸ poddisruptionbudgets"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  pdbs (1 finding)"
-    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
-    "        shop/web"
-    "        hint: node drains will block on the pods this budget covers"
     "────────────────────────────────────────────────────────────────────────────────"
-    "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"
     "── 2/5 🚧 Cordon ────────────────────────────────────────────────────────────────"
     "This will cordon (mark unschedulable) a node on 'cluster':"
     "  - n1"
@@ -532,7 +533,14 @@
    :recovery
    ["Recovery:"
     "  Cordoning node n1 did not complete or did not hold; no pod was evicted from it."
-    "  Node n1 is schedulable: nothing this run did keeps it out of service."]},
+    "  Node n1 is schedulable: nothing this run did keeps it out of service."],
+   :stdout
+   ["  pdbs (1 finding)"
+    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
+    "        shop/web"
+    "        hint: node drains will block on the pods this budget covers"
+    "0 critical, 1 warning, 0 info"
+    "✓ 2 other checks came back clean: hpas, hpa-failures"]},
   :grace-period
   {:result true,
    :out
@@ -542,13 +550,7 @@
     "  ▸ horizontalpodautoscalers"
     "  ▸ poddisruptionbudgets"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  pdbs (1 finding)"
-    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
-    "        shop/web"
-    "        hint: node drains will block on the pods this budget covers"
     "────────────────────────────────────────────────────────────────────────────────"
-    "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"
     "── 2/5 🚧 Cordon ────────────────────────────────────────────────────────────────"
     "This will cordon (mark unschedulable) a node on 'cluster':"
     "  - n1"
@@ -573,9 +575,6 @@
     "── 🔍 Evidence ──────────────────────────────────────────────────────────────────"
     "  ▸ nodes"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
-    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
-    "  ✓ Nodes running different kubelet minor versions"
     "────────────────────────────────────────────────────────────────────────────────"
     "✅ no issues found - 3 checks passed"],
    :confirmations
@@ -595,7 +594,17 @@
     "uncordon n1"],
    :banner "DONE - applied and verified",
    :recovery [],
-   :waited ["perform the maintenance on the node now"]},
+   :waited ["perform the maintenance on the node now"],
+   :stdout
+   ["  pdbs (1 finding)"
+    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
+    "        shop/web"
+    "        hint: node drains will block on the pods this budget covers"
+    "0 critical, 1 warning, 0 info"
+    "✓ 2 other checks came back clean: hpas, hpa-failures"
+    "  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
+    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
+    "  ✓ Nodes running different kubelet minor versions"]},
   :resumed-after-cordon
   {:result true,
    :out
@@ -605,13 +614,7 @@
     "  ▸ horizontalpodautoscalers"
     "  ▸ poddisruptionbudgets"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  pdbs (1 finding)"
-    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
-    "        shop/web"
-    "        hint: node drains will block on the pods this budget covers"
     "────────────────────────────────────────────────────────────────────────────────"
-    "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"
     "── 2/5 🚧 Cordon ────────────────────────────────────────────────────────────────"
     "✅ already holds: node n1 is unschedulable"
     "✅ skipped, already done: 🚧 Cordon"
@@ -633,9 +636,6 @@
     "── 🔍 Evidence ──────────────────────────────────────────────────────────────────"
     "  ▸ nodes"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
-    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
-    "  ✓ Nodes running different kubelet minor versions"
     "────────────────────────────────────────────────────────────────────────────────"
     "✅ no issues found - 3 checks passed"],
    :confirmations
@@ -655,7 +655,17 @@
    :banner
    "DONE - applied and verified; skipped as already done: 🚧 Cordon",
    :recovery [],
-   :waited ["perform the maintenance on the node now"]},
+   :waited ["perform the maintenance on the node now"],
+   :stdout
+   ["  pdbs (1 finding)"
+    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
+    "        shop/web"
+    "        hint: node drains will block on the pods this budget covers"
+    "0 critical, 1 warning, 0 info"
+    "✓ 2 other checks came back clean: hpas, hpa-failures"
+    "  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
+    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
+    "  ✓ Nodes running different kubelet minor versions"]},
   :resumed-after-drain
   {:result true,
    :out
@@ -665,13 +675,7 @@
     "  ▸ horizontalpodautoscalers"
     "  ▸ poddisruptionbudgets"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  pdbs (1 finding)"
-    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
-    "        shop/web"
-    "        hint: node drains will block on the pods this budget covers"
     "────────────────────────────────────────────────────────────────────────────────"
-    "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"
     "── 2/5 🚧 Cordon ────────────────────────────────────────────────────────────────"
     "✅ already holds: node n1 is unschedulable"
     "✅ skipped, already done: 🚧 Cordon"
@@ -690,9 +694,6 @@
     "── 🔍 Evidence ──────────────────────────────────────────────────────────────────"
     "  ▸ nodes"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
-    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
-    "  ✓ Nodes running different kubelet minor versions"
     "────────────────────────────────────────────────────────────────────────────────"
     "✅ no issues found - 3 checks passed"],
    :confirmations
@@ -710,7 +711,17 @@
    :banner
    "DONE - applied and verified; skipped as already done: 🚧 Cordon, 💨 Drain",
    :recovery [],
-   :waited ["perform the maintenance on the node now"]},
+   :waited ["perform the maintenance on the node now"],
+   :stdout
+   ["  pdbs (1 finding)"
+    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
+    "        shop/web"
+    "        hint: node drains will block on the pods this budget covers"
+    "0 critical, 1 warning, 0 info"
+    "✓ 2 other checks came back clean: hpas, hpa-failures"
+    "  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
+    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
+    "  ✓ Nodes running different kubelet minor versions"]},
   :resumed-after-drain-dry-run
   {:result true,
    :out
@@ -720,13 +731,7 @@
     "  ▸ horizontalpodautoscalers"
     "  ▸ poddisruptionbudgets"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  pdbs (1 finding)"
-    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
-    "        shop/web"
-    "        hint: node drains will block on the pods this budget covers"
     "────────────────────────────────────────────────────────────────────────────────"
-    "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"
     "── 2/5 🚧 Cordon ────────────────────────────────────────────────────────────────"
     "✅ already holds: node n1 is unschedulable"
     "✅ skipped, already done: 🚧 Cordon"
@@ -747,18 +752,25 @@
     "── 🔍 Evidence ──────────────────────────────────────────────────────────────────"
     "  ▸ nodes"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  nodes (1 finding)"
-    "    💡 INFO     node is cordoned (unschedulable)"
-    "        n1"
-    "        hint: uncordon with runbooks/kubernetes/nodes/uncordon.clj when the work on it is done"
-    "────────────────────────────────────────────────────────────────────────────────"
-    "0 critical, 0 warning, 1 info"
-    "✓ 2 other checks came back clean: node-removals, kubelet-skew"],
+    "────────────────────────────────────────────────────────────────────────────────"],
    :confirmations [],
    :writes [],
    :banner
    "DONE - already done, nothing was changed - skipped: 🚧 Cordon, 💨 Drain",
-   :recovery []},
+   :recovery [],
+   :stdout
+   ["  pdbs (1 finding)"
+    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
+    "        shop/web"
+    "        hint: node drains will block on the pods this budget covers"
+    "0 critical, 1 warning, 0 info"
+    "✓ 2 other checks came back clean: hpas, hpa-failures"
+    "  nodes (1 finding)"
+    "    💡 INFO     node is cordoned (unschedulable)"
+    "        n1"
+    "        hint: uncordon with runbooks/kubernetes/nodes/uncordon.clj when the work on it is done"
+    "0 critical, 0 warning, 1 info"
+    "✓ 2 other checks came back clean: node-removals, kubelet-skew"]},
   :resumed-after-drain-unattended
   {:result false,
    :out
@@ -768,13 +780,7 @@
     "  ▸ horizontalpodautoscalers"
     "  ▸ poddisruptionbudgets"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  pdbs (1 finding)"
-    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
-    "        shop/web"
-    "        hint: node drains will block on the pods this budget covers"
     "────────────────────────────────────────────────────────────────────────────────"
-    "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"
     "── 2/5 🚧 Cordon ────────────────────────────────────────────────────────────────"
     "✅ already holds: node n1 is unschedulable"
     "✅ skipped, already done: 🚧 Cordon"
@@ -798,7 +804,14 @@
    :writes [],
    :banner
    "PAUSED - continue with --from-segment 2 once this is done: perform the maintenance on the node now",
-   :recovery []},
+   :recovery [],
+   :stdout
+   ["  pdbs (1 finding)"
+    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
+    "        shop/web"
+    "        hint: node drains will block on the pods this budget covers"
+    "0 critical, 1 warning, 0 info"
+    "✓ 2 other checks came back clean: hpas, hpa-failures"]},
   :surface
   {:description
    "Playbook: cordon, drain, maintain, uncordon, and verify a node",
@@ -865,13 +878,7 @@
     "  ▸ horizontalpodautoscalers"
     "  ▸ poddisruptionbudgets"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  pdbs (1 finding)"
-    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
-    "        shop/web"
-    "        hint: node drains will block on the pods this budget covers"
     "────────────────────────────────────────────────────────────────────────────────"
-    "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"
     "── 2/5 🚧 Cordon ────────────────────────────────────────────────────────────────"
     "This will cordon (mark unschedulable) a node on 'cluster':"
     "  - n1"
@@ -903,7 +910,14 @@
     "drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1 --timeout=300s"],
    :banner
    "PAUSED after 2 effects - continue with --from-segment 2 once this is done: perform the maintenance on the node now",
-   :recovery []},
+   :recovery [],
+   :stdout
+   ["  pdbs (1 finding)"
+    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
+    "        shop/web"
+    "        hint: node drains will block on the pods this budget covers"
+    "0 critical, 1 warning, 0 info"
+    "✓ 2 other checks came back clean: hpas, hpa-failures"]},
   :unhealthy-after
   {:result false,
    :out
@@ -913,13 +927,7 @@
     "  ▸ horizontalpodautoscalers"
     "  ▸ poddisruptionbudgets"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  pdbs (1 finding)"
-    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
-    "        shop/web"
-    "        hint: node drains will block on the pods this budget covers"
     "────────────────────────────────────────────────────────────────────────────────"
-    "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"
     "── 2/5 🚧 Cordon ────────────────────────────────────────────────────────────────"
     "This will cordon (mark unschedulable) a node on 'cluster':"
     "  - n1"
@@ -944,12 +952,7 @@
     "── 🔍 Evidence ──────────────────────────────────────────────────────────────────"
     "  ▸ nodes"
     "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
-    "  nodes (1 finding)"
-    "    🔥 CRITICAL node is not Ready (status False)"
-    "        n2"
-    "────────────────────────────────────────────────────────────────────────────────"
-    "1 critical, 0 warning, 0 info"
-    "✓ 2 other checks came back clean: node-removals, kubelet-skew"],
+    "────────────────────────────────────────────────────────────────────────────────"],
    :confirmations
    [{:action
      "take a node out of service for maintenance and bring it back",
@@ -971,7 +974,19 @@
    ["Recovery:"
     "  The detectives found issues after node n1 came back; the findings above name them. Read them before taking another node out of service."
     "  Node n1 is schedulable: nothing this run did keeps it out of service."],
-   :waited ["perform the maintenance on the node now"]},
+   :waited ["perform the maintenance on the node now"],
+   :stdout
+   ["  pdbs (1 finding)"
+    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
+    "        shop/web"
+    "        hint: node drains will block on the pods this budget covers"
+    "0 critical, 1 warning, 0 info"
+    "✓ 2 other checks came back clean: hpas, hpa-failures"
+    "  nodes (1 finding)"
+    "    🔥 CRITICAL node is not Ready (status False)"
+    "        n2"
+    "1 critical, 0 warning, 0 info"
+    "✓ 2 other checks came back clean: node-removals, kubelet-skew"]},
   :unpicked
   {:result false,
    :out
@@ -987,11 +1002,6 @@
    :out
    ["▸ HelmRelease: apps/podinfo"
     "── 1/8 🔬 Read the HelmRelease, its owner and its storage ───────────────────────"
-    "owner:     Kustomization flux-system/apps"
-    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
-    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
-    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
-    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"
     "── 2/8 ⏸  Suspend the owner (Kustomizat…urceSet) that renders the HelmRelease ──"
     "This will suspend the owner that renders the HelmRelease on 'cluster':"
     "  - suspend Kustomization flux-system/apps, so it does not re-apply the HelmRelease meanwhile"
@@ -1066,17 +1076,18 @@
     "-n flux-system patch kustomizations.kustomize.toolkit.fluxcd.io apps --type=merge --patch={\"spec\":{\"suspend\":false}}"
     "-n flux-system annotate kustomizations.kustomize.toolkit.fluxcd.io apps --overwrite reconcile.fluxcd.io/requestedAt=<instant>"],
    :banner "DONE - applied and verified",
-   :recovery []},
+   :recovery [],
+   :stdout
+   ["owner:     Kustomization flux-system/apps"
+    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
+    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
+    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
+    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"]},
   :declined
   {:result false,
    :out
    ["▸ HelmRelease: apps/podinfo"
-    "── 1/8 🔬 Read the HelmRelease, its owner and its storage ───────────────────────"
-    "owner:     Kustomization flux-system/apps"
-    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
-    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
-    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
-    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"],
+    "── 1/8 🔬 Read the HelmRelease, its owner and its storage ───────────────────────"],
    :confirmations
    [{:action
      "suspend its owner, delete the release's workloads, volumes and Helm storage, then resume it to install afresh",
@@ -1092,17 +1103,18 @@
       "8/8 resume the owner that renders the HelmRelease"]}],
    :writes [],
    :banner "FAILED - read the messages above; nothing was changed",
-   :recovery []},
+   :recovery [],
+   :stdout
+   ["owner:     Kustomization flux-system/apps"
+    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
+    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
+    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
+    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"]},
   :dry-run
   {:result true,
    :out
    ["▸ HelmRelease: apps/podinfo"
     "── 1/8 🔬 Read the HelmRelease, its owner and its storage ───────────────────────"
-    "owner:     Kustomization flux-system/apps"
-    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
-    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
-    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
-    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"
     "── 2/8 ⏸  Suspend the owner (Kustomizat…urceSet) that renders the HelmRelease ──"
     "────────────────────────────────────────────────────────────────────────────────"
     "  🔍 DRY RUN - nothing will be changed"
@@ -1161,7 +1173,13 @@
    :confirmations [],
    :writes [],
    :banner "DONE - nothing was changed",
-   :recovery []},
+   :recovery [],
+   :stdout
+   ["owner:     Kustomization flux-system/apps"
+    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
+    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
+    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
+    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"]},
   :empty
   {:result true,
    :out ["✅ nothing to do"],
@@ -1174,11 +1192,6 @@
    :out
    ["▸ HelmRelease: apps/podinfo"
     "── 1/8 🔬 Read the HelmRelease, its owner and its storage ───────────────────────"
-    "owner:     Kustomization flux-system/apps"
-    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
-    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
-    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
-    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"
     "── 2/8 ⏸  Suspend the owner (Kustomizat…urceSet) that renders the HelmRelease ──"
     "This will suspend the owner that renders the HelmRelease on 'cluster':"
     "  - suspend Kustomization flux-system/apps, so it does not re-apply the HelmRelease meanwhile"
@@ -1244,17 +1257,18 @@
     "  The release's workloads, volumes and Helm storage stay as the steps before this one left them."
     "  Resume the HelmRelease once its Helm storage no longer holds the revision that blocked it, then the owner."
     "  Running this playbook again repeats every step, but no longer finds the claims a StatefulSet it"
-    "  already deleted made from its volumeClaimTemplates; delete those by hand."]},
+    "  already deleted made from its volumeClaimTemplates; delete those by hand."],
+   :stdout
+   ["owner:     Kustomization flux-system/apps"
+    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
+    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
+    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
+    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"]},
   :frozen
   {:result false,
    :out
    ["▸ HelmRelease: apps/podinfo"
     "── 1/8 🔬 Read the HelmRelease, its owner and its storage ───────────────────────"
-    "owner:     Kustomization flux-system/apps"
-    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
-    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
-    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
-    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"
     "── 2/8 ⏸  Suspend the owner (Kustomizat…urceSet) that renders the HelmRelease ──"
     "This will suspend the owner that renders the HelmRelease on 'cluster':"
     "  - suspend Kustomization flux-system/apps, so it does not re-apply the HelmRelease meanwhile"
@@ -1280,7 +1294,13 @@
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
    ["Recovery:"
-    "  Neither HelmRelease apps/podinfo nor its owner is suspended; Flux reconciles the release again."]},
+    "  Neither HelmRelease apps/podinfo nor its owner is suspended; Flux reconciles the release again."],
+   :stdout
+   ["owner:     Kustomization flux-system/apps"
+    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
+    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
+    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
+    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"]},
   :in-flight
   {:result false,
    :out
@@ -1296,11 +1316,6 @@
    :out
    ["▸ HelmRelease: apps/podinfo"
     "── 1/8 🔬 Read the HelmRelease, its owner and its storage ───────────────────────"
-    "owner:     Kustomization flux-system/apps"
-    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
-    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
-    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
-    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"
     "── 2/8 ⏸  Suspend the owner (Kustomizat…urceSet) that renders the HelmRelease ──"
     "This will suspend the owner that renders the HelmRelease on 'cluster':"
     "  - suspend Kustomization flux-system/apps, so it does not re-apply the HelmRelease meanwhile"
@@ -1375,17 +1390,18 @@
     "  The release's workloads, volumes and Helm storage stay as the steps before this one left them."
     "  Resume the HelmRelease once its Helm storage no longer holds the revision that blocked it, then the owner."
     "  Running this playbook again repeats every step, but no longer finds the claims a StatefulSet it"
-    "  already deleted made from its volumeClaimTemplates; delete those by hand."]},
+    "  already deleted made from its volumeClaimTemplates; delete those by hand."],
+   :stdout
+   ["owner:     Kustomization flux-system/apps"
+    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
+    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
+    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
+    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"]},
   :no-owner
   {:result true,
    :out
    ["▸ HelmRelease: apps/podinfo"
     "── 1/8 🔬 Read the HelmRelease, its owner and its storage ───────────────────────"
-    "owner:     none - no Kustomization or ResourceSet lists it"
-    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
-    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
-    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
-    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 300}"
     "── 2/8 ⏸  Suspend the owner (Kustomizat…urceSet) that renders the HelmRelease ──"
     "This will suspend the owner that renders the HelmRelease on 'cluster':"
     "  - no Kustomization or ResourceSet lists the HelmRelease - nothing to suspend"
@@ -1455,17 +1471,18 @@
     "-n apps patch helmreleases.helm.toolkit.fluxcd.io podinfo --type=merge --patch={\"spec\":{\"suspend\":false}}"
     "-n apps annotate helmreleases.helm.toolkit.fluxcd.io podinfo --overwrite reconcile.fluxcd.io/requestedAt=<instant>"],
    :banner "DONE - applied and verified",
-   :recovery []},
+   :recovery [],
+   :stdout
+   ["owner:     none - no Kustomization or ResourceSet lists it"
+    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
+    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
+    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
+    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 300}"]},
   :resourceset-owner
   {:result true,
    :out
    ["▸ HelmRelease: apps/podinfo"
     "── 1/8 🔬 Read the HelmRelease, its owner and its storage ───────────────────────"
-    "owner:     ResourceSet flux-system/apps"
-    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
-    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
-    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
-    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 2100}"
     "── 2/8 ⏸  Suspend the owner (Kustomizat…urceSet) that renders the HelmRelease ──"
     "This will suspend the owner that renders the HelmRelease on 'cluster':"
     "  - suspend ResourceSet flux-system/apps, so it does not re-apply the HelmRelease meanwhile"
@@ -1540,7 +1557,13 @@
     "-n flux-system annotate resourcesets.fluxcd.controlplane.io apps --overwrite fluxcd.controlplane.io/reconcile=enabled"
     "-n flux-system annotate resourcesets.fluxcd.controlplane.io apps --overwrite reconcile.fluxcd.io/requestedAt=<instant>"],
    :banner "DONE - applied and verified",
-   :recovery []},
+   :recovery [],
+   :stdout
+   ["owner:     ResourceSet flux-system/apps"
+    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
+    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
+    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
+    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 2100}"]},
   :surface
   {:description
    "Clears a HelmRelease's Helm storage so the next action is an install",
@@ -1639,11 +1662,6 @@
    :out
    ["▸ HelmRelease: apps/podinfo"
     "── 1/8 🔬 Read the HelmRelease, its owner and its storage ───────────────────────"
-    "owner:     Kustomization flux-system/apps"
-    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
-    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
-    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
-    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"
     "── 2/8 ⏸  Suspend the owner (Kustomizat…urceSet) that renders the HelmRelease ──"
     "This will suspend the owner that renders the HelmRelease on 'cluster':"
     "  - suspend Kustomization flux-system/apps, so it does not re-apply the HelmRelease meanwhile"
@@ -1698,4 +1716,10 @@
     "  The release's workloads, volumes and Helm storage stay as the steps before this one left them."
     "  Resume the HelmRelease once its Helm storage no longer holds the revision that blocked it, then the owner."
     "  Running this playbook again repeats every step, but no longer finds the claims a StatefulSet it"
-    "  already deleted made from its volumeClaimTemplates; delete those by hand."]}}}
+    "  already deleted made from its volumeClaimTemplates; delete those by hand."],
+   :stdout
+   ["owner:     Kustomization flux-system/apps"
+    "storage:   2 revision(s) of podinfo in apps, statuses superseded, pending-upgrade"
+    "workloads: deployments apps/podinfo, statefulsets apps/podinfo-db"
+    "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
+    "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"]}}}

@@ -315,6 +315,42 @@
   (is (nil? (:lines (failing-after (three-effects :verify (fn [_] [{:description "never" :check (constantly false) :timeout 0}]))
                                    nil :dry-run? true)))))
 
+(defn- rehearsal-that-throws
+  "A --dry-run of spec against w-1, whose throw is caught: {:thrown <message>
+   :record <the outcome record>}. A rehearsal runs no post-check and its
+   effects always succeed, so a throw is the path that reaches failed!."
+  [spec]
+  (let [record (outcome/fresh)
+        thrown (with-redefs [kubectl/current-context (constantly "ctx")
+                             kubectl/current-cluster (constantly "cluster")
+                             interact/confirm! (constantly true)]
+                 (binding [*err* (java.io.StringWriter.) *out* (java.io.StringWriter.)
+                           outcome/*record* record flow/*dry-run* true]
+                   (try (mutation/run-on! spec "w-1" {} nil) nil
+                        (catch clojure.lang.ExceptionInfo e (ex-message e)))))]
+    {:thrown thrown :record @record}))
+
+(deftest a-rehearsal-that-throws-records-no-recovery
+  (testing "an :effect builder that throws"
+    (let [{:keys [thrown record]} (rehearsal-that-throws
+                                   (three-effects :recovery "uncordon w-1 by hand"
+                                                  :effect (fn [_] (throw (ex-info "boom" {})))))]
+      (is (= "boom" thrown) "the fixture reaches failed! through the catch")
+      (is (not (contains? record :recovery)))
+      (is (nil? (outcome/recovery-lines :error record)))))
+  (testing "a :verify builder that throws once the plan is built"
+    (let [{:keys [thrown record]} (rehearsal-that-throws
+                                   (three-effects :recovery "uncordon w-1 by hand"
+                                                  :verify (fn [_] (throw (ex-info "no checks" {})))))]
+      (is (= "no checks" thrown))
+      (is (not (contains? record :recovery)))))
+  (testing "a spec without :recovery records no fallback"
+    (let [{:keys [thrown record]} (rehearsal-that-throws
+                                   (three-effects :effect (fn [_] (throw (ex-info "boom" {})))))]
+      (is (= "boom" thrown))
+      (is (not (contains? record :fallback)))
+      (is (not (contains? record :recovery))))))
+
 (deftest a-change-with-its-own-recovery-prints-only-that
   (let [{:keys [lines]} (failing-after (three-effects :recovery "uncordon w-1 by hand") 2)]
     (is (= ["Recovery:" "  uncordon w-1 by hand"] lines))))

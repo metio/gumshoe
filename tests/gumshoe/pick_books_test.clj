@@ -28,6 +28,7 @@
             [clojure.walk :as walk]
             [gumshoe.announce :as announce]
             [gumshoe.flow :as flow]
+            [gumshoe.streams-support :as streams]
             [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.runbook :as runbook]
@@ -77,9 +78,9 @@
 
 (defn- capture
   [thunk]
-  (let [out (java.io.StringWriter.)
-        result (binding [*out* out *err* out] (thunk))]
-    {:result result :out (str/split-lines (stdout/strip-colors (str/trim (str out))))}))
+  (let [{:keys [result err out]} (streams/separated thunk)
+        lines #(str/split-lines (stdout/strip-colors (str/trim %)))]
+    (streams/with-stdout {:result result :out (lines err)} out lines)))
 
 (defn- attempt
   [f]
@@ -108,9 +109,10 @@
                   fuzzy/select-multi (constantly nil)
                   announce/announce! (fn [system _ message] [system message])
                   flow/change! (fn [config] (reset! seen config) true)]
-      (let [{:keys [result out]} (capture #(attempt (fn [] ((:action config) opts {:announcement-data nil}))))
+      (let [{:keys [result out stdout]} (capture #(attempt (fn [] ((:action config) opts {:announcement-data nil}))))
             {:keys [confirmation effect announce!]} @seen]
         (cond-> {:result result :out out :commands @commands}
+          stdout (assoc :stdout stdout)
           @seen (assoc :change (printable
                                 (cond-> {:action (:action confirmation)
                                          :target (:target confirmation)

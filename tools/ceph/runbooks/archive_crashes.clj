@@ -26,7 +26,7 @@
 
 (defn- refuse!
   [why]
-  (println (str "refusing: " why))
+  (stdout/err-println (str "refusing: " why))
   false)
 
 (defn- still-readable

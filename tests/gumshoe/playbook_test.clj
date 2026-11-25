@@ -352,16 +352,36 @@
                                                  "w-1" {} nil))))))
     (is (= {:text "read the node by hand"} (:recovery @record)))))
 
-(deftest a-dry-run-records-no-recovery
+(defn- rehearsed-record
+  "The outcome record a --dry-run of `pb` against w-1 leaves behind, with any
+   exception the run throws swallowed."
+  [pb]
   (let [record (outcome/fresh)]
     (quietly
      (with-redefs [interact/confirm! (constantly true)]
        (binding [outcome/*record* record flow/*dry-run* true]
-         (playbook/run-on! {:select {:mode :one} :confirm {:action "x"}
-                            :steps [(check "fails" (atom []) false)]
-                            :recovery "x"}
-                           "w-1" {} nil))))
-    (is (not (contains? @record :recovery)))))
+         (try (playbook/run-on! pb "w-1" {} nil)
+              (catch clojure.lang.ExceptionInfo _ nil)))))
+    @record))
+
+(deftest a-dry-run-records-no-recovery
+  (let [pb {:select {:mode :one} :confirm {:action "x"} :recovery "the node may still be cordoned"}
+        reports-applied {:title "counted" :check (fn [_] (outcome/applied!) true)}]
+    (testing "a failing check that declares its own recovery"
+      (let [record (rehearsed-record
+                    (assoc pb :steps [{:title "look" :check (fn [_] false) :recovery "read the node by hand"}]))]
+        (is (not (contains? record :recovery)))))
+    (testing "a failing check after a step that reported an applied effect"
+      (let [record (rehearsed-record
+                    (assoc pb :steps [reports-applied
+                                      {:title "look" :check (fn [_] false) :recovery "read the node by hand"}]))]
+        (is (pos? (:applied record)) "the fixture reaches the standing playbook recovery")
+        (is (not (contains? record :recovery)))))
+    (testing "a step that throws and declares its own recovery"
+      (let [record (rehearsed-record
+                    (assoc pb :steps [{:title "look" :check (fn [_] (throw (ex-info "exploded" {})))
+                                       :recovery "read the node by hand"}]))]
+        (is (not (contains? record :recovery)))))))
 
 (deftest a-step-whose-effect-is-not-a-plan-is-refused-before-it-runs
   (let [ran (atom [])

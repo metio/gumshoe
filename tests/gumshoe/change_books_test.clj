@@ -30,6 +30,7 @@
             [clojure.walk :as walk]
             [gumshoe.announce :as announce]
             [gumshoe.flow :as flow]
+            [gumshoe.streams-support :as streams]
             [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
@@ -95,9 +96,8 @@
 
 (defn- capture
   [thunk]
-  (let [out (java.io.StringWriter.)
-        result (binding [*out* out *err* out] (thunk))]
-    {:result result :out (str/trim (str out))}))
+  (let [{:keys [result err out]} (streams/separated thunk)]
+    (streams/with-stdout {:result result :out (str/trim err)} out str/trim)))
 
 (defn- attempt
   [f]
@@ -126,7 +126,7 @@
                     fuzzy/select-single (constantly nil)
                     announce/announce! (fn [system _ message] [system message])
                     flow/change! (fn [config] (reset! seen config) true)]
-        (let [{:keys [result out]} (capture #(attempt (fn [] ((:action config) opts {:announcement-data nil}))))
+        (let [{:keys [result out stdout]} (capture #(attempt (fn [] ((:action config) opts {:announcement-data nil}))))
               {:keys [confirmation precondition announce! effect post-checks]} @seen
               _ (swap! state merge between)
               decided (when precondition (capture precondition))
@@ -135,6 +135,7 @@
                        (vec (for [{:keys [description check]} post-checks]
                               [description (attempt check)])))]
           (cond-> {:result result :out out}
+            stdout (assoc :stdout stdout)
             @seen (assoc :change (cond-> {:action (:action confirmation)
                                           :target (:target confirmation)
                                           :destructive? (boolean (:destructive? confirmation))
@@ -163,13 +164,14 @@
                     interact/confirm! (constantly true)
                     announce/announce! (fn [_ _ _] nil)
                     verify/eventually (fn [check] (eventually (assoc check :timeout 0)))]
-        (let [{:keys [result out]} (capture #(binding [outcome/*record* record]
-                                               (attempt (fn [] ((:action config) opts {:announcement-data nil})))))
+        (let [{:keys [result out stdout]} (capture #(binding [outcome/*record* record]
+                                                      (attempt (fn [] ((:action config) opts {:announcement-data nil})))))
               {:keys [tone text]} (outcome/banner {:changes? true :outcome (if (true? result) :ok :failed)} @record)]
-          {:result result
-           :out (str/split-lines (stdout/strip-colors out))
-           :banner text
-           :recovery (vec (outcome/recovery-lines tone @record))})))))
+          (cond-> {:result result
+                   :out (str/split-lines (stdout/strip-colors out))
+                   :banner text
+                   :recovery (vec (outcome/recovery-lines tone @record))}
+            stdout (assoc :stdout (str/split-lines (stdout/strip-colors stdout)))))))))
 
 (defn surface
   "What the book declares outside a run, and the opts its options parse argv
