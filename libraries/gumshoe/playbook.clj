@@ -50,6 +50,16 @@
    return whose exact items the operator must see - asks again when it is
    reached. The confirmation is destructive when any change is.
 
+   Before the confirmation, after the leading checks, the playbook judges the
+   steps it covers as far as their evidence exists (prejudge!): the pick of
+   every change, and the refusal of the first change unless a pause that
+   waits comes before it (prejudgeable), so the operator is not asked to
+   approve a playbook whose first change will be refused. A change after
+   another change, or after a pause that waits, judges state the run is
+   about to alter, so it is judged only when reached, after the
+   confirmation, where judging it earlier would refuse it falsely. Every
+   change is still judged right before it runs.
+
    The pauses split the steps into segments. `book` runs them all and waits at
    each pause; --from-segment N starts after the operator acted on the pause
    that opens segment N, checking its :verify without waiting. A pause with no
@@ -263,12 +273,75 @@
 
 (defn- run-change!
   "Runs a change step through gumshoe.mutation, keeping the plan its :effect
-   built in `plan`, so the run can name what the step applied."
+   built in `plan`, so the run can name what the step applied. A step judged
+   before the confirmation carries the read cache of that judgement, so its
+   :derive phase is the one judged and reads nothing again."
   [step {:keys [target opts announcement-data]} plan]
-  (mutation/run-on! (-> step
+  (mutation/run-on! (-> (dissoc step ::derive-cache)
                         (assoc :confirmed? (not (separately? step)))
                         (update :effect (fn [effect] (fn [ctx] (vreset! plan (effect ctx))))))
-                    target opts announcement-data))
+                    target opts announcement-data
+                    {:derive-cache (::derive-cache step)}))
+
+;; --- judging before the confirmation ----------------------------------------------
+
+(defn prejudgeable
+  "The indices of the change steps among `steps` - the steps one
+   confirmation covers - whose refusal is judged before that confirmation:
+   the first change, unless a pause that waits comes before it.
+
+   A change after another change judges state the earlier one is about to
+   alter (a drain after the cordon it needs), and a change after a waiting
+   pause judges state the operator is about to alter, so the evidence of
+   either exists only once the run reaches it; such a step is judged when
+   reached, after the confirmation, and never before it, where it would be
+   refused for a state the run itself is about to change. Checks read and
+   change nothing, so they do not end the judgeable prefix. `waits-first?`
+   says whether a pause opening `steps` waits; one that does not - the pause
+   opening a resumed segment, whose manual step is done - does not end it
+   either. Pure."
+  [steps waits-first?]
+  (loop [[step & more] steps i 0]
+    (when step
+      (case (kind step)
+        :check (recur more (inc i))
+        :pause (when-not (or (pos? i) waits-first?) (recur more (inc i)))
+        :change [i]))))
+
+(defn prejudge!
+  "Judges `steps`, before the one confirmation covering them, as far as
+   their evidence exists: the pick of every change, which parse-pick judges
+   alone, and the refusal of each prejudgeable change, over what its
+   :derive phase reads now (gumshoe.mutation/prejudge). Prints the first
+   refusal under its step's title and returns nil; otherwise returns the
+   steps, each judged change carrying the read cache its judgement filled.
+   A rehearsal asks for no confirmation and judges every step as it
+   reaches it, so it returns the steps as they are. `ctx` is the run's
+   context and `waits-first?` as prejudgeable takes it. A driver that
+   confirms a segment itself calls this before its confirmation."
+  [steps {:keys [target opts announcement-data]} waits-first?]
+  (if flow/*dry-run*
+    steps
+    (let [steps (vec steps)
+          judged (set (prejudgeable steps waits-first?))
+          refused! (fn [step verdict]
+                     (stdout/print-section (::title step))
+                     (mutation/prejudge-printed verdict)
+                     nil)]
+      (reduce (fn [steps i]
+                (let [step (nth steps i)]
+                  (if-not (= :change (kind step))
+                    steps
+                    (let [{:keys [refusal]} (mutation/parse-pick step target)]
+                      (cond
+                        refusal (reduced (refused! step {:refusal refusal}))
+                        (not (judged i)) steps
+                        :else (let [{:keys [cache] :as verdict} (mutation/prejudge step target opts announcement-data)]
+                                (if cache
+                                  (cond-> steps (not (separately? step)) (assoc-in [i ::derive-cache] cache))
+                                  (reduced (refused! step verdict)))))))))
+              steps
+              (range (count steps))))))
 
 (defn- run-step!
   [step ctx wait? plan]
@@ -391,8 +464,9 @@
 
 (defn run-segment!
   "Runs segment `n` (from 1) of the playbook against an already-chosen target.
-   The caller confirmed it, so its changes run without asking again, except
-   those that ask :separately?; a pause
+   The caller confirmed it, having judged it with prejudge! first, so its
+   changes run without asking again, except those that ask :separately?; a
+   pause
    opening it checks its :verify without waiting. Returns true when every step
    succeeded."
   [playbook n target opts announcement-data]
@@ -404,8 +478,9 @@
 
 (defn run-on!
   "Runs the playbook against an already-chosen target, from --from-segment (1
-   when absent) to its end: the leading checks, the one confirmation, then
-   every later step. Returns true when every step succeeded."
+   when absent) to its end: the leading checks, the judgement before the
+   confirmation (prejudge!), the one confirmation, then every later step.
+   Returns true when every step succeeded."
   [playbook target opts announcement-data]
   (let [segs (segments (:steps playbook))
         from (or (:from-segment opts) 1)
@@ -414,14 +489,17 @@
       (do (stdout/error (format "the playbook has %d segments, there is no segment %d" (count segs) from))
           false)
       (let [steps (apply concat (drop (dec from) segs))
-            [leading later] (split-with #(= :check (kind %)) steps)]
-        ;; only the pause that opens a resumed segment skips the wait:
-        ;; the operator did its manual step before running --from-segment.
-        ;; A pause after the leading checks, or one opening a fresh run,
-        ;; still has its manual step ahead of it
+            [leading later] (split-with #(= :check (kind %)) steps)
+            ;; only the pause that opens a resumed segment skips the wait:
+            ;; the operator did its manual step before running --from-segment.
+            ;; A pause after the leading checks, or one opening a fresh run,
+            ;; still has its manual step ahead of it
+            waits-first? (or (= 1 from) (boolean (seq leading)))]
         (and (run-steps! leading ctx false playbook)
-             (confirmed! playbook later ctx)
-             (run-steps! later ctx (or (= 1 from) (boolean (seq leading))) playbook))))))
+             (if-let [later (prejudge! later ctx waits-first?)]
+               (and (confirmed! playbook later ctx)
+                    (run-steps! later ctx waits-first? playbook))
+               false))))))
 
 (defn run!
   "Selects the subject, honouring the flags, and runs the playbook against it.

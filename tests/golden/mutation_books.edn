@@ -189,28 +189,7 @@
    :out
    "🔶 Certificate [\"shop/nope\"] contains invalid choices, please select\n❌ no Certificate selected"}},
  "runbooks/kubernetes/cronjobs/resume.clj"
- {:absent
-  {:action "resume a CronJob",
-   :destructive? false,
-   :items ["resume batch/nightly"],
-   :step "resume a CronJob",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=batch"
-     "patch"
-     "cronjob"
-     "nightly"
-     "--type=merge"
-     "--patch={\"spec\":{\"suspend\":false}}"]],
-   :precondition
-   {:result false, :out "refusing: the CronJob no longer exists"},
-   :announce "Resume CronJob batch/nightly",
-   :checks
-   [{:description "CronJob batch/nightly is resumed",
-     :timeout 30,
-     :interval 3,
-     :holds false}]},
+ {:absent {:stopped "refusing: the CronJob no longer exists"},
   :failed-at-the-first-effect
   {:result false,
    :out
@@ -241,29 +220,7 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
-  :refused
-  {:action "resume a CronJob",
-   :destructive? false,
-   :items
-   ["resume CronJob batch/nightly on its schedule 0 3 * * *"
-    "without startingDeadlineSeconds, a run missed while it was suspended starts at once"],
-   :step "resume a CronJob",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=batch"
-     "patch"
-     "cronjob"
-     "nightly"
-     "--type=merge"
-     "--patch={\"spec\":{\"suspend\":false}}"]],
-   :precondition {:result false, :out "refusing: it is not suspended"},
-   :announce "Resume CronJob batch/nightly",
-   :checks
-   [{:description "CronJob batch/nightly is resumed",
-     :timeout 30,
-     :interval 3,
-     :holds true}]},
+  :refused {:stopped "refusing: it is not suspended"},
   :spec-changed
   {:action "resume a CronJob",
    :destructive? false,
@@ -552,28 +509,7 @@
    :out
    "🔶 no CronJob matches the given flags, please select from all instead\n🔶 CronJob 'batch/nope' is not a valid choice, please select one\n❌ no CronJob selected"}},
  "runbooks/kubernetes/cronjobs/suspend.clj"
- {:absent
-  {:action "suspend a CronJob",
-   :destructive? false,
-   :items ["suspend batch/nightly"],
-   :step "suspend a CronJob",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=batch"
-     "patch"
-     "cronjob"
-     "nightly"
-     "--type=merge"
-     "--patch={\"spec\":{\"suspend\":true}}"]],
-   :precondition
-   {:result false, :out "refusing: the CronJob no longer exists"},
-   :announce "Suspend CronJob batch/nightly",
-   :checks
-   [{:description "CronJob batch/nightly is suspended",
-     :timeout 30,
-     :interval 3,
-     :holds false}]},
+ {:absent {:stopped "refusing: the CronJob no longer exists"},
   :failed-after-applying
   {:result false,
    :out
@@ -614,29 +550,7 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
-  :refused
-  {:action "suspend a CronJob",
-   :destructive? false,
-   :items
-   ["suspend CronJob batch/nightly - no new Job starts until it is resumed"],
-   :step "suspend a CronJob",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=batch"
-     "patch"
-     "cronjob"
-     "nightly"
-     "--type=merge"
-     "--patch={\"spec\":{\"suspend\":true}}"]],
-   :precondition
-   {:result false, :out "refusing: it is suspended already"},
-   :announce "Suspend CronJob batch/nightly",
-   :checks
-   [{:description "CronJob batch/nightly is suspended",
-     :timeout 30,
-     :interval 3,
-     :holds true}]},
+  :refused {:stopped "refusing: it is suspended already"},
   :spec-changed
   {:action "suspend a CronJob",
    :destructive? false,
@@ -729,32 +643,7 @@
      :interval 3,
      :holds false}]}},
  "runbooks/kubernetes/finalizers/remove.clj"
- {:absent
-  {:action
-   "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
-   :destructive? true,
-   :items ["deployments shop/web example.com/cleanup"],
-   :step
-   "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=shop"
-     "patch"
-     "deployments"
-     "web"
-     "--type=json"
-     "--patch=[{\"op\":\"test\",\"path\":\"/metadata/uid\",\"value\":null},{\"op\":\"test\",\"path\":\"/metadata/finalizers/-1\",\"value\":\"example.com/cleanup\"},{\"op\":\"remove\",\"path\":\"/metadata/finalizers/-1\"}]"]],
-   :precondition
-   {:result false, :out "refusing: the object no longer exists"},
-   :announce
-   "Remove finalizer from deployments shop/web example.com/cleanup",
-   :checks
-   [{:description
-     "deployments shop/web example.com/cleanup no longer waits on that finalizer",
-     :timeout 60,
-     :interval 5,
-     :holds true}]},
+ {:absent {:stopped "refusing: the object no longer exists"},
   :invalid
   {:stopped
    "refusing: the pick is not \"<type> <object> <finalizer>\""},
@@ -784,33 +673,8 @@
      :interval 5,
      :holds false}]},
   :refused
-  {:action
-   "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
-   :destructive? true,
-   :items ["deployments shop/web example.com/cleanup"],
-   :step
-   "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=shop"
-     "patch"
-     "deployments"
-     "web"
-     "--type=json"
-     "--patch=[{\"op\":\"test\",\"path\":\"/metadata/uid\",\"value\":\"uid-web\"},{\"op\":\"test\",\"path\":\"/metadata/finalizers/0\",\"value\":\"example.com/cleanup\"},{\"op\":\"remove\",\"path\":\"/metadata/finalizers/0\"}]"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: the object is not being deleted - its finalizer is doing its job"},
-   :announce
-   "Remove finalizer from deployments shop/web example.com/cleanup",
-   :checks
-   [{:description
-     "deployments shop/web example.com/cleanup no longer waits on that finalizer",
-     :timeout 60,
-     :interval 5,
-     :holds false}]},
+  {:stopped
+   "refusing: the object is not being deleted - its finalizer is doing its job"},
   :spec-changed
   {:action
    "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
@@ -926,37 +790,9 @@
      :interval 5,
      :holds false}]}},
  "runbooks/kubernetes/helm/rollback.clj"
- {:absent
-  {:action "roll a Helm release back",
-   :destructive? true,
-   :items ["roll shop/web back"],
-   :step "roll a Helm release back",
-   :plan
-   [[:note "nothing to roll back to - the precondition says why"]],
-   :precondition
-   {:result false, :out "refusing: the release no longer exists"},
-   :announce "Roll Helm release shop/web back to revision null",
-   :checks
-   [{:description "shop/web has a newer revision deployed",
-     :timeout 600,
-     :interval 10,
-     :holds false}]},
+ {:absent {:stopped "refusing: the release no longer exists"},
   :invalid
-  {:action "roll a Helm release back",
-   :destructive? true,
-   :items ["roll web back"],
-   :step "roll a Helm release back",
-   :plan
-   [[:note "nothing to roll back to - the precondition says why"]],
-   :precondition
-   {:result false,
-    :out "refusing: the pick is not \"<namespace>/<release>\""},
-   :announce "Roll Helm release web back to revision null",
-   :checks
-   [{:description "web has a newer revision deployed",
-     :timeout 600,
-     :interval 10,
-     :holds false}]},
+  {:stopped "refusing: the pick is not \"<namespace>/<release>\""},
   :permitted
   {:action "roll a Helm release back",
    :destructive? true,
@@ -981,31 +817,8 @@
      :interval 10,
      :holds false}]},
   :refused
-  {:action "roll a Helm release back",
-   :destructive? true,
-   :items
-   ["roll Helm release shop/web back from revision 2 (pending-upgrade) to revision 1 (superseded)"
-    "helm records the rollback as revision 3; its status says the manifests were applied, not that the pods are ready"
-    "the release's source (Git, a pipeline) still holds the newer chart or values and will upgrade it again"],
-   :step "roll a Helm release back",
-   :plan
-   [[:cmd
-     "helm"
-     "rollback"
-     "web"
-     "1"
-     "--namespace=shop"
-     "--kube-context=ctx"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: revision 2 is pending-upgrade - another helm operation is in progress, or was interrupted and needs fixing first"},
-   :announce "Roll Helm release shop/web back to revision 1",
-   :checks
-   [{:description "shop/web has a newer revision deployed",
-     :timeout 600,
-     :interval 10,
-     :holds false}]},
+  {:stopped
+   "refusing: revision 2 is pending-upgrade - another helm operation is in progress, or was interrupted and needs fixing first"},
   :spec-changed
   {:action "roll a Helm release back",
    :destructive? true,
@@ -1089,23 +902,7 @@
      :interval 10,
      :holds false}]}},
  "runbooks/kubernetes/namespaces/remove_finalizers.clj"
- {:absent
-  {:action
-   "force namespace termination - every resource left in it is deleted",
-   :destructive? true,
-   :items ["stuck"],
-   :step
-   "force namespace termination - every resource left in it is deleted",
-   :plan
-   [[:note "namespace stuck was not found; nothing is written back"]],
-   :precondition
-   {:result false, :out "refusing: namespace stuck no longer exists"},
-   :announce "Remove finalizers from namespace stuck",
-   :checks
-   [{:description "namespace stuck is gone",
-     :timeout 120,
-     :interval 10,
-     :holds true}]},
+ {:absent {:stopped "refusing: namespace stuck no longer exists"},
   :dry-run
   {:result true,
    :out
@@ -1183,30 +980,7 @@
      "--filename"
      "-"]]},
   :refused
-  {:action
-   "force namespace termination - every resource left in it is deleted",
-   :destructive? true,
-   :items ["stuck"],
-   :step
-   "force namespace termination - every resource left in it is deleted",
-   :plan
-   [[:kubectl-stdin
-     "ctx"
-     "{\"metadata\":{\"name\":\"stuck\",\"uid\":\"uid-stuck\",\"resourceVersion\":\"100\"},\"spec\":{\"finalizers\":[]},\"status\":{\"phase\":\"Active\"}}"
-     "replace"
-     "--raw"
-     "/api/v1/namespaces/stuck/finalize"
-     "--filename"
-     "-"]],
-   :precondition
-   {:result false,
-    :out "refusing: namespace stuck is Active, not Terminating"},
-   :announce "Remove finalizers from namespace stuck",
-   :checks
-   [{:description "namespace stuck is gone",
-     :timeout 120,
-     :interval 10,
-     :holds false}]},
+  {:stopped "refusing: namespace stuck is Active, not Terminating"},
   :spec-changed
   {:action
    "force namespace termination - every resource left in it is deleted",
@@ -1296,20 +1070,7 @@
    :out
    "🔶 Namespace 'nope' is not a valid choice, please select one\n❌ no Namespace selected"}},
  "runbooks/kubernetes/nodes/cordon.clj"
- {:absent
-  {:action "cordon (mark unschedulable) a node",
-   :destructive? false,
-   :items ["n1"],
-   :step "cordon (mark unschedulable) a node",
-   :plan [[:kubectl "ctx" "cordon" "n1"]],
-   :precondition
-   {:result false, :out "refusing: node n1 no longer exists"},
-   :announce "Cordon node n1",
-   :checks
-   [{:description "node n1 is unschedulable",
-     :timeout nil,
-     :interval nil,
-     :holds false}]},
+ {:absent {:stopped "refusing: node n1 no longer exists"},
   :dry-run
   {:result true,
    :out
@@ -1444,33 +1205,7 @@
    :out
    "🔶 Node 'n2' is not a valid choice, please select one\n❌ no Node selected"}},
  "runbooks/kubernetes/nodes/drain.clj"
- {:absent
-  {:action
-   "drain a node - every pod on it is evicted and emptyDir data is deleted",
-   :destructive? true,
-   :items ["n1"],
-   :step
-   "drain a node - every pod on it is evicted and emptyDir data is deleted",
-   :plan
-   [[:kubectl
-     "ctx"
-     "drain"
-     "n1"
-     "--ignore-daemonsets"
-     "--delete-emptydir-data"
-     "--grace-period=-1"]],
-   :precondition
-   {:result false, :out "refusing: node n1 no longer exists"},
-   :announce "Drain node n1",
-   :checks
-   [{:description "node n1 is unschedulable",
-     :timeout nil,
-     :interval nil,
-     :holds false}
-    {:description "no evictable pods remain on node n1",
-     :timeout 120,
-     :interval 10,
-     :holds true}]},
+ {:absent {:stopped "refusing: node n1 no longer exists"},
   :dry-run
   {:result true,
    :out
@@ -1681,41 +1416,8 @@
    "🔶 Node 'n9' is not a valid choice, please select one\n❌ no Node selected"}},
  "runbooks/kubernetes/nodes/restart_apiserver.clj"
  {:absent
-  {:action
-   "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
-   :destructive? true,
-   :items ["cp-1"],
-   :step
-   "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
-   :plan
-   [[:ssh
-     {:host "cp-1", :user nil, :needs-sudo? true}
-     "sudo"
-     "crictl"
-     "config"
-     "--set"
-     "runtime-endpoint=unix:///run/containerd/containerd.sock"
-     "--set"
-     "image-endpoint=unix:///run/containerd/containerd.sock"
-     "--set"
-     "timeout=10"]
-    [:ssh
-     {:host "cp-1", :user nil, :needs-sudo? true}
-     "sudo"
-     "crictl"
-     "stop"
-     nil]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: the cluster no longer lists node cp-1, so it is not reached over SSH"},
-   :announce "Restart kube-apiserver on cp-1",
-   :checks
-   [{:description
-     "kube-apiserver was replaced and answers /readyz (was null)",
-     :timeout 180,
-     :interval 5,
-     :holds true}]},
+  {:stopped
+   "refusing: the cluster no longer lists node cp-1, so it is not reached over SSH"},
   :dry-run
   {:result true,
    :out
@@ -1785,76 +1487,11 @@
     "    the changelog entry this change posted"
     "    the current state of cp-1 on cluster"]},
   :no-container
-  {:action
-   "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
-   :destructive? true,
-   :items ["cp-1"],
-   :step
-   "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
-   :plan
-   [[:ssh
-     {:host "cp-1", :user nil, :needs-sudo? true}
-     "sudo"
-     "crictl"
-     "config"
-     "--set"
-     "runtime-endpoint=unix:///run/containerd/containerd.sock"
-     "--set"
-     "image-endpoint=unix:///run/containerd/containerd.sock"
-     "--set"
-     "timeout=10"]
-    [:ssh
-     {:host "cp-1", :user nil, :needs-sudo? true}
-     "sudo"
-     "crictl"
-     "stop"
-     nil]],
-   :precondition
-   {:result false,
-    :out
-    "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n❌ no running kube-apiserver container on this node"},
-   :announce "Restart kube-apiserver on cp-1",
-   :checks
-   [{:description
-     "kube-apiserver was replaced and answers /readyz (was null)",
-     :timeout 180,
-     :interval 5,
-     :holds false}]},
+  {:stopped
+   "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n❌ no running kube-apiserver container on this node\nrefusing: its precondition does not hold"},
   :no-sudo
-  {:action
-   "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
-   :destructive? true,
-   :items ["cp-1"],
-   :step
-   "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
-   :plan
-   [[:ssh
-     {:host "cp-1", :user nil, :needs-sudo? true}
-     "sudo"
-     "crictl"
-     "config"
-     "--set"
-     "runtime-endpoint=unix:///run/containerd/containerd.sock"
-     "--set"
-     "image-endpoint=unix:///run/containerd/containerd.sock"
-     "--set"
-     "timeout=10"]
-    [:ssh
-     {:host "cp-1", :user nil, :needs-sudo? true}
-     "sudo"
-     "crictl"
-     "stop"
-     "abc123"]],
-   :precondition
-   {:result false,
-    :out "✓ can connect to cp-1\n  ✗ can not use sudo on cp-1"},
-   :announce "Restart kube-apiserver on cp-1",
-   :checks
-   [{:description
-     "kube-apiserver was replaced and answers /readyz (was abc123)",
-     :timeout 180,
-     :interval 5,
-     :holds false}]},
+  {:stopped
+   "✓ can connect to cp-1\n  ✗ can not use sudo on cp-1\nrefusing: its precondition does not hold"},
   :permitted
   {:action
    "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
@@ -1916,41 +1553,8 @@
      "stop"
      "abc123"]]},
   :refused
-  {:action
-   "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
-   :destructive? true,
-   :items ["cp-1"],
-   :step
-   "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
-   :plan
-   [[:ssh
-     {:host "cp-1", :user nil, :needs-sudo? true}
-     "sudo"
-     "crictl"
-     "config"
-     "--set"
-     "runtime-endpoint=unix:///run/containerd/containerd.sock"
-     "--set"
-     "image-endpoint=unix:///run/containerd/containerd.sock"
-     "--set"
-     "timeout=10"]
-    [:ssh
-     {:host "cp-1", :user nil, :needs-sudo? true}
-     "sudo"
-     "crictl"
-     "stop"
-     "abc123"]],
-   :precondition
-   {:result false,
-    :out
-    "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n❌ this node's apiserver does not answer /readyz - fix that before restarting it"},
-   :announce "Restart kube-apiserver on cp-1",
-   :checks
-   [{:description
-     "kube-apiserver was replaced and answers /readyz (was abc123)",
-     :timeout 180,
-     :interval 5,
-     :holds false}]},
+  {:stopped
+   "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n❌ this node's apiserver does not answer /readyz - fix that before restarting it\nrefusing: its precondition does not hold"},
   :spec-changed
   {:action
    "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
@@ -2071,53 +1675,10 @@
    :out
    "🔶 Control-plane node 'w-1' is not a valid choice, please select one\n❌ no Control-plane node selected"},
   :unreachable
-  {:action
-   "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
-   :destructive? true,
-   :items ["cp-1"],
-   :step
-   "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
-   :plan
-   [[:ssh
-     {:host "cp-1", :user nil, :needs-sudo? true}
-     "sudo"
-     "crictl"
-     "config"
-     "--set"
-     "runtime-endpoint=unix:///run/containerd/containerd.sock"
-     "--set"
-     "image-endpoint=unix:///run/containerd/containerd.sock"
-     "--set"
-     "timeout=10"]
-    [:ssh
-     {:host "cp-1", :user nil, :needs-sudo? true}
-     "sudo"
-     "crictl"
-     "stop"
-     "abc123"]],
-   :precondition {:result false, :out "✗ can not connect to cp-1"},
-   :announce "Restart kube-apiserver on cp-1",
-   :checks
-   [{:description
-     "kube-apiserver was replaced and answers /readyz (was abc123)",
-     :timeout 180,
-     :interval 5,
-     :holds false}]}},
+  {:stopped
+   "✗ can not connect to cp-1\nrefusing: its precondition does not hold"}},
  "runbooks/kubernetes/nodes/uncordon.clj"
- {:absent
-  {:action "uncordon (mark schedulable) a node",
-   :destructive? false,
-   :items ["n1"],
-   :step "uncordon (mark schedulable) a node",
-   :plan [[:kubectl "ctx" "uncordon" "n1"]],
-   :precondition
-   {:result false, :out "refusing: node n1 no longer exists"},
-   :announce "Uncordon node n1",
-   :checks
-   [{:description "node n1 is schedulable",
-     :timeout nil,
-     :interval nil,
-     :holds false}]},
+ {:absent {:stopped "refusing: node n1 no longer exists"},
   :empty {:result true, :out "✅ no node is cordoned"},
   :failed-after-applying
   {:result false,
@@ -2237,29 +1798,7 @@
    :out
    "🔶 Node 'n1' is not a valid choice, please select one\n❌ no Node selected"}},
  "runbooks/kubernetes/objects/delete.clj"
- {:absent
-  {:action "delete an object",
-   :destructive? true,
-   :items
-   ["delete deployments shop/web"
-    "the API server accepted a dry run: deleted (server dry run)"],
-   :step "delete an object",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=shop"
-     "delete"
-     "deployments"
-     "web"
-     "--wait=false"]],
-   :precondition
-   {:result false, :out "refusing: the object no longer exists"},
-   :announce "Delete deployments shop/web",
-   :checks
-   [{:description "deployments shop/web is gone or terminating",
-     :timeout 60,
-     :interval 5,
-     :holds true}]},
+ {:absent {:stopped "refusing: the object no longer exists"},
   :invalid
   {:stopped
    "refusing: the pick is not \"<type> <namespace>/<name>\" of deployments, statefulsets, daemonsets, jobs, cronjobs, pods, services, ingresses, configmaps, persistentvolumeclaims"},
@@ -2286,30 +1825,8 @@
      :interval 5,
      :holds false}]},
   :refused
-  {:action "delete an object",
-   :destructive? true,
-   :items
-   ["delete deployments shop/web"
-    "the API server refused a dry run: admission webhook denied the request"],
-   :step "delete an object",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=shop"
-     "delete"
-     "deployments"
-     "web"
-     "--wait=false"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: the dry run was refused: admission webhook denied the request"},
-   :announce "Delete deployments shop/web",
-   :checks
-   [{:description "deployments shop/web is gone or terminating",
-     :timeout 60,
-     :interval 5,
-     :holds false}]},
+  {:stopped
+   "refusing: the dry run was refused: admission webhook denied the request"},
   :spec-changed
   {:action "delete an object",
    :destructive? true,
@@ -2413,26 +1930,7 @@
      :interval 5,
      :holds false}]}},
  "runbooks/kubernetes/orders/recreate.clj"
- {:absent
-  {:action "delete ACME orders so cert-manager recreates them",
-   :destructive? true,
-   :items ["shop/web-1"],
-   :step "delete ACME orders so cert-manager recreates them",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=shop"
-     "delete"
-     "orders.acme.cert-manager.io"
-     "web-1"]],
-   :precondition
-   {:result false, :out "refusing: Order shop/web-1 no longer exists"},
-   :announce "Recreate invalid orders [shop/web-1]",
-   :checks
-   [{:description "invalid order shop/web-1 is cleared",
-     :timeout 60,
-     :interval 5,
-     :holds true}]},
+ {:absent {:stopped "refusing: Order shop/web-1 no longer exists"},
   :empty {:result true, :out "✅ every ACME order is valid"},
   :failed-after-applying
   {:result false,
@@ -2484,27 +1982,8 @@
      "orders.acme.cert-manager.io"
      "web-1"]]},
   :refused
-  {:action "delete ACME orders so cert-manager recreates them",
-   :destructive? true,
-   :items ["shop/web-1"],
-   :step "delete ACME orders so cert-manager recreates them",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=shop"
-     "delete"
-     "orders.acme.cert-manager.io"
-     "web-1"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: Order shop/web-1 is valid now; it no longer needs to be recreated"},
-   :announce "Recreate invalid orders [shop/web-1]",
-   :checks
-   [{:description "invalid order shop/web-1 is cleared",
-     :timeout 60,
-     :interval 5,
-     :holds true}]},
+  {:stopped
+   "refusing: Order shop/web-1 is valid now; it no longer needs to be recreated"},
   :spec-changed
   {:action "delete ACME orders so cert-manager recreates them",
    :destructive? true,
@@ -2591,28 +2070,7 @@
    "🔶 Order [\"shop/web-2\"] contains invalid choices, please select\n❌ no Order selected"}},
  "runbooks/kubernetes/volumes/delete_released.clj"
  {:absent
-  {:action
-   "delete Released PersistentVolumes - a 'Delete' reclaim policy also removes the backing storage",
-   :destructive? true,
-   :items ["pv-1 (Unknown reclaim policy)"],
-   :step
-   "delete Released PersistentVolumes - a 'Delete' reclaim policy also removes the backing storage",
-   :plan
-   [[:kubectl
-     "ctx"
-     "delete"
-     "persistentvolume"
-     "pv-1"
-     "--wait=false"]],
-   :precondition
-   {:result false,
-    :out "refusing: PersistentVolume pv-1 no longer exists"},
-   :announce "Delete released PersistentVolumes [pv-1]",
-   :checks
-   [{:description "PersistentVolume pv-1 is gone",
-     :timeout 120,
-     :interval 10,
-     :holds true}]},
+  {:stopped "refusing: PersistentVolume pv-1 no longer exists"},
   :dry-run
   {:result true,
    :out
@@ -2678,28 +2136,7 @@
      "pv-1"
      "--wait=false"]]},
   :refused
-  {:action
-   "delete Released PersistentVolumes - a 'Delete' reclaim policy also removes the backing storage",
-   :destructive? true,
-   :items ["pv-1 (Delete reclaim policy)"],
-   :step
-   "delete Released PersistentVolumes - a 'Delete' reclaim policy also removes the backing storage",
-   :plan
-   [[:kubectl
-     "ctx"
-     "delete"
-     "persistentvolume"
-     "pv-1"
-     "--wait=false"]],
-   :precondition
-   {:result false,
-    :out "refusing: PersistentVolume pv-1 is Bound, not Released"},
-   :announce "Delete released PersistentVolumes [pv-1]",
-   :checks
-   [{:description "PersistentVolume pv-1 is gone",
-     :timeout 120,
-     :interval 10,
-     :holds false}]},
+  {:stopped "refusing: PersistentVolume pv-1 is Bound, not Released"},
   :spec-changed
   {:action
    "delete Released PersistentVolumes - a 'Delete' reclaim policy also removes the backing storage",
@@ -2790,28 +2227,8 @@
    "🔶 PersistentVolume [\"pv-2\"] contains invalid choices, please select\n❌ no PersistentVolume selected"}},
  "runbooks/kubernetes/volumes/delete_unused.clj"
  {:absent
-  {:action
-   "delete a PersistentVolumeClaim - the data on the volume is lost",
-   :destructive? true,
-   :items ["shop/data"],
-   :step
-   "delete a PersistentVolumeClaim - the data on the volume is lost",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=shop"
-     "delete"
-     "persistentvolumeclaim"
-     "data"]],
-   :precondition
-   {:result false,
-    :out "refusing: PersistentVolumeClaim shop/data no longer exists"},
-   :announce "Delete unused PersistentVolumeClaim shop/data",
-   :checks
-   [{:description "PersistentVolumeClaim shop/data is gone",
-     :timeout 120,
-     :interval 10,
-     :holds true}]},
+  {:stopped
+   "refusing: PersistentVolumeClaim shop/data no longer exists"},
   :empty
   {:result true, :out "✅ every PersistentVolumeClaim is in use"},
   :failed-after-applying
@@ -2870,29 +2287,8 @@
      "persistentvolumeclaim"
      "data"]]},
   :refused
-  {:action
-   "delete a PersistentVolumeClaim - the data on the volume is lost",
-   :destructive? true,
-   :items ["shop/data"],
-   :step
-   "delete a PersistentVolumeClaim - the data on the volume is lost",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=shop"
-     "delete"
-     "persistentvolumeclaim"
-     "data"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: PersistentVolumeClaim shop/data is used by pod(s) web-0"},
-   :announce "Delete unused PersistentVolumeClaim shop/data",
-   :checks
-   [{:description "PersistentVolumeClaim shop/data is gone",
-     :timeout 120,
-     :interval 10,
-     :holds false}]},
+  {:stopped
+   "refusing: PersistentVolumeClaim shop/data is used by pod(s) web-0"},
   :spec-changed
   {:action
    "delete a PersistentVolumeClaim - the data on the volume is lost",
@@ -2995,26 +2391,7 @@
    :out
    "🔶 no PersistentVolumeClaim matches the given flags, please select from all instead\n🔶 PersistentVolumeClaim 'shop/nope' is not a valid choice, please select one\n❌ no PersistentVolumeClaim selected"}},
  "runbooks/kubernetes/workloads/pause.clj"
- {:absent
-  {:action "pause a Deployment's rollouts",
-   :destructive? false,
-   :items ["pause Deployment shop/web"],
-   :step "pause a Deployment's rollouts",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=shop"
-     "rollout"
-     "pause"
-     "deployment/web"]],
-   :precondition
-   {:result false, :out "refusing: the Deployment no longer exists"},
-   :announce "Pause Deployment shop/web",
-   :checks
-   [{:description "Deployment shop/web is paused",
-     :timeout 60,
-     :interval 5,
-     :holds false}]},
+ {:absent {:stopped "refusing: the Deployment no longer exists"},
   :invalid
   {:stopped
    "refusing: the pick is not \"Deployment <namespace>/<name>\""},
@@ -3040,28 +2417,7 @@
      :timeout 60,
      :interval 5,
      :holds false}]},
-  :refused
-  {:action "pause a Deployment's rollouts",
-   :destructive? false,
-   :items
-   ["pause Deployment shop/web - changes to its pod template are kept but not rolled out until it is resumed"
-    "rollout restart and rollback refuse a paused Deployment"],
-   :step "pause a Deployment's rollouts",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=shop"
-     "rollout"
-     "pause"
-     "deployment/web"]],
-   :precondition
-   {:result false, :out "refusing: it is paused already"},
-   :announce "Pause Deployment shop/web",
-   :checks
-   [{:description "Deployment shop/web is paused",
-     :timeout 60,
-     :interval 5,
-     :holds true}]},
+  :refused {:stopped "refusing: it is paused already"},
   :spec-changed
   {:action "pause a Deployment's rollouts",
    :destructive? false,
@@ -3147,28 +2503,7 @@
      :interval 5,
      :holds false}]}},
  "runbooks/kubernetes/workloads/restart.clj"
- {:absent
-  {:action
-   "restart every pod of the workload, one batch at a time as its update strategy allows - a workload with a single replica is unavailable while its pod restarts",
-   :destructive? false,
-   :items ["Deployment shop/web"],
-   :step
-   "restart every pod of the workload, one batch at a time as its update strategy allows - a workload with a single replica is unavailable while its pod restarts",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=shop"
-     "rollout"
-     "restart"
-     "deployment/web"]],
-   :precondition
-   {:result false, :out "refusing: the workload no longer exists"},
-   :announce "Restart Deployment shop/web",
-   :checks
-   [{:description "Deployment shop/web rolled out",
-     :timeout 600,
-     :interval 10,
-     :holds false}]},
+ {:absent {:stopped "refusing: the workload no longer exists"},
   :invalid
   {:stopped "refusing: the pick is not \"<Kind> <namespace>/<name>\""},
   :permitted
@@ -3193,29 +2528,8 @@
      :interval 10,
      :holds true}]},
   :refused
-  {:action
-   "restart every pod of the workload, one batch at a time as its update strategy allows - a workload with a single replica is unavailable while its pod restarts",
-   :destructive? false,
-   :items ["Deployment shop/web"],
-   :step
-   "restart every pod of the workload, one batch at a time as its update strategy allows - a workload with a single replica is unavailable while its pod restarts",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=shop"
-     "rollout"
-     "restart"
-     "deployment/web"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: the Deployment is paused, so a restart waits until it is resumed - resume it first"},
-   :announce "Restart Deployment shop/web",
-   :checks
-   [{:description "Deployment shop/web rolled out",
-     :timeout 600,
-     :interval 10,
-     :holds true}]},
+  {:stopped
+   "refusing: the Deployment is paused, so a restart waits until it is resumed - resume it first"},
   :spec-changed
   {:action
    "restart every pod of the workload, one batch at a time as its update strategy allows - a workload with a single replica is unavailable while its pod restarts",
@@ -3298,28 +2612,7 @@
      :interval 10,
      :holds false}]}},
  "runbooks/kubernetes/workloads/resume.clj"
- {:absent
-  {:action
-   "resume a Deployment and roll out the changes made while it was paused",
-   :destructive? false,
-   :items ["resume Deployment shop/web"],
-   :step
-   "resume a Deployment and roll out the changes made while it was paused",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=shop"
-     "rollout"
-     "resume"
-     "deployment/web"]],
-   :precondition
-   {:result false, :out "refusing: the Deployment no longer exists"},
-   :announce "Resume Deployment shop/web",
-   :checks
-   [{:description "Deployment shop/web is resumed and rolled out",
-     :timeout 600,
-     :interval 5,
-     :holds false}]},
+ {:absent {:stopped "refusing: the Deployment no longer exists"},
   :invalid
   {:stopped
    "refusing: the pick is not \"Deployment <namespace>/<name>\""},
@@ -3345,28 +2638,7 @@
      :timeout 600,
      :interval 5,
      :holds false}]},
-  :refused
-  {:action
-   "resume a Deployment and roll out the changes made while it was paused",
-   :destructive? false,
-   :items
-   ["resume Deployment shop/web - every pod template change made while it was paused rolls out now"],
-   :step
-   "resume a Deployment and roll out the changes made while it was paused",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=shop"
-     "rollout"
-     "resume"
-     "deployment/web"]],
-   :precondition {:result false, :out "refusing: it is not paused"},
-   :announce "Resume Deployment shop/web",
-   :checks
-   [{:description "Deployment shop/web is resumed and rolled out",
-     :timeout 600,
-     :interval 5,
-     :holds true}]},
+  :refused {:stopped "refusing: it is not paused"},
   :spec-changed
   {:action
    "resume a Deployment and roll out the changes made while it was paused",
@@ -3454,22 +2726,7 @@
      :interval 5,
      :holds false}]}},
  "runbooks/kubernetes/workloads/rollback.clj"
- {:absent
-  {:action "roll a workload back",
-   :destructive? true,
-   :items ["roll Deployment shop/web back"],
-   :step "roll a workload back",
-   :plan
-   [[:note "nothing to roll back to - the precondition says why"]],
-   :precondition
-   {:result false, :out "refusing: the Deployment no longer exists"},
-   :announce "Roll Deployment shop/web back to revision null",
-   :checks
-   [{:description
-     "Deployment shop/web runs revision null's images and rolled out",
-     :timeout 600,
-     :interval 10,
-     :holds false}]},
+ {:absent {:stopped "refusing: the Deployment no longer exists"},
   :invalid
   {:stopped "refusing: the pick is not \"<Kind> <namespace>/<name>\""},
   :permitted
@@ -3496,23 +2753,8 @@
      :interval 10,
      :holds false}]},
   :refused
-  {:action "roll a workload back",
-   :destructive? true,
-   :items ["roll Deployment shop/web back"],
-   :step "roll a workload back",
-   :plan
-   [[:note "nothing to roll back to - the precondition says why"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: the Deployment has no earlier revision to go back to"},
-   :announce "Roll Deployment shop/web back to revision null",
-   :checks
-   [{:description
-     "Deployment shop/web runs revision null's images and rolled out",
-     :timeout 600,
-     :interval 10,
-     :holds false}]},
+  {:stopped
+   "refusing: the Deployment has no earlier revision to go back to"},
   :spec-changed
   {:action "roll a workload back",
    :destructive? true,
@@ -3605,26 +2847,7 @@
      :interval 10,
      :holds false}]}},
  "runbooks/kubernetes/workloads/scale.clj"
- {:absent
-  {:action "scale a workload",
-   :destructive? false,
-   :items ["scale a workload"],
-   :step "scale a workload",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=shop"
-     "scale"
-     "deployment/web"
-     "--replicas=3"]],
-   :precondition
-   {:result false, :out "refusing: the workload no longer exists"},
-   :announce "Scale Deployment shop/web to 3 replica(s)",
-   :checks
-   [{:description "Deployment shop/web runs 3 ready replica(s)",
-     :timeout 600,
-     :interval 10,
-     :holds false}]},
+ {:absent {:stopped "refusing: the workload no longer exists"},
   :failed-after-applying
   {:result false,
    :out
@@ -3644,26 +2867,7 @@
     "    the changelog entry this change posted"
     "    the current state of Deployment shop/web on cluster"]},
   :invalid
-  {:action "scale a workload",
-   :destructive? false,
-   :items ["scale a workload"],
-   :step "scale a workload",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=shop"
-     "scale"
-     "daemonset/web"
-     "--replicas=3"]],
-   :precondition
-   {:result false,
-    :out "refusing: a DaemonSet is not scaled by a replica count"},
-   :announce "Scale DaemonSet shop/web to 3 replica(s)",
-   :checks
-   [{:description "DaemonSet shop/web runs 3 ready replica(s)",
-     :timeout 600,
-     :interval 10,
-     :holds false}]},
+  {:stopped "refusing: a DaemonSet is not scaled by a replica count"},
   :permitted
   {:action "scale a workload",
    :destructive? false,
@@ -3684,27 +2888,8 @@
      :interval 10,
      :holds false}]},
   :refused
-  {:action "scale a workload",
-   :destructive? false,
-   :items ["scale Deployment shop/web from 2 to 3 replica(s)"],
-   :step "scale a workload",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=shop"
-     "scale"
-     "deployment/web"
-     "--replicas=3"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: HorizontalPodAutoscaler web-hpa manages its replicas (1 to 0) and would undo this - change the HPA instead"},
-   :announce "Scale Deployment shop/web to 3 replica(s)",
-   :checks
-   [{:description "Deployment shop/web runs 3 ready replica(s)",
-     :timeout 600,
-     :interval 10,
-     :holds false}]},
+  {:stopped
+   "refusing: HorizontalPodAutoscaler web-hpa manages its replicas (1 to 0) and would undo this - change the HPA instead"},
   :spec-changed
   {:action "scale a workload",
    :destructive? false,
@@ -3785,28 +2970,7 @@
      :interval 10,
      :holds false}]}},
  "tools/argocd/runbooks/refresh.clj"
- {:absent
-  {:action "refresh an Application",
-   :destructive? false,
-   :items ["refresh argocd/shop"],
-   :step "refresh an Application",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=argocd"
-     "annotate"
-     "applications.argoproj.io"
-     "shop"
-     "--overwrite"
-     "argocd.argoproj.io/refresh=hard"]],
-   :precondition
-   {:result false, :out "refusing: the Application no longer exists"},
-   :announce "Refresh Application argocd/shop",
-   :checks
-   [{:description "the controller refreshed argocd/shop",
-     :timeout 300,
-     :interval 5,
-     :holds false}]},
+ {:absent {:stopped "refusing: the Application no longer exists"},
   :invalid
   {:stopped "refusing: the pick is not \"<namespace>/<name>\""},
   :permitted
@@ -3833,31 +2997,8 @@
      :interval 5,
      :holds true}]},
   :refused
-  {:action "refresh an Application",
-   :destructive? false,
-   :items
-   ["refresh Application argocd/shop - the controller compares it with https://git.example/shop.git@main again, regenerating its manifests instead of reading the manifest cache"
-    "a refresh changes nothing in the cluster; an automated sync may follow when it finds a difference"],
-   :step "refresh an Application",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=argocd"
-     "annotate"
-     "applications.argoproj.io"
-     "shop"
-     "--overwrite"
-     "argocd.argoproj.io/refresh=hard"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: a refresh is requested already and the controller has not taken it yet"},
-   :announce "Refresh Application argocd/shop",
-   :checks
-   [{:description "the controller refreshed argocd/shop",
-     :timeout 300,
-     :interval 5,
-     :holds false}]},
+  {:stopped
+   "refusing: a refresh is requested already and the controller has not taken it yet"},
   :spec-changed
   {:action "refresh an Application",
    :destructive? false,
@@ -3945,31 +3086,7 @@
      :interval 5,
      :holds false}]}},
  "tools/argocd/runbooks/sync.clj"
- {:absent
-  {:action
-   "sync an Application - the cluster is changed to match its source",
-   :destructive? true,
-   :items ["sync argocd/shop"],
-   :step
-   "sync an Application - the cluster is changed to match its source",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=argocd"
-     "patch"
-     "applications.argoproj.io"
-     "shop"
-     "--type=merge"
-     "--patch={\"operation\":{\"initiatedBy\":{\"username\":\"gumshoe\"},\"sync\":{\"syncStrategy\":{\"hook\":{}},\"prune\":true}}}"]],
-   :precondition
-   {:result false, :out "refusing: the Application no longer exists"},
-   :announce "Sync Application argocd/shop",
-   :checks
-   [{:description "argocd/shop synced",
-     :timeout 900,
-     :interval 10,
-     :holds false,
-     :abort nil}]},
+ {:absent {:stopped "refusing: the Application no longer exists"},
   :invalid
   {:stopped "refusing: the pick is not \"<namespace>/<name>\""},
   :permitted
@@ -3999,34 +3116,8 @@
      :holds false,
      :abort nil}]},
   :refused
-  {:action
-   "sync an Application - the cluster is changed to match its source",
-   :destructive? true,
-   :items
-   ["sync Application argocd/shop to https://git.example/shop.git@main (currently OutOfSync, Healthy)"
-    "prune: resources removed from Git are deleted from the cluster"],
-   :step
-   "sync an Application - the cluster is changed to match its source",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=argocd"
-     "patch"
-     "applications.argoproj.io"
-     "shop"
-     "--type=merge"
-     "--patch={\"operation\":{\"initiatedBy\":{\"username\":\"gumshoe\"},\"sync\":{\"syncStrategy\":{\"hook\":{}},\"prune\":true}}}"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: an operation is running already (Running) - wait for it, or end it with argocd app terminate-op"},
-   :announce "Sync Application argocd/shop",
-   :checks
-   [{:description "argocd/shop synced",
-     :timeout 900,
-     :interval 10,
-     :holds false,
-     :abort nil}]},
+  {:stopped
+   "refusing: an operation is running already (Running) - wait for it, or end it with argocd app terminate-op"},
   :spec-changed
   {:action
    "sync an Application - the cluster is changed to match its source",
@@ -4122,21 +3213,7 @@
      :holds false,
      :abort nil}]}},
  "tools/cnpg/runbooks/backup.clj"
- {:absent
-  {:action "start an on-demand backup",
-   :destructive? false,
-   :items ["back up db/pg"],
-   :step "start an on-demand backup",
-   :plan [[:note "nothing to back up - the precondition says why"]],
-   :precondition
-   {:result false, :out "refusing: the cluster no longer exists"},
-   :announce "Back up db/pg as null",
-   :checks
-   [{:description "Backup db/null completed",
-     :timeout 3600,
-     :interval 15,
-     :holds false,
-     :abort nil}]},
+ {:absent {:stopped "refusing: the cluster no longer exists"},
   :invalid
   {:stopped "refusing: the pick is not \"<namespace>/<cluster>\""},
   :permitted
@@ -4162,30 +3239,8 @@
      :holds false,
      :abort nil}]},
   :refused
-  {:action "start an on-demand backup",
-   :destructive? false,
-   :items
-   ["start Backup db/pg-<stamp> of cluster pg with method null"
-    "it runs where spec.backup.target says (prefer-standby, the default - a standby when one is ready)"],
-   :step "start an on-demand backup",
-   :plan
-   [[:kubectl-stdin
-     "ctx"
-     "{\"apiVersion\":\"postgresql.cnpg.io/v1\",\"kind\":\"Backup\",\"metadata\":{\"namespace\":\"db\",\"name\":\"pg-<stamp>\",\"labels\":{\"cnpg.io/cluster\":\"pg\"}},\"spec\":{\"cluster\":{\"name\":\"pg\"},\"method\":null}}"
-     "create"
-     "-f"
-     "-"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: the cluster configures no backup destination - neither a barmanObjectStore, a WAL-archiving plugin, nor volume snapshots"},
-   :announce "Back up db/pg as pg-<stamp>",
-   :checks
-   [{:description "Backup db/pg-<stamp> completed",
-     :timeout 3600,
-     :interval 15,
-     :holds false,
-     :abort nil}]},
+  {:stopped
+   "refusing: the cluster configures no backup destination - neither a barmanObjectStore, a WAL-archiving plugin, nor volume snapshots"},
   :spec-changed
   {:action "start an on-demand backup",
    :destructive? false,
@@ -4271,31 +3326,7 @@
      :holds false,
      :abort nil}]}},
  "tools/cnpg/runbooks/fence.clj"
- {:absent
-  {:action
-   "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
-   :destructive? true,
-   :items ["db/pg pg-2"],
-   :step
-   "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace"
-     "db"
-     "annotate"
-     "clusters.postgresql.cnpg.io"
-     "pg"
-     "--overwrite"
-     "cnpg.io/fencedInstances=[\"pg-2\"]"]],
-   :precondition
-   {:result false, :out "refusing: the cluster no longer exists"},
-   :announce "Fence pg-2 in db/pg",
-   :checks
-   [{:description "pg-2 is fenced",
-     :timeout 60,
-     :interval 5,
-     :holds false}]},
+ {:absent {:stopped "refusing: the cluster no longer exists"},
   :invalid
   {:stopped
    "refusing: the pick is not \"<namespace>/<cluster> <instance>\""},
@@ -4323,31 +3354,7 @@
      :timeout 60,
      :interval 5,
      :holds false}]},
-  :refused
-  {:action
-   "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
-   :destructive? true,
-   :items ["db/pg pg-2"],
-   :step
-   "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace"
-     "db"
-     "annotate"
-     "clusters.postgresql.cnpg.io"
-     "pg"
-     "--overwrite"
-     "cnpg.io/fencedInstances=[\"pg-2\"]"]],
-   :precondition
-   {:result false, :out "refusing: pg-2 is fenced already"},
-   :announce "Fence pg-2 in db/pg",
-   :checks
-   [{:description "pg-2 is fenced",
-     :timeout 60,
-     :interval 5,
-     :holds true}]},
+  :refused {:stopped "refusing: pg-2 is fenced already"},
   :spec-changed
   {:action
    "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
@@ -4438,30 +3445,7 @@
      :interval 5,
      :holds false}]}},
  "tools/cnpg/runbooks/hibernate.clj"
- {:absent
-  {:action
-   "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
-   :destructive? true,
-   :items ["Hibernate db/pg"],
-   :step
-   "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=db"
-     "annotate"
-     "clusters.postgresql.cnpg.io"
-     "pg"
-     "--overwrite"
-     "cnpg.io/hibernation=on"]],
-   :precondition
-   {:result false, :out "refusing: the cluster no longer exists"},
-   :announce "Hibernate db/pg",
-   :checks
-   [{:description "db/pg is hibernated",
-     :timeout 300,
-     :interval 10,
-     :holds false}]},
+ {:absent {:stopped "refusing: the cluster no longer exists"},
   :invalid
   {:stopped "refusing: the pick is not \"<namespace>/<cluster>\""},
   :permitted
@@ -4489,32 +3473,7 @@
      :timeout 300,
      :interval 10,
      :holds false}]},
-  :refused
-  {:action
-   "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
-   :destructive? true,
-   :items
-   ["hibernate cluster db/pg - the operator deletes its 2 instance pod(s), the primary first, and keeps their volumes"
-    "no instance runs until it is rehydrated, so nothing accepts connections, archives WAL or takes a backup"],
-   :step
-   "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=db"
-     "annotate"
-     "clusters.postgresql.cnpg.io"
-     "pg"
-     "--overwrite"
-     "cnpg.io/hibernation=on"]],
-   :precondition
-   {:result false, :out "refusing: hibernation is requested already"},
-   :announce "Hibernate db/pg",
-   :checks
-   [{:description "db/pg is hibernated",
-     :timeout 300,
-     :interval 10,
-     :holds true}]},
+  :refused {:stopped "refusing: hibernation is requested already"},
   :spec-changed
   {:action
    "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
@@ -4605,28 +3564,7 @@
      :interval 10,
      :holds false}]}},
  "tools/cnpg/runbooks/rehydrate.clj"
- {:absent
-  {:action "rehydrate a cluster",
-   :destructive? false,
-   :items ["Rehydrate db/pg"],
-   :step "rehydrate a cluster",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=db"
-     "annotate"
-     "clusters.postgresql.cnpg.io"
-     "pg"
-     "--overwrite"
-     "cnpg.io/hibernation=off"]],
-   :precondition
-   {:result false, :out "refusing: the cluster no longer exists"},
-   :announce "Rehydrate db/pg",
-   :checks
-   [{:description "db/pg is rehydrated and healthy",
-     :timeout 900,
-     :interval 10,
-     :holds false}]},
+ {:absent {:stopped "refusing: the cluster no longer exists"},
   :invalid
   {:stopped "refusing: the pick is not \"<namespace>/<cluster>\""},
   :permitted
@@ -4651,29 +3589,7 @@
      :timeout 900,
      :interval 10,
      :holds false}]},
-  :refused
-  {:action "rehydrate a cluster",
-   :destructive? false,
-   :items
-   ["rehydrate cluster db/pg - the operator recreates its instance pods on the kept volumes"],
-   :step "rehydrate a cluster",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=db"
-     "annotate"
-     "clusters.postgresql.cnpg.io"
-     "pg"
-     "--overwrite"
-     "cnpg.io/hibernation=off"]],
-   :precondition
-   {:result false, :out "refusing: the cluster is not hibernated"},
-   :announce "Rehydrate db/pg",
-   :checks
-   [{:description "db/pg is rehydrated and healthy",
-     :timeout 900,
-     :interval 10,
-     :holds true}]},
+  :refused {:stopped "refusing: the cluster is not hibernated"},
   :spec-changed
   {:action "rehydrate a cluster",
    :destructive? false,
@@ -4754,28 +3670,7 @@
      :interval 10,
      :holds false}]}},
  "tools/cnpg/runbooks/reload.clj"
- {:absent
-  {:action "reload a cluster's configuration",
-   :destructive? false,
-   :items ["Reload db/pg"],
-   :step "reload a cluster's configuration",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=db"
-     "annotate"
-     "clusters.postgresql.cnpg.io"
-     "pg"
-     "--overwrite"
-     "cnpg.io/reloadedAt=<instant>"]],
-   :precondition
-   {:result false, :out "refusing: the cluster no longer exists"},
-   :announce "Reload db/pg",
-   :checks
-   [{:description "db/pg took the reload and is healthy",
-     :timeout 600,
-     :interval 10,
-     :holds false}]},
+ {:absent {:stopped "refusing: the cluster no longer exists"},
   :invalid
   {:stopped "refusing: the pick is not \"<namespace>/<cluster>\""},
   :permitted
@@ -4801,30 +3696,8 @@
      :interval 10,
      :holds false}]},
   :refused
-  {:action "reload a cluster's configuration",
-   :destructive? false,
-   :items
-   ["reload cluster db/pg - the operator reconciles every instance again and rolls out configuration that changed, such as a renewed Secret or ConfigMap"],
-   :step "reload a cluster's configuration",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=db"
-     "annotate"
-     "clusters.postgresql.cnpg.io"
-     "pg"
-     "--overwrite"
-     "cnpg.io/reloadedAt=<instant>"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: the cluster is hibernated, so no instance runs - rehydrate it first"},
-   :announce "Reload db/pg",
-   :checks
-   [{:description "db/pg took the reload and is healthy",
-     :timeout 600,
-     :interval 10,
-     :holds false}]},
+  {:stopped
+   "refusing: the cluster is hibernated, so no instance runs - rehydrate it first"},
   :spec-changed
   {:action "reload a cluster's configuration",
    :destructive? false,
@@ -4907,31 +3780,7 @@
      :interval 10,
      :holds false}]}},
  "tools/cnpg/runbooks/restart.clj"
- {:absent
-  {:action
-   "restart every instance of a cluster - each is briefly unavailable, the primary included",
-   :destructive? true,
-   :items ["Restart db/pg"],
-   :step
-   "restart every instance of a cluster - each is briefly unavailable, the primary included",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=db"
-     "annotate"
-     "clusters.postgresql.cnpg.io"
-     "pg"
-     "--overwrite"
-     "kubectl.kubernetes.io/restartedAt=<instant>"]],
-   :precondition
-   {:result false, :out "refusing: the cluster no longer exists"},
-   :announce "Restart db/pg",
-   :checks
-   [{:description
-     "every instance of db/pg restarted and the cluster is healthy",
-     :timeout 1200,
-     :interval 10,
-     :holds false}]},
+ {:absent {:stopped "refusing: the cluster no longer exists"},
   :invalid
   {:stopped "refusing: the pick is not \"<namespace>/<cluster>\""},
   :permitted
@@ -4961,34 +3810,8 @@
      :interval 10,
      :holds false}]},
   :refused
-  {:action
-   "restart every instance of a cluster - each is briefly unavailable, the primary included",
-   :destructive? true,
-   :items
-   ["restart every instance of cluster db/pg, one at a time, replicas first"
-    "then the primary in place (primaryUpdateMethod restart) - it accepts no writes while it restarts"],
-   :step
-   "restart every instance of a cluster - each is briefly unavailable, the primary included",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=db"
-     "annotate"
-     "clusters.postgresql.cnpg.io"
-     "pg"
-     "--overwrite"
-     "kubectl.kubernetes.io/restartedAt=<instant>"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: the cluster is not healthy (Setting up primary) - wait until it is, or investigate first"},
-   :announce "Restart db/pg",
-   :checks
-   [{:description
-     "every instance of db/pg restarted and the cluster is healthy",
-     :timeout 1200,
-     :interval 10,
-     :holds false}]},
+  {:stopped
+   "refusing: the cluster is not healthy (Setting up primary) - wait until it is, or investigate first"},
   :spec-changed
   {:action
    "restart every instance of a cluster - each is briefly unavailable, the primary included",
@@ -5081,29 +3904,7 @@
      :interval 10,
      :holds false}]}},
  "tools/cnpg/runbooks/resume_scheduled_backup.clj"
- {:absent
-  {:action "resume scheduled backups",
-   :destructive? false,
-   :items ["resume db/nightly"],
-   :step "resume scheduled backups",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=db"
-     "patch"
-     "scheduledbackups.postgresql.cnpg.io"
-     "nightly"
-     "--type=merge"
-     "--patch={\"spec\":{\"suspend\":false}}"]],
-   :precondition
-   {:result false,
-    :out "refusing: the ScheduledBackup no longer exists"},
-   :announce "Resume ScheduledBackup db/nightly",
-   :checks
-   [{:description "ScheduledBackup db/nightly is resumed",
-     :timeout 30,
-     :interval 3,
-     :holds false}]},
+ {:absent {:stopped "refusing: the ScheduledBackup no longer exists"},
   :invalid
   {:stopped "refusing: the pick is not \"<namespace>/<name>\""},
   :permitted
@@ -5128,28 +3929,7 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
-  :refused
-  {:action "resume scheduled backups",
-   :destructive? false,
-   :items
-   ["resume ScheduledBackup db/nightly - backups of cluster pg start again on its schedule 0 0 3 * * *"],
-   :step "resume scheduled backups",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=db"
-     "patch"
-     "scheduledbackups.postgresql.cnpg.io"
-     "nightly"
-     "--type=merge"
-     "--patch={\"spec\":{\"suspend\":false}}"]],
-   :precondition {:result false, :out "refusing: it is not suspended"},
-   :announce "Resume ScheduledBackup db/nightly",
-   :checks
-   [{:description "ScheduledBackup db/nightly is resumed",
-     :timeout 30,
-     :interval 3,
-     :holds true}]},
+  :refused {:stopped "refusing: it is not suspended"},
   :spec-changed
   {:action "resume scheduled backups",
    :destructive? false,
@@ -5234,29 +4014,7 @@
      :interval 3,
      :holds false}]}},
  "tools/cnpg/runbooks/suspend_scheduled_backup.clj"
- {:absent
-  {:action "suspend scheduled backups",
-   :destructive? false,
-   :items ["suspend db/nightly"],
-   :step "suspend scheduled backups",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=db"
-     "patch"
-     "scheduledbackups.postgresql.cnpg.io"
-     "nightly"
-     "--type=merge"
-     "--patch={\"spec\":{\"suspend\":true}}"]],
-   :precondition
-   {:result false,
-    :out "refusing: the ScheduledBackup no longer exists"},
-   :announce "Suspend ScheduledBackup db/nightly",
-   :checks
-   [{:description "ScheduledBackup db/nightly is suspended",
-     :timeout 30,
-     :interval 3,
-     :holds false}]},
+ {:absent {:stopped "refusing: the ScheduledBackup no longer exists"},
   :invalid
   {:stopped "refusing: the pick is not \"<namespace>/<name>\""},
   :permitted
@@ -5282,30 +4040,7 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
-  :refused
-  {:action "suspend scheduled backups",
-   :destructive? false,
-   :items
-   ["suspend ScheduledBackup db/nightly - no backup of cluster pg starts on its schedule 0 0 3 * * * until it is resumed"
-    "the cluster's newest recovery point ages from now on; WAL archiving continues"],
-   :step "suspend scheduled backups",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=db"
-     "patch"
-     "scheduledbackups.postgresql.cnpg.io"
-     "nightly"
-     "--type=merge"
-     "--patch={\"spec\":{\"suspend\":true}}"]],
-   :precondition
-   {:result false, :out "refusing: it is suspended already"},
-   :announce "Suspend ScheduledBackup db/nightly",
-   :checks
-   [{:description "ScheduledBackup db/nightly is suspended",
-     :timeout 30,
-     :interval 3,
-     :holds true}]},
+  :refused {:stopped "refusing: it is suspended already"},
   :spec-changed
   {:action "suspend scheduled backups",
    :destructive? false,
@@ -5392,29 +4127,7 @@
      :interval 3,
      :holds false}]}},
  "tools/cnpg/runbooks/switchover.clj"
- {:absent
-  {:action
-   "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
-   :destructive? true,
-   :items ["db/pg 2"],
-   :step
-   "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
-   :plan
-   [[:cmd
-     "kubectl-cnpg"
-     "promote"
-     "pg"
-     "pg-2"
-     "--context=ctx"
-     "--namespace=db"]],
-   :precondition
-   {:result false, :out "refusing: the cluster no longer exists"},
-   :announce "Promote pg-2 in db/pg",
-   :checks
-   [{:description "pg-2 is the primary",
-     :timeout 300,
-     :interval 10,
-     :holds false}]},
+ {:absent {:stopped "refusing: the cluster no longer exists"},
   :invalid
   {:stopped
    "refusing: the pick is not \"<namespace>/<cluster> <instance>\""},
@@ -5441,29 +4154,7 @@
      :interval 10,
      :holds false}]},
   :refused
-  {:action
-   "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
-   :destructive? true,
-   :items ["db/pg 2"],
-   :step
-   "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
-   :plan
-   [[:cmd
-     "kubectl-cnpg"
-     "promote"
-     "pg"
-     "pg-2"
-     "--context=ctx"
-     "--namespace=db"]],
-   :precondition
-   {:result false,
-    :out "refusing: a switchover to pg-2 is under way already"},
-   :announce "Promote pg-2 in db/pg",
-   :checks
-   [{:description "pg-2 is the primary",
-     :timeout 300,
-     :interval 10,
-     :holds false}]},
+  {:stopped "refusing: a switchover to pg-2 is under way already"},
   :spec-changed
   {:action
    "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
@@ -5549,31 +4240,7 @@
      :interval 10,
      :holds false}]}},
  "tools/cnpg/runbooks/unfence.clj"
- {:absent
-  {:action
-   "lift the fence - the operator takes the instance back into service",
-   :destructive? true,
-   :items ["db/pg pg-2"],
-   :step
-   "lift the fence - the operator takes the instance back into service",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace"
-     "db"
-     "annotate"
-     "clusters.postgresql.cnpg.io"
-     "pg"
-     "--overwrite"
-     "cnpg.io/fencedInstances-"]],
-   :precondition
-   {:result false, :out "refusing: the cluster no longer exists"},
-   :announce "Unfence pg-2 in db/pg",
-   :checks
-   [{:description "pg-2 is no longer fenced",
-     :timeout 60,
-     :interval 5,
-     :holds false}]},
+ {:absent {:stopped "refusing: the cluster no longer exists"},
   :invalid
   {:stopped
    "refusing: the pick is not \"<namespace>/<cluster> <instance>\""},
@@ -5602,24 +4269,8 @@
      :interval 5,
      :holds false}]},
   :refused
-  {:action
-   "lift the fence - the operator takes the instance back into service",
-   :destructive? true,
-   :items ["db/pg pg-2"],
-   :step
-   "lift the fence - the operator takes the instance back into service",
-   :plan
-   [[:note "nothing can be written - the precondition says why"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: every instance is fenced with \"*\" - lift the fence on all of them, then fence the others again"},
-   :announce "Unfence pg-2 in db/pg",
-   :checks
-   [{:description "pg-2 is no longer fenced",
-     :timeout 60,
-     :interval 5,
-     :holds false}]},
+  {:stopped
+   "refusing: every instance is fenced with \"*\" - lift the fence on all of them, then fence the others again"},
   :spec-changed
   {:action
    "lift the fence - the operator takes the instance back into service",
@@ -5709,27 +4360,7 @@
      :holds false}]}},
  "tools/flux/runbooks/flux/reconcile.clj"
  {:absent
-  {:action "trigger a flux reconciliation",
-   :destructive? false,
-   :items ["apps/podinfo"],
-   :step "trigger a flux reconciliation",
-   :plan
-   [[:cmd
-     "flux"
-     "reconcile"
-     "helmrelease"
-     "podinfo"
-     "--context=ctx"
-     "--namespace=apps"]],
-   :precondition
-   {:result false,
-    :out "refusing: HelmRelease apps/podinfo no longer exists"},
-   :announce "Reconcile HelmRelease apps/podinfo",
-   :checks
-   [{:description "HelmRelease apps/podinfo is Ready",
-     :timeout 120,
-     :interval 10,
-     :holds false}]},
+  {:stopped "refusing: HelmRelease apps/podinfo no longer exists"},
   :permitted
   {:action "trigger a flux reconciliation",
    :destructive? false,
@@ -5859,31 +4490,7 @@
      :holds false}]}},
  "tools/flux/runbooks/flux/reset.clj"
  {:absent
-  {:action "clear the failure counters and reconcile",
-   :destructive? false,
-   :items ["apps/podinfo"],
-   :step "clear the failure counters and reconcile",
-   :plan
-   [[:note "clearing the failure counters of apps/podinfo"]
-    [:kubectl
-     "ctx"
-     "-n"
-     "apps"
-     "annotate"
-     "helmreleases.helm.toolkit.fluxcd.io"
-     "podinfo"
-     "--overwrite"
-     "reconcile.fluxcd.io/resetAt=<instant>"
-     "reconcile.fluxcd.io/requestedAt=<instant>"]],
-   :precondition
-   {:result false,
-    :out "refusing: HelmRelease apps/podinfo no longer exists"},
-   :announce "Reset HelmRelease apps/podinfo",
-   :checks
-   [{:description "HelmRelease apps/podinfo is Ready",
-     :timeout 300,
-     :interval 15,
-     :holds false}]},
+  {:stopped "refusing: HelmRelease apps/podinfo no longer exists"},
   :permitted
   {:action "clear the failure counters and reconcile",
    :destructive? false,
@@ -6031,39 +4638,7 @@
      :interval 15,
      :holds false}]}},
  "tools/flux/runbooks/flux/resume.clj"
- {:absent
-  {:action "resume a Flux object",
-   :destructive? false,
-   :items ["resume Kustomization flux-system/apps"],
-   :step "resume a Flux object",
-   :plan
-   [[:kubectl
-     "ctx"
-     "-n"
-     "flux-system"
-     "patch"
-     "kustomizations.kustomize.toolkit.fluxcd.io"
-     "apps"
-     "--type=merge"
-     "--patch={\"spec\":{\"suspend\":false}}"]
-    [:kubectl
-     "ctx"
-     "-n"
-     "flux-system"
-     "annotate"
-     "kustomizations.kustomize.toolkit.fluxcd.io"
-     "apps"
-     "--overwrite"
-     "reconcile.fluxcd.io/requestedAt=<instant>"]],
-   :precondition
-   {:result false, :out "refusing: the object no longer exists"},
-   :announce "Resume Kustomization flux-system/apps",
-   :checks
-   [{:description
-     "Kustomization flux-system/apps is no longer suspended",
-     :timeout 30,
-     :interval 3,
-     :holds false}]},
+ {:absent {:stopped "refusing: the object no longer exists"},
   :failed-after-applying
   {:result false,
    :out
@@ -6116,39 +4691,7 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
-  :refused
-  {:action "resume a Flux object",
-   :destructive? false,
-   :items
-   ["resume Kustomization flux-system/apps and request a reconcile - changes pushed to its source meanwhile are applied now"],
-   :step "resume a Flux object",
-   :plan
-   [[:kubectl
-     "ctx"
-     "-n"
-     "flux-system"
-     "patch"
-     "kustomizations.kustomize.toolkit.fluxcd.io"
-     "apps"
-     "--type=merge"
-     "--patch={\"spec\":{\"suspend\":false}}"]
-    [:kubectl
-     "ctx"
-     "-n"
-     "flux-system"
-     "annotate"
-     "kustomizations.kustomize.toolkit.fluxcd.io"
-     "apps"
-     "--overwrite"
-     "reconcile.fluxcd.io/requestedAt=<instant>"]],
-   :precondition {:result false, :out "refusing: it is not suspended"},
-   :announce "Resume Kustomization flux-system/apps",
-   :checks
-   [{:description
-     "Kustomization flux-system/apps is no longer suspended",
-     :timeout 30,
-     :interval 3,
-     :holds true}]},
+  :refused {:stopped "refusing: it is not suspended"},
   :spec-changed
   {:action "resume a Flux object",
    :destructive? false,
@@ -6263,29 +4806,7 @@
      :interval 3,
      :holds false}]}},
  "tools/flux/runbooks/flux/suspend.clj"
- {:absent
-  {:action "suspend a Flux object",
-   :destructive? false,
-   :items ["suspend Kustomization flux-system/apps"],
-   :step "suspend a Flux object",
-   :plan
-   [[:kubectl
-     "ctx"
-     "-n"
-     "flux-system"
-     "patch"
-     "kustomizations.kustomize.toolkit.fluxcd.io"
-     "apps"
-     "--type=merge"
-     "--patch={\"spec\":{\"suspend\":true}}"]],
-   :precondition
-   {:result false, :out "refusing: the object no longer exists"},
-   :announce "Suspend Kustomization flux-system/apps",
-   :checks
-   [{:description "Kustomization flux-system/apps is suspended",
-     :timeout 30,
-     :interval 3,
-     :holds false}]},
+ {:absent {:stopped "refusing: the object no longer exists"},
   :invalid
   {:stopped
    "refusing: the pick is not \"<Kind> <namespace>/<name>\" of a HelmRelease, Kustomization, GitRepository or OCIRepository"},
@@ -6313,31 +4834,7 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
-  :refused
-  {:action "suspend a Flux object",
-   :destructive? false,
-   :items
-   ["suspend Kustomization flux-system/apps - Flux stops reconciling it, and what it applied stays as it is"
-    "changes pushed to its source are not applied until it is resumed"],
-   :step "suspend a Flux object",
-   :plan
-   [[:kubectl
-     "ctx"
-     "-n"
-     "flux-system"
-     "patch"
-     "kustomizations.kustomize.toolkit.fluxcd.io"
-     "apps"
-     "--type=merge"
-     "--patch={\"spec\":{\"suspend\":true}}"]],
-   :precondition
-   {:result false, :out "refusing: it is suspended already"},
-   :announce "Suspend Kustomization flux-system/apps",
-   :checks
-   [{:description "Kustomization flux-system/apps is suspended",
-     :timeout 30,
-     :interval 3,
-     :holds true}]},
+  :refused {:stopped "refusing: it is suspended already"},
   :spec-changed
   {:action "suspend a Flux object",
    :destructive? false,
@@ -7052,22 +5549,7 @@
    :out
    "🔶 no JsonnetSnippet matches the given flags, please select from all instead\n🔶 JsonnetSnippet 'apps/nope' is not a valid choice, please select one\n❌ no JsonnetSnippet selected"}},
  "tools/stageset/runbooks/stageset/promote.clj"
- {:absent
-  {:action "promote a StageSet stage",
-   :destructive? false,
-   :items ["apps/site"],
-   :step "promote a StageSet stage",
-   :plan [[:note "no stage was chosen; nothing is promoted"]],
-   :precondition
-   {:result false,
-    :out "refusing: StageSet apps/site no longer exists"},
-   :announce "Promote stage null of StageSet apps/site",
-   :checks
-   [{:description
-     "stage null of StageSet apps/site acted on the promotion",
-     :timeout 300,
-     :interval 5,
-     :holds false}]},
+ {:absent {:stopped "refusing: StageSet apps/site no longer exists"},
   :dry-run
   {:result true,
    :out
@@ -7244,23 +5726,8 @@
    :out
    "❌ could not list the StageSet candidates - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
   :unknown-stage
-  {:checks
-   [{:description
-     "stage null of StageSet apps/site acted on the promotion",
-     :timeout 300,
-     :interval 5,
-     :holds false}],
-   :destructive? false,
-   :announce "Promote stage null of StageSet apps/site",
-   :out "🔶 Stage 'qa' is not a valid choice, please select one",
-   :action "promote a StageSet stage",
-   :items ["apps/site"],
-   :plan [[:note "no stage was chosen; nothing is promoted"]],
-   :step "promote a StageSet stage",
-   :precondition
-   {:result false,
-    :out
-    "refusing: StageSet apps/site declares no stage qa, only dev, prod"}},
+  {:stopped
+   "🔶 Stage 'qa' is not a valid choice, please select one\nrefusing: StageSet apps/site declares no stage qa, only dev, prod"},
   :unparsable-pick
   {:result false,
    :out
@@ -7445,21 +5912,7 @@
    :out
    "🔶 no StageSet matches the given flags, please select from all instead\n🔶 StageSet 'apps/nope' is not a valid choice, please select one\n❌ no StageSet selected"}},
  "tools/velero/runbooks/backup.clj"
- {:absent
-  {:action "start a backup from a schedule's template",
-   :destructive? false,
-   :items ["back up from velero/daily"],
-   :step "start a backup from a schedule's template",
-   :plan [[:note "nothing to back up - the precondition says why"]],
-   :precondition
-   {:result false, :out "refusing: the Schedule no longer exists"},
-   :announce "Back up from Schedule velero/daily as null",
-   :checks
-   [{:description "Backup velero/null completed",
-     :timeout 3600,
-     :interval 15,
-     :holds false,
-     :abort nil}]},
+ {:absent {:stopped "refusing: the Schedule no longer exists"},
   :invalid
   {:stopped "refusing: the pick is not \"<namespace>/<schedule>\""},
   :permitted
@@ -7486,31 +5939,8 @@
      :holds false,
      :abort nil}]},
   :refused
-  {:action "start a backup from a schedule's template",
-   :destructive? false,
-   :items
-   ["start Backup velero/daily-<stamp> from Schedule daily's template"
-    "it covers shop and writes to default"
-    "it carries the label velero.io/schedule-name=daily, so it counts as one of the schedule's backups and expires after 720h0m0s"],
-   :step "start a backup from a schedule's template",
-   :plan
-   [[:kubectl-stdin
-     "ctx"
-     "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Backup\",\"metadata\":{\"namespace\":\"velero\",\"name\":\"daily-<stamp>\",\"labels\":{\"velero.io/schedule-name\":\"daily\"}},\"spec\":{\"storageLocation\":\"default\",\"includedNamespaces\":[\"shop\"],\"ttl\":\"720h0m0s\"}}"
-     "create"
-     "-f"
-     "-"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: BackupStorageLocation default is Unavailable, so the backup cannot be written"},
-   :announce "Back up from Schedule velero/daily as daily-<stamp>",
-   :checks
-   [{:description "Backup velero/daily-<stamp> completed",
-     :timeout 3600,
-     :interval 15,
-     :holds false,
-     :abort nil}]},
+  {:stopped
+   "refusing: BackupStorageLocation default is Unavailable, so the backup cannot be written"},
   :spec-changed
   {:action "start a backup from a schedule's template",
    :destructive? false,
@@ -7600,21 +6030,7 @@
      :holds false,
      :abort nil}]}},
  "tools/velero/runbooks/delete_backup.clj"
- {:absent
-  {:action "delete a backup and its data",
-   :destructive? true,
-   :items ["delete velero/daily-1"],
-   :step "delete a backup and its data",
-   :plan [[:note "nothing to delete - the precondition says why"]],
-   :precondition
-   {:result false, :out "refusing: the Backup no longer exists"},
-   :announce "Delete Backup velero/daily-1",
-   :checks
-   [{:description "Backup velero/daily-1 and its data are deleted",
-     :timeout 1800,
-     :interval 10,
-     :holds true,
-     :abort nil}]},
+ {:absent {:stopped "refusing: the Backup no longer exists"},
   :invalid
   {:stopped "refusing: the pick is not \"<namespace>/<backup>\""},
   :permitted
@@ -7641,30 +6057,8 @@
      :holds false,
      :abort nil}]},
   :refused
-  {:action "delete a backup and its data",
-   :destructive? true,
-   :items
-   ["delete Backup velero/daily-1 - its files in BackupStorageLocation default, its volume snapshots, file-system backups and data-mover copies are removed"
-    "nothing restores from it afterwards; this cannot be undone"],
-   :step "delete a backup and its data",
-   :plan
-   [[:kubectl-stdin
-     "ctx"
-     "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"DeleteBackupRequest\",\"metadata\":{\"namespace\":\"velero\",\"generateName\":\"daily-1-\",\"labels\":{\"velero.io/backup-name\":\"daily-1\",\"velero.io/backup-uid\":\"uid-daily-1\"}},\"spec\":{\"backupName\":\"daily-1\"}}"
-     "create"
-     "-f"
-     "-"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: it is still running (InProgress) - wait for it to finish"},
-   :announce "Delete Backup velero/daily-1",
-   :checks
-   [{:description "Backup velero/daily-1 and its data are deleted",
-     :timeout 1800,
-     :interval 10,
-     :holds false,
-     :abort nil}]},
+  {:stopped
+   "refusing: it is still running (InProgress) - wait for it to finish"},
   :spec-changed
   {:action "delete a backup and its data",
    :destructive? true,
@@ -7754,28 +6148,7 @@
      :holds false,
      :abort nil}]}},
  "tools/velero/runbooks/pause_schedule.clj"
- {:absent
-  {:action "pause a backup schedule",
-   :destructive? false,
-   :items ["pause velero/daily"],
-   :step "pause a backup schedule",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=velero"
-     "patch"
-     "schedules.velero.io"
-     "daily"
-     "--type=merge"
-     "--patch={\"spec\":{\"paused\":true}}"]],
-   :precondition
-   {:result false, :out "refusing: the Schedule no longer exists"},
-   :announce "Pause Schedule velero/daily",
-   :checks
-   [{:description "Schedule velero/daily is paused",
-     :timeout 30,
-     :interval 3,
-     :holds false}]},
+ {:absent {:stopped "refusing: the Schedule no longer exists"},
   :invalid
   {:stopped "refusing: the pick is not \"<namespace>/<schedule>\""},
   :permitted
@@ -7801,30 +6174,7 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
-  :refused
-  {:action "pause a backup schedule",
-   :destructive? false,
-   :items
-   ["pause Schedule velero/daily - no backup starts on its schedule 0 2 * * * until it is resumed"
-    "the newest backup ages from now on, and the backup scan reports the schedule as paused"],
-   :step "pause a backup schedule",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=velero"
-     "patch"
-     "schedules.velero.io"
-     "daily"
-     "--type=merge"
-     "--patch={\"spec\":{\"paused\":true}}"]],
-   :precondition
-   {:result false, :out "refusing: it is paused already"},
-   :announce "Pause Schedule velero/daily",
-   :checks
-   [{:description "Schedule velero/daily is paused",
-     :timeout 30,
-     :interval 3,
-     :holds true}]},
+  :refused {:stopped "refusing: it is paused already"},
   :spec-changed
   {:action "pause a backup schedule",
    :destructive? false,
@@ -7910,28 +6260,7 @@
      :interval 3,
      :holds false}]}},
  "tools/velero/runbooks/resume_schedule.clj"
- {:absent
-  {:action "resume a backup schedule",
-   :destructive? false,
-   :items ["resume velero/daily"],
-   :step "resume a backup schedule",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=velero"
-     "patch"
-     "schedules.velero.io"
-     "daily"
-     "--type=merge"
-     "--patch={\"spec\":{\"paused\":false}}"]],
-   :precondition
-   {:result false, :out "refusing: the Schedule no longer exists"},
-   :announce "Resume Schedule velero/daily",
-   :checks
-   [{:description "Schedule velero/daily is resumed",
-     :timeout 30,
-     :interval 3,
-     :holds false}]},
+ {:absent {:stopped "refusing: the Schedule no longer exists"},
   :invalid
   {:stopped "refusing: the pick is not \"<namespace>/<schedule>\""},
   :permitted
@@ -7957,29 +6286,7 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
-  :refused
-  {:action "resume a backup schedule",
-   :destructive? false,
-   :items
-   ["resume Schedule velero/daily - backups start again on its schedule 0 2 * * *"
-    "Velero counts the next run from the last backup, so a run missed while it was paused starts a backup at once; velero schedule unpause --skip-immediately resumes without it"],
-   :step "resume a backup schedule",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=velero"
-     "patch"
-     "schedules.velero.io"
-     "daily"
-     "--type=merge"
-     "--patch={\"spec\":{\"paused\":false}}"]],
-   :precondition {:result false, :out "refusing: it is not paused"},
-   :announce "Resume Schedule velero/daily",
-   :checks
-   [{:description "Schedule velero/daily is resumed",
-     :timeout 30,
-     :interval 3,
-     :holds true}]},
+  :refused {:stopped "refusing: it is not paused"},
   :spec-changed
   {:action "resume a backup schedule",
    :destructive? false,

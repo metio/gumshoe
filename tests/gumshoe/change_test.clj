@@ -298,7 +298,7 @@
   (configmap (if (<= n 1) 1 2)))
 
 (deftest the-engine-runs-an-alias-spec-and-its-canonical-spelling-alike
-  (doseq [[label alias canonical read]
+  (doseq [[label alias canonical read confirmed?]
           [["a subject that drifted is refused in the single-subject words"
             {:subject {:type "cronjobs"}}
             {:subjects [{:from :pick :type "cronjobs"}]}
@@ -311,13 +311,23 @@
             {:subjects (constantly [cronjob-ref])}
             {:subjects [{:from :target :refs (constantly [cronjob-ref])}]}
             moving]
-           ["a precondition that fails aborts in flow's words alone"
+           ["a precondition that fails refuses before the confirmation"
             {:precondition (constantly false)}
             {:refusal (constantly change/unmet)}
-            (fn [_ _] nil)]
-           ["a refusal before a precondition prints its reason"
+            (fn [_ _] nil)
+            false]
+           ["a refusal before a precondition prints its reason before the confirmation"
             {:refusal (constantly "busy") :precondition (constantly true)}
             {:refusal (constantly "busy")}
+            (fn [_ _] nil)
+            false]
+           ["a covered precondition that fails aborts in flow's words alone"
+            {:precondition (constantly false) :confirmed? true}
+            {:refusal (constantly change/unmet) :confirmed? true}
+            (fn [_ _] nil)]
+           ["a covered refusal before a precondition prints its reason"
+            {:refusal (constantly "busy") :precondition (constantly true) :confirmed? true}
+            {:refusal (constantly "busy") :confirmed? true}
             (fn [_ _] nil)]
            ["a subject that holds runs"
             {:subject {:type "cronjobs"} :precondition (constantly true)}
@@ -327,7 +337,9 @@
       (let [a (run alias "batch/nightly" read)
             c (run canonical "batch/nightly" read)]
         (is (= a c))
-        (is (some? (:confirmation a)) "the change reached its confirmation")))))
+        (if (false? confirmed?)
+          (is (nil? (:confirmation a)) "the change was refused before its confirmation")
+          (is (some? (:confirmation a)) "the change reached its confirmation"))))))
 
 (deftest the-words-of-each-refusal-stay-as-they-were
   (testing "a subject: the object is \"it\""
@@ -336,8 +348,11 @@
   (testing "several subjects: the refusal names the object"
     (is (= "refusing: cronjobs batch/nightly: its spec changed after the confirmation (generation 1, now 2)\nflow aborts\n"
            (:out (run {:subjects (constantly [cronjob-ref])} "batch/nightly" moving)))))
-  (testing "a precondition prints nothing of its own"
-    (is (= "flow aborts\n" (:out (run {:precondition (constantly false)} "batch/nightly" (fn [_ _] nil)))))))
+  (testing "a precondition prints nothing of its own after the confirmation"
+    (is (= "flow aborts\n" (:out (run {:precondition (constantly false) :confirmed? true} "batch/nightly" (fn [_ _] nil))))))
+  (testing "a precondition that does not hold before the confirmation refuses in the engine's words"
+    (is (= (str "refusing: " mutation/unmet-before-confirmation "\n")
+           (:out (run {:precondition (constantly false)} "batch/nightly" (fn [_ _] nil)))))))
 
 (deftest a-top-level-or-select-empty-message-is-what-run!-shows
   (doseq [spec [{:select {:mode :one :label "CronJob" :candidates (constantly [])} :empty-message "none here"}

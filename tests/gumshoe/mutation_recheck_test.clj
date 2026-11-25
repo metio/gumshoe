@@ -111,13 +111,13 @@
     (is (= "new" @seen))))
 
 (deftest an-unanswered-recheck-read-refuses-before-the-judgement
-  (let [judged (atom false)
+  (let [judged (atom [])
         {:keys [result out]} (run {:derive derive-secret
                                    :recheck derive-secret
-                                   :refusal (fn [_] (reset! judged true) nil)}
+                                   :refusal (fn [_] (swap! judged conj mutation/*phase*) nil)}
                                   (fn [name phase] (if (= :after phase) :unread (configmap name "old"))))]
     (is (false? result))
-    (is (false? @judged) "the refusal never judges a read that did not answer")
+    (is (= [:derive] @judged) "the refusal judged the answered reads before the confirmation, and never a read that did not answer")
     (is (str/includes? out "refusing: could not read what the precondition rests on - "))))
 
 (deftest a-recheck-read-that-finds-nothing-is-judged

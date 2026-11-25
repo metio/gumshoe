@@ -43,18 +43,22 @@
    Each :from appears at most once. :connect takes no :subjects, because
    every entry is read with kubectl.
 
-   :refusal is the one guard. It runs after the confirmation, against the
-   context the subjects and :recheck read again, and returns nil to let the
-   change run, a reason to refuse it with \"refusing: <reason>\", or `unmet`
-   to refuse it in the generic words of gumshoe.flow (\"its precondition no
-   longer holds\"), which add nothing of their own.
+   :refusal is the one guard. It runs before the confirmation, against the
+   derived context with what :recheck returns merged over it, and again
+   after the confirmation, against the context the subjects and :recheck
+   read again (see gumshoe.mutation). It returns nil to let the change run,
+   a reason to refuse it with \"refusing: <reason>\", or `unmet` to refuse
+   it in the engine's generic words (\"its precondition does not hold\"
+   before the confirmation, gumshoe.flow's \"its precondition no longer
+   holds\" after it), which add nothing of their own.
 
    Aliases, accepted indefinitely:
      :subject {..}         the :pick entry of :subjects
      :subjects (fn)        the :target entry of :subjects
      :pin (fn)             the :reads entry of :subjects
-     :precondition (fn)    judged after :refusal, as a refusal returning
-                           `unmet` when it returns false
+     :precondition (fn)    judged after :refusal, before and after the
+                           confirmation, as a refusal returning `unmet`
+                           when it returns false
      :empty-message \"..\"  [:select :empty-message]
      :announce? false      :announce false; :announce? true is the default
                            and is dropped

@@ -955,9 +955,9 @@
 
 (def ^:private judged-by-the-book
   "Books whose :invalid pick has the shape of a pick and is refused by the
-   book's own :refusal, after the confirmation: helm/rollback reads its
-   free-form :one pick itself, and workloads/scale parses a DaemonSet it then
-   refuses to scale."
+   book's own :refusal, judged before the confirmation: helm/rollback reads
+   its free-form :one pick itself, and workloads/scale parses a DaemonSet it
+   then refuses to scale."
   #{"runbooks/kubernetes/helm/rollback.clj" "runbooks/kubernetes/workloads/scale.clj"})
 
 (deftest every-book-refuses-a-pick-that-does-not-parse-before-its-confirmation
@@ -973,7 +973,8 @@
     (doseq [path judged-by-the-book
             :let [scenario (get-in books [path :invalid])]]
       (testing (str path " judges its own pick")
-        (is (false? (get-in (transcript (load-spec path) scenario) [:precondition :result])))))))
+        (let [{:keys [stopped] :as t} (transcript (load-spec path) scenario)]
+          (is (and stopped (re-find #"(?m)^refusing: " stopped)) (pr-str t)))))))
 
 (deftest every-book-refuses-an-unparsable-pick-through-its-own-selection
   (binding [ssh/*user-config* nil]
@@ -1005,9 +1006,12 @@
 ;; --- a target whose state moved before the confirmation was answered -------------
 
 (defn- judged
-  "What the book at path decides in scenario once the operator confirmed:
-   {:result <the precondition's verdict, :none without one> :out <what it
-   printed>} with :plan, :items and the :commands the run sent, in order."
+  "What the book at path decides in scenario: {:result <the verdict, :none
+   without a precondition> :out <what the judgement printed> :asked? <whether
+   a confirmation was shown>} with :plan, :items and the :commands the run
+   sent, in order. Once the operator confirmed, the verdict is the
+   precondition's; a change refused before its confirmation has the verdict
+   false, :asked? false and prints its reason before anything is asked."
   [path scenario]
   (binding [ssh/*user-config* nil]
     (let [spec (load-spec path)]
@@ -1015,16 +1019,27 @@
         path
         #(reach-change
           spec scenario
-          (fn [out {:keys [confirmation precondition effect]} state]
-            (when-let [between (:between scenario)]
-              (swap! state assoc :objects (:objects between)))
-            (let [{:keys [result] :as verdict} (if precondition (capture precondition) {:result :none :out ""})]
-              (assoc verdict
-                     :result result
-                     :before out
-                     :plan effect
-                     :items (vec (:items confirmation))
-                     :commands (:commands @state)))))))))
+          (fn [out {:keys [confirmation precondition effect] :as config} state]
+            (if (nil? config)
+              {:result false :out out :before out :asked? false :plan nil :items nil
+               :commands (:commands @state)}
+              (do
+                (when-let [between (:between scenario)]
+                  (swap! state assoc :objects (:objects between)))
+                (let [{:keys [result] :as verdict} (if precondition (capture precondition) {:result :none :out ""})]
+                  (assoc verdict
+                         :result result
+                         :asked? true
+                         :before out
+                         :plan effect
+                         :items (vec (:items confirmation))
+                         :commands (:commands @state)))))))))))
+
+(defn- refused-before-asking?
+  "Whether the verdict refused the change before its confirmation, printing
+   a reason matching re."
+  [{:keys [result out asked?]} re]
+  (and (false? result) (false? asked?) (boolean (re-find re out))))
 
 (defn- refused-with?
   "Whether the verdict refused the change and printed a reason matching re."
@@ -1042,7 +1057,9 @@
     (is (refused-with? (judged path {:objects start :target ["shop/web-1"]
                                      :between {:objects [[order-type (order "valid")]]}})
                        #"refusing: .*shop/web-1.* valid"))
-    (is (refused-with? (judged path {:objects [] :target ["shop/web-1"]}) #"refusing: .*shop/web-1"))
+    (is (refused-before-asking? (judged path {:objects [] :target ["shop/web-1"]}) #"refusing: .*shop/web-1"))
+    (is (refused-before-asking? (judged path {:objects [[order-type (order "valid")]] :target ["shop/web-1"]})
+                                #"refusing: .*shop/web-1.* valid"))
     (is (true? (:result (judged path {:objects start :target ["shop/web-1"]}))))))
 
 (deftest namespaces-remove-finalizers-refuses-a-namespace-no-longer-terminating
@@ -1052,9 +1069,11 @@
                                      :between {:objects [["namespaces" (namespace-object "Active")]]}})
                        #"refusing: .*stuck.* Active"))
     (is (true? (:result (judged path {:objects start :target "stuck"}))))
+    (is (refused-before-asking? (judged path {:objects [["namespaces" (namespace-object "Active")]] :target "stuck"})
+                                #"refusing: .*stuck.* Active"))
     (testing "a namespace no read found"
       (let [{:keys [plan] :as verdict} (judged path {:objects [] :target "stuck"})]
-        (is (refused-with? verdict #"refusing: .*stuck"))
+        (is (refused-before-asking? verdict #"refusing: .*stuck"))
         (is (not-any? #(= :kubectl-stdin (first %)) plan)
             "the plan writes nothing back, so no empty finalizer list is ever sent")))))
 
@@ -1065,10 +1084,12 @@
                                      :between {:objects [["persistentvolumes" (volume "Bound")]]}})
                        #"refusing: .*pv-1.* Bound"))
     (is (true? (:result (judged path {:objects start :target ["pv-1"]}))))
-    (testing "a volume no read found"
+    (is (refused-before-asking? (judged path {:objects [["persistentvolumes" (volume "Bound")]] :target ["pv-1"]})
+                                #"refusing: .*pv-1.* Bound"))
+    (testing "a volume no read found is refused before its confirmation lists it"
       (let [{:keys [items] :as verdict} (judged path {:objects [] :target ["pv-1"]})]
-        (is (refused-with? verdict #"refusing: .*pv-1"))
-        (is (= ["pv-1 (Unknown reclaim policy)"] items))))))
+        (is (refused-before-asking? verdict #"refusing: .*pv-1"))
+        (is (nil? items))))))
 
 (deftest stageset-promote-refuses-a-stage-the-stageset-does-not-declare
   (let [path "tools/stageset/runbooks/stageset/promote.clj"
@@ -1076,10 +1097,10 @@
         stageless [[stageset-type (assoc-in (stageset "True") [:spec :stages] [])]]
         no-nil? (fn [{:keys [plan]}] (not-any? #(some nil? %) plan))]
     (let [verdict (judged path {:objects start :target "apps/site" :opts {:stage "qa"}})]
-      (is (refused-with? verdict #"refusing: .*stage"))
+      (is (refused-before-asking? verdict #"refusing: .*stage"))
       (is (no-nil? verdict) "no command is planned with a nil argument"))
     (let [verdict (judged path {:objects stageless :target "apps/site" :opts {:stage "prod"}})]
-      (is (refused-with? verdict #"refusing: .*apps/site.* no stages"))
+      (is (refused-before-asking? verdict #"refusing: .*apps/site.* no stages"))
       (is (no-nil? verdict)))
     (is (refused-with? (judged path {:objects start :target "apps/site" :opts {:stage "prod"}
                                      :between {:objects stageless}})
@@ -1089,7 +1110,7 @@
 (deftest flux-reconcile-and-reset-refuse-a-missing-helmrelease
   (doseq [path ["tools/flux/runbooks/flux/reconcile.clj" "tools/flux/runbooks/flux/reset.clj"]]
     (testing path
-      (is (refused-with? (judged path {:objects [] :target "apps/podinfo"}) #"refusing: .*HelmRelease"))
+      (is (refused-before-asking? (judged path {:objects [] :target "apps/podinfo"}) #"refusing: .*HelmRelease"))
       (is (refused-with? (judged path {:objects [[helmrelease-type (helmrelease "podinfo")]] :target "apps/podinfo"
                                        :between {:objects []}})
                          #"refusing: .*HelmRelease"))
@@ -1100,7 +1121,11 @@
     (is (refused-with? (judged path {:objects [["persistentvolumeclaims" claim]] :target "shop/data"
                                      :between {:objects [["persistentvolumeclaims" claim] ["pods" claiming-pod]]}})
                        #"refusing: .*web-0"))
-    (is (refused-with? (judged path {:objects [] :target "shop/data"}) #"refusing: .*shop/data"))))
+    (is (refused-before-asking? (judged path {:objects [] :target "shop/data"}) #"refusing: .*shop/data"))
+    (testing "a pod already using the claim refuses before the confirmation, judged over :recheck's read"
+      (is (refused-before-asking? (judged path {:objects [["persistentvolumeclaims" claim] ["pods" claiming-pod]]
+                                                :target "shop/data"})
+                                  #"refusing: .*web-0")))))
 
 (deftest node-steps-refuse-a-node-that-no-longer-exists-or-was-replaced
   (doseq [[path start] [["runbooks/kubernetes/nodes/cordon.clj" [["nodes" (node "n1")]]]
@@ -1119,7 +1144,7 @@
         ssh? (fn [{:keys [commands]}] (some #(= "ssh" (first %)) commands))]
     (testing "a node absent before the confirmation is never connected to"
       (let [verdict (judged path {:objects [] :target "cp-1" :ssh (apiserver-host "ok")})]
-        (is (refused-with? verdict #"refusing: .*cp-1"))
+        (is (refused-before-asking? verdict #"refusing: .*cp-1"))
         (is (not (ssh? verdict)) (pr-str (:commands verdict)))))
     (testing "a node removed after the confirmation is refused before any SSH connection is checked"
       (let [verdict (judged path {:objects start :target "cp-1" :ssh (apiserver-host "ok") :between {:objects []}})]
