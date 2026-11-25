@@ -107,6 +107,9 @@
   [{:name "loki-mode"
     :description "Loki runs in microservice mode with components present"
     :requires ["workloads" "namespace"]
+    ;; "namespace" is always set; without the workloads read the check would
+    ;; report no Loki components where nobody looked
+    :joins ["workloads"]
     :detect detect-deployment-mode}
    {:name "loki-components"
     :description "Every essential Loki component (distributor, ingester, querier, query-frontend) exists"
