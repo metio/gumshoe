@@ -31,16 +31,24 @@
     (when-not (str/blank? output)
       (try (json/parse-string output true) (catch Exception _ nil)))))
 
+(defn ceph-json-answer
+  "{:ok? <the command answered> :doc <its parsed JSON> :exit .. :err ..} of
+   a ceph command. :ok? is true only when it exited cleanly and its output
+   parsed; :exit and :err say why a command that is not :ok? did not
+   answer."
+  [connection & args]
+  (let [{:keys [exit out err]} (apply shell/execute (ssh/ssh-args connection (ceph-args connection (concat ["ceph"] args ["--format" "json"]))))
+        doc (when-not (str/blank? out)
+              (try (json/parse-string out true) (catch Exception _ nil)))]
+    {:ok? (and (zero? exit) (some? doc)) :doc doc :exit exit :err err}))
+
 (defn ceph-json-result
   "{:ok? <the command answered> :doc <its parsed JSON>} of a ceph command.
    :ok? is true only when it exited cleanly and its output parsed, so a check
    on an absence - no crash left - can tell an empty answer from none, which
    ceph-json returns as the same nil."
   [connection & args]
-  (let [{:keys [exit out]} (apply shell/execute (ssh/ssh-args connection (ceph-args connection (concat ["ceph"] args ["--format" "json"]))))
-        doc (when-not (str/blank? out)
-              (try (json/parse-string out true) (catch Exception _ nil)))]
-    {:ok? (and (zero? exit) (some? doc)) :doc doc}))
+  (select-keys (apply ceph-json-answer connection args) [:ok? :doc]))
 
 (defn ceph-stream!
   "Runs a ceph command streaming its output. Returns true on a clean exit."
@@ -134,6 +142,52 @@
 (defn osds
   [connection]
   (:osds (ceph-json connection "osd" "dump")))
+
+;; ---------------------------------------------------------------------------
+;; crash reports
+
+(defn unarchived-crashes
+  "The crash reports `ceph crash ls-new` lists, read strictly: {:crashes
+   [..]} when ceph answered, an empty vector when it answered that there are
+   none, and {:unread <why>} when it did not answer or answered something
+   that is no list of crash reports. A caller never reads an unanswered
+   command as \"no crash left\"."
+  [connection]
+  (let [{:keys [ok? doc exit err]} (ceph-json-answer connection "crash" "ls-new")]
+    (cond
+      (and (some? exit) (not (zero? exit)))
+      {:unread (str "ceph crash ls-new failed: " (or (not-empty (str/trim (str err))) (str "exit " exit)))}
+
+      (not ok?)
+      {:unread "ceph crash ls-new answered nothing a crash list parses from"}
+
+      (not (sequential? doc))
+      {:unread "ceph crash ls-new answered a document that is no list of crash reports"}
+
+      :else {:crashes (vec doc)})))
+
+(defn crashes-refusal
+  "Why a change resting on an unarchived-crashes result must not run, or
+   nil when ceph answered."
+  [{:keys [unread]}]
+  (when unread
+    (str "could not read the unarchived crash reports - " unread)))
+
+(defn archive-effects
+  "One effect per crash report, archiving that report alone, so a report
+   ceph lists after the operator confirmed is never archived unseen."
+  [connection crashes]
+  (mapv #(effect connection "crash" "archive" (:crash_id %)) crashes))
+
+(defn archived?
+  "Whether none of the confirmed crashes is listed unarchived in `listed`,
+   an unarchived-crashes result. A read that did not answer proves nothing,
+   and a report listed later than the confirmation is none of these."
+  [confirmed {:keys [crashes unread]}]
+  (and (nil? unread)
+       (some? crashes)
+       (let [ids (set (map :crash_id crashes))]
+         (not-any? #(contains? ids (:crash_id %)) confirmed))))
 
 ;; ---------------------------------------------------------------------------
 ;; upgrades

@@ -281,3 +281,42 @@
             [scenario transcript] scenarios]
       (testing (str path " " scenario)
         (is (= (get-in golden [path scenario]) transcript))))))
+
+;; --- archive_crashes fails closed -------------------------------------------------------
+
+(def ^:private archive-crashes "tools/ceph/runbooks/archive_crashes.clj")
+
+(defn- archive-transcript
+  [scenario]
+  (transcript (load-config archive-crashes) (get-in books [archive-crashes :scenarios scenario])))
+
+(deftest archive-crashes-refuses-when-ceph-does-not-answer
+  (let [{:keys [result out change]} (archive-transcript :ceph-unanswered)]
+    (is (false? result) "a ceph that did not answer is no evidence that nothing is left to archive")
+    (is (nil? change) "nothing is offered for confirmation")
+    (is (str/includes? out "refusing: could not read the unarchived crash reports"))
+    (is (str/includes? out "Error initializing cluster client"))
+    (is (not (str/includes? out "nothing to do")))))
+
+(deftest archive-crashes-has-nothing-to-do-only-when-ceph-answered-an-empty-list
+  (let [{:keys [result out change]} (archive-transcript :none)]
+    (is (true? result))
+    (is (nil? change))
+    (is (str/includes? out "nothing to do"))))
+
+(deftest archive-crashes-archives-only-the-reports-the-operator-confirmed
+  (let [{:keys [change]} (archive-transcript :new-crash-meanwhile)
+        archived (map last (:plan change))]
+    (is (= (map :crash_id crashes) archived))
+    (is (every? #(= ["ceph" "crash" "archive"] (take 3 (drop 2 %))) (:plan change)))
+    (is (= [["the 2 confirmed crash report(s) are archived" true]] (get-in change [:checks :after]))
+        "a crash reported after the confirmation is left for the operator to look at")))
+
+(deftest archive-crashes-refuses-after-the-confirmation-when-ceph-stops-answering
+  (let [{:keys [change]} (archive-transcript :unanswered-meanwhile)]
+    (is (false? (get-in change [:precondition :result])))
+    (is (str/includes? (get-in change [:precondition :out]) "refusing: could not read the unarchived crash reports"))))
+
+(deftest archive-crashes-post-check-never-holds-on-a-ceph-that-did-not-answer
+  (let [{:keys [change]} (archive-transcript :permitted)]
+    (is (= [["the 2 confirmed crash report(s) are archived" false]] (get-in change [:checks :unanswered])))))

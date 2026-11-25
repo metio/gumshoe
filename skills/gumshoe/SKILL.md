@@ -343,7 +343,10 @@ mostly data:
   check still turns that timeout into a warning. Reads over SSH, among them
   every `gumshoe.ceph` read, ignore the binding, so a check built on them
   still has to tell a failed read from an empty one itself
-  (`ceph/ceph-json-result` returns `{:ok? :doc}` for that);
+  (`ceph/ceph-json-result` returns `{:ok? :doc}` for that, and
+  `ceph/unarchived-crashes` shows the shape a book reads: `{:crashes [..]}`
+  when ceph answered, `{:unread "why"}` when it did not, so a book refuses
+  instead of reporting "nothing to do");
 - a post-check fails closed. A check about the state of an object (resumed,
   schedulable, unfenced, Ready) judges it through
   `(verify/object-holds? object pred)`, which is false for nil, because a
@@ -608,7 +611,12 @@ mostly data:
   `:recovery` through `(gumshoe.change/compose own-keys (builder …))`:
   `(gumshoe.steps.objects/delete {:objects (fn [ctx] …) :none "…" :timeout
   …})` deletes `{:type :namespace :name}` objects without waiting and proves
-  each gone with a read that answered; `gumshoe.steps.flux/suspend`,
+  each gone with a read that answered. Its effect is marked with
+  `gumshoe.change/destructive`, so the step asks for a typed yes whatever
+  the caller's `:confirm` says, whether the caller composes or merges it;
+  a builder whose effect destroys what it acts on marks its effect the same
+  way instead of returning a `:confirm` of its own, which a caller's
+  `merge` would overwrite with its action; `gumshoe.steps.flux/suspend`,
   `resume` and `reconcile` take `{:object (fn [ctx] {:kind :type :namespace
   :name}) …}` for any kind in `flux/suspendable` or a ResourceSet, and
   `reconcile` waits for `status.lastHandledReconcileAt` to equal the token

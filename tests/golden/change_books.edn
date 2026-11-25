@@ -100,9 +100,9 @@
    "🔶 no Pod matches the given flags, please select from all instead\n🔶 Pod 'shop/web-9' is not a valid choice, please select one\n❌ no Pod selected"}},
  "tools/ceph/runbooks/archive_crashes.clj"
  {:ceph-unanswered
-  {:result true,
+  {:result false,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n✅ no unarchived crashes - nothing to do"},
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\nrefusing: could not read the unarchived crash reports - ceph crash ls-new failed: Error initializing cluster client: ObjectNotFound('RADOS object not found (error calling conf_read_file)')"},
   :cephadm
   {:result true,
    :out
@@ -127,11 +127,27 @@
       "--"
       "ceph"
       "crash"
-      "archive-all"]],
+      "archive"
+      "2026-11-24T10:00:00.000000Z_1a2b"]
+     [:ssh
+      {:host "mgr-1",
+       :user "admin",
+       :cephadm-shell? true,
+       :needs-sudo? true}
+      "sudo"
+      "cephadm"
+      "shell"
+      "--"
+      "ceph"
+      "crash"
+      "archive"
+      "2026-11-24T11:00:00.000000Z_3c4d"]],
+    :precondition {:result true, :out ""},
     :announce ["ceph (mgr-1)" "Archive 2 ceph crash report(s)"],
     :checks
-    {:after [["no unarchived crashes remain" true]],
-     :unanswered [["no unarchived crashes remain" false]]}}},
+    {:after [["the 2 confirmed crash report(s) are archived" true]],
+     :unanswered
+     [["the 2 confirmed crash report(s) are archived" false]]}}},
   :failed-after-applying
   {:result false,
    :out
@@ -139,7 +155,7 @@
     "  ✓ can connect to mgr-1"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: no unarchived crashes remain"],
+    "❌ NOT verified within 0s: the 2 confirmed crash report(s) are archived"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery []},
@@ -163,11 +179,23 @@
        :needs-sudo? false}
       "ceph"
       "crash"
-      "archive-all"]],
+      "archive"
+      "2026-11-24T10:00:00.000000Z_1a2b"]
+     [:ssh
+      {:host "mgr-1",
+       :user nil,
+       :cephadm-shell? false,
+       :needs-sudo? false}
+      "ceph"
+      "crash"
+      "archive"
+      "2026-11-24T11:00:00.000000Z_3c4d"]],
+    :precondition {:result true, :out ""},
     :announce ["ceph (mgr-1)" "Archive 2 ceph crash report(s)"],
     :checks
-    {:after [["no unarchived crashes remain" false]],
-     :unanswered [["no unarchived crashes remain" false]]}}},
+    {:after [["the 2 confirmed crash report(s) are archived" true]],
+     :unanswered
+     [["the 2 confirmed crash report(s) are archived" false]]}}},
   :none
   {:result true,
    :out
@@ -192,11 +220,23 @@
        :needs-sudo? false}
       "ceph"
       "crash"
-      "archive-all"]],
+      "archive"
+      "2026-11-24T10:00:00.000000Z_1a2b"]
+     [:ssh
+      {:host "mgr-1",
+       :user nil,
+       :cephadm-shell? false,
+       :needs-sudo? false}
+      "ceph"
+      "crash"
+      "archive"
+      "2026-11-24T11:00:00.000000Z_3c4d"]],
+    :precondition {:result true, :out ""},
     :announce ["ceph (mgr-1)" "Archive 2 ceph crash report(s)"],
     :checks
-    {:after [["no unarchived crashes remain" true]],
-     :unanswered [["no unarchived crashes remain" false]]}}},
+    {:after [["the 2 confirmed crash report(s) are archived" true]],
+     :unanswered
+     [["the 2 confirmed crash report(s) are archived" false]]}}},
   :still-unarchived
   {:result true,
    :out
@@ -217,11 +257,23 @@
        :needs-sudo? false}
       "ceph"
       "crash"
-      "archive-all"]],
+      "archive"
+      "2026-11-24T10:00:00.000000Z_1a2b"]
+     [:ssh
+      {:host "mgr-1",
+       :user nil,
+       :cephadm-shell? false,
+       :needs-sudo? false}
+      "ceph"
+      "crash"
+      "archive"
+      "2026-11-24T11:00:00.000000Z_3c4d"]],
+    :precondition {:result true, :out ""},
     :announce ["ceph (mgr-1)" "Archive 2 ceph crash report(s)"],
     :checks
-    {:after [["no unarchived crashes remain" false]],
-     :unanswered [["no unarchived crashes remain" false]]}}},
+    {:after [["the 2 confirmed crash report(s) are archived" false]],
+     :unanswered
+     [["the 2 confirmed crash report(s) are archived" false]]}}},
   :surface
   {:description
    "Archives ceph daemon crash reports, clearing the RECENT_CRASH warning",
@@ -263,11 +315,26 @@
        :needs-sudo? false}
       "ceph"
       "crash"
-      "archive-all"]],
+      "archive"
+      "2026-11-24T10:00:00.000000Z_1a2b"]
+     [:ssh
+      {:host "mgr-1",
+       :user nil,
+       :cephadm-shell? false,
+       :needs-sudo? false}
+      "ceph"
+      "crash"
+      "archive"
+      "2026-11-24T11:00:00.000000Z_3c4d"]],
+    :precondition
+    {:result false,
+     :out
+     "refusing: could not read the unarchived crash reports - ceph crash ls-new failed: Error initializing cluster client: ObjectNotFound('RADOS object not found (error calling conf_read_file)')"},
     :announce ["ceph (mgr-1)" "Archive 2 ceph crash report(s)"],
     :checks
-    {:after [["no unarchived crashes remain" false]],
-     :unanswered [["no unarchived crashes remain" false]]}}},
+    {:after [["the 2 confirmed crash report(s) are archived" false]],
+     :unanswered
+     [["the 2 confirmed crash report(s) are archived" false]]}}},
   :unreachable
   {:result false,
    :out
