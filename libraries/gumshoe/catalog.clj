@@ -75,8 +75,10 @@
    :name (short-name path)
    :description (if (edn-book? path)
                   (edn-reader/description-of path)
+                  ;; Throwable: a deeply nested file overflows the reader's
+                  ;; stack, and that Error must not take the launcher down
                   (try (description-of (forms-of path))
-                       (catch Exception _ nil)))})
+                       (catch Throwable _ nil)))})
 
 (def ^:private book-dir-names
   "A classpath entry holds books when its own name is one of these."
@@ -228,9 +230,19 @@
    (\"tools/flux/runbooks/gitops.clj\", \"runbooks/investigate.clj\") found on the
    classpath - so a front door names a book the same way whether gumshoe runs from
    its own repo (the book is under the working directory) or a casebook that has it
-   as a dependency (the book is under ~/.gitlibs). Falls back to the suffix itself
-   when nothing matches, so a bare monorepo path still runs."
+   as a dependency (the book is under ~/.gitlibs). The book listed under exactly
+   that :id wins, as resolve-book picks it; otherwise the book whose path ends in
+   the suffix at a directory boundary, the shortest :id first, so a casebook's
+   products/shop/runbooks/investigate.clj never stands in for
+   runbooks/investigate.clj. Falls back to the suffix itself when nothing
+   matches, so a bare monorepo path still runs."
   ([suffix] (resolve-path suffix (books)))
   ([suffix catalog]
-   (or (some #(when (str/ends-with? (:path %) suffix) (:path %)) catalog)
+   (or (some #(when (= suffix (:id %)) (:path %)) catalog)
+       (->> catalog
+            (filter #(let [path (str (:path %))]
+                       (or (= path suffix) (str/ends-with? path (str "/" suffix)))))
+            (sort-by #(count (str (or (:id %) (:path %)))))
+            (first)
+            :path)
        suffix)))

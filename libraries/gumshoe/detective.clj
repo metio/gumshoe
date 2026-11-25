@@ -23,6 +23,7 @@
       :hint      \"optional: what to do about it\"}"
   (:require [cheshire.core :as json]
             [clojure.string :as str]
+            [clojure.walk :as walk]
             [gumshoe.config :as config]
             [gumshoe.correlation :as correlation]
             [gumshoe.detectives.registry :as registry]
@@ -65,27 +66,67 @@
   (merge {:critical 0 :warning 0 :info 0}
          (frequencies (map :severity findings))))
 
+(def crashed-summary
+  "The summary of the finding a detective that threw yields in place of its own."
+  "detective failed to run - investigate its input")
+
+(defn normalize-finding
+  "A finding whose :severity the report can rank. A string severity reads as
+   its keyword (\"critical\" from JSON or EDN data), and any other value - a
+   typo such as :error, nil, a number - counts as :critical with a hint naming
+   what the detective returned, so a finding the report cannot rank fails the
+   run instead of passing it."
+  [finding]
+  (let [severity (:severity finding)
+        severity (if (string? severity) (keyword (str/lower-case (str/trim severity))) severity)]
+    (if (contains? severity-order severity)
+      (assoc finding :severity severity)
+      (assoc finding
+             :severity :critical
+             :hint (str (format "the detective returned the severity %s, which is not :critical, :warning or :info"
+                                (pr-str (:severity finding)))
+                        (when-let [hint (:hint finding)] (str " - " hint)))))))
+
 (defn run-detectives
   "Applies every detective to already-collected evidence. A detective that
    throws on unexpected data does not take down the whole investigation: it
-   yields one finding reporting its own failure, so every other detective's
-   results still reach the operator. A pod finding that follows from a
-   finding about its workload or node carries that one as :parent."
+   yields one critical finding marked :crashed reporting its own failure, so
+   every other detective's results still reach the operator and the run fails,
+   since a check that could not judge its evidence has not passed. A pod finding
+   that follows from a finding about its workload or node carries that one as
+   :parent."
   [detectives evidence]
   (correlation/correlate
    (mapcat (fn [{:keys [name detect]}]
-                 (try
-                   ;; detectives are lazy for-comprehensions - realize them HERE,
-                   ;; inside the try, or a throw during realization would escape
-                   (doall (map #(assoc % :detective name) (detect evidence)))
-                   (catch Exception e
-                     [{:severity :warning
-                       :detective name
-                       :component name
-                       :summary "detective failed to run - investigate its input"
-                       :hint (ex-message e)}])))
+             (try
+               ;; detectives are lazy for-comprehensions - realize them HERE,
+               ;; inside the try, or a throw during realization would escape
+               (doall (map #(normalize-finding (assoc % :detective name)) (detect evidence)))
+               ;; Throwable, not Exception: an assert, a :pre condition or a
+               ;; StackOverflowError in one detective must not discard every
+               ;; other detective's findings.
+               (catch Throwable e
+                 [{:severity :critical
+                   :crashed true
+                   :detective name
+                   :component name
+                   :summary crashed-summary
+                   :hint (or (ex-message e) (str e))}])))
            detectives)
    evidence))
+
+(defn crashed-detectives
+  "The names of the detectives whose :detect threw, in the order they ran."
+  [findings]
+  (vec (distinct (keep #(when (:crashed %) (:detective %)) findings))))
+
+(defn crashed-message
+  "Why a run with a crashed detective fails, naming each one."
+  [names]
+  (format "%d check%s could not run, so %s judged nothing - %s"
+          (count names) (if (= 1 (count names)) "" "s")
+          (if (= 1 (count names)) "it" "they")
+          (str/join ", " names)))
 
 (defn empty-subjects?
   "Whether one evidence value holds nothing to judge: nil, an empty list,
@@ -159,23 +200,61 @@
   [detectives]
   (vec (into (sorted-set) (mapcat :requires detectives))))
 
+(def ^:dynamic *collector-timeout-ms*
+  "How long one evidence collector may run before its key counts as not read.
+   A kubectl read carries its own request timeout; a registered collector that
+   talks SSH, HTTP or a port-forward may not, and one that blocks must not hang
+   the whole scan."
+  300000)
+
+(defn- bounded-collect
+  "The value collector returns for key within timeout-ms, or ::timed-out after
+   cancelling it. Exceptions from the collector reach the caller."
+  [collect timeout-ms]
+  (let [work (future (collect))
+        value (deref work timeout-ms ::timed-out)]
+    (when (= ::timed-out value) (future-cancel work))
+    value))
+
+(defn timed-out-message
+  "The warning naming the evidence keys whose collector did not return in time."
+  [keys timeout-ms]
+  (format "%s did not answer within %ds and count%s as not read: %s"
+          (if (= 1 (count keys)) "one evidence read" (str (count keys) " evidence reads"))
+          (quot timeout-ms 1000)
+          (if (= 1 (count keys)) "s" "")
+          (str/join ", " keys)))
+
 (defn read-evidence
   "The evidence the detectives require, read one key after another without
    printing anything, for a check that reads it again and again. Unlike
    collect-evidence! it lets a collector's exception through, so a strict read
-   that did not answer reaches the caller instead of reading as no evidence."
+   that did not answer reaches the caller instead of reading as no evidence. A
+   collector that runs past *collector-timeout-ms* throws an ex-info naming its
+   key."
   [context cluster detectives]
-  (into (evidence-base cluster)
-        (for [key (required-keys detectives)]
-          [key ((registry/collector-for key) context key)])))
+  (let [timeout-ms *collector-timeout-ms*]
+    (into (evidence-base cluster)
+          (for [key (required-keys detectives)]
+            (let [value (try (bounded-collect #((registry/collector-for key) context key) timeout-ms)
+                             (catch java.util.concurrent.ExecutionException e
+                               (throw (or (ex-cause e) e))))]
+              (when (= ::timed-out value)
+                (throw (ex-info (timed-out-message [key] timeout-ms) {::timed-out key})))
+              [key value])))))
 
 (defn collect-evidence!
   "Fetches every resource type required by the given detectives exactly once,
    all types in parallel. A type the cluster does not know (missing CRD)
-   yields no evidence, so the corresponding detectives simply report nothing."
+   yields no evidence, so the corresponding detectives simply report nothing.
+   A collector that throws or runs past *collector-timeout-ms* yields nil for
+   its key, which marks the detectives requiring it unread; the keys that timed
+   out are named once collection ends."
   [context detectives]
   (let [types (required-keys detectives)
-        cluster (try (kubectl/current-cluster) (catch Exception _ nil))]
+        cluster (try (kubectl/current-cluster) (catch Exception _ nil))
+        timeout-ms *collector-timeout-ms*
+        timed-out (atom [])]
     (stdout/print-section "🔍 Evidence")
     ;; every resource type is fetched in parallel and shown on a live task list
     ;; that ticks each one off as it lands - so a slow fetch reads as progress,
@@ -187,10 +266,17 @@
                            ;; registered collector - one uniform seam, no special
                            ;; case, so a custom-evidence detective composes into
                            ;; any scan.
-                           [type (future (try ((registry/collector-for type) context type)
-                                              (catch Exception _ nil)))])
+                           [type (future
+                                   (let [value (try (bounded-collect #((registry/collector-for type) context type)
+                                                                     timeout-ms)
+                                                    (catch Throwable _ nil))]
+                                     (if (= ::timed-out value)
+                                       (do (swap! timed-out conj type) nil)
+                                       value)))])
                          types)
           results (progress/watch-futures! labelled)]
+      (when (seq @timed-out)
+        (stdout/warn (timed-out-message (sort @timed-out) timeout-ms)))
       (into (evidence-base cluster) (map vector types results)))))
 
 (defn- severity-tag
@@ -198,13 +284,14 @@
   (case severity
     :critical (stdout/red (str (theme/severity :critical) " CRITICAL"))
     :warning (stdout/yellow (str (theme/severity :warning) " WARNING "))
-    :info (stdout/blue (str (theme/severity :info) " INFO    "))))
+    :info (stdout/blue (str (theme/severity :info) " INFO    "))
+    (stdout/red (str (theme/severity :critical) " " (pr-str severity)))))
 
 (defn- worst-severity
   "The most severe severity-order among findings (critical wins), for ordering
    areas so the story opens on what is most broken."
   [findings]
-  (apply min (map (comp severity-order :severity) findings)))
+  (apply min (map #(severity-order (:severity %) 0) findings)))
 
 (defn areas
   "Findings grouped by the detective that raised them - one area of the story -
@@ -352,28 +439,53 @@
     (format "every check read nothing, so nothing was checked - %s"
             (str/join ", " (map :name detectives)))))
 
+(defn- json-safe
+  "data with every value cheshire has no encoder for replaced by its string
+   form, so one exotic field in a finding or a book's :extra does not cost the
+   whole report."
+  [data]
+  (walk/postwalk (fn [v]
+                   (if (or (nil? v) (string? v) (number? v) (boolean? v) (keyword? v) (symbol? v)
+                           (map? v) (coll? v) (map-entry? v) (inst? v) (uuid? v)
+                           (instance? java.time.temporal.TemporalAccessor v))
+                     v
+                     (str v)))
+                 data))
+
+(defn json-report
+  "The machine-readable report as pretty JSON. A value cheshire cannot encode
+   is written as its string form rather than failing the report."
+  [data]
+  (try (json/generate-string data {:pretty true})
+       (catch Exception _
+         (json/generate-string (json-safe data) {:pretty true}))))
+
 (defn report!
   "Renders findings in the requested format (text, json, edn) to stdout, always
    alongside the list of detectives that ran. Returns true when nothing critical
-   was found and at least one detective read something; a run that judged
-   nothing reports :nothing-checked and returns false.
+   was found, no detective crashed and at least one detective read something; a
+   run that judged nothing reports :nothing-checked and returns false, and a run
+   with a detective that threw names it under :crashed and returns false.
 
    `extra` is a map a book adds to the machine-readable formats, such as the
    rows it collected; the report's own keys win over it, and the text report
    leaves it out."
   ([detectives findings output] (report! detectives findings output nil))
   ([detectives findings output extra]
-   (let [blind (nothing-checked? detectives findings)
+   (let [findings (mapv normalize-finding findings)
+         blind (nothing-checked? detectives findings)
+         crashed (crashed-detectives findings)
          data (cond-> (merge extra {:findings findings
                                     :checked (checked detectives)
                                     :summary (summary-of findings)})
-                blind (assoc :nothing-checked true))
-         healthy (and (not blind) (healthy? findings))]
+                blind (assoc :nothing-checked true)
+                (seq crashed) (assoc :crashed crashed))
+         healthy (and (not blind) (empty? crashed) (healthy? findings))]
      ;; keep the findings so the harness banners them and offers to share
      ;; them - every scan renders through here, the custom flows included
      (summary/capture! findings)
      (case output
-       "json" (do (println (json/generate-string data {:pretty true}))
+       "json" (do (println (json-report data))
                   healthy)
        "edn" (do (prn data)
                  healthy)
@@ -384,7 +496,10 @@
            (do (stdout/print-section "🔬 Findings")
                (stdout/error (nothing-checked-message detectives))
                false)
-           (print-report! detectives findings)))))))
+           (let [shown (print-report! detectives findings)]
+             (when (seq crashed)
+               (stdout/error (crashed-message crashed)))
+             (and shown (empty? crashed)))))))))
 
 (defn when-to-run!
   "Prints a short orientation before an investigation: what this book is for and

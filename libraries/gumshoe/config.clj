@@ -53,13 +53,58 @@
            (some-> (System/getenv "XDG_CONFIG_HOME") (str "/gumshoe/env.edn"))
            (some-> (System/getProperty "user.home") (str "/.config/gumshoe/env.edn"))]))
 
+(defn normalize
+  "Pure: a config map with every part of the wrong shape dropped, as
+   {:config .. :warnings [..]}. Every reader below destructures :environments
+   as a map of name to environment map, each :select as a map of signal to
+   value, and merges :defaults as a map; a part that is not would throw in
+   each of them. So a non-map :environments or :defaults is dropped, an
+   environment that is not a map is dropped, and a :select that is not a map
+   is dropped from its environment, which then is only usable through
+   GUMSHOE_ENVIRONMENT. Each drop is named in a warning."
+  [config]
+  (let [warnings (transient [])
+        warn! (fn [fmt & args] (conj! warnings (apply format fmt args)))
+        envs (:environments config)
+        envs (cond
+               (nil? envs) nil
+               (not (map? envs)) (do (warn! ":environments is a map of name to environment, not %s - ignored" (pr-str envs))
+                                     nil)
+               :else (into {}
+                           (keep (fn [[nm env]]
+                                   (cond
+                                     (not (map? env))
+                                     (do (warn! ":environments -> %s is a map, not %s - ignored" (pr-str nm) (pr-str env))
+                                         nil)
+                                     (and (contains? env :select) (not (map? (:select env))))
+                                     (do (warn! ":environments -> %s -> :select is a map of signal to value, such as {:kubernetes-cluster \"kube.example.org\"}, not %s - ignored"
+                                                (pr-str nm) (pr-str (:select env)))
+                                         [nm (dissoc env :select)])
+                                     :else [nm env])))
+                           envs))
+        defaults (:defaults config)
+        config (cond-> config
+                 (contains? config :environments) (dissoc :environments)
+                 (some? envs) (assoc :environments envs)
+                 (and (some? defaults) (not (map? defaults)))
+                 (as-> c (do (warn! ":defaults is a map, not %s - ignored" (pr-str defaults))
+                             (dissoc c :defaults))))]
+    {:config config :warnings (persistent! warnings)}))
+
 (defn load-file-safely
-  "Reads and parses an env.edn path, or nil when it is missing or unreadable."
+  "Reads and parses an env.edn path, or nil when it is missing or unreadable.
+   A part of the wrong shape is dropped with a warning on stderr (see
+   normalize), so the rest of the file still applies."
   [path]
   (when (and path (fs/exists? path))
     (try
       (let [data (edn/read-string (slurp (str path)))]
-        (when (map? data) data))
+        (when (map? data)
+          (let [{:keys [config warnings]} (normalize data)]
+            (binding [*out* *err*]
+              (doseq [warning warnings]
+                (println (format "warning: %s: %s" path warning))))
+            config)))
       (catch Exception _ nil))))
 
 (def ^:private loaded
@@ -96,12 +141,14 @@
    ;; aliases (see matches-signals?); splice its members in rather than letting
    ;; the whole set count as one entry.
    (let [clusters (:clusters config)
-         clusters (if (string? clusters) [clusters] clusters)
+         clusters (cond (string? clusters) [clusters]
+                        (coll? clusters) (remove coll? (if (map? clusters) [] clusters)))
          select-clusters (mapcat (fn [env]
                                    (let [c (get-in env [:select :kubernetes-cluster])]
                                      (cond (set? c) c
                                            (some? c) [c])))
-                                 (vals (:environments config)))]
+                                 (let [envs (:environments config)]
+                                   (when (map? envs) (filter map? (vals envs)))))]
      (distinct (concat select-clusters clusters)))))
 
 (defn- signal-matches?
@@ -117,7 +164,8 @@
 (defn- matches-signals?
   [env signals]
   (let [select (:select env)]
-    (and (seq select)
+    (and (map? select)
+         (seq select)
          (every? (fn [[k v]] (signal-matches? v (get signals k))) select))))
 
 (defn select-environment
@@ -127,8 +175,8 @@
    by name. The GUMSHOE_ENVIRONMENT override is applied on top of
    this by active-environment."
   [envs signals]
-  (->> envs
-       (filter (fn [[_ env]] (matches-signals? env signals)))
+  (->> (when (map? envs) envs)
+       (filter (fn [[_ env]] (and (map? env) (matches-signals? env signals))))
        (sort-by (fn [[nm env]] [(- (count (:select env))) (str nm)]))
        ffirst))
 
@@ -174,9 +222,10 @@
    that sets it."
   ([signals] (active-config (all) (active-environment signals)))
   ([config active]
-   (merge (dissoc config :environments :defaults)
-          (:defaults config)
-          (get-in config [:environments active]))))
+   (let [layer #(when (map? %) %)]
+     (merge (dissoc config :environments :defaults)
+            (layer (:defaults config))
+            (layer (when (map? (:environments config)) (get (:environments config) active)))))))
 
 (defn- blank->nil [s] (when-not (str/blank? (str s)) (str s)))
 

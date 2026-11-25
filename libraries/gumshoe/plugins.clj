@@ -16,18 +16,34 @@
   (:require [gumshoe.config :as config]
             [gumshoe.stdout :as stdout]))
 
+(defn plugin-names
+  "The configured :plugins value as a list of namespace names and the warnings
+   it gives. A single symbol or string names one plugin, nil names none, and a
+   value that is neither a name nor a list of them names none and warns."
+  [plugins]
+  (cond
+    (nil? plugins) {:names []}
+    (or (symbol? plugins) (string? plugins)) {:names [plugins]}
+    (or (sequential? plugins) (set? plugins)) {:names (vec plugins)}
+    :else {:names []
+           :warnings [(format ":plugins in env.edn is a list of plugin namespaces, not %s - no plugin was loaded"
+                              (pr-str plugins))]}))
+
 (defn load!
   "Requires every namespace listed in env.edn :plugins (or the given list), so
    their registrations take effect. Safe and best-effort: a plugin that can not
-   be loaded is warned about and skipped."
+   be loaded is warned about and skipped, and a :plugins value of the wrong
+   shape is warned about and loads nothing."
   ([] (load! (config/value [:plugins] [])))
   ([plugins]
-   (doseq [plugin plugins]
-     (try
-       (require (symbol (str plugin)))
-       ;; Catch Throwable, not just Exception: a plugin whose top-level
-       ;; registration trips an assert (subject/register-facts! has :pre
-       ;; conditions) throws AssertionError, an Error - which would otherwise
-       ;; abort the whole core instead of skipping the one bad plugin.
-       (catch Throwable e
-         (stdout/warn (format "could not load plugin %s: %s" plugin (ex-message e))))))))
+   (let [{:keys [names warnings]} (plugin-names plugins)]
+     (doseq [warning warnings] (stdout/warn warning))
+     (doseq [plugin names]
+       (try
+         (require (symbol (str plugin)))
+         ;; Catch Throwable, not just Exception: a plugin whose top-level
+         ;; registration trips an assert (subject/register-facts! has :pre
+         ;; conditions) throws AssertionError, an Error - which would otherwise
+         ;; abort the whole core instead of skipping the one bad plugin.
+         (catch Throwable e
+           (stdout/warn (format "could not load plugin %s: %s" plugin (ex-message e)))))))))

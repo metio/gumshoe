@@ -167,6 +167,7 @@
                    [gumshoe.watch-test]
                    [gumshoe.resources-test]
                    [gumshoe.robustness-test]
+                   [gumshoe.engine-resilience-test]
                    [gumshoe.hooks-test]
                    [gumshoe.grafana-test]
                    [gumshoe.interact-test]
@@ -368,6 +369,7 @@
                                                          'gumshoe.watch-test
                                                          'gumshoe.resources-test
                                                          'gumshoe.robustness-test
+                                                         'gumshoe.engine-resilience-test
                                                          'gumshoe.hooks-test
                                                          'gumshoe.grafana-test
                                                          'gumshoe.interact-test

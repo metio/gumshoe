@@ -51,12 +51,35 @@
          (if (::kubectl/unread (ex-data e)) (ex-message e) false))
        (catch Exception _ false)))
 
+(defn bounded-attempt
+  "One attempt of check, as attempt runs it, given at most limit-ms to return:
+   its result, or a message saying it did not return in time. A check that
+   blocks without a timeout of its own is abandoned there instead of holding
+   the post-check, and the book, forever."
+  [check limit-ms]
+  (let [work (future (attempt check))
+        result (deref work limit-ms ::timed-out)]
+    (if (= ::timed-out result)
+      (do (future-cancel work)
+          (format "the check did not return within %ds" (quot limit-ms 1000)))
+      result)))
+
+(defn- abort-reason
+  "The reason abort names, or nil when it names none or throws. Called once
+   per attempt, so the reason judged is the reason printed."
+  [abort]
+  (when abort
+    (try (abort) (catch Exception _ nil))))
+
 (defn eventually
-  "Retries check until it returns truthy or timeout (seconds) elapses.
-   Exceptions inside check count as not-yet-verified, among them a strict
-   read that did not answer. A malformed post-check is
-   refused. Returns the verdict - true when verified, true-with-a-warning when
-   a :soft? check times out, false when a hard check times out.
+  "Retries check until it returns truthy or timeout (seconds) elapses on the
+   wall clock, counting the time each attempt takes. Exceptions inside check
+   count as not-yet-verified, among them a strict read that did not answer.
+   Each attempt gets the time left before the deadline, and at least one
+   interval, so a check that hangs ends the wait at most one interval late. A
+   malformed post-check is refused. Returns the verdict - true when verified,
+   true-with-a-warning when a :soft? check times out, false when a hard check
+   times out.
 
    :abort (fn [] -> reason or nil) names a state the check can no longer reach
    from, such as an operation that failed: the wait ends at once with the
@@ -65,40 +88,43 @@
   (if-not (and (string? description) (fn? check))
     (do (stdout/error "refusing a malformed post-check: it needs a :description string and a :check function")
         false)
-    (loop [elapsed 0
-           ;; Prime the dedup set with a baseline sample, so the pre-existing
-           ;; signal backlog (Kubernetes Warning events persist ~1h, a ceph log
-           ;; tail) is not reported as if it appeared during this wait. Only
-           ;; signals that show up after the change are surfaced.
-           seen (if watch (try (set (watch)) (catch Exception _ #{})) #{})]
-      (let [result (attempt check)
-            unread (when (string? result) (str " - the last read did not answer: " result))]
-        (cond
-          (true? result)
-          (do (stdout/ok (str "verified: " description))
-              true)
-
-          (when abort (try (abort) (catch Exception _ nil)))
-          (do (stdout/error (format "NOT verified: %s - %s" description (abort)))
-              false)
-
-          (>= elapsed timeout)
-          (if soft?
-            (do (stdout/warn (format "could not confirm within %ds (best effort): %s%s" timeout description (str unread)))
-                (stdout/warn "the operation itself reported no error - confirm by hand if in doubt")
+    (let [start (System/currentTimeMillis)
+          deadline (+ start (* 1000 timeout))
+          interval-ms (* 1000 (max interval 1))]
+      (loop [;; Prime the dedup set with a baseline sample, so the pre-existing
+             ;; signal backlog (Kubernetes Warning events persist ~1h, a ceph log
+             ;; tail) is not reported as if it appeared during this wait. Only
+             ;; signals that show up after the change are surfaced.
+             seen (if watch (try (set (watch)) (catch Exception _ #{})) #{})]
+        (let [result (bounded-attempt check (max interval-ms (- deadline (System/currentTimeMillis))))
+              unread (when (string? result) (str " - the last read did not answer: " result))
+              reason (when-not (true? result) (abort-reason abort))
+              now (System/currentTimeMillis)]
+          (cond
+            (true? result)
+            (do (stdout/ok (str "verified: " description))
                 true)
-            (do (stdout/error (format "NOT verified within %ds: %s%s" timeout description (str unread)))
-                false))
 
-          :else
-          (do (stdout/err-println (format "  ⏳ waiting for: %s (%d/%ds)" description elapsed timeout))
-              (Thread/sleep (* interval 1000))
-              (let [fresh (when watch
-                            (try (seq (remove seen (watch))) (catch Exception _ nil)))]
-                (doseq [signal fresh]
-                  (stdout/warn (str "while waiting — " signal)))
-                (recur (+ elapsed (max interval 1))
-                       (into seen fresh)))))))))
+            reason
+            (do (stdout/error (format "NOT verified: %s - %s" description reason))
+                false)
+
+            (>= now deadline)
+            (if soft?
+              (do (stdout/warn (format "could not confirm within %ds (best effort): %s%s" timeout description (str unread)))
+                  (stdout/warn "the operation itself reported no error - confirm by hand if in doubt")
+                  true)
+              (do (stdout/error (format "NOT verified within %ds: %s%s" timeout description (str unread)))
+                  false))
+
+            :else
+            (do (stdout/err-println (format "  ⏳ waiting for: %s (%d/%ds)" description (quot (- now start) 1000) timeout))
+                (Thread/sleep (long (min interval-ms (max 0 (- deadline now)))))
+                (let [fresh (when watch
+                              (try (seq (remove seen (watch))) (catch Exception _ nil)))]
+                  (doseq [signal fresh]
+                    (stdout/warn (str "while waiting — " signal)))
+                  (recur (into seen fresh))))))))))
 
 (defn all
   "Runs every post-check in order; all of them must hold (a :soft? check that
