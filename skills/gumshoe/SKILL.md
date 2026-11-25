@@ -368,6 +368,17 @@ mostly data:
   of `:subject`, `:subjects` and `:pin` still follow the judgement. Reads
   before the confirmation run with `mutation/*phase*` bound to `:derive`,
   reads after it to `:judge`;
+- each of those two phases binds a fresh `kubectl/*read-cache*`, so an
+  object read by the subject read and again by `:derive`, or by `:refusal`
+  and again by a drift check, is fetched once per phase. No read after the
+  confirmation is served from a read before it, and post-checks run outside
+  both phases, so every poll reads the cluster. Subjects are read
+  concurrently, and the `:judge` phase fetches the objects it is about to
+  judge at once. A `:derive` or `:recheck` that makes several independent
+  reads issues them together with `(gumshoe.concurrent/values {:a #(read-a
+  context) :b #(read-b context)})`, which returns `{:a … :b …}`; its
+  futures carry the phase, the cache and the strict binding along, and it
+  rethrows a strict read's `::kubectl/unread` unwrapped;
 - a change that acts on something other than the cluster of the kube context
   - an SSH host, a storage cluster - names it with `:connect (fn [opts] …)`,
   which checks the connection and returns `{:context … :cluster …

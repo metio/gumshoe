@@ -3,12 +3,15 @@
 
 (ns gumshoe.mutation-subjects-test
   "The :subjects key of a mutation spec, a change acting on several objects,
-   against stubbed reads."
-  (:require [clojure.test :refer [deftest is testing]]
+   against a stubbed kubectl."
+  (:require [cheshire.core :as json]
+            [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [gumshoe.effect :as effect]
             [gumshoe.flow :as flow]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.mutation :as mutation]))
+            [gumshoe.mutation :as mutation]
+            [gumshoe.shell :as shell]))
 
 (def ^:private claim {:type "persistentvolumeclaims" :namespace "moodle" :name "moodle-data"})
 (def ^:private database {:type "databases.kinda.rocks" :namespace "moodle" :name "moodle"})
@@ -17,25 +20,47 @@
 (defn- object
   [{:keys [name]} & {:keys [generation uid seen] :or {generation 1}}]
   {:metadata (cond-> {:namespace "moodle" :name name :uid (or uid (str name "-uid")) :generation generation}
-               seen (assoc :annotations {"seen" seen}))})
+               seen (assoc :annotations {:seen seen}))})
 
 (defn- unread!
   []
   (throw (ex-info "kubectl get did not answer: i/o timeout" {::kubectl/unread true})))
 
+(defn- ref-of
+  "The ref a kubectl get of one namespaced object reads."
+  [argv]
+  (let [[_ type name] (drop-while #(not= "get" %) argv)]
+    {:type type
+     :namespace (some #(when (str/starts-with? % "--namespace=") (subs % (count "--namespace="))) argv)
+     :name name}))
+
+(defn- answer
+  "What kubectl prints for the object (read ref phase) returns: the object,
+   NotFound for nil, and a timeout for a read that throws unread."
+  [read {:keys [type name] :as ref} phase]
+  (try
+    (if-let [object (read ref phase)]
+      {:exit 0 :out (json/generate-string object) :err ""}
+      {:exit 1 :out "" :err (format "Error from server (NotFound): %s \"%s\" not found" type name)})
+    (catch clojure.lang.ExceptionInfo e
+      (if (::kubectl/unread (ex-data e))
+        {:exit 1 :out "" :err "Unable to connect to the server: i/o timeout"}
+        (throw e)))))
+
 (defn- run
-  "Runs spec on the namespace moodle with reads answered by (read ref phase),
-   where phase is :before until flow/change! is called and :after from
-   then on, and flow/change! recorded. Returns what the run printed and
-   returned, the config change! received, and the reads it made, each with
-   its phase and whether it ran under strict reads."
+  "Runs spec on the namespace moodle with every kubectl get answered by
+   (read ref phase), where phase is :before until flow/change! is called
+   and :after from then on, and flow/change! recorded. Returns what the run
+   printed and returned, the config change! received, and every kubectl
+   read it ran, each with its phase and whether it ran under strict reads."
   [spec read & {:keys [target] :or {target "moodle"}}]
   (let [reads (atom []) seen (atom nil) phase (atom :before)]
     (with-redefs [kubectl/current-context (constantly "ctx")
                   kubectl/current-cluster (constantly "cluster")
-                  mutation/fetch-pinned (fn [_ ref]
-                                          (swap! reads conj [(dissoc ref :facts) @phase kubectl/*strict-reads*])
-                                          (read ref @phase))
+                  shell/execute (fn [& argv]
+                                  (let [ref (ref-of argv) at @phase]
+                                    (swap! reads conj [ref at kubectl/*strict-reads*])
+                                    (answer read ref at)))
                   flow/change! (fn [config]
                                  (reset! seen config)
                                  (reset! phase :after)
@@ -66,16 +91,17 @@
                                     (fn [ref phase] (object ref :seen (str (:name ref) "-" (name phase)))))
         by (into {} @seen)]
     (is (true? result) "an annotation leaves the fingerprint alone")
-    (is (= [claim database] (map first (filter #(= :before (second %)) reads)))
-        "every subject is read once before :derive, in the declared order")
+    (is (= #{claim database} (set (map first (filter #(= :before (second %)) reads))))
+        "every subject is read before :derive")
+    (is (= 4 (count reads)) "each subject once in each phase")
     (is (every? #(nth % 2) reads) "every read of a subject is strict")
     (testing ":derive, :items and :effect see the objects read before the confirmation"
       (is (= [claim database] (get-in by [:derive :refs])))
-      (is (= ["moodle-data-before" "moodle-before"] (map #(get-in % [:metadata :annotations "seen"]) (get-in by [:derive :objects]))))
-      (is (= ["moodle-data-before" "moodle-before"] (map #(get-in % [:metadata :annotations "seen"]) (get-in by [:items :objects])))))
+      (is (= ["moodle-data-before" "moodle-before"] (map #(get-in % [:metadata :annotations :seen]) (get-in by [:derive :objects]))))
+      (is (= ["moodle-data-before" "moodle-before"] (map #(get-in % [:metadata :annotations :seen]) (get-in by [:items :objects])))))
     (testing ":refusal and :precondition see every object read again after it"
-      (is (= ["moodle-data-after" "moodle-after"] (map #(get-in % [:metadata :annotations "seen"]) (get-in by [:refusal :objects]))))
-      (is (= ["moodle-data-after" "moodle-after"] (map #(get-in % [:metadata :annotations "seen"]) (get-in by [:precondition :objects])))))))
+      (is (= ["moodle-data-after" "moodle-after"] (map #(get-in % [:metadata :annotations :seen]) (get-in by [:refusal :objects]))))
+      (is (= ["moodle-data-after" "moodle-after"] (map #(get-in % [:metadata :annotations :seen]) (get-in by [:precondition :objects])))))))
 
 (deftest a-second-subject-edited-after-the-confirmation-is-refused-by-name
   (let [{:keys [result out]} (run {:subjects (adoptees claim database)}
@@ -95,7 +121,8 @@
 (deftest unchanged-subjects-let-the-change-run
   (let [{:keys [result reads]} (run {:subjects (adoptees claim database)} (fn [ref _] (object ref)))]
     (is (true? result))
-    (is (= 4 (count reads)) "each subject once before the confirmation and once for the drift check")))
+    (is (= 4 (count reads)) "each subject once before the confirmation and once for the drift check")
+    (is (= {:before 2 :after 2} (frequencies (map second reads))))))
 
 (deftest facts-of-a-subject-join-its-fingerprint
   (let [{:keys [result out]} (run {:subjects (fn [_] [(assoc database :facts #(get-in % [:spec :secretName]))])}
@@ -164,7 +191,7 @@
                                     (fn [ref _] (object ref))
                                     :target ["moodle-data" "moodle-files"])]
     (is (true? result))
-    (is (= ["moodle-data" "moodle-files"] (map (comp :name first) (take 2 reads))) "the target of a :many select is its names")))
+    (is (= #{"moodle-data" "moodle-files"} (set (map (comp :name first) (take 2 reads)))) "the target of a :many select is its names")))
 
 (deftest a-subject-without-a-type-or-name-is-a-spec-error
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #":subjects ref needs a :type and a :name"

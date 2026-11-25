@@ -138,6 +138,22 @@
    runs inside one binding of it, so no read after the confirmation runs
    inside the binding of the reads before it.
 
+   Each phase also binds a fresh kubectl/*read-cache*, so within one phase
+   an object read twice - by the subject read and by :derive, by :refusal
+   and by the drift check of its pin - is fetched once, and both judge the
+   same answer. The cache of a phase is bound inside that phase only: no
+   read after the confirmation is served from a read before it, and a
+   post-check, which runs outside both phases, reads the cluster on every
+   poll. A rehearsal under --dry-run has the same two phases, each with its
+   own cache.
+
+   Independent reads run concurrently: read-subjects reads its refs at
+   once, and the :judge phase starts by fetching every object it is about
+   to judge (the subject, the pinned object and the subjects) at once into
+   its cache. A :derive or :recheck that makes several independent reads
+   issues them together with gumshoe.concurrent/values, whose futures
+   carry *phase*, the cache and kubectl/*strict-reads* along.
+
    :refusal returns why the change must not run, or nil. The engine prints
    the reason as \"refusing: <reason>\" and stops, and only a change no
    refusal stopped reaches :precondition.
@@ -192,6 +208,7 @@
   (:require [clojure.string :as str]
             [clojure.walk :as walk]
             [gumshoe.change :as change]
+            [gumshoe.concurrent :as concurrent]
             [gumshoe.effect :as effect]
             [gumshoe.flow :as flow]
             [gumshoe.prerequisites :as prerequisites]
@@ -269,26 +286,34 @@
   nil)
 
 (defn- in-phase
-  "thunk running with *phase* bound to phase, or nil without a thunk."
-  [phase thunk]
-  (when thunk
-    (fn [] (binding [*phase* phase] (thunk)))))
+  "thunk running with *phase* bound to phase and kubectl/*read-cache* bound
+   to cache, a fresh one for each call when none is given; nil without a
+   thunk. A thunk called twice - a precondition a rehearsal and a playbook
+   both run - reads afresh each time."
+  ([phase thunk] (in-phase phase nil thunk))
+  ([phase cache thunk]
+   (when thunk
+     (fn [] (binding [*phase* phase
+                      kubectl/*read-cache* (or cache (kubectl/read-cache))]
+              (thunk))))))
 
 (defn derived
   "{:values <what derive returned>} or {:unread <reason>}. derive runs under
-   kubectl/*strict-reads*, in the :derive *phase*, and its result is realized
-   inside the binding, so a lazy seq cannot run its reads after it, and a
-   read that did not answer surfaces as its message instead of as nil - the
-   same contract as the candidate listing of a select. A read that answered
-   that its object does not exist still derives nil."
-  [derive base]
-  (try
-    {:values (when derive
-               (binding [kubectl/*strict-reads* true
-                         *phase* :derive]
-                 (walk/postwalk identity (derive base))))}
-    (catch clojure.lang.ExceptionInfo e
-      (if (::kubectl/unread (ex-data e)) {:unread (ex-message e)} (throw e)))))
+   kubectl/*strict-reads*, in the :derive *phase* with cache as its
+   kubectl/*read-cache* (a fresh one when none is given), and its result is
+   realized inside the binding, so a lazy seq cannot run its reads after it,
+   and a read that did not answer surfaces as its message instead of as nil
+   - the same contract as the candidate listing of a select. A read that
+   answered that its object does not exist still derives nil."
+  ([derive base] (derived derive base nil))
+  ([derive base cache]
+   (try
+     {:values (when derive
+                ((in-phase :derive cache
+                           #(binding [kubectl/*strict-reads* true]
+                              (walk/postwalk identity (derive base))))))}
+     (catch clojure.lang.ExceptionInfo e
+       (if (::kubectl/unread (ex-data e)) {:unread (ex-message e)} (throw e))))))
 
 (defn strict-precondition
   "precondition as a thunk whose reads are strict: a read in it that did not
@@ -344,11 +369,11 @@
   "The objects the refs name, read now, in the same order - nil for an
    object that does not exist. Every read of the :subjects of a change goes
    through here, one call per phase with the whole set, so the phase is the
-   unit a cache or a concurrent read would work on. Under
+   unit a cache works on; the reads run concurrently. Under
    kubectl/*strict-reads* a read that did not answer throws. A post-check
    calls it with the :refs of ctx to see the objects after the change."
   [context refs]
-  (mapv #(fetch-pinned context %) refs))
+  (concurrent/all (map (fn [ref] #(fetch-pinned context ref)) refs)))
 
 (defn subjects-fingerprints
   "The fingerprint of each object, with the :facts of its ref."
@@ -461,6 +486,44 @@
           why (refuse! why)
           :else true)))))
 
+(defn object-key
+  "What identifies the object a ref names, whatever else the ref carries
+   (:facts, :optional?): [type namespace name]."
+  [{:keys [type namespace name]}]
+  [type namespace name])
+
+(defn judged-refs
+  "The refs whose objects the :judge phase of spec reads, each once, in the
+   order first named: the subject's ref when a refusal reads it again, the
+   pinned ref, then the subjects. Pure, so the prefetch is tested apart from
+   the reads."
+  [spec {:keys [ref refs]} pinned]
+  (let [{:keys [refusal]} spec]
+    (->> (concat (when (and refusal ref) [ref]) (when pinned [pinned]) refs)
+         (reduce (fn [[seen out] r]
+                   (let [k (object-key r)]
+                     (if (seen k) [seen out] [(conj seen k) (conj out r)])))
+                 [#{} []])
+         second)))
+
+(defn- prefetching
+  "thunk preceded by a concurrent, strict read of the objects refs name,
+   which only fills the phase's cache: what thunk reads of them is then
+   served from it. A read that did not answer here is not kept and is
+   issued again, in thunk, by the read whose contract decides what its
+   failure means. With fewer than two objects nothing runs concurrently and
+   the cache already serves a second read of one, so thunk runs alone."
+  [context refs thunk]
+  (if (and thunk (<= 2 (count refs)))
+    (fn []
+      (try
+        (binding [kubectl/*strict-reads* true]
+          (read-subjects context refs))
+        (catch clojure.lang.ExceptionInfo e
+          (when-not (::kubectl/unread (ex-data e)) (throw e))))
+      (thunk))
+    thunk))
+
 (defn- pin-of
   "The ref the change pins and its fingerprint at the confirmation: the ref
    of its :reads subject when it has one, else the :pick subject's ref,
@@ -542,7 +605,8 @@
   (let [base (cond-> {:context context :cluster cluster :target target
                       :opts opts :announcement-data announcement-data}
                (change/pick-subject spec) (assoc :ref ref))
-        {:keys [values unread]} (derived (subject-derive spec) base)]
+        derive-cache (kubectl/read-cache)
+        {:keys [values unread]} (derived (subject-derive spec) base derive-cache)]
     (if unread
       (do (stdout/error (format "could not read what the change rests on - %s" unread))
           false)
@@ -555,7 +619,7 @@
                          (when-let [guidance (left-behind spec ctx (effect/as-plan @plan) applied-before)]
                            (outcome/fallback! guidance ctx))))
             ok? (try
-                  (let [{:keys [ref before]} (binding [*phase* :derive] (pin-of spec ctx))
+                  (let [{:keys [ref before]} ((in-phase :derive derive-cache #(pin-of spec ctx)))
                         refs (:refs ctx)
                         subjects-before (subjects-fingerprints refs (:objects ctx))
                         items-fn (:items spec)]
@@ -564,12 +628,12 @@
                                      :target cluster
                                      :items (if items-fn (items-fn ctx) (select/items (:mode select) target))
                                      :destructive? (:destructive? confirm)}
-                      :precondition (in-phase :judge
-                                              (strict-precondition
-                                               (subjects-precondition
-                                                (pinned-precondition (judged-precondition spec ctx)
-                                                                     ref before #(fetch-pinned context %))
-                                                refs subjects-before #(read-subjects context %))))
+                      :precondition (let [guard (strict-precondition
+                                                 (subjects-precondition
+                                                  (pinned-precondition (judged-precondition spec ctx)
+                                                                       ref before #(fetch-pinned context %))
+                                                  refs subjects-before #(read-subjects context %)))]
+                                      (in-phase :judge (prefetching context (judged-refs spec ctx ref) guard)))
                       :confirmed? (:confirmed? spec)
                       :announce! (when announce
                                    #(announce/announce! announce-as announcement-data (announce ctx)))

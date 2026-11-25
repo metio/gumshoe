@@ -62,6 +62,9 @@
                    [gumshoe.mutation-pick-test]
                    [gumshoe.mutation-subjects-test]
                    [gumshoe.mutation-recheck-test]
+                   [gumshoe.mutation-reads-test]
+                   [gumshoe.read-cache-test]
+                   [gumshoe.concurrent-test]
                    [gumshoe.pick-test]
                    [gumshoe.deletion-test]
                    [gumshoe.workloads-ops-test]
@@ -235,6 +238,9 @@
                                                          'gumshoe.mutation-pick-test
                                                          'gumshoe.mutation-subjects-test
                                                          'gumshoe.mutation-recheck-test
+                                                         'gumshoe.mutation-reads-test
+                                                         'gumshoe.read-cache-test
+                                                         'gumshoe.concurrent-test
                                                          'gumshoe.pick-test
                                                          'gumshoe.deletion-test
                                                          'gumshoe.workloads-ops-test

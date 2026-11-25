@@ -640,7 +640,10 @@ the same machine-enforced contract:
   when it moved after the confirmation, named in the refusal. Live state the
   judgement rests on that no subject covers is read again after the
   confirmation with `:recheck`, whose map `:refusal` and `:precondition` see
-  over what `:derive` read before it. A suspend/resume
+  over what `:derive` read before it. Within each of the two phases, before
+  and after the confirmation, an object is fetched once and independent
+  reads run concurrently (`gumshoe.concurrent/values` for a `:derive` of
+  its own); post-checks read the cluster on every poll. A suspend/resume
   or pause/resume pair is one `gumshoe.toggle/pair` declaration whose `:on` and
   `:off` specs differ only in the wanted state and their words
   (`gumshoe.steps.workloads/cronjob-suspending`). A change acting over SSH or another API
