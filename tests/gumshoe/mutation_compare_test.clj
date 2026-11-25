@@ -131,8 +131,8 @@
 
 (defn- run-node-change
   "run-on! of spec on node n1, whose object reads as at-confirmation until
-   the operator confirmed and as before-effect after; what it printed and
-   the plans it ran."
+   the operator confirmed and as before-effect after; what it printed on
+   stdout and stderr, and the plans it ran."
   [spec at-confirmation before-effect]
   (let [confirmed? (atom false) executed (atom [])]
     (with-redefs [kubectl/current-context (constantly "ctx")
@@ -141,11 +141,12 @@
                   effect/run! (fn [e] (swap! executed conj e) true)
                   mutation/fetch-pinned (fn [_ _] (if @confirmed? before-effect at-confirmation))]
       (let [out (with-out-str
-                  (mutation/run-on! (merge {:select {:mode :one :label "Node" :flag :node}
-                                            :confirm {:action "cordon a node" :destructive? false}
-                                            :effect (fn [_] (effect/plan (effect/note "cordon")))}
-                                           spec)
-                                    "n1" {} nil))]
+                  (binding [*err* *out*]
+                    (mutation/run-on! (merge {:select {:mode :one :label "Node" :flag :node}
+                                              :confirm {:action "cordon a node" :destructive? false}
+                                              :effect (fn [_] (effect/plan (effect/note "cordon")))}
+                                             spec)
+                                      "n1" {} nil)))]
         {:out out :executed @executed}))))
 
 (deftest the-engine-pins-a-subject-by-what-it-declares

@@ -91,3 +91,46 @@
     (is (= 10 (:hpa-grace-minutes (cli/parse-opts [] {:spec spec}))))
     (is (= 3 (:hpa-grace-minutes (cli/parse-opts ["--hpa-grace-minutes" "3"] {:spec spec}))))
     (is (thrown? Exception (cli/parse-opts ["--hpa-grace-minutes" "-1"] {:spec spec})))))
+
+(defn- failing-writer
+  "A PrintWriter over a stream that fails every write (an unconnected pipe),
+   as stdout does on a full disk or a closed pipe."
+  []
+  (java.io.PrintWriter. (java.io.PipedOutputStream.)))
+
+(deftest a-report-that-never-reached-stdout-is-not-a-pass-test
+  (doseq [output ["json" "edn" "text"]]
+    (testing output
+      (let [err (java.io.StringWriter.)
+            healthy (binding [*out* (failing-writer) *err* err]
+                      (detective/report! detectives [] output))]
+        (is (false? healthy) "a healthy scan whose report is missing never exits 0")
+        (is (str/includes? (str err) "the report could not be written to stdout") (str err)))))
+  (testing "a report that was written keeps its verdict"
+    (let [out (java.io.StringWriter.)]
+      (is (true? (binding [*out* (java.io.PrintWriter. out) *err* (java.io.StringWriter.)]
+                   (detective/report! detectives [] "json"))))
+      (is (str/includes? (str out) "\"findings\"")))))
+
+(deftest every-java-time-value-is-written-test
+  (testing "cheshire encodes instants and dates; every other java.time value is written as its string"
+    (doseq [v [(java.time.LocalDate/of 2026 11 25)
+               (java.time.LocalDateTime/of 2026 11 25 1 2 3)
+               (java.time.ZonedDateTime/of 2026 11 25 1 2 3 0 (java.time.ZoneId/of "Europe/Berlin"))
+               (java.time.OffsetDateTime/of 2026 11 25 1 2 3 0 java.time.ZoneOffset/UTC)
+               (java.time.LocalTime/of 1 2 3)
+               (java.time.Year/of 2026)]]
+      (let [data (cheshire.core/parse-string (detective/json-report {:findings [{:since v}]}) true)]
+        (is (= (str v) (:since (first (:findings data)))) (str (class v))))))
+  (testing "an instant beside them keeps cheshire's own encoding"
+    (let [data (cheshire.core/parse-string
+                (detective/json-report {:at (java.time.Instant/parse "2026-11-25T00:00:00Z")
+                                        :day (java.time.LocalDate/of 2026 11 25)})
+                true)]
+      (is (= "2026-11-25T00:00:00Z" (:at data)))
+      (is (= "2026-11-25" (:day data)))))
+  (testing "a book's :extra holding one does not cost the findings"
+    (let [out (with-out-str
+                (binding [*err* (java.io.StringWriter.)]
+                  (detective/report! detectives findings "json" {:day (java.time.LocalDate/of 2026 11 25)})))]
+      (is (= "boom" (:summary (first (:findings (cheshire.core/parse-string out true)))))))))

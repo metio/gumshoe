@@ -57,10 +57,12 @@
   "What a book with these options makes of its arguments, as {:opts ..
    :notes [..]}, the notes naming each deprecated alias the arguments use.
    A refused argument goes to `error-fn` as babashka.cli hands it over, or
-   throws without one."
+   throws without one. A book takes no positional argument, so the first one
+   is refused with cause :unexpected-argument (flags/parse-without-positionals)."
   ([options args] (arguments options args nil))
   ([options args error-fn]
-   {:opts (cli/parse-opts args (cond-> (cli-spec options) error-fn (assoc :error-fn error-fn)))
+   {:opts (flags/parse-without-positionals
+           args (cond-> (cli-spec options) error-fn (assoc :error-fn error-fn)) "a book")
     :notes (flags/notes options args)}))
 
 (defn help-text
@@ -333,6 +335,16 @@
          (nil? stopped)
          (nil? thunk))))
 
+(defn offers-share?
+  "Pure: whether a finished read-only run asks to share its findings. The
+   offer is an fzf prompt drawn on /dev/tty, which waits for a key whenever
+   the process has a controlling terminal, even with stdout piped. So it is
+   asked only of a text run (a book without --output is one) on a console:
+   a json or edn run, a pipe, cron or a pty nobody watches ends without it,
+   as the drill-down offer does."
+  [{:keys [output console?]}]
+  (boolean (and console? (contains? #{nil "text"} output))))
+
 (defn change-book?
   "Pure: whether a run of the book with the parsed opts may change anything.
    :change? is a boolean or a (fn [opts]) for a book that changes something
@@ -444,7 +456,8 @@
                 ;; the exact CLI calls behind a read-only run's output are safe to replay
                 (reproducer/offer! description)
                 ;; the findings themselves, as Markdown, for a shared pad or a ticket
-                (summary/offer! description)
+                (when (offers-share? {:output (:output opts) :console? (some? (System/console))})
+                  (summary/offer! description))
                 ;; something turned up - offer a shared terminal to investigate together
                 (when (= :failed outcome)
                   (upterm/offer!)))

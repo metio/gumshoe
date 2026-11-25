@@ -233,14 +233,32 @@
   (binding [*out* *err*]
     (apply println parts)))
 
+(defn animate?
+  "Pure: whether a line on stderr may be repainted in place. The repaint
+   writes carriage returns to stderr, so stderr must be a terminal: `bb book
+   2> run.log` gets the line once instead of a frame every 90 ms, and
+   FORCE_COLOR asks for colour, not for cursor movement into a log. NO_COLOR
+   and --no-color turn it off as well. Whether stdout is captured plays no
+   part, so `-o json | jq` keeps the live line on the terminal."
+  [{:keys [stderr-terminal? no-color? no-color-flag?]}]
+  (boolean (and stderr-terminal?
+                (not no-color?)
+                (not no-color-flag?))))
+
+(defn- stderr-live?
+  []
+  (animate? {:stderr-terminal? (terminal? 2)
+             :no-color? (not (str/blank? (System/getenv "NO_COLOR")))
+             :no-color-flag? @no-color-flag?}))
+
 (defn with-spinner
   "Runs thunk while animating a spinner with the message on stderr, so a slow
-   fetch never looks like a hang. Returns thunk's value. Only animates on a
-   terminal (reusing the color decision as the tty signal); elsewhere it prints
-   the message once and runs. The spinner writes to stderr only and erases its
-   own line when done, so a captured result and a scrolling log both stay clean."
+   fetch never looks like a hang. Returns thunk's value. Only animates when
+   stderr is a live terminal (animate?); elsewhere it prints the message once
+   and runs. The spinner writes to stderr only and erases its own line when
+   done, so a captured result and a scrolling log both stay clean."
   [message thunk]
-  (if @colors?
+  (if (stderr-live?)
     (let [frames (theme/token :spinner)
           running (atom true)
           animation (future

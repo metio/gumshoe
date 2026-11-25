@@ -23,6 +23,7 @@
   (:require [babashka.cli :as cli]
             [clojure.string :as str]
             [gumshoe.catalog :as catalog]
+            [gumshoe.flags :as flags]
             [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
@@ -246,15 +247,25 @@
    {:label "🌌 OpenNebula - hosts, VMs, datastores (asks for the frontend)"
     :book "tools/opennebula/runbooks/scan.clj" :needs-frontend? true}])
 
+(defn- detect-refusal!
+  [{:keys [msg]}]
+  (stdout/error msg)
+  (stdout/err-println "run with --help to see the available flags")
+  (System/exit 1))
+
 (def ^:private detect-spec
   {:spec {:dry-run {:desc "Pass --dry-run through to the chosen book" :coerce :boolean}
           :no-color {:desc "Disable colored output (also honors NO_COLOR)" :coerce :boolean}
           :help {:desc "Show this help message" :alias :h :coerce :boolean}}
    :restrict true
-   :error-fn (fn [{:keys [msg]}]
-               (stdout/error msg)
-               (stdout/err-println "run with --help to see the available flags")
-               (System/exit 1))})
+   :error-fn #'detect-refusal!})
+
+(defn detect-options
+  "The options ./detect makes of its arguments. A positional argument is
+   refused (flags/parse-without-positionals), so a --dry-run after a stray
+   word is never dropped while the chosen book runs for real."
+  [args]
+  (flags/parse-without-positionals args detect-spec "./detect"))
 
 (defn- ask
   [prompt]
@@ -267,7 +278,7 @@
    :back so the caller can step up a level."
   ([args] (detect args false))
   ([args back?]
-   (let [opts (cli/parse-opts (raw-args args) detect-spec)]
+   (let [opts (detect-options (raw-args args))]
      (when (:no-color opts) (stdout/disable-colors!))
      (if (:help opts)
        (do (stdout/err-println (stdout/bold "detect - start an investigation when something hurts"))
