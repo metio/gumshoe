@@ -9,7 +9,8 @@
   (:require [babashka.classpath :as classpath]
             [babashka.fs :as fs]
             [clojure.string :as str]
-            [edamame.core :as edamame]))
+            [edamame.core :as edamame]
+            [gumshoe.edn-reader :as edn-reader]))
 
 (def ^:private harness-calls
   "The calls a book uses to enter the harness. The config map is their first
@@ -46,8 +47,14 @@
              (when (string? desc) desc)))
         forms))
 
+(defn edn-book?
+  "Whether a path names a book written as EDN (see gumshoe.edn-book) rather
+   than Clojure."
+  [path]
+  (str/ends-with? (str path) ".edn"))
+
 (defn short-name
-  "The path below its book-root segment, without the .clj suffix, e.g.
+  "The path below its book-root segment, without the .clj or .edn suffix, e.g.
    kubernetes/nodes/cordon - short enough to fuzzy-match by name. Works whether
    the path is relative (runbooks/…) or an absolute classpath entry
    (/…/gitlibs/…/runbooks/…), so a book from a dependency reads the same as a
@@ -56,17 +63,20 @@
   (-> path
       (str/replace #"^.*/(runbooks|playbooks|firebooks)/" "")
       (str/replace #"^(runbooks|playbooks|firebooks)/" "")
-      (str/replace #"\.clj$" "")))
+      (str/replace #"\.(clj|edn)$" "")))
 
 (defn book-at
   "Reads one book file into {:path :name :description}. Never throws - an
    unreadable or unparseable book still appears, labelled by its path, rather
-   than vanishing from the launcher."
+   than vanishing from the launcher. An EDN book is read as data only, with
+   gumshoe.edn-reader's bounds, and nothing in it is compiled here."
   [path]
   {:path path
    :name (short-name path)
-   :description (try (description-of (forms-of path))
-                     (catch Exception _ nil))})
+   :description (if (edn-book? path)
+                  (edn-reader/description-of path)
+                  (try (description-of (forms-of path))
+                       (catch Exception _ nil)))})
 
 (def ^:private book-dir-names
   "A classpath entry holds books when its own name is one of these."
@@ -127,7 +137,9 @@
                   books)))
 
 (defn books
-  "Every runnable book on the classpath, ordered by :id. Each is {:path :id :name
+  "Every runnable book on the classpath, ordered by :id: each .clj file below a
+   book root, and each .edn file, a book in the experimental DSL format (see
+   gumshoe.edn-book). Each is {:path :id :name
    :description :local?}: :path is the file to run, :id its stable name relative
    to its checkout (see origin-of), and :local? whether it is the casebook's own.
    Books sharing an :id appear once, the casebook's own first and otherwise the
@@ -142,7 +154,7 @@
           (map (fn [root] [root (origin-of root casebook)]))
           (sort-by (fn [[_ origin]] (if (= origin casebook) 0 1)))
           (mapcat (fn [[root origin]]
-                    (for [file (sort (map str (fs/glob root "**.clj")))]
+                    (for [file (sort (map str (fs/glob root "**.{clj,edn}")))]
                       {:path file
                        :id (str (fs/relativize origin file))
                        :local? (= origin casebook)})))

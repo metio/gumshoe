@@ -23,11 +23,11 @@
 
 (defn book-slug
   "A recording sub-path from a book's file path, robust to absolute paths:
-   .../runbooks/x/y.clj -> x/y."
+   .../runbooks/x/y.clj or y.edn -> x/y."
   [book-file]
-  (if-let [m (re-find #"(?:runbooks|playbooks|firebooks)/(.+?)\.clj$" (str book-file))]
+  (if-let [m (re-find #"(?:runbooks|playbooks|firebooks)/(.+?)\.(?:clj|edn)$" (str book-file))]
     (second m)
-    (-> (str book-file) (str/replace #"\.clj$" "") (str/replace #".*/" ""))))
+    (-> (str book-file) (str/replace #"\.(?:clj|edn)$" "") (str/replace #".*/" ""))))
 
 (defn secret-key?
   [k]

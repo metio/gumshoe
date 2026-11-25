@@ -712,17 +712,23 @@ timestamp yields nil rather than an exception.
 
 ## Changes written as data
 
+**The format is experimental.** Its vocabulary has not been reviewed yet,
+and any word of it may change in any release. Every change written in it
+declares `:gumshoe/dsl :v0-experimental`, a change declaring anything else
+is refused, and every run of an EDN book prints a note on stderr saying the
+format may change.
+
 A change to one object can be written as plain EDN, and
 `gumshoe.dsl/compile` turns it into the change map `mutation/book` and
 `mutation/run-on!` run. The data holds no code: reads, judgements and
 effects are words of a small vocabulary, and anything beyond it is a
 library function registered under a keyword. Every safeguard gumshoe has is
 on unless the change opts out of it with a reason. This is the CronJob
-suspend book (`runbooks/kubernetes/cronjobs/suspend.edn`, beside
-`suspend.clj`):
+suspend book `runbooks/kubernetes/cronjobs/suspend.clj` written as data, in
+`tests/edn-books/runbooks/kubernetes/cronjobs/suspend.edn`:
 
 ```clojure
-{:gumshoe/dsl 0
+{:gumshoe/dsl :v0-experimental
  :description "Suspends a CronJob so no new Job starts"
  :target {:pick :namespaced :label "CronJob" :type "cronjobs"
           :namespace-flag :namespace :name-flag :job
@@ -791,10 +797,49 @@ The vocabulary:
   `:candidates` or `:parse`), so a function that reads the cluster can only
   stand where reads stand.
 
-`workloads/scale.edn`, `objects/delete.edn` and `cronjobs/resume.edn` sit
-beside their books too, and `tests/gumshoe/dsl_books_test.clj` holds each to
-every transcript its book keeps in the golden harness. `bb run` and the
-catalog read `.clj` books only, so these files run through `compile`.
+### Running an EDN book
+
+A file holding such a change is a book. `bb run` (and `bb gumshoe`) runs it
+by its path, with the flags its target derives, exactly as it runs the
+Clojure book it mirrors:
+
+```sh
+bb run tests/edn-books/runbooks/kubernetes/cronjobs/suspend.edn --help
+bb run tests/edn-books/runbooks/kubernetes/cronjobs/suspend.edn --namespace shop --job nightly --dry-run
+```
+
+```text
+note: tests/edn-books/runbooks/kubernetes/cronjobs/suspend.edn is written in the experimental EDN book format (:gumshoe/dsl :v0-experimental), which may change in any release
+```
+
+An `.edn` file below a book root (`runbooks/`, `playbooks/`, `firebooks/`)
+of gumshoe or a casebook is listed by `bb run --list` and the menus, and
+`bb verify` loads it the way `bb run` does: a file `bb run` refuses is a
+finding, and the change it compiles to is held to the same spec contract,
+guard rule and fail-closed post-checks as a Clojure book's spec. Data a
+casebook's books read therefore lives outside its book roots. gumshoe's own
+EDN forms of `cronjobs/suspend`, `cronjobs/resume`, `workloads/scale` and
+`objects/delete` live under `tests/edn-books/` rather than `runbooks/`, so
+the catalog lists each of those books once, as its Clojure form, while the
+format is experimental; `tests/gumshoe/dsl_books_test.clj` holds each to
+every transcript its book keeps in the golden harness.
+
+A book file may come from anywhere on disk, and reading one never runs
+code from it:
+
+- it is read with `clojure.edn`, so `#=` read-eval, reader conditionals,
+  syntax quote, regexes and anonymous functions are refused as syntax;
+- every tagged literal is refused, `#inst` and `#uuid` included;
+- a file over 64 KiB, nested over 32 collections deep, holding more than
+  one form, or not valid UTF-8 is refused before it is compiled;
+- `compile` refuses every symbol, unknown key and word, and calls only
+  functions registered in `gumshoe.dsl.registry`. The plugins named in
+  `env.edn` load before the book compiles, so a casebook registers its own
+  functions from a plugin namespace.
+
+A refused file prints the path and the reason and exits 1, for example
+`refused book.edn: [:gumshoe/dsl]: the change declares :gumshoe/dsl 0, and
+this compiles :v0-experimental - …`.
 
 ## Structure
 

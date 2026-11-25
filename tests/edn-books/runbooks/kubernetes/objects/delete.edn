@@ -1,9 +1,11 @@
 ;; SPDX-FileCopyrightText: The gumshoe Authors
 ;; SPDX-License-Identifier: 0BSD
 
-;; delete.clj written in the gumshoe.dsl vocabulary; gumshoe.dsl/compile
-;; makes a change of it that runs as the book does.
-{:gumshoe/dsl 0
+;; runbooks/kubernetes/objects/delete.clj written in the experimental
+;; gumshoe.dsl vocabulary. Run it with
+;;   bb run tests/edn-books/runbooks/kubernetes/objects/delete.edn
+;; which compiles it with gumshoe.dsl/compile and runs it as the book runs.
+{:gumshoe/dsl :v0-experimental
  :description "Deletes one namespaced object after a server-side dry run accepted it"
  :target {:pick :one :label "Object" :flag :pick
           :parse :gumshoe.deletion/parse-pick

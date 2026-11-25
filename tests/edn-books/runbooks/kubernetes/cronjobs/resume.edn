@@ -1,9 +1,11 @@
 ;; SPDX-FileCopyrightText: The gumshoe Authors
 ;; SPDX-License-Identifier: 0BSD
 
-;; resume.clj written in the gumshoe.dsl vocabulary; gumshoe.dsl/compile
-;; makes a change of it that runs as the book does.
-{:gumshoe/dsl 0
+;; runbooks/kubernetes/cronjobs/resume.clj written in the experimental
+;; gumshoe.dsl vocabulary. Run it with
+;;   bb run tests/edn-books/runbooks/kubernetes/cronjobs/resume.edn
+;; which compiles it with gumshoe.dsl/compile and runs it as the book runs.
+{:gumshoe/dsl :v0-experimental
  :description "Resumes a suspended CronJob on its schedule"
  :target {:pick :namespaced :label "CronJob" :type "cronjobs"
           :namespace-flag :namespace :name-flag :job

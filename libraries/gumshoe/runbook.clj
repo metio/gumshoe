@@ -73,7 +73,11 @@
                                      details))
                  "\n\n"))
           (stdout/yellow "Usage:")
-          "\n  bb " (or file "<runbook>") " [options]"
+          ;; an EDN book runs through the run door, not as a bb script
+          "\n  bb " (cond (nil? file) "<runbook>"
+                          (str/ends-with? file ".edn") (str "run " file)
+                          :else file)
+          " [options]"
           "\n\n"
           (stdout/yellow "Options:")
           "\n"
