@@ -9,6 +9,7 @@
   (:require [babashka.process :as process]
             [cheshire.core :as cheshire]
             [clojure.string :as str]
+            [gumshoe.concurrent :as concurrent]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
@@ -577,7 +578,8 @@
   [context covered]
   (when-let [crds (get-all context "customresourcedefinitions")]
     (let [types (status-types crds covered)
-          reads (map vector types (pmap #(get-all context %) types))]
+          reads (map vector types (concurrent/map-all #(get-all context %) types
+                                                      {:parallelism concurrent/default-parallelism}))]
       {:items (vec (mapcat (comp :items second) reads))
        :unread (vec (for [[type result] reads :when (nil? result)] type))})))
 
@@ -810,27 +812,104 @@
       true)
     (catch Exception _ false)))
 
+(defn- port-bindable?
+  "Whether this process could bind port on 127.0.0.1 right now. A program
+   holding the port without accepting connections is caught here, where a
+   connection attempt would miss it."
+  [port]
+  (try
+    (with-open [_socket (java.net.ServerSocket. (int port) 1 (java.net.InetAddress/getByName "127.0.0.1"))]
+      true)
+    (catch Exception _ false)))
+
+(defn local-port-taken?
+  "Whether anything holds port on 127.0.0.1: a listener or a bind."
+  [port]
+  (or (port-open? port) (not (port-bindable? port))))
+
+(defn free-local-port
+  "A port on 127.0.0.1 nothing holds right now, chosen by the kernel from the
+   ephemeral range. Another program can take it before kubectl binds it;
+   with-port-forward then refuses instead of running against that program,
+   because kubectl never reports it as forwarded."
+  []
+  (with-open [socket (java.net.ServerSocket. 0 1 (java.net.InetAddress/getByName "127.0.0.1"))]
+    (.getLocalPort socket)))
+
+(defn local-port-or-free
+  "The local port an operator asked for, or a free one when they asked for
+   none, so concurrent books never share a default port."
+  [port]
+  (or port (free-local-port)))
+
+(defn forwarded-port
+  "The local port a line of kubectl port-forward's output reports as bound on
+   127.0.0.1, or nil. kubectl prints the line only once its listener is bound,
+   and binds 127.0.0.1 and ::1 separately: when 127.0.0.1 is taken by another
+   program it still forwards ::1 and prints only the ::1 line."
+  [line]
+  (some-> (re-find #"^Forwarding from 127\.0\.0\.1:(\d+) -> " (str line)) second parse-long))
+
+(def ^:dynamic *port-forward*
+  "The kubectl port-forward process with-port-forward runs f under, so a step
+   inside f can check that the forward it talks through is still ours."
+  nil)
+
+(defn port-forward-alive?
+  "Whether the port-forward f runs under is still running. Once it exits, the
+   local port is free for any program to take, so a later request to it may
+   reach somebody else's service. False outside with-port-forward."
+  []
+  (boolean (some-> *port-forward* process/alive?)))
+
+(defn- watch-forward-output
+  "Copies each line kubectl port-forward prints to stderr and delivers :bound
+   to bound once kubectl reports local-port forwarded on 127.0.0.1, or :exited
+   when its output ends first. Our stdout carries the book's result (--output
+   json), so the per-connection chatter goes to stderr; it is read
+   continuously, since an unread pipe fills up and blocks the forward."
+  [forward local-port bound]
+  (doto (Thread.
+         ^Runnable
+         (fn []
+           (try
+             (with-open [reader (java.io.BufferedReader. (java.io.InputStreamReader. ^java.io.InputStream (:out forward)))]
+               (loop []
+                 (when-let [line (.readLine reader)]
+                   (binding [*out* *err*] (println line) (flush))
+                   (when (= local-port (forwarded-port line)) (deliver bound :bound))
+                   (recur))))
+             (catch Exception _ nil)
+             (finally (deliver bound :exited)))))
+    (.setDaemon true)
+    (.start)))
+
+(def ^:dynamic *forward-start-ms*
+  "How long kubectl port-forward may take to report its listener bound."
+  30000)
+
 (defn with-port-forward
   "Runs f while the service's remote-port is forwarded to local-port, then
-   tears the forward down no matter what f does. Refuses to run f unless the
-   forward is genuinely ours: a local-port already in use would silently point
-   f at the wrong service, so that is an error, not a surprise."
+   tears the forward down no matter what f does. f runs only against our own
+   forward: a local-port already taken is refused before kubectl starts, f
+   starts only once kubectl itself reported 127.0.0.1:local-port bound and is
+   still running, and a forward that exited while f ran turns f's result into
+   a failure, since its port may by then belong to another program. A step
+   inside f that talks to the port repeatedly checks port-forward-alive?."
   [{:keys [context namespace service local-port remote-port]} f]
   (cond
     (nil? remote-port)
     (do (stdout/error (format "service/%s has no resolvable port to forward" service)) false)
 
-    (port-open? local-port)
+    (nil? local-port)
+    (do (stdout/error "no local port to forward to - pass one with --port") false)
+
+    (local-port-taken? local-port)
     (do (stdout/error (format "local port %d is already in use - pick another with --port" local-port))
         false)
 
     :else
     (let [forward (try
-                    ;; kubectl port-forward logs a line per connection on its
-                    ;; stdout. Our stdout carries the book's result (--output
-                    ;; json), so that chatter is copied to stderr instead; it
-                    ;; is still drained continuously, since an unread pipe
-                    ;; fills up and blocks the forward.
                     ;; babashka.process takes the options first and the
                     ;; command as separate strings; a vector after the
                     ;; options would be run as one program named "[kubectl".
@@ -838,7 +917,7 @@
                     ;; finally below runs still takes the forward down
                     ;; instead of leaving it holding local-port.
                     (shell/track-child!
-                     (apply process/process {:out System/err :err :inherit}
+                     (apply process/process {:out :stream :err :inherit}
                             ["kubectl" (str "--context=" context) (str "--namespace=" namespace)
                              "port-forward" (str "service/" service)
                              (str local-port ":" remote-port)]))
@@ -848,16 +927,31 @@
       (if (nil? forward)
         false
         (try
-          (loop [attempt 0]
-            (cond
-              (port-open? local-port) (f)
-              (not (process/alive? forward))
-              (do (stdout/error (format "kubectl port-forward to service/%s exited before the port opened" service))
-                  false)
-              (>= attempt 30) (do (stdout/error (format "port-forward to service/%s did not come up within 30 seconds" service))
-                                  false)
-              :else (do (Thread/sleep 1000)
-                        (recur (inc attempt)))))
+          (let [bound (promise)
+                deadline (+ (System/currentTimeMillis) *forward-start-ms*)]
+            (watch-forward-output forward local-port bound)
+            (loop []
+              (cond
+                (not (process/alive? forward))
+                (do (stdout/error (format "kubectl port-forward to service/%s exited before the port opened" service))
+                    false)
+
+                (and (= :bound (deref bound 0 nil)) (port-open? local-port) (process/alive? forward))
+                (let [result (binding [*port-forward* forward] (f))]
+                  (if (process/alive? forward)
+                    result
+                    (do (stdout/error (format (str "kubectl port-forward to service/%s exited while it was in use;"
+                                                   " what went through local port %d afterwards may have reached another program")
+                                              service local-port))
+                        false)))
+
+                (> (System/currentTimeMillis) deadline)
+                (do (stdout/error (format "port-forward to service/%s did not report 127.0.0.1:%d bound within %d seconds"
+                                          service local-port (quot *forward-start-ms* 1000)))
+                    false)
+
+                :else (do (Thread/sleep 100)
+                          (recur)))))
           (finally
             (process/destroy-tree forward)
             (shell/untrack-child! forward)))))))

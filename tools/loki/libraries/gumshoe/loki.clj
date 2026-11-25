@@ -8,7 +8,8 @@
    itself rather than probing one endpoint. When a component that serves the
    hash ring is reachable, the ring state is collected too; an unreachable ring
    is simply not judged."
-  (:require [gumshoe.http :as http]
+  (:require [gumshoe.concurrent :as concurrent]
+            [gumshoe.http :as http]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.stdout :as stdout]))
 
@@ -79,8 +80,7 @@
   [base-url]
   (stdout/print-section "🔍 Evidence (Loki hash rings)")
   (stdout/err-println (format "  %s %s" (stdout/blue "▸") base-url))
-  (let [rings (mapv (fn [[ring path]]
-                      (future [ring (http/fetch (str base-url path))]))
-                    ring-paths)]
+  (let [rings (concurrent/map-all (fn [[ring path]] [ring (http/fetch (str base-url path))])
+                                  ring-paths)]
     {"url" base-url
-     "rings" (answered-rings (into {} (map deref) rings))}))
+     "rings" (answered-rings (into {} rings))}))

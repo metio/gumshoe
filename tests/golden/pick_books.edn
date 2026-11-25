@@ -601,16 +601,16 @@
      :coerce :string,
      :alias :i},
     :port
-    {:desc "The local port used for the port-forward",
+    {:desc
+     "The local port used for the port-forward - a free port when omitted",
      :alias :p,
-     :default 42538,
      :coerce :long}},
    :prerequisites
    {:installed-tools ["kubectl" "psql" "fzf"],
     :cluster-capabilities [],
     :kubectl-can-get ["dbinstances.kinda.rocks" "secrets"]},
    :announce? true,
-   :parsed {:port 42538, :instance "pg-main"}},
+   :parsed {:instance "pg-main"}},
   :unanswered
   {:result false,
    :out
@@ -713,9 +713,9 @@
      :default "web",
      :coerce :string},
     :port
-    {:desc "The local port used for the port-forward",
+    {:desc
+     "The local port used for the port-forward - a free port when omitted",
      :alias :p,
-     :default 46372,
      :coerce :long},
     :delete-timeout
     {:desc
@@ -730,7 +730,6 @@
    :parsed
    {:selector "operated-prometheus=true",
     :port-name "web",
-    :port 46372,
     :delete-timeout 600,
     :metric "up",
     :namespace "monitoring",

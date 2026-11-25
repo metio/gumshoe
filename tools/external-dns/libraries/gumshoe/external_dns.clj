@@ -7,6 +7,7 @@
    listeners, DNSEndpoints) and resolves each one against the DNS server.
    The comparison itself is a pure detective."
   (:require [clojure.string :as str]
+            [gumshoe.concurrent :as concurrent]
             [gumshoe.dns :as dns]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.stdout :as stdout]))
@@ -108,18 +109,16 @@
 (defn collect-evidence!
   [context server]
   (stdout/print-section "🔍 Evidence (cluster + dig)")
-  (let [reads (into {} (map (fn [[k f]] [k @f]))
-                    (mapv (fn [[k type]] [k (future (read-source context type))]) source-types))
+  (let [reads (into {} (concurrent/map-all (fn [[k type]] [k (read-source context type)]) source-types))
         unread (sort (keep (fn [[k type]] (when (nil? (get reads k)) type)) source-types))
         sources (answered-sources reads)
-        resolutions (mapv (fn [host]
-                            (future [host {:a (dns/query {:server server} "A" (probe-name host))
-                                           :aaaa (dns/query {:server server} "AAAA" (probe-name host))}]))
-                          (keys sources))]
+        resolve (fn [host]
+                  [host {:a (dns/query {:server server} "A" (probe-name host))
+                         :aaaa (dns/query {:server server} "AAAA" (probe-name host))}])]
     (when (seq unread)
       (stdout/err-println (format "  %s could not read %s - nothing is judged" (stdout/red "✗") (str/join ", " unread))))
     (stdout/err-println (format "  %s %d hostnames via %s" (stdout/blue "▸") (count sources) server))
     {:now (java.time.Instant/now)
      "server" server
      "sources" sources
-     "resolved" (into {} (map deref) resolutions)}))
+     "resolved" (into {} (concurrent/map-all resolve (keys sources)))}))

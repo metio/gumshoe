@@ -4,7 +4,8 @@
 (ns gumshoe.thanos
   "Evidence collection for Thanos Query: readiness, the connected store
    endpoints, and rule evaluation health, all pulled from its HTTP API."
-  (:require [gumshoe.http :as http]
+  (:require [gumshoe.concurrent :as concurrent]
+            [gumshoe.http :as http]
             [gumshoe.stdout :as stdout]))
 
 (defn answered
@@ -31,10 +32,9 @@
   [base-url]
   (stdout/print-section "🔍 Evidence (Thanos HTTP API)")
   (stdout/err-println (format "  %s %s" (stdout/blue "▸") base-url))
-  (let [ready (future (http/fetch (str base-url "/-/ready")))
-        stores (future (http/fetch (str base-url "/api/v1/stores")))
-        rules (future (http/fetch (str base-url "/api/v1/rules")))]
-    (doseq [[path response] [["/api/v1/stores" @stores] ["/api/v1/rules" @rules]]
+  (let [[ready stores rules] (concurrent/map-all #(http/fetch (str base-url %))
+                                                 ["/-/ready" "/api/v1/stores" "/api/v1/rules"])]
+    (doseq [[path response] [["/api/v1/stores" stores] ["/api/v1/rules" rules]]
             :when (not (:reachable response))]
       (stdout/warn (format "%s did not answer: %s" path (:error response))))
-    (evidence base-url @ready @stores @rules)))
+    (evidence base-url ready stores rules)))

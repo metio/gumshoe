@@ -25,9 +25,8 @@
           :port-name {:desc "The distributor service port to forward for the ring check"
                       :default "http-metrics"
                       :coerce :string}
-          :port {:desc "The local port used for the port-forward"
+          :port {:desc "The local port used for the port-forward - a free port when omitted"
                  :alias :p
-                 :default 13100
                  :coerce :long}}
          detective/output-option))
 
@@ -70,12 +69,13 @@
       false
       (let [opts (assoc opts :namespace namespace)]
         (if-let [service (distributor-service context namespace selector)]
-          (kubectl/with-port-forward {:context context
-                                      :namespace namespace
-                                      :service (kubectl/name-of service)
-                                      :local-port (:port opts)
-                                      :remote-port (kubectl/service-port-or-first service (:port-name opts))}
-            (fn [] (run (assoc opts :ring-url (str "http://localhost:" (:port opts))))))
+          (let [local-port (kubectl/local-port-or-free (:port opts))]
+            (kubectl/with-port-forward {:context context
+                                        :namespace namespace
+                                        :service (kubectl/name-of service)
+                                        :local-port local-port
+                                        :remote-port (kubectl/service-port-or-first service (:port-name opts))}
+              (fn [] (run (assoc opts :ring-url (str "http://localhost:" local-port))))))
           (run opts))))))
 
 (defn- collect

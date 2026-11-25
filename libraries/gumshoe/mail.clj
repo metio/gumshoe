@@ -7,6 +7,7 @@
    against the running services (openssl s_client / bash TCP). Pure parsing
    and planning stay here; the detectives judge the evidence."
   (:require [clojure.string :as str]
+            [gumshoe.concurrent :as concurrent]
             [gumshoe.dns :as dns]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
@@ -174,21 +175,23 @@
   (stdout/print-section "🔍 Evidence (dig + openssl)")
   (stdout/err-println (format "  %s domain %s, host %s" (stdout/blue "▸") domain host))
   (let [q (fn [type name] (dns/query {:server server} type name))
-        mx (future (q "MX" domain))
-        spf (future (q "TXT" domain))
-        dmarc (future (q "TXT" (str "_dmarc." domain)))
-        ptr (future (ptr-evidence server host))
-        dkim (future (into {} (map (fn [selector]
-                                     [selector (q "TXT" (format "%s._domainkey.%s" selector domain))])
-                                   dkim-selectors)))
-        probes (mapv (fn [service] (future (probe-service host service probe-timeout-ms))) services)]
-    (stdout/err-println (format "  %s probing %d service ports on %s" (stdout/blue "▸") (count services) host))
+        _ (stdout/err-println (format "  %s probing %d service ports on %s" (stdout/blue "▸") (count services) host))
+        [mx spf dmarc ptr dkim & probes]
+        (concurrent/all
+         (into [#(q "MX" domain)
+                #(q "TXT" domain)
+                #(q "TXT" (str "_dmarc." domain))
+                #(ptr-evidence server host)
+                #(into {} (map (fn [selector]
+                                 [selector (q "TXT" (format "%s._domainkey.%s" selector domain))])
+                               dkim-selectors))]
+               (map (fn [service] #(probe-service host service probe-timeout-ms)) services)))]
     {:now (java.time.Instant/now)
      "domain" domain
      "host" host
-     "mx" @mx
-     "spf" @spf
-     "dmarc" @dmarc
-     "ptr" @ptr
-     "dkim" @dkim
-     "probes" (mapv deref probes)}))
+     "mx" mx
+     "spf" spf
+     "dmarc" dmarc
+     "ptr" ptr
+     "dkim" dkim
+     "probes" (vec probes)}))

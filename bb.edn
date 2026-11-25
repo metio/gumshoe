@@ -160,6 +160,8 @@
                    [gumshoe.loki-test]
                    [gumshoe.http-test]
                    [gumshoe.port-forward-test]
+                   [gumshoe.port-forward-ownership-test]
+                   [gumshoe.nested-cancellation-test]
                    [gumshoe.bounded-waits-test]
                    [gumshoe.ipfamily-test]
                    [gumshoe.opennebula-test]
@@ -373,6 +375,8 @@
                                                          'gumshoe.loki-test
                                                          'gumshoe.http-test
                                                          'gumshoe.port-forward-test
+                                                         'gumshoe.port-forward-ownership-test
+                                                         'gumshoe.nested-cancellation-test
                                                          'gumshoe.bounded-waits-test
                                                          'gumshoe.ipfamily-test
                                                          'gumshoe.opennebula-test

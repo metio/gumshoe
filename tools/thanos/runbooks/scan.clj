@@ -27,9 +27,8 @@
           :port-name {:desc "The service port to forward"
                       :default "http"
                       :coerce :string}
-          :port {:desc "The local port used for the port-forward"
+          :port {:desc "The local port used for the port-forward - a free port when omitted"
                  :alias :p
-                 :default 19090
                  :coerce :long}}
          detective/output-option))
 
@@ -52,7 +51,7 @@
       false
       (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
             remote-port (kubectl/service-port-or-first (kubectl/find-item @services target) (:port-name opts))
-            local-port (:port opts)]
+            local-port (kubectl/local-port-or-free (:port opts))]
         (kubectl/with-port-forward {:context context
                                     :namespace namespace
                                     :service name

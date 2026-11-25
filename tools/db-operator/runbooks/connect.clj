@@ -20,9 +20,8 @@
    :ingress {:desc "A public ingress host, used to look up the namespace"
              :alias :i
              :coerce :string}
-   :port {:desc "The local port used for the port-forward"
+   :port {:desc "The local port used for the port-forward - a free port when omitted"
           :alias :p
-          :default 42538
           :coerce :long}})
 
 (def prerequisites
@@ -53,7 +52,7 @@
               :announce! #(announce/announce! cluster announcement-data
                                                            (format "psql session on database %s" target))
               :execute! #(postgres/with-postgres context connection (:port opts)
-                           (fn [] (postgres/psql! connection (:port opts))))})))))))
+                           (fn [port] (postgres/psql! connection port)))})))))))
 
 (runbook/execute!
  {:description "Opens an interactive psql session on a db-operator managed database"

@@ -16,6 +16,7 @@
    is named and never reads as a cluster without connections. A failed
    Cluster read is no evidence at all."
   (:require [gumshoe.cnpg.instances :as inst]
+            [gumshoe.concurrent :as concurrent]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.postgres :as postgres]))
 
@@ -76,9 +77,10 @@
                       :else (if-let [pod (primary-pod cluster (kubectl/items-of (force labelled)))]
                               (assoc row :pod pod)
                               (assoc row :reason :no-primary))))]
-      (classify (vec (pmap (fn [{:keys [namespace pod reason] :as row}]
-                             (if reason row (assoc row :reading (read namespace pod))))
-                           (vec targets)))))))
+      (classify (concurrent/map-all (fn [{:keys [namespace pod reason] :as row}]
+                                      (if reason row (assoc row :reading (read namespace pod))))
+                                    (vec targets)
+                                    {:parallelism concurrent/default-parallelism})))))
 
 (defn collector
   "The evidence collector, for registration through the plugin seam."
