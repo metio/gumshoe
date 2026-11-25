@@ -2,7 +2,9 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns runbooks.prometheus.list-dashboard-metrics
-  "Lists every metric used by the dashboards of a Grafana instance."
+  "Lists every metric used by the dashboards of a Grafana instance. A query
+   mimirtool could not parse is named on stderr and fails the run, because the
+   metrics only it uses are missing from the list."
   (:require [babashka.fs :as fs]
             [gumshoe.inputs :as inputs]
             [gumshoe.mimirtool :as mimirtool]
@@ -37,8 +39,15 @@
       (do (stdout/error "no Grafana token given and none found in gopass, use --token") false)
       (fs/with-temp-dir [workdir {}]
         (if-let [analysis (mimirtool/analyze-grafana! base-url token (str workdir))]
-          (do (run! println (mimirtool/used-metrics analysis))
-              true)
+          (let [unparsed (mimirtool/parse-errors analysis)]
+            (run! println (mimirtool/used-metrics analysis))
+            (if (seq unparsed)
+              (do (stdout/error "mimirtool could not parse these queries, so the metrics only they use are missing from the list above:")
+                  (doseq [{:keys [source errors]} unparsed
+                          error errors]
+                    (stdout/error (format "  %s: %s" source error)))
+                  false)
+              true))
           false)))))
 
 (runbook/execute!
