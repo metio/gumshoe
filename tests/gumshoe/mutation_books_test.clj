@@ -391,7 +391,17 @@
 (def ^:private certificate-type "certificates.cert-manager.io")
 (def ^:private order-type "orders.acme.cert-manager.io")
 
-(defn- certificate [status] {:metadata (meta-of "shop" "web-tls") :status (ready status)})
+(defn- certificate
+  "Certificate shop/web-tls with its Ready condition at status, at revision
+   (none by default); failed-at stamps a failed issuance with an Issuing
+   condition False carrying its message."
+  [status & {:keys [revision failed-at]}]
+  {:metadata (meta-of "shop" "web-tls")
+   :status (cond-> (ready status)
+             revision (assoc :revision revision)
+             failed-at (-> (assoc :lastFailureTime failed-at)
+                           (update :conditions conj {:type "Issuing" :status "False" :reason "Failed"
+                                                     :message "The certificate request has failed to complete and will be retried: rate limited"})))})
 
 (defn- order [state] {:metadata (meta-of "shop" "web-1") :status {:state state}})
 
@@ -664,9 +674,18 @@
               :refused [["secrets" (helm-revision 1 "superseded")] ["secrets" (helm-revision 2 "pending-upgrade")]]})
 
    "runbooks/kubernetes/certificates/renew.clj"
-   (standard {:target ["shop/web-tls"]
-              :permitted [[certificate-type (certificate "True")]]
-              :refused [[certificate-type (certificate "False")]]})
+   (let [before [[certificate-type (certificate "True" :revision 1)]]]
+     (assoc (standard {:target ["shop/web-tls"]
+                       :permitted before
+                       :refused [[certificate-type (certificate "False")]]})
+            ;; cert-manager stored a new certificate after the renewal
+            :reissued {:objects before :target ["shop/web-tls"]
+                       :between {:objects [[certificate-type (certificate "True" :revision 2)]]}}
+            ;; still Ready on the old certificate: no evidence of a renewal
+            :not-reissued {:objects before :target ["shop/web-tls"]}
+            :issuance-failed {:objects before :target ["shop/web-tls"]
+                              :between {:objects [[certificate-type (certificate "True" :revision 1
+                                                                                 :failed-at "2026-11-25T10:00:00Z")]]}}))
 
    "runbooks/kubernetes/cronjobs/start.clj"
    (standard {:target "batch/nightly" :invalid "nightly"
