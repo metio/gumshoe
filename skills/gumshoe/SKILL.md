@@ -320,6 +320,11 @@ mostly data:
   leave part of what the check covers unjudged (a kind of binding, a kind
   of owner), and leave out a read judged only when it answered, one that
   only adds to a hint, or one that a cluster may not serve.
+  Reads judged only when they answered, of which any one is enough (the
+  ServiceAccount, Secret, Service and namespace reads a pod template is
+  judged against), go in `:consults`: the check is unread when every one is
+  nil, an empty list still counts, and its `:detect` guards with
+  `(gumshoe.evidence/consulted? evidence reads)`.
   A collection reading a command's output out of a container uses
   `kubectl/exec-answer`, nil unless the command exited 0; `exec-stdout`
   returns whatever reached stdout, so a failed command reads as an empty

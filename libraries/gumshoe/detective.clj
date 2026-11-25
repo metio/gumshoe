@@ -111,10 +111,17 @@
    Service to its EndpointSlices - names the evidence keys it joins as
    :joins. When any one of them is nil, the join cannot be made: a missing
    side would read as no endpoints, or no Service, where nobody looked. Such
-   a check is unread even though the other keys answered."
-  [{:keys [requires judges joins]} evidence]
+   a check is unread even though the other keys answered.
+
+   A detective that judges its subjects against several reads of which any
+   one is enough - each judged only when it answered - names them as
+   :consults. When every one of them is nil, it has nothing to judge against,
+   and its silence is no more a pass than a refused read. An empty list
+   answers, so a consulted read that came back empty still counts."
+  [{:keys [requires judges joins consults]} evidence]
   (boolean (or (and (seq requires) (every? #(nil? (get evidence %)) requires))
                (and (seq joins) (some #(nil? (get evidence %)) joins))
+               (and (seq consults) (every? #(nil? (get evidence %)) consults))
                (and (seq judges) (every? #(empty-subjects? (get evidence %)) judges)))))
 
 (defn mark-unread

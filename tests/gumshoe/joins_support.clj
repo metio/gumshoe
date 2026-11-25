@@ -7,7 +7,9 @@
    the helpers here derive the evidence with joined reads missing, judge it
    the way a scan does, and generate it for test.check. Adding a check to a
    case list is all a later fix needs to put it under the same table and
-   property."
+   property. A check that consults several reads of which any one is enough
+   names them as :consults in its case, and the consulted-read helpers derive
+   the evidence on which none or only one of them answered."
   (:require [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
             [gumshoe.detective :as detective]))
@@ -39,6 +41,15 @@
   [joins answered]
   (conj (mapv (fn [read] [(str "only " read " did not answer") (without answered [read])]) joins)
         ["no joined read answered" (without answered joins)]))
+
+(defn consulted-read-cases
+  "[label evidence] for each consulted read answering alone, and for none of
+   them answering, derived from one answered evidence map. A check consults
+   reads of which any one is enough, so only the last case leaves it with
+   nothing to judge against."
+  [consults answered]
+  (conj (mapv (fn [read] [(str "only " read " answered") (without answered (remove #{read} consults))]) consults)
+        ["no consulted read answered" (without answered consults)]))
 
 (defn judgement
   "What a scan makes of the check on this evidence: whether it is marked
@@ -99,3 +110,14 @@
   (gen/let [{:keys [check answered]} (gen/elements cases)
             evidence (gen-varied answered)]
     [check evidence]))
+
+(defn no-unconsulted-check-judges
+  "The property that no evidence on which none of a case's consulted reads
+   answered yields a finding or a pass for its check, however the other reads
+   are thinned. Each case's :check may be swapped by the caller, which is how
+   a positive control drops a check's :consults."
+  [cases]
+  (prop/for-all [[check evidence] (gen/let [{:keys [check consults answered]} (gen/elements cases)
+                                            evidence (gen-varied answered)]
+                                    [check (without evidence consults)])]
+    (judges-nothing? check evidence)))

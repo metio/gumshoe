@@ -13,3 +13,11 @@
    missing side would read as an object that does not exist."
   [evidence reads]
   (every? #(some? (get evidence %)) reads))
+
+(defn consulted?
+  "Whether any read a check consults answered. A check that judges against
+   several reads of which any one is enough - each judged only when it
+   answered - has nothing to judge against when none did. An empty list is an
+   answer."
+  [evidence reads]
+  (boolean (some #(some? (get evidence %)) reads)))
