@@ -2,9 +2,13 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.loki-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [cheshire.core :as json]
+            [clojure.test :refer [deftest is testing]]
+            [gumshoe.detective :as detective]
             [gumshoe.detectives.loki :as loki]
-            [gumshoe.loki :as loki-evidence]))
+            [gumshoe.http :as http]
+            [gumshoe.loki :as loki-evidence]
+            [gumshoe.shell :as shell]))
 
 (defn- summaries [findings] (set (map :summary findings)))
 
@@ -89,3 +93,47 @@
   (testing "a fully ACTIVE ring is silent"
     (is (empty? (loki/detect-rings {"rings" {"ingester" {:reachable true
                                                          :json {:shards [{:id "loki-0" :state "ACTIVE"}]}}}})))))
+
+(defn- unread-checks
+  [evidence]
+  (set (map :name (filter :unread (detective/mark-unread loki/detectives evidence)))))
+
+(defn- quietly
+  [f]
+  (binding [*err* (java.io.StringWriter.)] (f)))
+
+(deftest an-unanswered-workload-read-leaves-the-checks-unread-test
+  (with-redefs [shell/execute (fn [& _] {:exit 1 :out "" :err "Unable to connect to the server"})]
+    (let [evidence (quietly #(loki-evidence/collect-workloads! {:context "ctx" :namespace "loki"
+                                                                 :selector "app.kubernetes.io/name=loki"}))]
+      (is (nil? (get evidence "workloads")))
+      (is (= #{"loki-mode" "loki-components" "loki-health" "loki-rings"} (unread-checks evidence))))))
+
+(deftest an-answered-workload-read-is-read-test
+  (with-redefs [shell/execute (fn [& _] {:exit 0 :err ""
+                                         :out (json/generate-string
+                                               {:items [{:kind "Deployment"
+                                                         :metadata {:namespace "loki" :name "loki-distributor"
+                                                                    :labels {(keyword "app.kubernetes.io/component") "distributor"}}
+                                                         :spec {:replicas 1} :status {:readyReplicas 1}}]})})]
+    (let [evidence (quietly #(loki-evidence/collect-workloads! {:context "ctx" :namespace "loki"
+                                                                 :selector "app.kubernetes.io/name=loki"}))]
+      (is (= 1 (count (get evidence "workloads"))))
+      (is (= #{"loki-rings"} (unread-checks evidence))))))
+
+(deftest rings-that-did-not-answer-with-shards-are-unread-test
+  (doseq [[label response] [["unreachable" {:reachable false :error "refused"}]
+                            ["404" {:reachable true :status 404 :body "404 page not found"}]
+                            ["html" {:reachable true :status 200 :body "<html></html>" :json nil}]]]
+    (with-redefs [http/fetch (fn [& _] response)]
+      (let [evidence (quietly #(loki-evidence/collect-rings! "http://localhost:13100"))]
+        (is (nil? (get evidence "rings")) label)
+        (is (contains? (unread-checks evidence) "loki-rings") label)))))
+
+(deftest answered-rings-keeps-the-rings-with-shards-test
+  (let [active {:reachable true :status 200 :json {:shards [{:id "i-1" :state "ACTIVE"}]}}]
+    (is (= {"ingester" active}
+           (loki-evidence/answered-rings {"ingester" active
+                                          "ruler" {:reachable true :status 404}
+                                          "compactor" {:reachable false}})))
+    (is (nil? (loki-evidence/answered-rings {"ruler" {:reachable true :status 404}})))))

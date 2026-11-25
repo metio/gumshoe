@@ -46,18 +46,36 @@
   [{:keys [context namespace selector]}]
   (stdout/print-section "🔍 Evidence (Loki components)")
   (stdout/err-println (format "  %s namespace %s (selector %s)" (stdout/blue "▸") namespace selector))
-  (let [items (kubectl/items-of (kubectl/get-selected context "deployments,statefulsets" selector))
-        workloads (workloads-from items namespace)]
+  (let [{:keys [ok? doc]} (kubectl/get-json-result context "deployments,statefulsets"
+                                                  "--all-namespaces" (str "--selector=" selector))
+        ;; a read that did not answer leaves the workloads nil, so the checks
+        ;; over them are unread instead of reporting no Loki components
+        workloads (when ok? (workloads-from (kubectl/items-of doc) namespace))]
+    (when-not ok?
+      (stdout/err-println (str "    " (stdout/red "✗") " could not read the deployments and statefulsets")))
     (doseq [{:keys [component name]} workloads]
       (stdout/err-println (str "    " (stdout/blue "▸") " " (or component name))))
     {:now (java.time.Instant/now)
      "namespace" namespace
      "workloads" workloads}))
 
+(defn answered-rings
+  "Pure: the ring responses that answered 2xx with a list of shards, or nil
+   when none did. An unreachable ring, an error status or a page that is not
+   the ring's JSON holds no member to judge, so it is left out, and a check
+   left with no ring at all is unread instead of passing on nothing."
+  [fetched]
+  (not-empty
+   (into {}
+         (filter (fn [[_ response]]
+                   (and (http/ok? response) (sequential? (-> response :json :shards)))))
+         fetched)))
+
 (defn collect-rings!
   "The hash ring state from a reachable ring-serving component (a port-forward to
-   the distributor). Best-effort: an unreachable ring yields no evidence, and
-   the workload view already tells the health story on its own."
+   the distributor). Best-effort: a ring that does not answer with its shards
+   yields no evidence, and the workload view already tells the health story on
+   its own."
   [base-url]
   (stdout/print-section "🔍 Evidence (Loki hash rings)")
   (stdout/err-println (format "  %s %s" (stdout/blue "▸") base-url))
@@ -65,4 +83,4 @@
                       (future [ring (http/fetch (str base-url path))]))
                     ring-paths)]
     {"url" base-url
-     "rings" (into {} (map deref) rings)}))
+     "rings" (answered-rings (into {} (map deref) rings))}))
