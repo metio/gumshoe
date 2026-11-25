@@ -2,9 +2,15 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.rightsizing-test
-  (:require [clojure.string :as str]
+  (:require [cheshire.core :as json]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [gumshoe.rightsizing :as rs]))
+            [gumshoe.http :as http]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.promql :as promql]
+            [gumshoe.rightsizing :as rs]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.shell :as shell]))
 
 (def ^:private mi 1048576.0)
 
@@ -115,3 +121,38 @@
       "a bare pod has no template")
   (is (str/includes? (rs/patch-line {:namespace "jobs" :workload "Job/backup" :container "x" :cpu-recommendation 0.1})
                      "job/backup")))
+
+;; --- the book --------------------------------------------------------------------
+
+(def ^:private right-size-book
+  (binding [runbook/*loading* true]
+    (load-file "tools/prometheus/runbooks/right_size.clj")))
+
+(defn- run-right-size
+  "Runs the book against a Prometheus answering an empty vector and a cluster
+   answering the pods read with pods-result. Returns the result, or the
+   message of what it threw, and what it printed."
+  [opts pods-result]
+  (let [printed (java.io.StringWriter.)
+        reads (atom [])]
+    (with-redefs [http/fetch (fn [& _] {:reachable true :status 200
+                                        :json {:status "success" :data {:resultType "vector" :result []}}})
+                  promql/credentials (fn [& _] {})
+                  kubectl/current-context (constantly "ctx")
+                  shell/execute (fn [& argv] (swap! reads conj (vec argv)) pods-result)]
+      (let [result (binding [*out* printed *err* printed]
+                     (try ((:action right-size-book) (merge {:prometheus "https://prometheus.example.org" :window "7d"} opts) {})
+                          (catch clojure.lang.ExceptionInfo e (str "threw: " (ex-message e)))))]
+        {:result result :out (str printed) :reads @reads}))))
+
+(deftest an-unanswered-pods-read-is-not-an-empty-cluster
+  (let [{:keys [result out]} (run-right-size {} {:exit 1 :out "" :err "Unable to connect to the server"})]
+    (is (= "threw: could not list the pods - the cluster did not answer" result))
+    (is (not (str/includes? out "no container usage")))))
+
+(deftest an-answered-empty-pods-read-reports-no-usage
+  (let [{:keys [result out reads]} (run-right-size {:namespace "shop"}
+                                                   {:exit 0 :out (json/generate-string {:items []}) :err ""})]
+    (is (true? result))
+    (is (str/includes? out "no container usage over 7d that matches a running pod"))
+    (is (some #(some #{"--namespace=shop"} %) reads) "the namespace narrows the read")))
