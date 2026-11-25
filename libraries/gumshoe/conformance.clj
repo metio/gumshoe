@@ -26,6 +26,15 @@
 
      :no-verify \"the session is the result; nothing is left to check\"
 
+   A destructive spec also needs a guard the engine judges again after the
+   confirmation - a :refusal, a :precondition, or a subject it reads again
+   and pins - or a stated reason for having none,
+
+     :no-guard \"the effect itself refuses a target that moved\"
+
+   Those findings are notes unless the caller passes :guards :require, as
+   gumshoe's own gate does.
+
    A declared :pin is called with a synthetic pick in a namespace of its own
    and must return a ref with a :type and a :name, in the picked namespace
    when the ref has one. A library that cannot be required is reported too,
@@ -34,8 +43,9 @@
    these findings are printed as notes until it drops the option.
 
    An advisory names something worth a look that the gate does not fail on:
-   a mutation book whose spec declares no :recovery, and, under
-   :spec-contract :advise, the judgements of the mutation specs. gumshoe.mutation prints
+   a mutation book whose spec declares no :recovery, a destructive spec
+   without a guard unless :guards :require, and, under :spec-contract
+   :advise, the judgements of the mutation specs. gumshoe.mutation prints
    generic guidance when such a change fails after applying an effect, so
    the book works without one; verify! prints the advisories as notes and
    still passes.
@@ -411,6 +421,31 @@
              :else
              "has no post-check (:verify) and states no reason for having none (:no-verify \"why\")")]))
 
+(defn guard-problems
+  "What a spec, as gumshoe.change/normalize maps it, lacks to act only on
+   the target the operator confirmed, as messages. A destructive spec needs
+   a guard the engine judges again after the confirmation: a :refusal (or a
+   :precondition, its alias), which judges the state read again then, or a
+   subject (:subject, :subjects, :pin), which is read again and refused when
+   it was deleted, replaced or changed. A spec with neither states why, as
+   :no-guard \"why\". A spec that is not destructive needs no guard."
+  [{:keys [confirm refusal subjects no-guard] :as spec}]
+  (let [guarded? (or (some? refusal) (boolean (seq subjects)))
+        reason? (contains? spec :no-guard)]
+    (cond
+      (and guarded? reason?)
+      ["declares a guard (:refusal, :precondition, :subject, :subjects or :pin) and a :no-guard reason for having none; drop the reason"]
+
+      (and reason? (not (non-blank? no-guard)))
+      [":no-guard must be a string saying why the spec judges nothing again after the confirmation"]
+
+      (and (true? (:destructive? confirm)) (not guarded?) (not reason?))
+      [(str "is destructive and judges nothing again after the confirmation, so it acts on a target whose state"
+            " moved while the operator read the prompt; declare a :refusal over that state, a :subject or"
+            " :subjects to pin, or :no-guard \"why\"")]
+
+      :else [])))
+
 (def probe-namespace
   "The namespace of the synthetic pick a declared :pin is called with."
   "gumshoe-probe-namespace")
@@ -538,6 +573,16 @@
       [(str "is refused: " refused)]
       (concat (contract-problems canonical) (pin-problems canonical select)))))
 
+(defn spec-guard-problems
+  "guard-problems of one spec, {:spec}, judged on the canonical change map.
+   A spec gumshoe.change/normalize refuses has none here: spec-problems
+   reports the refusal."
+  [{:keys [spec]}]
+  (let [canonical (try (change/normalize spec)
+                       (catch clojure.lang.ExceptionInfo e
+                         (if (change/invalid? e) nil (throw e))))]
+    (when canonical (guard-problems canonical))))
+
 (defn- contains-spec?
   "Whether spec holds every entry of library-spec as the same value, as
    (merge library-spec {...}) does."
@@ -545,20 +590,33 @@
   (and (not (identical? spec library-spec))
        (every? (fn [[k v]] (identical? v (get spec k ::absent))) library-spec)))
 
+(defn- judged-findings
+  "A `check` finding per problem (problems-of item) names, against the file
+   that defines the spec. A spec that a book builds by merging a library
+   spec inherits that spec's problems, which are reported once, against the
+   library."
+  [check problems-of specs library-specs]
+  (let [library-problems (mapv (fn [l] [(:spec l) (set (problems-of l))]) library-specs)]
+    (for [{:keys [file name spec] :as item} specs
+          :let [inherited (into #{} (comp (filter #(contains-spec? spec (first %))) (mapcat second))
+                                library-problems)]
+          problem (problems-of item)
+          :when (not (inherited problem))]
+      (finding file check (str "mutation spec " name " " problem)))))
+
 (defn spec-findings
   "A finding per problem of each spec (see spec-problems), against the file
    that defines it, from {:file :name :spec :select}. A spec that a book
    builds by merging a library spec inherits that spec's problems, which are
    reported once, against the library."
   ([specs] (spec-findings specs []))
-  ([specs library-specs]
-   (let [library-problems (mapv (fn [l] [(:spec l) (set (spec-problems l))]) library-specs)]
-     (for [{:keys [file name spec] :as item} specs
-           :let [inherited (into #{} (comp (filter #(contains-spec? spec (first %))) (mapcat second))
-                                 library-problems)]
-           problem (spec-problems item)
-           :when (not (inherited problem))]
-       (finding file :spec-contract (str "mutation spec " name " " problem))))))
+  ([specs library-specs] (judged-findings :spec-contract spec-problems specs library-specs)))
+
+(defn guard-findings
+  "A :guard finding per problem of spec-guard-problems for each spec, from
+   {:file :name :spec}, inheriting as spec-findings does."
+  ([specs] (guard-findings specs []))
+  ([specs library-specs] (judged-findings :guard spec-guard-problems specs library-specs)))
 
 (defn- distinct-specs
   "specs without a spec value seen before, so a spec reached through a book
@@ -602,15 +660,16 @@
       (assoc spec :file file))))
 
 (defn contract-findings
-  "spec-findings for the specs the libraries and loaded books define, each
-   judged once, and a :load finding for each library that cannot be
-   required."
+  "spec-findings and guard-findings for the specs the libraries and loaded
+   books define, each judged once, and a :load finding for each library
+   that cannot be required."
   [loaded parsed-books parsed-libraries]
   (let [libraries (library-specs parsed-libraries)
-        library-specs (remove :finding libraries)]
+        library-specs (remove :finding libraries)
+        specs (distinct-specs (concat library-specs (book-specs loaded parsed-books)))]
     (concat (keep :finding libraries)
-            (spec-findings (distinct-specs (concat library-specs (book-specs loaded parsed-books)))
-                           library-specs))))
+            (spec-findings specs library-specs)
+            (guard-findings specs library-specs))))
 
 (defn advisories
   "Every advisory for the book files (see without-recovery). None fails the
@@ -628,9 +687,12 @@
    mutation specs the books and libraries define are judged against their
    contract (see contract-findings). `spec-contract` :advise reports those
    judgements as advisories instead, for a casebook that takes a gumshoe
-   release before it has fixed or annotated its specs. :advisories holds
-   them and every advisory of `advisories`."
-  [{:keys [books libraries license load? spec-contract] :as opts}]
+   release before it has fixed or annotated its specs. The :guard findings
+   (see guard-problems) are advisories unless `guards` is :require, so a
+   casebook sees a destructive spec without a guard as a note until it opts
+   into failing on it. :advisories holds them and every advisory of
+   `advisories`."
+  [{:keys [books libraries license load? spec-contract guards] :as opts}]
   (let [parsed-books (mapv parse books)
         parsed-libraries (mapv parse libraries)
         parsed (concat parsed-books parsed-libraries)
@@ -639,7 +701,10 @@
                              (select-keys opts [:classpath])))
         contract (when loaded (contract-findings loaded parsed-books parsed-libraries))
         advise? (= :advise spec-contract)
-        advised (when advise? (filter #(= :spec-contract (:check %)) contract))]
+        noted? (fn [{:keys [check]}]
+                 (or (and advise? (= :spec-contract check))
+                     (and (not= :require guards) (= :guard check))))
+        advised (filter noted? contract)]
     {:findings (vec (concat (unparseable parsed)
                             (when-not (false? license)
                               (missing-license (concat books libraries) license))
@@ -649,7 +714,7 @@
                             (undescribed-books parsed-books)
                             (option-problems parsed-books)
                             (load-findings loaded)
-                            (if advise? (remove #(= :spec-contract (:check %)) contract) contract)))
+                            (remove noted? contract)))
      :advisories (vec (concat (without-recovery (filter :forms parsed-books)) advised))}))
 
 (defn findings
@@ -695,9 +760,10 @@
 
      {:books [\"runbooks\"] :libraries [\"libraries\"] :license \"0BSD\"}
 
-   A casebook that carries no SPDX headers passes :license false, and one
+   A casebook that carries no SPDX headers passes :license false, one
    whose mutation specs should be noted rather than fail it :spec-contract
-   :advise."
+   :advise, and one that fails on a destructive spec without a guard
+   :guards :require."
   [opts]
   (let [{:keys [books libraries] :as files} (files-in opts)
         {found :findings advised :advisories} (report (merge (with-library-classpath opts) files))]

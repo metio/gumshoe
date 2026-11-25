@@ -25,14 +25,28 @@
   "The label kubeadm puts on a control-plane node."
   "node-role.kubernetes.io/control-plane")
 
-(defn control-plane-nodes
-  "Names of the nodes carrying the control-plane role label. The label's value is
+(defn control-plane?
+  "Whether node carries the control-plane role label. The label's value is
    conventionally empty, so presence of the key is what counts."
+  [node]
+  (contains? (-> node :metadata :labels) (keyword control-plane-label)))
+
+(defn control-plane-nodes
+  "Names of the nodes carrying the control-plane role label."
   [nodes-list]
-  (kubectl/names-of
-   {:items (kubectl/filter-list
-            nodes-list
-            #(contains? (-> % :metadata :labels) (keyword control-plane-label)))}))
+  (kubectl/names-of {:items (kubectl/filter-list nodes-list control-plane?)}))
+
+(defn restart-refusal
+  "Why kube-apiserver must not be restarted on the node named `name`, judged
+   on the node as the cluster lists it: the cluster no longer lists it, so
+   the host its name resolves to over SSH may be another machine by now, or
+   it carries no control-plane role label, so no kube-apiserver of this
+   cluster runs there."
+  [name node]
+  (cond
+    (nil? node) (format "the cluster no longer lists node %s, so it is not reached over SSH" name)
+    (not (control-plane? node)) (format "node %s carries no %s label" name control-plane-label)
+    :else nil))
 
 (defn container-id
   "The running kube-apiserver container id from `crictl ps -q` output. The flag

@@ -325,6 +325,12 @@
   (mapv kubectl/namespace-name-of
         (concat (filter parked? releases) (remove parked? releases))))
 
+(defn helmrelease-refusal
+  "Why a change must not act on the HelmRelease named `target`, judged on it
+   as read after the confirmation: it no longer exists."
+  [target helmrelease]
+  (when (nil? helmrelease) (format "HelmRelease %s no longer exists" target)))
+
 (defn reset-effect
   "Clears the failure counters and asks for a reconcile. `requestedAt` alone
    triggers the reconcile and leaves the exhausted counters in place, so the

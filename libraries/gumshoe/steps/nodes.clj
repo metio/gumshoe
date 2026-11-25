@@ -5,7 +5,12 @@
   "The steps that change a node's scheduling: cordon, drain and uncordon.
 
    Each step is a mutation spec (see gumshoe.mutation): its runbook runs it on
-   its own, and a playbook composes it with others (see gumshoe.playbook). A step
+   its own, and a playbook composes it with others (see gumshoe.playbook). Each
+   step names the node as its :subject, so the engine reads it again after the
+   confirmation and refuses a node that was removed or replaced meanwhile. None
+   refuses a node already in the state it brings about: cordon, drain and
+   uncordon are idempotent, and the maintenance playbook runs again over a node
+   a failed run left cordoned. A step
    declares the prerequisites and options it needs, so whatever runs it derives
    its own from the steps. The book that runs a step names its :description,
    where the catalog reads it without loading the book. The bespoke parts - candidates, effect, checks - are
@@ -53,6 +58,18 @@
   [node]
   (true? (-> node :spec :unschedulable)))
 
+(def ^:private node-subject {:type "nodes"})
+
+(defn node-refusal
+  "Why a step must not act on the node named `name`, judged on the node as
+   read after the confirmation: it no longer exists."
+  [name node]
+  (when (nil? node) (format "node %s no longer exists" name)))
+
+(defn- refusal
+  [{:keys [target object]}]
+  (node-refusal target object))
+
 (defn cordon-effect
   [context node]
   (effect/plan (effect/kubectl context "cordon" node)))
@@ -91,6 +108,8 @@
             :preview "kubectl describe node {}"}
    :empty-message "every node is already cordoned"
    :confirm {:action "cordon (mark unschedulable) a node" :destructive? false}
+   :subject node-subject
+   :refusal refusal
    :announce (fn [{:keys [target]}] (format "Cordon node %s" target))
    :effect (fn [{:keys [context target]}] (cordon-effect context target))
    :verify (fn [{:keys [context target]}] [(unschedulable-check context target)])})
@@ -107,6 +126,8 @@
    :select {:mode :one :label "Node" :flag :node :candidates all-nodes}
    :confirm {:action "drain a node - every pod on it is evicted and emptyDir data is deleted"
              :destructive? true}
+   :subject node-subject
+   :refusal refusal
    :announce (fn [{:keys [target]}] (format "Drain node %s" target))
    ;; -1 lets each pod keep its own terminationGracePeriodSeconds
    :effect (fn [{:keys [context target opts]}] (drain-effect context target (:grace-period opts)))
@@ -118,6 +139,8 @@
    :select {:mode :one :label "Node" :flag :node :candidates cordoned-nodes}
    :empty-message "no node is cordoned"
    :confirm {:action "uncordon (mark schedulable) a node" :destructive? false}
+   :subject node-subject
+   :refusal refusal
    :announce (fn [{:keys [target]}] (format "Uncordon node %s" target))
    :effect (fn [{:keys [context target]}] (effect/plan (effect/kubectl context "uncordon" target)))
    :verify (fn [{:keys [context target]}] [(schedulable-check context target)])})

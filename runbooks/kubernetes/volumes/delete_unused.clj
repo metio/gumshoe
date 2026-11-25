@@ -3,7 +3,8 @@
 
 (ns runbooks.kubernetes.volumes.delete-unused
   "Deletes a PersistentVolumeClaim that no pod uses."
-  (:require [gumshoe.effect :as effect]
+  (:require [gumshoe.cleanup :as cleanup]
+            [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]))
 
@@ -28,10 +29,11 @@
   :empty-message "every PersistentVolumeClaim is in use"
   :confirm {:action "delete a PersistentVolumeClaim - the data on the volume is lost"
             :destructive? true}
+  :subject {:type "persistentvolumeclaims"}
   ;; a pod may have started using the claim since it was offered
-  :precondition (fn [{:keys [context target]}]
-                  (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
-                    (kubectl/pvc-unused? context namespace name)))
+  :recheck (fn [{:keys [context ref]}]
+             {:pods (kubectl/get-json-result context "pods" (str "--namespace=" (:namespace ref)))})
+  :refusal (fn [{:keys [ref object pods]}] (cleanup/claim-refusal ref object pods))
   :announce (fn [{:keys [target]}] (format "Delete unused PersistentVolumeClaim %s" target))
   :effect (fn [{:keys [context target]}]
             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]

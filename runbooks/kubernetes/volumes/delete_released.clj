@@ -7,6 +7,7 @@
    according to each volume's reclaim policy - which is shown right in the
    confirmation, since a 'Delete' policy also destroys the backing storage."
   (:require [clojure.string :as str]
+            [gumshoe.cleanup :as cleanup]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]))
@@ -14,14 +15,18 @@
 (defn released-volumes
   [context]
   (kubectl/names-of (kubectl/filter-list (kubectl/get-all context "persistentvolumes")
-                                         #(= "Released" (-> % :status :phase)))))
+                                         cleanup/released?)))
 
-(defn reclaim-policies
-  "A name -> reclaim-policy map for the chosen volumes."
-  [context volumes]
-  (into {} (for [volume volumes]
-             [volume (-> (kubectl/get-cluster-resource context "persistentvolumes" volume)
-                         :spec :persistentVolumeReclaimPolicy)])))
+(defn volume-refs
+  "The ref of each picked volume, which the engine reads again and pins."
+  [{:keys [target]}]
+  (for [volume target] {:type "persistentvolumes" :name volume}))
+
+(defn volume-items
+  "What the confirmation lists per volume: its name and reclaim policy, as
+   the volumes read before the confirmation name it."
+  [volumes objects]
+  (map #(format "%s (%s reclaim policy)" %1 (cleanup/reclaim-policy %2)) volumes objects))
 
 (defn delete-effect
   [context volumes]
@@ -45,10 +50,10 @@
                   :kubectl-can-delete ["persistentvolumes"]}
   :select {:mode :many :label "PersistentVolume" :flag :volumes :candidates released-volumes}
   :empty-message "no PersistentVolume is Released"
-  ;; look up each volume's reclaim policy once, so the confirmation can name it
-  :derive (fn [{:keys [context target]}] {:policies (reclaim-policies context target)})
-  :items (fn [{:keys [target policies]}]
-           (map #(format "%s (%s reclaim policy)" % (get policies % "Unknown")) target))
+  :subjects volume-refs
+  :items (fn [{:keys [target objects]}] (volume-items target objects))
+  ;; a claim may have bound a volume again while the operator read the prompt
+  :refusal (fn [{:keys [refs objects]}] (cleanup/first-refusal cleanup/volume-refusal refs objects))
   :confirm {:action "delete Released PersistentVolumes - a 'Delete' reclaim policy also removes the backing storage"
             :destructive? true}
   :announce (fn [{:keys [target]}] (format "Delete released PersistentVolumes [%s]" (str/join ", " target)))

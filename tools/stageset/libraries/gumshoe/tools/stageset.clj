@@ -32,6 +32,29 @@
 ;; the token into status.stages[].lastHandledPromotion once it acted on it.
 (def promote-annotation :stages.metio.wtf/promote)
 
+(defn declared-stages
+  "The stage names a StageSet declares, as its status reports them, else as
+   its spec lists them."
+  [stageset]
+  (mapv :name (or (seq (-> stageset :status :stages))
+                  (-> stageset :spec :stages))))
+
+(defn promotion-refusal
+  "Why `stage` of the StageSet named `target` must not be promoted, judged on
+   the StageSet as read now; `requested` is the stage the flags named, when
+   they named one: the StageSet no longer exists, declares no stages, no
+   stage was chosen (the flags named one it does not declare), or it no
+   longer declares the stage chosen."
+  [target stageset stage requested]
+  (let [stages (declared-stages stageset)]
+    (cond
+      (nil? stageset) (format "StageSet %s no longer exists" target)
+      (empty? stages) (format "StageSet %s declares no stages" target)
+      (and (nil? stage) requested) (format "StageSet %s declares no stage %s, only %s" target requested (str/join ", " stages))
+      (nil? stage) "no stage was chosen"
+      (not (some #{stage} stages)) (format "StageSet %s no longer declares stage %s" target stage)
+      :else nil)))
+
 (defn promotion-handled?
   "Whether the stage acted on the promotion the StageSet's promote annotation
    addresses to it: the annotation names the stage and a token, and the

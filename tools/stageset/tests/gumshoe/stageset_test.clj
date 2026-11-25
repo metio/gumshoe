@@ -157,3 +157,28 @@
     (is (false? (stageset/promotion-handled? (promoted-stageset "canary@" "") "canary"))))
   (testing "a StageSet that could not be read is not promoted"
     (is (false? (stageset/promotion-handled? nil "canary")))))
+
+(defn- with-stages
+  [spec-stages status-stages]
+  {:metadata {:namespace "apps" :name "site"}
+   :spec {:stages (mapv #(hash-map :name %) spec-stages)}
+   :status (when status-stages {:stages (mapv #(hash-map :name %) status-stages)})})
+
+(deftest the-declared-stages-come-from-the-status-else-the-spec
+  (is (= ["dev" "prod"] (stageset/declared-stages (with-stages ["dev" "prod"] nil))))
+  (is (= ["dev" "qa" "prod"] (stageset/declared-stages (with-stages ["dev" "prod"] ["dev" "qa" "prod"]))))
+  (is (= [] (stageset/declared-stages (with-stages [] nil))))
+  (is (= [] (stageset/declared-stages nil))))
+
+(deftest a-promotion-is-refused-unless-the-stageset-declares-the-stage
+  (let [site (with-stages ["dev" "prod"] nil)]
+    (is (nil? (stageset/promotion-refusal "apps/site" site "prod" "prod")))
+    (is (nil? (stageset/promotion-refusal "apps/site" site "prod" nil)) "a stage picked interactively")
+    (is (= "StageSet apps/site no longer exists" (stageset/promotion-refusal "apps/site" nil "prod" "prod")))
+    (is (= "StageSet apps/site declares no stages"
+           (stageset/promotion-refusal "apps/site" (with-stages [] nil) nil "prod")))
+    (is (= "StageSet apps/site declares no stage qa, only dev, prod"
+           (stageset/promotion-refusal "apps/site" site nil "qa")))
+    (is (= "no stage was chosen" (stageset/promotion-refusal "apps/site" site nil nil)))
+    (is (= "StageSet apps/site no longer declares stage qa"
+           (stageset/promotion-refusal "apps/site" site "qa" nil)))))

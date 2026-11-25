@@ -7,6 +7,7 @@
   (:require [babashka.fs :as fs]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [gumshoe.change :as change]
             [gumshoe.conformance :as conformance]))
 
 (def ^:private header
@@ -325,6 +326,34 @@
   (is (empty? (conformance/contract-problems
                (-> complete-spec (dissoc :verify) (assoc :no-verify "the session is the result"))))))
 
+(def ^:private destructive-spec
+  (assoc-in complete-spec [:confirm :destructive?] true))
+
+(deftest a-destructive-spec-without-a-guard-is-a-guard-problem
+  (let [[problem & more] (conformance/guard-problems destructive-spec)]
+    (is (nil? more))
+    (is (str/includes? problem "is destructive and judges nothing again after the confirmation") problem)))
+
+(deftest every-guard-satisfies-the-rule
+  (doseq [[guard spec] [[":refusal" (assoc destructive-spec :refusal (fn [_] nil))]
+                        [":precondition" (assoc destructive-spec :precondition (fn [_] true))]
+                        [":subject" (assoc destructive-spec :subject {:type "nodes"} :select {:mode :one})]
+                        [":subjects" (assoc destructive-spec :subjects (fn [_] []))]
+                        [":pin" (assoc destructive-spec :pin (fn [_] nil))]
+                        [":no-guard" (assoc destructive-spec :no-guard "the effect refuses a target that moved")]]]
+    (testing guard
+      (is (empty? (conformance/guard-problems (change/normalize spec)))))))
+
+(deftest a-spec-that-is-not-destructive-needs-no-guard
+  (is (empty? (conformance/guard-problems complete-spec))))
+
+(deftest a-no-guard-reason-is-judged-like-a-no-verify-reason
+  (is (str/includes? (first (conformance/guard-problems (assoc destructive-spec :no-guard " ")))
+                     ":no-guard must be a string"))
+  (is (str/includes? (first (conformance/guard-problems
+                             (change/normalize (assoc destructive-spec :no-guard "why" :refusal (fn [_] nil)))))
+                     "drop the reason")))
+
 (deftest a-declared-pin-is-called-with-a-pick-in-a-namespace-of-its-own
   (let [ns conformance/probe-namespace
         problems #(conformance/pin-problems (assoc complete-spec :pin %1) %2)
@@ -460,6 +489,35 @@
                       (conformance/findings-in (assoc (roots root) :spec-contract :advise))))
         (is (= 4 (count (filter #(= :spec-contract (:check %))
                                 (:advisories (conformance/report-in (assoc (roots root) :spec-contract :advise))))))))
+      (finally (fs/delete-tree root)))))
+
+(def ^:private unguarded-book
+  (str header
+       "(ns casebook.guard.purge\n"
+       "  \"Deletes without judging what it deletes again.\"\n"
+       "  (:require [gumshoe.mutation :as mutation]))\n\n"
+       "(mutation/book\n"
+       " {:description \"Purges\"\n"
+       "  :prerequisites {}\n"
+       "  :select {:mode :one :label \"Namespace\" :flag :namespace :candidates (fn [_] [])}\n"
+       "  :confirm {:action \"purge a namespace\" :destructive? true}\n"
+       "  :effect (fn [_] [])\n"
+       "  :verify (fn [_] [])})\n"))
+
+(deftest a-destructive-spec-without-a-guard-is-a-note-unless-guards-are-required
+  (let [root (casebook! {"runbooks/purge.clj" unguarded-book})
+        guard? #(= :guard (:check %))]
+    (try
+      (let [{:keys [findings advisories]} (conformance/report-in (roots root))]
+        (is (not-any? guard? findings) "a casebook keeps passing")
+        (is (= ["mutation spec casebook.guard.purge is destructive and judges nothing again after the confirmation"]
+               (map #(first (str/split (:message %) #",")) (filter guard? advisories)))))
+      (testing ":guards :require fails on it"
+        (is (= {"purge.clj" [:guard]}
+               (by-file (filter guard? (conformance/findings-in (assoc (roots root) :guards :require))))))
+        (is (thrown? clojure.lang.ExceptionInfo
+                     (binding [*out* (java.io.StringWriter.) *err* (java.io.StringWriter.)]
+                       (conformance/verify! (assoc (roots root) :guards :require))))))
       (finally (fs/delete-tree root)))))
 
 (def ^:private verified-library

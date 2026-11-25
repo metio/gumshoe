@@ -1097,15 +1097,9 @@
    :step
    "force namespace termination - every resource left in it is deleted",
    :plan
-   [[:kubectl-stdin
-     "ctx"
-     "{\"spec\":{\"finalizers\":[]}}"
-     "replace"
-     "--raw"
-     "/api/v1/namespaces/stuck/finalize"
-     "--filename"
-     "-"]],
-   :precondition nil,
+   [[:note "namespace stuck was not found; nothing is written back"]],
+   :precondition
+   {:result false, :out "refusing: namespace stuck no longer exists"},
    :announce "Remove finalizers from namespace stuck",
    :checks
    [{:description "namespace stuck is gone",
@@ -1166,7 +1160,7 @@
      "/api/v1/namespaces/stuck/finalize"
      "--filename"
      "-"]],
-   :precondition nil,
+   :precondition {:result true, :out ""},
    :announce "Remove finalizers from namespace stuck",
    :checks
    [{:description "namespace stuck is gone",
@@ -1204,7 +1198,9 @@
      "/api/v1/namespaces/stuck/finalize"
      "--filename"
      "-"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out "refusing: namespace stuck is Active, not Terminating"},
    :announce "Remove finalizers from namespace stuck",
    :checks
    [{:description "namespace stuck is gone",
@@ -1227,7 +1223,8 @@
      "/api/v1/namespaces/stuck/finalize"
      "--filename"
      "-"]],
-   :precondition nil,
+   :precondition
+   {:result false, :out "refusing: it changed after the confirmation"},
    :announce "Remove finalizers from namespace stuck",
    :checks
    [{:description "namespace stuck is gone",
@@ -1256,6 +1253,7 @@
    ["What it does:"
     "  picks one Namespace (--namespace, or interactively)"
     "  asks to confirm: force namespace termination - every resource left in it is deleted (destructive - type yes)"
+    "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
     "  verifies the result before it reports success"
     ""
@@ -1279,7 +1277,10 @@
      "/api/v1/namespaces/stuck/finalize"
      "--filename"
      "-"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
    :announce "Remove finalizers from namespace stuck",
    :checks
    [{:description "namespace stuck is gone",
@@ -1301,7 +1302,8 @@
    :items ["n1"],
    :step "cordon (mark unschedulable) a node",
    :plan [[:kubectl "ctx" "cordon" "n1"]],
-   :precondition nil,
+   :precondition
+   {:result false, :out "refusing: node n1 no longer exists"},
    :announce "Cordon node n1",
    :checks
    [{:description "node n1 is unschedulable",
@@ -1344,7 +1346,7 @@
    :items ["n1"],
    :step "cordon (mark unschedulable) a node",
    :plan [[:kubectl "ctx" "cordon" "n1"]],
-   :precondition nil,
+   :precondition {:result true, :out ""},
    :announce "Cordon node n1",
    :checks
    [{:description "node n1 is unschedulable",
@@ -1363,7 +1365,7 @@
    :items ["n1"],
    :step "cordon (mark unschedulable) a node",
    :plan [[:kubectl "ctx" "cordon" "n1"]],
-   :precondition nil,
+   :precondition {:result true, :out ""},
    :announce "Cordon node n1",
    :checks
    [{:description "node n1 is unschedulable",
@@ -1376,7 +1378,8 @@
    :items ["n1"],
    :step "cordon (mark unschedulable) a node",
    :plan [[:kubectl "ctx" "cordon" "n1"]],
-   :precondition nil,
+   :precondition
+   {:result false, :out "refusing: it changed after the confirmation"},
    :announce "Cordon node n1",
    :checks
    [{:description "node n1 is unschedulable",
@@ -1407,6 +1410,7 @@
    ["What it does:"
     "  picks one Node (--node, or interactively)"
     "  asks to confirm: cordon (mark unschedulable) a node"
+    "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
     "  verifies the result before it reports success"
     ""
@@ -1421,7 +1425,10 @@
    :items ["n1"],
    :step "cordon (mark unschedulable) a node",
    :plan [[:kubectl "ctx" "cordon" "n1"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
    :announce "Cordon node n1",
    :checks
    [{:description "node n1 is unschedulable",
@@ -1452,7 +1459,8 @@
      "--ignore-daemonsets"
      "--delete-emptydir-data"
      "--grace-period=-1"]],
-   :precondition nil,
+   :precondition
+   {:result false, :out "refusing: node n1 no longer exists"},
    :announce "Drain node n1",
    :checks
    [{:description "node n1 is unschedulable",
@@ -1516,7 +1524,7 @@
      "--ignore-daemonsets"
      "--delete-emptydir-data"
      "--grace-period=-1"]],
-   :precondition nil,
+   :precondition {:result true, :out ""},
    :announce "Drain node n1",
    :checks
    [{:description "node n1 is unschedulable",
@@ -1556,7 +1564,7 @@
      "--ignore-daemonsets"
      "--delete-emptydir-data"
      "--grace-period=-1"]],
-   :precondition nil,
+   :precondition {:result true, :out ""},
    :announce "Drain node n1",
    :checks
    [{:description "node n1 is unschedulable",
@@ -1582,7 +1590,8 @@
      "--ignore-daemonsets"
      "--delete-emptydir-data"
      "--grace-period=-1"]],
-   :precondition nil,
+   :precondition
+   {:result false, :out "refusing: it changed after the confirmation"},
    :announce "Drain node n1",
    :checks
    [{:description "node n1 is unschedulable",
@@ -1623,6 +1632,7 @@
    ["What it does:"
     "  picks one Node (--node, or interactively)"
     "  asks to confirm: drain a node - every pod on it is evicted and emptyDir data is deleted (destructive - type yes)"
+    "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
     "  verifies the result before it reports success"
     ""
@@ -1647,7 +1657,10 @@
      "--ignore-daemonsets"
      "--delete-emptydir-data"
      "--grace-period=-1"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
    :announce "Drain node n1",
    :checks
    [{:description "node n1 is unschedulable",
@@ -1691,18 +1704,18 @@
      "sudo"
      "crictl"
      "stop"
-     "abc123"]],
+     nil]],
    :precondition
-   {:result true,
+   {:result false,
     :out
-    "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n────────────────────────────────────────────────────────────────────────────────\nnode       : cp-1\ncontainer  : abc123\nstarted-at : <instant>"},
+    "refusing: the cluster no longer lists node cp-1, so it is not reached over SSH"},
    :announce "Restart kube-apiserver on cp-1",
    :checks
    [{:description
-     "kube-apiserver was replaced and answers /readyz (was abc123)",
+     "kube-apiserver was replaced and answers /readyz (was null)",
      :timeout 180,
      :interval 5,
-     :holds false}]},
+     :holds true}]},
   :dry-run
   {:result true,
    :out
@@ -1964,9 +1977,9 @@
      "stop"
      "abc123"]],
    :precondition
-   {:result true,
+   {:result false,
     :out
-    "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n────────────────────────────────────────────────────────────────────────────────\nnode       : cp-1\ncontainer  : abc123\nstarted-at : <instant>"},
+    "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n────────────────────────────────────────────────────────────────────────────────\nnode       : cp-1\ncontainer  : abc123\nstarted-at : <instant>\nrefusing: it changed after the confirmation"},
    :announce "Restart kube-apiserver on cp-1",
    :checks
    [{:description
@@ -2038,7 +2051,10 @@
      "crictl"
      "stop"
      "abc123"]],
-   :precondition {:result false, :out "✗ can not connect to cp-1"},
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
    :announce "Restart kube-apiserver on cp-1",
    :checks
    [{:description
@@ -2094,7 +2110,8 @@
    :items ["n1"],
    :step "uncordon (mark schedulable) a node",
    :plan [[:kubectl "ctx" "uncordon" "n1"]],
-   :precondition nil,
+   :precondition
+   {:result false, :out "refusing: node n1 no longer exists"},
    :announce "Uncordon node n1",
    :checks
    [{:description "node n1 is schedulable",
@@ -2126,7 +2143,7 @@
    :items ["n1"],
    :step "uncordon (mark schedulable) a node",
    :plan [[:kubectl "ctx" "uncordon" "n1"]],
-   :precondition nil,
+   :precondition {:result true, :out ""},
    :announce "Uncordon node n1",
    :checks
    [{:description "node n1 is schedulable",
@@ -2145,7 +2162,7 @@
    :items ["n1"],
    :step "uncordon (mark schedulable) a node",
    :plan [[:kubectl "ctx" "uncordon" "n1"]],
-   :precondition nil,
+   :precondition {:result true, :out ""},
    :announce "Uncordon node n1",
    :checks
    [{:description "node n1 is schedulable",
@@ -2158,7 +2175,8 @@
    :items ["n1"],
    :step "uncordon (mark schedulable) a node",
    :plan [[:kubectl "ctx" "uncordon" "n1"]],
-   :precondition nil,
+   :precondition
+   {:result false, :out "refusing: it changed after the confirmation"},
    :announce "Uncordon node n1",
    :checks
    [{:description "node n1 is schedulable",
@@ -2185,6 +2203,7 @@
    ["What it does:"
     "  picks one Node (--node, or interactively)"
     "  asks to confirm: uncordon (mark schedulable) a node"
+    "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
     "  verifies the result before it reports success"
     ""
@@ -2199,7 +2218,10 @@
    :items ["n1"],
    :step "uncordon (mark schedulable) a node",
    :plan [[:kubectl "ctx" "uncordon" "n1"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
    :announce "Uncordon node n1",
    :checks
    [{:description "node n1 is schedulable",
@@ -2403,7 +2425,8 @@
      "delete"
      "orders.acme.cert-manager.io"
      "web-1"]],
-   :precondition nil,
+   :precondition
+   {:result false, :out "refusing: Order shop/web-1 no longer exists"},
    :announce "Recreate invalid orders [shop/web-1]",
    :checks
    [{:description "invalid order shop/web-1 is cleared",
@@ -2441,7 +2464,7 @@
      "delete"
      "orders.acme.cert-manager.io"
      "web-1"]],
-   :precondition nil,
+   :precondition {:result true, :out ""},
    :announce "Recreate invalid orders [shop/web-1]",
    :checks
    [{:description "invalid order shop/web-1 is cleared",
@@ -2472,7 +2495,10 @@
      "delete"
      "orders.acme.cert-manager.io"
      "web-1"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out
+    "refusing: Order shop/web-1 is valid now; it no longer needs to be recreated"},
    :announce "Recreate invalid orders [shop/web-1]",
    :checks
    [{:description "invalid order shop/web-1 is cleared",
@@ -2491,7 +2517,10 @@
      "delete"
      "orders.acme.cert-manager.io"
      "web-1"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out
+    "refusing: orders.acme.cert-manager.io shop/web-1: its spec changed after the confirmation (generation 1, now 2)"},
    :announce "Recreate invalid orders [shop/web-1]",
    :checks
    [{:description "invalid order shop/web-1 is cleared",
@@ -2521,6 +2550,7 @@
    ["What it does:"
     "  picks one or more of Order (--orders, or interactively)"
     "  asks to confirm: delete ACME orders so cert-manager recreates them (destructive - type yes)"
+    "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
     "  verifies the result before it reports success"
     ""
@@ -2541,7 +2571,10 @@
      "delete"
      "orders.acme.cert-manager.io"
      "web-1"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
    :announce "Recreate invalid orders [shop/web-1]",
    :checks
    [{:description "invalid order shop/web-1 is cleared",
@@ -2561,7 +2594,7 @@
   {:action
    "delete Released PersistentVolumes - a 'Delete' reclaim policy also removes the backing storage",
    :destructive? true,
-   :items ["pv-1 (null reclaim policy)"],
+   :items ["pv-1 (Unknown reclaim policy)"],
    :step
    "delete Released PersistentVolumes - a 'Delete' reclaim policy also removes the backing storage",
    :plan
@@ -2571,7 +2604,9 @@
      "persistentvolume"
      "pv-1"
      "--wait=false"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out "refusing: PersistentVolume pv-1 no longer exists"},
    :announce "Delete released PersistentVolumes [pv-1]",
    :checks
    [{:description "PersistentVolume pv-1 is gone",
@@ -2622,7 +2657,7 @@
      "persistentvolume"
      "pv-1"
      "--wait=false"]],
-   :precondition nil,
+   :precondition {:result true, :out ""},
    :announce "Delete released PersistentVolumes [pv-1]",
    :checks
    [{:description "PersistentVolume pv-1 is gone",
@@ -2656,7 +2691,9 @@
      "persistentvolume"
      "pv-1"
      "--wait=false"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out "refusing: PersistentVolume pv-1 is Bound, not Released"},
    :announce "Delete released PersistentVolumes [pv-1]",
    :checks
    [{:description "PersistentVolume pv-1 is gone",
@@ -2677,7 +2714,10 @@
      "persistentvolume"
      "pv-1"
      "--wait=false"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out
+    "refusing: persistentvolumes pv-1: it changed after the confirmation"},
    :announce "Delete released PersistentVolumes [pv-1]",
    :checks
    [{:description "PersistentVolume pv-1 is gone",
@@ -2707,6 +2747,7 @@
    ["What it does:"
     "  picks one or more of PersistentVolume (--volumes, or interactively)"
     "  asks to confirm: delete Released PersistentVolumes - a 'Delete' reclaim policy also removes the backing storage (destructive - type yes)"
+    "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
     "  verifies the result before it reports success"
     ""
@@ -2729,7 +2770,10 @@
      "persistentvolume"
      "pv-1"
      "--wait=false"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
    :announce "Delete released PersistentVolumes [pv-1]",
    :checks
    [{:description "PersistentVolume pv-1 is gone",
@@ -2759,7 +2803,9 @@
      "delete"
      "persistentvolumeclaim"
      "data"]],
-   :precondition {:result true, :out ""},
+   :precondition
+   {:result false,
+    :out "refusing: PersistentVolumeClaim shop/data no longer exists"},
    :announce "Delete unused PersistentVolumeClaim shop/data",
    :checks
    [{:description "PersistentVolumeClaim shop/data is gone",
@@ -2837,7 +2883,10 @@
      "delete"
      "persistentvolumeclaim"
      "data"]],
-   :precondition {:result false, :out ""},
+   :precondition
+   {:result false,
+    :out
+    "refusing: PersistentVolumeClaim shop/data is used by pod(s) web-0"},
    :announce "Delete unused PersistentVolumeClaim shop/data",
    :checks
    [{:description "PersistentVolumeClaim shop/data is gone",
@@ -2858,7 +2907,10 @@
      "delete"
      "persistentvolumeclaim"
      "data"]],
-   :precondition {:result true, :out ""},
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
    :announce "Delete unused PersistentVolumeClaim shop/data",
    :checks
    [{:description "PersistentVolumeClaim shop/data is gone",
@@ -5669,7 +5721,9 @@
      "podinfo"
      "--context=ctx"
      "--namespace=apps"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out "refusing: HelmRelease apps/podinfo no longer exists"},
    :announce "Reconcile HelmRelease apps/podinfo",
    :checks
    [{:description "HelmRelease apps/podinfo is Ready",
@@ -5689,7 +5743,7 @@
      "podinfo"
      "--context=ctx"
      "--namespace=apps"]],
-   :precondition nil,
+   :precondition {:result true, :out ""},
    :announce "Reconcile HelmRelease apps/podinfo",
    :checks
    [{:description "HelmRelease apps/podinfo is Ready",
@@ -5709,7 +5763,7 @@
      "podinfo"
      "--context=ctx"
      "--namespace=apps"]],
-   :precondition nil,
+   :precondition {:result true, :out ""},
    :announce "Reconcile HelmRelease apps/podinfo",
    :checks
    [{:description "HelmRelease apps/podinfo is Ready",
@@ -5729,7 +5783,10 @@
      "podinfo"
      "--context=ctx"
      "--namespace=apps"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
    :announce "Reconcile HelmRelease apps/podinfo",
    :checks
    [{:description "HelmRelease apps/podinfo is Ready",
@@ -5767,6 +5824,7 @@
    ["What it does:"
     "  picks one HelmRelease by namespace and name (--namespace and --name, or interactively)"
     "  asks to confirm: trigger a flux reconciliation"
+    "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
     "  verifies the result before it reports success"
     ""
@@ -5789,7 +5847,10 @@
      "podinfo"
      "--context=ctx"
      "--namespace=apps"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
    :announce "Reconcile HelmRelease apps/podinfo",
    :checks
    [{:description "HelmRelease apps/podinfo is Ready",
@@ -5814,7 +5875,9 @@
      "--overwrite"
      "reconcile.fluxcd.io/resetAt=<instant>"
      "reconcile.fluxcd.io/requestedAt=<instant>"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out "refusing: HelmRelease apps/podinfo no longer exists"},
    :announce "Reset HelmRelease apps/podinfo",
    :checks
    [{:description "HelmRelease apps/podinfo is Ready",
@@ -5838,7 +5901,7 @@
      "--overwrite"
      "reconcile.fluxcd.io/resetAt=<instant>"
      "reconcile.fluxcd.io/requestedAt=<instant>"]],
-   :precondition nil,
+   :precondition {:result true, :out ""},
    :announce "Reset HelmRelease apps/podinfo",
    :checks
    [{:description "HelmRelease apps/podinfo is Ready",
@@ -5862,7 +5925,7 @@
      "--overwrite"
      "reconcile.fluxcd.io/resetAt=<instant>"
      "reconcile.fluxcd.io/requestedAt=<instant>"]],
-   :precondition nil,
+   :precondition {:result true, :out ""},
    :announce "Reset HelmRelease apps/podinfo",
    :checks
    [{:description "HelmRelease apps/podinfo is Ready",
@@ -5886,7 +5949,10 @@
      "--overwrite"
      "reconcile.fluxcd.io/resetAt=<instant>"
      "reconcile.fluxcd.io/requestedAt=<instant>"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
    :announce "Reset HelmRelease apps/podinfo",
    :checks
    [{:description "HelmRelease apps/podinfo is Ready",
@@ -5925,6 +5991,7 @@
    ["What it does:"
     "  picks one HelmRelease by namespace and name (--namespace and --name, or interactively)"
     "  asks to confirm: clear the failure counters and reconcile"
+    "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
     "  verifies the result before it reports success"
     ""
@@ -5953,7 +6020,10 @@
      "--overwrite"
      "reconcile.fluxcd.io/resetAt=<instant>"
      "reconcile.fluxcd.io/requestedAt=<instant>"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
    :announce "Reset HelmRelease apps/podinfo",
    :checks
    [{:description "HelmRelease apps/podinfo is Ready",
@@ -6987,15 +7057,10 @@
    :destructive? false,
    :items ["apps/site"],
    :step "promote a StageSet stage",
-   :plan
-   [[:cmd
-     "stagesetctl"
-     "promote"
-     "site"
-     "--stage"
-     nil
-     "--namespace=apps"]],
-   :precondition nil,
+   :plan [[:note "no stage was chosen; nothing is promoted"]],
+   :precondition
+   {:result false,
+    :out "refusing: StageSet apps/site no longer exists"},
    :announce "Promote stage null of StageSet apps/site",
    :checks
    [{:description
@@ -7047,7 +7112,7 @@
      "prod"
      "--namespace=apps"]],
    :step "promote a StageSet stage",
-   :precondition nil},
+   :precondition {:result true, :out ""}},
   :picked
   {:result true,
    :out "▸ StageSet: apps/site\n▸ Stage: prod",
@@ -7082,7 +7147,7 @@
      "prod"
      "--namespace=apps"]],
    :step "promote a StageSet stage",
-   :precondition nil},
+   :precondition {:result true, :out ""}},
   :spec-changed
   {:checks
    [{:description
@@ -7104,7 +7169,10 @@
      "prod"
      "--namespace=apps"]],
    :step "promote a StageSet stage",
-   :precondition nil},
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"}},
   :surface
   {:description
    "Manually promotes a held StageSet stage via stagesetctl",
@@ -7137,6 +7205,7 @@
    ["What it does:"
     "  picks one StageSet by namespace and name (--namespace and --name, or interactively)"
     "  asks to confirm: promote a StageSet stage"
+    "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
     "  verifies the result before it reports success"
     ""
@@ -7166,7 +7235,10 @@
      "prod"
      "--namespace=apps"]],
    :step "promote a StageSet stage",
-   :precondition nil},
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"}},
   :unanswered-pick
   {:result false,
    :out
@@ -7183,16 +7255,12 @@
    :out "🔶 Stage 'qa' is not a valid choice, please select one",
    :action "promote a StageSet stage",
    :items ["apps/site"],
-   :plan
-   [[:cmd
-     "stagesetctl"
-     "promote"
-     "site"
-     "--stage"
-     nil
-     "--namespace=apps"]],
+   :plan [[:note "no stage was chosen; nothing is promoted"]],
    :step "promote a StageSet stage",
-   :precondition nil},
+   :precondition
+   {:result false,
+    :out
+    "refusing: StageSet apps/site declares no stage qa, only dev, prod"}},
   :unparsable-pick
   {:result false,
    :out

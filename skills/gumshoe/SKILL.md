@@ -278,7 +278,12 @@ mostly data:
   :verify …})`. Conformance requires each spec to carry a readable
   `:confirm {:action …}`, an explicit `:destructive?` true or false,
   `:prerequisites`, an `:effect`, and a `:verify` or, for a change with
-  nothing to check afterwards, `:no-verify "why"`. Its effect plan (`[[:kubectl "cordon" node]]`) runs,
+  nothing to check afterwards, `:no-verify "why"`. A destructive spec also
+  needs a guard judged again after the confirmation: a `:refusal` over the
+  state it rests on, or a `:subject`/`:subjects` the engine reads again and
+  pins, or `:no-guard "why"`; give it both where you can, so a target that
+  was deleted, replaced or left the state it was offered in is refused with
+  a reason naming it. Its effect plan (`[[:kubectl "cordon" node]]`) runs,
   dry-runs, or is collected in a test. An `:effect` returning one effect,
   such as a bare `(effect/note …)`, runs as a plan of one; anything else
   that is not a plan, a keyword, a map or a plan holding a non-effect, is
@@ -615,4 +620,8 @@ merges a library spec inherits its problems, and they are named once,
 against the library. A library that cannot be required is a `load` finding.
 A casebook that takes a gumshoe release before fixing or annotating its
 specs passes `:spec-contract :advise`, which prints these as `note:` lines;
-`conformance/report-in` returns `{:findings :advisories}` as data.
+`conformance/report-in` returns `{:findings :advisories}` as data. A
+destructive spec with no `:refusal`, `:precondition`, `:subject`,
+`:subjects` or `:pin` and no `:no-guard "why"` is a `guard` line: a note by
+default, a finding under `:guards :require`, and a failure in gumshoe's own
+gate.

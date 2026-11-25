@@ -10,7 +10,9 @@
 
    A scenario names the objects the cluster holds, the pick and flags, and
    what happens between the confirmation and the precondition: nothing, a
-   spec change (the generation moves), or a kubectl that stops answering.
+   spec change (the generation moves), a kubectl that stops answering, or
+   {:objects [..]}, the cluster holding those objects instead (the state the
+   change rests on moved).
    Each book also keeps its surface: the options, prerequisites, selection,
    messages and --help text its spec declares, and the candidates its select
    offers over the permitted and the refused cluster.
@@ -147,9 +149,11 @@
    the run printed, the config it handed flow/change! (nil when it stopped
    before) and the cluster's state atom."
   [spec {:keys [objects target opts dry-run ssh]} f]
-  (let [state (atom {:objects objects :answering? true :dry-run dry-run :ssh ssh})
+  (let [state (atom {:objects objects :answering? true :dry-run dry-run :ssh ssh :commands []})
         seen (atom nil)]
-    (with-redefs [shell/execute (fn [& argv] (answer @state (vec argv)))
+    (with-redefs [shell/execute (fn [& argv]
+                                  (swap! state update :commands conj (vec argv))
+                                  (answer @state (vec argv)))
                   fuzzy/select-single (constantly nil)
                   fuzzy/select-multi (constantly nil)
                   kubectl/current-context (constantly "ctx")
@@ -168,10 +172,10 @@
    spec scenario
    (fn [out seen state]
      (let [{:keys [confirmation precondition announce! effect step post-checks]} seen]
-       (case between
-         :spec-changed (swap! state update :objects bump-generation)
-         :unanswered (swap! state assoc :answering? false)
-         nil)
+       (cond
+         (= :spec-changed between) (swap! state update :objects bump-generation)
+         (= :unanswered between) (swap! state assoc :answering? false)
+         (map? between) (swap! state assoc :objects (:objects between)))
        (normalise
         (if-not seen
           {:stopped out}
@@ -997,3 +1001,146 @@
         (is (seq checks) "the permitted scenario reaches the change and its post-checks")
         (is (= [] (verify/fail-closed-findings checks))
             "no post-check holds on a cluster that does not answer, nor on one holding nothing unless it verifies an absence")))))
+
+;; --- a target whose state moved before the confirmation was answered -------------
+
+(defn- judged
+  "What the book at path decides in scenario once the operator confirmed:
+   {:result <the precondition's verdict, :none without one> :out <what it
+   printed>} with :plan, :items and the :commands the run sent, in order."
+  [path scenario]
+  (binding [ssh/*user-config* nil]
+    (let [spec (load-spec path)]
+      (with-book-redefs
+        path
+        #(reach-change
+          spec scenario
+          (fn [out {:keys [confirmation precondition effect]} state]
+            (when-let [between (:between scenario)]
+              (swap! state assoc :objects (:objects between)))
+            (let [{:keys [result] :as verdict} (if precondition (capture precondition) {:result :none :out ""})]
+              (assoc verdict
+                     :result result
+                     :before out
+                     :plan effect
+                     :items (vec (:items confirmation))
+                     :commands (:commands @state)))))))))
+
+(defn- refused-with?
+  "Whether the verdict refused the change and printed a reason matching re."
+  [{:keys [result out]} re]
+  (and (false? result) (boolean (re-find re out))))
+
+(defn- replaced
+  "[type object] deleted and created again under the same name."
+  [[type object]]
+  [type (assoc-in object [:metadata :uid] (str (-> object :metadata :uid) "-again"))])
+
+(deftest orders-recreate-refuses-an-order-that-became-valid
+  (let [path "runbooks/kubernetes/orders/recreate.clj"
+        start [[order-type (order "invalid")]]]
+    (is (refused-with? (judged path {:objects start :target ["shop/web-1"]
+                                     :between {:objects [[order-type (order "valid")]]}})
+                       #"refusing: .*shop/web-1.* valid"))
+    (is (refused-with? (judged path {:objects [] :target ["shop/web-1"]}) #"refusing: .*shop/web-1"))
+    (is (true? (:result (judged path {:objects start :target ["shop/web-1"]}))))))
+
+(deftest namespaces-remove-finalizers-refuses-a-namespace-no-longer-terminating
+  (let [path "runbooks/kubernetes/namespaces/remove_finalizers.clj"
+        start [["namespaces" (namespace-object "Terminating")]]]
+    (is (refused-with? (judged path {:objects start :target "stuck"
+                                     :between {:objects [["namespaces" (namespace-object "Active")]]}})
+                       #"refusing: .*stuck.* Active"))
+    (is (true? (:result (judged path {:objects start :target "stuck"}))))
+    (testing "a namespace no read found"
+      (let [{:keys [plan] :as verdict} (judged path {:objects [] :target "stuck"})]
+        (is (refused-with? verdict #"refusing: .*stuck"))
+        (is (not-any? #(= :kubectl-stdin (first %)) plan)
+            "the plan writes nothing back, so no empty finalizer list is ever sent")))))
+
+(deftest volumes-delete-released-refuses-a-volume-bound-again
+  (let [path "runbooks/kubernetes/volumes/delete_released.clj"
+        start [["persistentvolumes" (volume "Released")]]]
+    (is (refused-with? (judged path {:objects start :target ["pv-1"]
+                                     :between {:objects [["persistentvolumes" (volume "Bound")]]}})
+                       #"refusing: .*pv-1.* Bound"))
+    (is (true? (:result (judged path {:objects start :target ["pv-1"]}))))
+    (testing "a volume no read found"
+      (let [{:keys [items] :as verdict} (judged path {:objects [] :target ["pv-1"]})]
+        (is (refused-with? verdict #"refusing: .*pv-1"))
+        (is (= ["pv-1 (Unknown reclaim policy)"] items))))))
+
+(deftest stageset-promote-refuses-a-stage-the-stageset-does-not-declare
+  (let [path "tools/stageset/runbooks/stageset/promote.clj"
+        start [[stageset-type (stageset "True")]]
+        stageless [[stageset-type (assoc-in (stageset "True") [:spec :stages] [])]]
+        no-nil? (fn [{:keys [plan]}] (not-any? #(some nil? %) plan))]
+    (let [verdict (judged path {:objects start :target "apps/site" :opts {:stage "qa"}})]
+      (is (refused-with? verdict #"refusing: .*stage"))
+      (is (no-nil? verdict) "no command is planned with a nil argument"))
+    (let [verdict (judged path {:objects stageless :target "apps/site" :opts {:stage "prod"}})]
+      (is (refused-with? verdict #"refusing: .*apps/site.* no stages"))
+      (is (no-nil? verdict)))
+    (is (refused-with? (judged path {:objects start :target "apps/site" :opts {:stage "prod"}
+                                     :between {:objects stageless}})
+                       #"refusing: "))
+    (is (true? (:result (judged path {:objects start :target "apps/site" :opts {:stage "prod"}}))))))
+
+(deftest flux-reconcile-and-reset-refuse-a-missing-helmrelease
+  (doseq [path ["tools/flux/runbooks/flux/reconcile.clj" "tools/flux/runbooks/flux/reset.clj"]]
+    (testing path
+      (is (refused-with? (judged path {:objects [] :target "apps/podinfo"}) #"refusing: .*HelmRelease"))
+      (is (refused-with? (judged path {:objects [[helmrelease-type (helmrelease "podinfo")]] :target "apps/podinfo"
+                                       :between {:objects []}})
+                         #"refusing: .*HelmRelease"))
+      (is (true? (:result (judged path {:objects [[helmrelease-type (helmrelease "podinfo")]] :target "apps/podinfo"})))))))
+
+(deftest volumes-delete-unused-names-the-pod-that-started-using-the-claim
+  (let [path "runbooks/kubernetes/volumes/delete_unused.clj"]
+    (is (refused-with? (judged path {:objects [["persistentvolumeclaims" claim]] :target "shop/data"
+                                     :between {:objects [["persistentvolumeclaims" claim] ["pods" claiming-pod]]}})
+                       #"refusing: .*web-0"))
+    (is (refused-with? (judged path {:objects [] :target "shop/data"}) #"refusing: .*shop/data"))))
+
+(deftest node-steps-refuse-a-node-that-no-longer-exists-or-was-replaced
+  (doseq [[path start] [["runbooks/kubernetes/nodes/cordon.clj" [["nodes" (node "n1")]]]
+                        ["runbooks/kubernetes/nodes/uncordon.clj" [["nodes" (node "n1" :unschedulable true)]]]
+                        ["runbooks/kubernetes/nodes/drain.clj" [["nodes" (node "n1" :unschedulable true)]]]]
+          :let [scenario {:objects start :target "n1" :opts {:grace-period -1}}]]
+    (testing path
+      (is (true? (:result (judged path scenario))))
+      (is (refused-with? (judged path (assoc scenario :between {:objects []})) #"refusing: .*n1"))
+      (is (refused-with? (judged path (assoc scenario :between {:objects (mapv replaced start)}))
+                         #"refusing: .*(deleted|created)")))))
+
+(deftest restart-apiserver-never-reaches-a-node-the-cluster-no-longer-lists
+  (let [path "runbooks/kubernetes/nodes/restart_apiserver.clj"
+        start [["nodes" (node "cp-1" :control-plane? true)]]
+        ssh? (fn [{:keys [commands]}] (some #(= "ssh" (first %)) commands))]
+    (testing "a node absent before the confirmation is never connected to"
+      (let [verdict (judged path {:objects [] :target "cp-1" :ssh (apiserver-host "ok")})]
+        (is (refused-with? verdict #"refusing: .*cp-1"))
+        (is (not (ssh? verdict)) (pr-str (:commands verdict)))))
+    (testing "a node removed after the confirmation is refused before any SSH connection is checked"
+      (let [verdict (judged path {:objects start :target "cp-1" :ssh (apiserver-host "ok") :between {:objects []}})]
+        (is (refused-with? verdict #"refusing: .*cp-1"))
+        (is (not (re-find #"can connect" (:out verdict))))))
+    (testing "a node replaced after the confirmation"
+      (is (refused-with? (judged path {:objects start :target "cp-1" :ssh (apiserver-host "ok")
+                                       :between {:objects (mapv replaced start)}})
+                         #"refusing: .*(deleted|created)")))
+    (testing "a node that is not a control-plane node"
+      (is (refused-with? (judged path {:objects [["nodes" (node "cp-1")]] :target "cp-1" :ssh (apiserver-host "ok")})
+                         #"refusing: .*control-plane")))
+    (is (true? (:result (judged path {:objects start :target "cp-1" :ssh (apiserver-host "ok")}))))))
+
+(deftest every-destructive-book-refuses-a-target-that-does-not-exist
+  ;; the behaviour behind conformance/guard-problems: a guard is declared, and
+  ;; it holds against a cluster where the confirmed target is gone
+  (binding [ssh/*user-config* nil]
+    (doseq [[path scenarios] books
+            :let [spec (load-spec path)]
+            :when (get-in spec [:confirm :destructive?])]
+      (testing path
+        (let [{:keys [precondition stopped] :as t} (with-book-redefs path #(transcript spec (:absent scenarios)))]
+          (is (or (some? stopped) (false? (:result precondition))) (pr-str t)))))))

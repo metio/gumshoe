@@ -64,10 +64,14 @@
                  (ready-now? conn)))})
 
 (defn- derive-state
-  "Resolved once, so the effect stops the container the checks compared against."
-  [{:keys [target opts]}]
+  "Resolved once, so the effect stops the container the checks compared
+   against. A node the cluster does not list as a control-plane node is not
+   connected to: :before stays nil and the refusal stops the change."
+  [{:keys [target opts object]}]
   (let [conn (connection target opts)]
-    {:conn conn :before (running-container conn)}))
+    {:conn conn
+     :before (when-not (apiserver/restart-refusal target object)
+               (running-container conn))}))
 
 (mutation/book
  {:description "Restarts kube-apiserver on one control-plane node (stale discovery, renewed certificates)"
@@ -78,7 +82,11 @@
   :select {:mode :one :label "Control-plane node" :flag :node :candidates candidates
            :preview "kubectl describe node {}"}
   :empty-message "no node carries the control-plane role label"
+  :subject {:type "nodes"}
   :derive derive-state
+  ;; judged before the SSH checks below, so a node the cluster no longer
+  ;; lists is never connected to
+  :refusal (fn [{:keys [target object]}] (apiserver/restart-refusal target object))
   :precondition (fn [{:keys [conn before target]}]
                   (cond
                     (not (ssh/check-connection? conn)) false

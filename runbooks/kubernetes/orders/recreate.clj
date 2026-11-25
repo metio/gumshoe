@@ -4,6 +4,7 @@
 (ns runbooks.kubernetes.orders.recreate
   "Deletes invalid ACME orders so cert-manager recreates them."
   (:require [clojure.string :as str]
+            [gumshoe.cleanup :as cleanup]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]))
@@ -14,7 +15,13 @@
   [context]
   (kubectl/namespaces-names
    (kubectl/filter-list (kubectl/get-all context order-type)
-                        #(not= "valid" (-> % :status :state)))))
+                        cleanup/invalid-order?)))
+
+(defn order-refs
+  "The ref of each picked order, which the engine reads again and pins."
+  [{:keys [target]}]
+  (for [order target]
+    (assoc (kubectl/namespace-name-map order) :type order-type)))
 
 (defn recreate-effect
   [context selected]
@@ -49,6 +56,9 @@
   :empty-message "every ACME order is valid"
   :confirm {:action "delete ACME orders so cert-manager recreates them"
             :destructive? true}
+  :subjects order-refs
+  ;; cert-manager may have reported an order valid while the operator read the prompt
+  :refusal (fn [{:keys [refs objects]}] (cleanup/first-refusal cleanup/order-refusal refs objects))
   :announce (fn [{:keys [target]}] (format "Recreate invalid orders [%s]" (str/join ", " target)))
   :effect (fn [{:keys [context target]}] (recreate-effect context target))
   :verify (fn [{:keys [context target]}] (cleared-checks context target))})

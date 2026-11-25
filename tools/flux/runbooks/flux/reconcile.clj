@@ -39,6 +39,8 @@
   :select {:mode :namespaced :label "HelmRelease" :namespace-flag :namespace :name-flag :name
            :candidates helmreleases}
   :confirm {:action "trigger a flux reconciliation" :destructive? false}
+  :subject {:type flux/helmrelease-type}
+  :refusal (fn [{:keys [target object]}] (flux/helmrelease-refusal target object))
   :announce (fn [{:keys [target]}] (format "Reconcile HelmRelease %s" target))
   :effect (fn [{:keys [context target]}]
             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]

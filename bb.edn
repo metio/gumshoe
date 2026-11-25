@@ -159,6 +159,7 @@
                    [gumshoe.toggle-test]
                    [gumshoe.playbook-test]
                    [gumshoe.steps-nodes-test]
+                   [gumshoe.cleanup-test]
                    [gumshoe.playbook-books-test]
                    [gumshoe.dispatch-test]
                    [gumshoe.prerequisites-test]
@@ -336,6 +337,7 @@
                                                          'gumshoe.toggle-test
                                                          'gumshoe.playbook-test
                                                          'gumshoe.steps-nodes-test
+                                                         'gumshoe.cleanup-test
                                                          'gumshoe.playbook-books-test
                                                          'gumshoe.dispatch-test
                                                          'gumshoe.prerequisites-test
