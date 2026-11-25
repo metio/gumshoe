@@ -17,8 +17,13 @@
 
    A few books also run for real, with flow/change! and the effect
    interpreter in place and an effect or a post-check failing after an
-   earlier effect applied, and keep the banner and the recovery lines the
-   harness prints under it.
+   earlier effect applied, or rehearsing under --dry-run, and keep the banner
+   and the recovery lines the harness prints under it. Some also pick their
+   own subject through mutation/run!: a candidate the flags name, one they do
+   not, a cluster without candidates and one that does not answer.
+
+   A scenario's :ssh answers the commands a book runs on a host over SSH, by
+   the remote command line.
 
    Regenerate the file after an intended change with
    (gumshoe.mutation-books-test/write-golden!) and review its diff."
@@ -29,11 +34,13 @@
             [clojure.test :refer [deftest is testing]]
             [gumshoe.announce :as announce]
             [gumshoe.flow :as flow]
+            [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
             [gumshoe.outcome :as outcome]
             [gumshoe.shell :as shell]
+            [gumshoe.ssh :as ssh]
             [gumshoe.stdout :as stdout]
             [gumshoe.verify :as verify]))
 
@@ -69,18 +76,30 @@
                      (str/join "\t" [namespace (:name labels) (:status labels) (:version labels)
                                      (:modifiedAt labels) (:createdAt labels) creationTimestamp])))))
 
+(defn- answer-ssh
+  "What a host answers for an ssh argv: the entry of `ssh` (remote command
+   line -> result) for the command run on the far end, or a clean exit with
+   no output."
+  [ssh argv]
+  (let [command (str/join " " (drop 2 (drop-while #(not= "--" %) argv)))]
+    (merge {:exit 0 :out "" :err ""} (get ssh command))))
+
 (defn- answer
   "What kubectl answers for argv against state {:objects [[type object]..]
-   :answering? :dry-run}."
-  [{:keys [objects answering? dry-run]} argv]
+   :answering? :dry-run :ssh}. A pod read with a spec.nodeName field selector
+   lists the pods on that node only."
+  [{:keys [objects answering? dry-run ssh]} argv]
   (let [namespace (arg-value argv "--namespace=")
+        node (arg-value (filter string? argv) "--field-selector=spec.nodeName=")
         [_ type name] (drop-while #(not= "get" %) argv)
         name (when (and name (not (str/starts-with? name "-"))) name)
         matches (fn [[t o]] (and (= t type)
                                  (or (nil? namespace) (= namespace (-> o :metadata :namespace)))
-                                 (or (nil? name) (= name (-> o :metadata :name)))))]
+                                 (or (nil? name) (= name (-> o :metadata :name)))
+                                 (or (nil? node) (= node (-> o :spec :nodeName)))))]
     (cond
       (not answering?) unanswered
+      (= "ssh" (first argv)) (answer-ssh ssh argv)
       (some #{"--dry-run=server"} argv) (or dry-run {:exit 0 :out "deleted (server dry run)" :err ""})
       (not (some #{"get"} argv)) {:exit 0 :out "" :err ""}
       (and (= "secrets" type) (arg-value argv "--output=jsonpath="))
@@ -124,10 +143,12 @@
 
 (defn transcript
   "What the book does in one scenario."
-  [spec {:keys [objects target opts dry-run between]}]
-  (let [state (atom {:objects objects :answering? true :dry-run dry-run})
+  [spec {:keys [objects target opts dry-run ssh between]}]
+  (let [state (atom {:objects objects :answering? true :dry-run dry-run :ssh ssh})
         seen (atom nil)]
     (with-redefs [shell/execute (fn [& argv] (answer @state (vec argv)))
+                  fuzzy/select-single (constantly nil)
+                  fuzzy/select-multi (constantly nil)
                   kubectl/current-context (constantly "ctx")
                   kubectl/current-cluster (constantly "cluster")
                   announce/announce! (fn [_ _ message] message)
@@ -160,13 +181,13 @@
    `fail-at`th effect fails, or with every effect applied and nothing on the
    recorded cluster changing, so a post-check does not hold: what the run
    printed, its banner and the recovery lines under it. Post-checks run once,
-   with a timeout of 0."
-  [spec {:keys [objects target opts fail-at]}]
+   with a timeout of 0. With `dry-run?` the run rehearses under --dry-run."
+  [spec {:keys [objects target opts fail-at ssh dry-run?]}]
   (let [record (outcome/fresh)
         effects (atom 0)
         exit (fn [] (if (= fail-at (swap! effects inc)) 1 0))
         eventually verify/eventually]
-    (with-redefs [shell/execute (fn [& argv] (answer {:objects objects :answering? true} (vec argv)))
+    (with-redefs [shell/execute (fn [& argv] (answer {:objects objects :answering? true :ssh ssh} (vec argv)))
                   shell/run-with-output (fn [& _] (exit))
                   shell/execute-with-stdin (fn [& _] (let [code (exit)]
                                                        {:exit code :out "" :err (if (zero? code) "" "Error from server (Forbidden): refused")}))
@@ -175,7 +196,8 @@
                   interact/confirm! (constantly true)
                   announce/announce! (fn [_ _ message] message)
                   verify/eventually (fn [check] (eventually (assoc check :timeout 0)))]
-      (let [{:keys [result out]} (capture #(binding [outcome/*record* record]
+      (let [{:keys [result out]} (capture #(binding [outcome/*record* record
+                                                     flow/*dry-run* (boolean dry-run?)]
                                              (try (mutation/run-on! spec target (or opts {}) nil)
                                                   (catch Exception e (println "threw:" (type e) (ex-message e))))))
             {:keys [tone text]} (outcome/banner {:changes? true :outcome (if result :ok :failed)} @record)]
@@ -184,6 +206,28 @@
           :out (str/split-lines (stdout/strip-colors out))
           :banner text
           :recovery (vec (outcome/recovery-lines tone @record))})))))
+
+(defn pick-transcript
+  "What the book does when it picks its own subject from opts through
+   mutation/run!, with the fuzzy finder answering as an operator who picks
+   nothing and flow/change! captured: the result, what it printed, and the
+   confirmation and plan of the change it reached."
+  [spec {:keys [objects opts answering? ssh] :or {answering? true}}]
+  (let [seen (atom nil)]
+    (with-redefs [shell/execute (fn [& argv] (answer {:objects objects :answering? answering? :ssh ssh} (vec argv)))
+                  fuzzy/select-single (constantly nil)
+                  fuzzy/select-multi (constantly nil)
+                  kubectl/current-context (constantly "ctx")
+                  kubectl/current-cluster (constantly "cluster")
+                  announce/announce! (fn [_ _ message] message)
+                  flow/change! (fn [config] (reset! seen config) true)]
+      (let [{:keys [result out]} (capture #(attempt (fn [] (mutation/run! spec (or opts {}) nil))))
+            {:keys [confirmation effect]} @seen]
+        (normalise
+         (cond-> {:result result :out (stdout/strip-colors out)}
+           @seen (assoc :action (:action confirmation)
+                        :items (vec (:items confirmation))
+                        :plan effect)))))))
 
 (defn surface
   "What the book declares outside a run: its flags, prerequisites, selection,
@@ -321,6 +365,92 @@
               :labels {:owner "helm" :name "web" :status status :version (str version)
                        :modifiedAt "1767225600" :createdAt "1767225600"}}})
 
+(defn- ready
+  [status]
+  {:conditions [{:type "Ready" :status status :reason (if (= "True" status) "Ready" "Failed")}]})
+
+;; cert-manager: Certificate shop/web-tls and ACME Order shop/web-1.
+
+(def ^:private certificate-type "certificates.cert-manager.io")
+(def ^:private order-type "orders.acme.cert-manager.io")
+
+(defn- certificate [status] {:metadata (meta-of "shop" "web-tls") :status (ready status)})
+
+(defn- order [state] {:metadata (meta-of "shop" "web-1") :status {:state state}})
+
+;; The Job cronjobs/start creates from batch/nightly, under the suffix the
+;; harness fixes.
+
+(defn- job
+  [& {:keys [failed?]}]
+  {:metadata (meta-of "batch" "nightly-abcde")
+   :status (if failed? {:conditions [{:type "Failed" :status "True"}]} {:active 1})})
+
+;; Namespace stuck terminating on the kubernetes finalizer.
+
+(defn- namespace-object
+  [phase]
+  {:metadata {:name "stuck" :uid "uid-stuck" :resourceVersion "100"}
+   :spec {:finalizers ["kubernetes"]}
+   :status {:phase phase}})
+
+;; Nodes, the pods on them, and a control-plane node reached over SSH.
+
+(defn- node
+  [name & {:keys [unschedulable control-plane?]}]
+  {:metadata (cond-> {:name name :uid (str "uid-" name) :resourceVersion "100"}
+               control-plane? (assoc :labels {:node-role.kubernetes.io/control-plane ""}))
+   :spec (cond-> {} unschedulable (assoc :unschedulable true))})
+
+(defn- pod-on
+  [node-name name owner-kind]
+  {:metadata {:namespace "shop" :name name :uid (str "uid-" name)
+              :ownerReferences [{:kind owner-kind :name (str name "-owner")}]}
+   :spec {:nodeName node-name}})
+
+(def ^:private apiserver-container "sudo crictl ps --name kube-apiserver -q")
+(def ^:private apiserver-readyz "curl -sk https://localhost:6443/readyz")
+(def ^:private apiserver-started "sudo crictl inspect -o go-template --template '{{.status.startedAt}}' abc123")
+
+(defn- apiserver-host
+  "What the control-plane node cp-1 answers over SSH, with kube-apiserver
+   container abc123 answering /readyz with `readyz`."
+  [readyz & {:keys [container] :or {container "abc123"}}]
+  {apiserver-container {:out container}
+   apiserver-readyz {:out readyz}
+   apiserver-started {:out "2026-01-01T00:00:00Z"}})
+
+;; PersistentVolume pv-1 and the claim shop/data.
+
+(defn- volume
+  [phase]
+  {:metadata {:name "pv-1" :uid "uid-pv-1" :resourceVersion "100"}
+   :spec {:persistentVolumeReclaimPolicy "Delete"}
+   :status {:phase phase}})
+
+(def ^:private claim {:metadata (meta-of "shop" "data")})
+
+(def ^:private claiming-pod
+  {:metadata {:namespace "shop" :name "web-0" :uid "uid-web-0"}
+   :spec {:volumes [{:name "data" :persistentVolumeClaim {:claimName "data"}}]}})
+
+;; JaaS JsonnetSnippet apps/site and the StageSet apps/site.
+
+(def ^:private snippet-type "jsonnetsnippets.jaas.metio.wtf")
+(def ^:private stageset-type "stagesets.stages.metio.wtf")
+
+(defn- snippet
+  [suspend reason]
+  {:metadata (meta-of "apps" "site")
+   :spec {:suspend suspend}
+   :status {:conditions [{:type "Ready" :status (if (= "Succeeded" reason) "True" "False") :reason reason}]}})
+
+(defn- stageset
+  [status]
+  {:metadata (meta-of "apps" "site")
+   :spec {:stages [{:name "dev"} {:name "prod"}]}
+   :status (ready status)})
+
 (defn- standard
   "The scenarios every book runs: permitted, refused, absent, a spec change and
    an unanswered read between confirmation and precondition, and a pick that
@@ -332,6 +462,13 @@
            :spec-changed {:objects permitted :target target :opts opts :dry-run dry-run :between :spec-changed}
            :unanswered {:objects permitted :target target :opts opts :dry-run dry-run :between :unanswered}}
     invalid (assoc :invalid {:objects permitted :target invalid :opts opts :dry-run dry-run})))
+
+(defn- over-ssh
+  "The standard scenarios with the host answering `ssh` in each of them, and
+   `refused-ssh` in the refused one."
+  [scenarios ssh refused-ssh]
+  (-> (update-vals scenarios #(assoc % :ssh ssh))
+      (assoc-in [:refused :ssh] refused-ssh)))
 
 (def books
   {"runbooks/kubernetes/cronjobs/suspend.clj"
@@ -479,7 +616,155 @@
    "runbooks/kubernetes/helm/rollback.clj"
    (standard {:target "shop/web" :invalid "web"
               :permitted [["secrets" (helm-revision 1 "superseded")] ["secrets" (helm-revision 2 "deployed")]]
-              :refused [["secrets" (helm-revision 1 "superseded")] ["secrets" (helm-revision 2 "pending-upgrade")]]})})
+              :refused [["secrets" (helm-revision 1 "superseded")] ["secrets" (helm-revision 2 "pending-upgrade")]]})
+
+   "runbooks/kubernetes/certificates/renew.clj"
+   (standard {:target ["shop/web-tls"]
+              :permitted [[certificate-type (certificate "True")]]
+              :refused [[certificate-type (certificate "False")]]})
+
+   "runbooks/kubernetes/cronjobs/start.clj"
+   (standard {:target "batch/nightly" :invalid "nightly"
+              :permitted [["cronjobs" (cronjob false)] ["jobs" (job)]]
+              :refused [["cronjobs" (cronjob true)] ["jobs" (job :failed? true)]]})
+
+   "runbooks/kubernetes/namespaces/remove_finalizers.clj"
+   (standard {:target "stuck"
+              :permitted [["namespaces" (namespace-object "Terminating")]]
+              :refused [["namespaces" (namespace-object "Active")]]})
+
+   "runbooks/kubernetes/nodes/cordon.clj"
+   (standard {:target "n1"
+              :permitted [["nodes" (node "n1")]]
+              :refused [["nodes" (node "n1" :unschedulable true)]]})
+
+   "runbooks/kubernetes/nodes/drain.clj"
+   (standard {:target "n1" :opts {:grace-period -1}
+              :permitted [["nodes" (node "n1" :unschedulable true)] ["pods" (pod-on "n1" "agent" "DaemonSet")]
+                          ["pods" (pod-on "n2" "web" "ReplicaSet")]]
+              :refused [["nodes" (node "n1")] ["pods" (pod-on "n1" "web" "ReplicaSet")]]})
+
+   "runbooks/kubernetes/nodes/uncordon.clj"
+   (standard {:target "n1"
+              :permitted [["nodes" (node "n1" :unschedulable true)]]
+              :refused [["nodes" (node "n1")]]})
+
+   "runbooks/kubernetes/nodes/restart_apiserver.clj"
+   (assoc (over-ssh (standard {:target "cp-1"
+                               :permitted [["nodes" (node "cp-1" :control-plane? true)]]
+                               :refused [["nodes" (node "cp-1" :control-plane? true)]]})
+                    (apiserver-host "ok") (apiserver-host "[-]etcd failed"))
+          :no-container {:objects [["nodes" (node "cp-1" :control-plane? true)]] :target "cp-1"
+                         :ssh (apiserver-host "ok" :container "")}
+          :unreachable {:objects [["nodes" (node "cp-1" :control-plane? true)]] :target "cp-1"
+                        :ssh (assoc (apiserver-host "ok") "exit 0" {:exit 255 :err "ssh: connect to host cp-1 port 22: Connection timed out"})}
+          :no-sudo {:objects [["nodes" (node "cp-1" :control-plane? true)]] :target "cp-1"
+                    :ssh (assoc (apiserver-host "ok") "sudo -n true" {:exit 1 :err "sudo: a password is required"})})
+
+   "runbooks/kubernetes/orders/recreate.clj"
+   (standard {:target ["shop/web-1"]
+              :permitted [[order-type (order "invalid")]]
+              :refused [[order-type (order "valid")]]})
+
+   "runbooks/kubernetes/volumes/delete_released.clj"
+   (standard {:target ["pv-1"]
+              :permitted [["persistentvolumes" (volume "Released")]]
+              :refused [["persistentvolumes" (volume "Bound")]]})
+
+   "runbooks/kubernetes/volumes/delete_unused.clj"
+   (standard {:target "shop/data" :invalid "data"
+              :permitted [["persistentvolumeclaims" claim]]
+              :refused [["persistentvolumeclaims" claim] ["pods" claiming-pod]]})
+
+   "tools/jaas/runbooks/jaas/reconcile.clj"
+   (standard {:target "apps/site" :invalid "site"
+              :permitted [[snippet-type (snippet false "Succeeded")]]
+              :refused [[snippet-type (snippet true "Suspended")]]})
+
+   "tools/jaas/runbooks/jaas/suspend.clj"
+   (standard {:target "apps/site" :invalid "site"
+              :permitted [[snippet-type (snippet false "Succeeded")]]
+              :refused [[snippet-type (snippet true "Suspended")]]})
+
+   "tools/jaas/runbooks/jaas/resume.clj"
+   (standard {:target "apps/site" :invalid "site"
+              :permitted [[snippet-type (snippet true "Suspended")]]
+              :refused [[snippet-type (snippet false "Succeeded")]]})
+
+   "tools/stageset/runbooks/stageset/promote.clj"
+   (assoc (standard {:target "apps/site" :invalid "site" :opts {:stage "prod"}
+                     :permitted [[stageset-type (stageset "True")]]
+                     :refused [[stageset-type (stageset "False")]]})
+          :unknown-stage {:objects [[stageset-type (stageset "True")]] :target "apps/site" :opts {:stage "qa"}})
+
+   "tools/stageset/runbooks/stageset/reconcile.clj"
+   (standard {:target "apps/site" :invalid "site" :opts {:update-now true}
+              :permitted [[stageset-type (stageset "True")]]
+              :refused [[stageset-type (stageset "False")]]})})
+
+(def ^:private book-redefs
+  "Vars a book defines that the harness fixes, by the book's path: the
+   random suffix cronjobs/start gives the Job it creates."
+  {"runbooks/kubernetes/cronjobs/start.clj"
+   {'runbooks.kubernetes.cronjobs.start/random-suffix (constantly "abcde")}})
+
+(defn- pick-scenarios
+  "The scenarios a book runs through its own selection: opts that pick a
+   candidate of objects, opts that pick none, a cluster without candidates and
+   a cluster that does not answer."
+  [objects picked unpicked]
+  {:picked {:objects objects :opts picked}
+   :unpicked {:objects objects :opts unpicked}
+   :empty {:objects [] :opts picked}
+   :unanswered-pick {:objects objects :opts picked :answering? false}})
+
+(def ^:private picks
+  "Books that also pick their subject through mutation/run!, by path."
+  {"runbooks/kubernetes/certificates/renew.clj"
+   (pick-scenarios [[certificate-type (certificate "True")]] {:certificates ["shop/web-tls"]} {:certificates ["shop/nope"]})
+
+   "runbooks/kubernetes/cronjobs/start.clj"
+   (pick-scenarios [["cronjobs" (cronjob false)]] {:namespace "batch" :job "nightly"} {:namespace "batch" :job "nope"})
+
+   "runbooks/kubernetes/namespaces/remove_finalizers.clj"
+   (pick-scenarios [["namespaces" (namespace-object "Terminating")]] {:namespace "stuck"} {:namespace "nope"})
+
+   "runbooks/kubernetes/nodes/cordon.clj"
+   (pick-scenarios [["nodes" (node "n1")] ["nodes" (node "n2" :unschedulable true)]] {:node "n1"} {:node "n2"})
+
+   "runbooks/kubernetes/nodes/drain.clj"
+   (pick-scenarios [["nodes" (node "n1")]] {:node "n1" :grace-period -1} {:node "n9" :grace-period -1})
+
+   "runbooks/kubernetes/nodes/uncordon.clj"
+   (pick-scenarios [["nodes" (node "n1")] ["nodes" (node "n2" :unschedulable true)]] {:node "n2"} {:node "n1"})
+
+   "runbooks/kubernetes/nodes/restart_apiserver.clj"
+   (update-vals (pick-scenarios [["nodes" (node "cp-1" :control-plane? true)] ["nodes" (node "w-1")]] {:node "cp-1"} {:node "w-1"})
+                #(assoc % :ssh (apiserver-host "ok")))
+
+   "runbooks/kubernetes/orders/recreate.clj"
+   (pick-scenarios [[order-type (order "invalid")]] {:orders ["shop/web-1"]} {:orders ["shop/web-2"]})
+
+   "runbooks/kubernetes/volumes/delete_released.clj"
+   (pick-scenarios [["persistentvolumes" (volume "Released")]] {:volumes ["pv-1"]} {:volumes ["pv-2"]})
+
+   "runbooks/kubernetes/volumes/delete_unused.clj"
+   (pick-scenarios [["persistentvolumeclaims" claim]] {:namespace "shop" :pvc "data"} {:namespace "shop" :pvc "nope"})
+
+   "tools/jaas/runbooks/jaas/reconcile.clj"
+   (pick-scenarios [[snippet-type (snippet false "Succeeded")]] {:namespace "apps" :name "site"} {:namespace "apps" :name "nope"})
+
+   "tools/jaas/runbooks/jaas/suspend.clj"
+   (pick-scenarios [[snippet-type (snippet false "Succeeded")]] {:namespace "apps" :name "site"} {:namespace "apps" :name "nope"})
+
+   "tools/jaas/runbooks/jaas/resume.clj"
+   (pick-scenarios [[snippet-type (snippet true "Suspended")]] {:namespace "apps" :name "site"} {:namespace "apps" :name "nope"})
+
+   "tools/stageset/runbooks/stageset/promote.clj"
+   (pick-scenarios [[stageset-type (stageset "True")]] {:namespace "apps" :name "site" :stage "prod"} {:namespace "apps" :name "nope" :stage "prod"})
+
+   "tools/stageset/runbooks/stageset/reconcile.clj"
+   (pick-scenarios [[stageset-type (stageset "True")]] {:namespace "apps" :name "site"} {:namespace "apps" :name "nope"})})
 
 (defn- placed
   "[type object] moved to namespace/name, uid and all."
@@ -516,19 +801,90 @@
    {:failed-after-applying {:objects [["deployments" (deployment)]] :target "Deployment shop/web" :opts {:replicas 3}}}
 
    "runbooks/kubernetes/cronjobs/resume.clj"
-   {:failed-at-the-first-effect {:objects [["cronjobs" (cronjob true)]] :target "batch/nightly" :fail-at 1}}})
+   {:failed-at-the-first-effect {:objects [["cronjobs" (cronjob true)]] :target "batch/nightly" :fail-at 1}}
+
+   "runbooks/kubernetes/certificates/renew.clj"
+   {:failed-after-applying {:objects [[certificate-type (certificate "False")]] :target ["shop/web-tls"]}
+    :dry-run {:objects [[certificate-type (certificate "True")]] :target ["shop/web-tls"] :dry-run? true}}
+
+   "runbooks/kubernetes/cronjobs/start.clj"
+   {:failed-at-the-first-effect {:objects [["cronjobs" (cronjob false)]] :target "batch/nightly" :fail-at 1}
+    :dry-run {:objects [["cronjobs" (cronjob false)]] :target "batch/nightly" :dry-run? true}}
+
+   "runbooks/kubernetes/namespaces/remove_finalizers.clj"
+   {:failed-at-the-first-effect {:objects [["namespaces" (namespace-object "Terminating")]] :target "stuck" :fail-at 1}
+    :failed-after-applying {:objects [["namespaces" (namespace-object "Terminating")]] :target "stuck"}
+    :dry-run {:objects [["namespaces" (namespace-object "Terminating")]] :target "stuck" :dry-run? true}}
+
+   "runbooks/kubernetes/nodes/cordon.clj"
+   {:failed-after-applying {:objects [["nodes" (node "n1")]] :target "n1"}
+    :dry-run {:objects [["nodes" (node "n1")]] :target "n1" :dry-run? true}}
+
+   "runbooks/kubernetes/nodes/drain.clj"
+   {:failed-at-the-first-effect {:objects [["nodes" (node "n1")]] :target "n1" :opts {:grace-period -1} :fail-at 1}
+    :failed-after-applying {:objects [["nodes" (node "n1" :unschedulable true)] ["pods" (pod-on "n1" "web" "ReplicaSet")]]
+                            :target "n1" :opts {:grace-period 30}}
+    :dry-run {:objects [["nodes" (node "n1")]] :target "n1" :opts {:grace-period -1} :dry-run? true}}
+
+   "runbooks/kubernetes/nodes/uncordon.clj"
+   {:failed-after-applying {:objects [["nodes" (node "n1" :unschedulable true)]] :target "n1"}}
+
+   "runbooks/kubernetes/nodes/restart_apiserver.clj"
+   {:failed-after-applying {:objects [["nodes" (node "cp-1" :control-plane? true)]] :target "cp-1" :ssh (apiserver-host "ok")}
+    :failed-at-the-second-effect {:objects [["nodes" (node "cp-1" :control-plane? true)]] :target "cp-1"
+                                  :ssh (apiserver-host "ok") :fail-at 2}
+    :dry-run {:objects [["nodes" (node "cp-1" :control-plane? true)]] :target "cp-1" :ssh (apiserver-host "ok") :dry-run? true}}
+
+   "runbooks/kubernetes/orders/recreate.clj"
+   {:failed-after-applying {:objects [[order-type (order "invalid")]] :target ["shop/web-1"]}}
+
+   "runbooks/kubernetes/volumes/delete_released.clj"
+   {:failed-after-applying {:objects [["persistentvolumes" (volume "Released")]] :target ["pv-1"]}
+    :dry-run {:objects [["persistentvolumes" (volume "Released")]] :target ["pv-1"] :dry-run? true}}
+
+   "runbooks/kubernetes/volumes/delete_unused.clj"
+   {:failed-after-applying {:objects [["persistentvolumeclaims" claim]] :target "shop/data"}}
+
+   "tools/jaas/runbooks/jaas/reconcile.clj"
+   {:failed-after-applying {:objects [[snippet-type (snippet false "Succeeded")]] :target "apps/site"}}
+
+   "tools/jaas/runbooks/jaas/suspend.clj"
+   {:failed-after-applying {:objects [[snippet-type (snippet false "Succeeded")]] :target "apps/site"}
+    :failed-at-the-first-effect {:objects [[snippet-type (snippet false "Succeeded")]] :target "apps/site" :fail-at 1}}
+
+   "tools/jaas/runbooks/jaas/resume.clj"
+   {:failed-after-applying {:objects [[snippet-type (snippet true "Suspended")]] :target "apps/site"}}
+
+   "tools/stageset/runbooks/stageset/promote.clj"
+   {:failed-at-the-first-effect {:objects [[stageset-type (stageset "True")]] :target "apps/site" :opts {:stage "prod"} :fail-at 1}
+    :dry-run {:objects [[stageset-type (stageset "True")]] :target "apps/site" :opts {:stage "prod"} :dry-run? true}}
+
+   "tools/stageset/runbooks/stageset/reconcile.clj"
+   {:failed-after-applying {:objects [[stageset-type (stageset "False")]] :target "apps/site" :opts {:update-now true}}}})
+
+(defn- with-book-redefs
+  "(f) with the vars book-redefs names for the book at path fixed; the book
+   is loaded already, so its vars resolve."
+  [path f]
+  (if-let [redefs (get book-redefs path)]
+    (with-redefs-fn (into {} (for [[sym value] redefs] [(resolve sym) value])) f)
+    (f)))
 
 (defn transcripts
   []
-  (into (sorted-map)
-        (for [[path scenarios] books]
-          (let [spec (load-spec path)]
-            [path (assoc (into (sorted-map) (concat (for [[k scenario] scenarios] [k (transcript spec scenario)])
-                                                    (for [[k scenario] (get failing path)] [k (failed-transcript spec scenario)])))
-                         :surface (surface spec (let [permitted (get-in scenarios [:permitted :objects])
-                                                      refused (get-in scenarios [:refused :objects])]
-                                                  (cond-> {:permitted permitted :refused refused}
-                                                    (mixed-books path) (assoc :mixed (mixed permitted refused))))))]))))
+  (binding [ssh/*user-config* nil]
+    (into (sorted-map)
+          (for [[path scenarios] books]
+            (let [spec (load-spec path)]
+              [path (with-book-redefs
+                      path
+                      #(assoc (into (sorted-map) (concat (for [[k scenario] scenarios] [k (transcript spec scenario)])
+                                                         (for [[k scenario] (get failing path)] [k (failed-transcript spec scenario)])
+                                                         (for [[k scenario] (get picks path)] [k (pick-transcript spec scenario)])))
+                              :surface (surface spec (let [permitted (get-in scenarios [:permitted :objects])
+                                                           refused (get-in scenarios [:refused :objects])]
+                                                       (cond-> {:permitted permitted :refused refused}
+                                                         (mixed-books path) (assoc :mixed (mixed permitted refused)))))))])))))
 
 (defn write-golden!
   []

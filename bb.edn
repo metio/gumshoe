@@ -153,6 +153,7 @@
                    [gumshoe.mutation-test]
                    [gumshoe.toggle-test]
                    [gumshoe.playbook-test]
+                   [gumshoe.playbook-books-test]
                    [gumshoe.dispatch-test]
                    [gumshoe.prerequisites-test]
                    [gumshoe.postgres-test]
@@ -323,6 +324,7 @@
                                                          'gumshoe.mutation-test
                                                          'gumshoe.toggle-test
                                                          'gumshoe.playbook-test
+                                                         'gumshoe.playbook-books-test
                                                          'gumshoe.dispatch-test
                                                          'gumshoe.prerequisites-test
                                                          'gumshoe.postgres-test
