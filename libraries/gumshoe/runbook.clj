@@ -41,6 +41,21 @@
           :alias :h
           :coerce :boolean}})
 
+(defn cli-spec
+  "The babashka.cli spec a book with these options parses its arguments
+   with: the options and the standard flags, unknown flags refused."
+  [options]
+  {:spec (merge options standard-options)
+   :restrict true})
+
+(defn arguments
+  "What a book with these options makes of its arguments, as {:opts ..}.
+   A refused argument goes to `error-fn` as babashka.cli hands it over, or
+   throws without one."
+  ([options args] (arguments options args nil))
+  ([options args error-fn]
+   {:opts (cli/parse-opts args (cond-> (cli-spec options) error-fn (assoc :error-fn error-fn)))}))
+
 (defn help-text
   ([description spec] (help-text description spec nil))
   ([description spec details]
@@ -57,6 +72,11 @@
           (stdout/yellow "Options:")
           "\n"
           (cli/format-opts (merge spec {:order (vec (keys (:spec spec)))}))))))
+
+(defn help
+  "The --help text of a book's config."
+  [{:keys [description options details]}]
+  (help-text description (cli-spec (or options {})) details))
 
 ;; Each prerequisite is one [label thunk] checklist item. The thunk does the
 ;; (often slow) check and returns {:ok? bool :label "..."} - so the item animates
@@ -285,20 +305,18 @@
 
    ctx contains :announcement-data when :announce? is true. Under *loading*
    it returns the config untouched."
-  [{:keys [description options prerequisites announce? action details]
+  [{:keys [description options prerequisites announce? action]
     :or {options {} prerequisites {} announce? true}
     :as config}]
   (if *loading*
     config
-    (let [spec {:spec (merge options standard-options)
-                :restrict true
-                :error-fn (fn [{:keys [type cause msg option]}]
-                            (when (= :org.babashka/cli type)
-                              (case cause
-                                :require (stdout/error (format "missing required option: --%s" (name option)))
-                                :validate (stdout/error (format "invalid value for option --%s: %s" (name option) msg))
-                                (stdout/error msg))
-                              (System/exit 1)))}]
+    (let [error-fn (fn [{:keys [type cause msg option]}]
+                     (when (= :org.babashka/cli type)
+                       (case cause
+                         :require (stdout/error (format "missing required option: --%s" (name option)))
+                         :validate (stdout/error (format "invalid value for option --%s: %s" (name option) msg))
+                         (stdout/error msg))
+                       (System/exit 1)))]
       (when (some #{"--no-color"} *command-line-args*) (stdout/disable-colors!))
       ;; load the configured plugins - their code is already on the classpath via
       ;; deps - before the parse, which validates --output against the formats
@@ -308,8 +326,8 @@
       ;; help is answered before the strict parse, so required options never
       ;; stand between the user and the usage text
       (if (some #{"-h" "--help"} *command-line-args*)
-        (println (help-text description spec details))
-        (let [opts (cli/parse-opts *command-line-args* spec)]
+        (println (help config))
+        (let [{:keys [opts]} (arguments options *command-line-args* error-fn)]
           ;; select the output theme and the interactive backend from env.edn (or a
           ;; plugin's, just loaded) before anything prints or prompts
           (theme/apply!)
