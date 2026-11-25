@@ -14,8 +14,8 @@
 ;; casebook's file at that path when there is one, else the dependency's. babashka
 ;; resolves the git dep once via tools.deps (needs a JVM - the gumshoe devShell
 ;; provides it) and caches it under ~/.gitlibs.
-{:deps {io.github.metio/gumshoe {:git/tag "2026.11.25015428"
-                                 :git/sha "6c6d7758e1e541e6fbaf2dae89a53e72bd3c48bd"}}
+{:deps {io.github.metio/gumshoe {:git/tag "2026.11.25025930"
+                                 :git/sha "4016676bb47d398b37313b60204ec5aabd6bb1e9"}}
  :paths ["libraries" "runbooks" "playbooks" "firebooks"]
  :tasks {gumshoe {:doc "The one front door"
                   :requires ([gumshoe.main :as main])
