@@ -57,6 +57,19 @@
   ;; run, so a book referring to a var that does not exist fails here.
   (assert-none (conformance/unloadable (concat book-files tool-book-files))))
 
+(deftest every-edn-book-passes-the-gate
+  ;; A book written as EDN is held to the whole gate a casebook's verify!
+  ;; runs, guards required: wherever it sits in a book root, and gumshoe's
+  ;; own EDN forms under tests/edn-books.
+  (let [edn-books (filter conformance/edn-book?
+                          (conformance/book-files (concat (:books conformance/default-paths)
+                                                          (for [tool (fs/list-dir "tools")
+                                                                root ["runbooks" "playbooks" "firebooks"]]
+                                                            (str (fs/path tool root)))
+                                                          ["tests/edn-books/runbooks"])))]
+    (is (<= 4 (count edn-books)))
+    (assert-none (:findings (conformance/report {:books edn-books :libraries [] :license "0BSD" :guards :require})))))
+
 (deftest every-casebook-example-book-loads
   (assert-none (conformance/unloadable
                 (conformance/clj-files ["casebook-example/runbooks" "casebook-example/playbooks"

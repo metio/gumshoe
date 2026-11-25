@@ -56,6 +56,14 @@ an upstream book by placing a file at the same path; the listing then shows
 the casebook's book only. A path that names no book exits 1 and prints the
 closest listed paths. An absolute path runs as given.
 
+A listed path ending in `.edn` is a book written in the experimental EDN
+change format (`:gumshoe/dsl :v0-experimental`). It runs through the same
+doors and takes the same `--help` and `--dry-run`; its first stderr line is
+a note that the format may change, which is not a failure. Only `bb run`
+or `bb gumshoe` runs one: bare `bb <file>.edn` does not. A file the reader
+or `compile` refuses exits 1 with `refused <file>: <path>: <reason>`
+before any prerequisite or cluster read.
+
 Bare `bb <path>` is babashka loading a file from the working directory, so
 from a casebook it runs only the casebook's own files and answers `File does
 not exist` for an upstream book. Where a casebook's shell banner or notes
@@ -498,8 +506,16 @@ mostly data:
   the conformance gate reports it as `is refused: …`;
 - a change to one object can be written as plain EDN and compiled with
   `(gumshoe.dsl/compile data)` into that canonical map (README "Changes
-  written as data"; `runbooks/kubernetes/cronjobs/suspend.edn` is a whole
-  one). Declare the target with its `:type` (or a registered `:parse`), the
+  written as data"; `tests/edn-books/runbooks/kubernetes/cronjobs/suspend.edn`
+  is a whole one). The format is experimental and may change in any
+  release: a change declares `:gumshoe/dsl :v0-experimental`, and anything
+  else is refused. Saved as an `.edn` file below a book root, it is a book
+  that `bb run` lists and runs and `bb verify` judges like a Clojure book,
+  so keep data files outside book roots. The file is read as plain EDN
+  only (no tagged literals, at most 64 KiB and 32 levels deep), and
+  functions a casebook registers load from a plugin named in `env.edn`.
+  Prefer a Clojure book for anything an operator relies on until the
+  vocabulary is reviewed. Declare the target with its `:type` (or a registered `:parse`), the
   `:state` the change brings about, `:refuse` entries, `:confirm` and
   `[:kubectl :patch|:scale|:annotate|:delete …]` effects; `compile` derives
   the pin, the fail-closed post-check, the skip as done and, for a delete,

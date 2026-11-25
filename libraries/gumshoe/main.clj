@@ -34,15 +34,29 @@
   [args]
   (if (map? args) (vec *command-line-args*) args))
 
+(defn book-command
+  "The command that runs the book file at path with the flags extra: `bb
+   <file>` for a Clojure book, and for an EDN book the gumshoe.edn-book
+   runner, which reads and compiles the file and evaluates nothing in it."
+  [path extra]
+  (into (if (catalog/edn-book? path)
+          ["bb" "-m" "gumshoe.edn-book" (str path)]
+          ["bb" (str path)])
+        extra))
+
+(defn- launch-book
+  [path extra]
+  (apply shell/run-with-output (book-command path extra)))
+
 (defn- launch
   "Runs a book by its catalog-resolved path, forwarding extra flags."
   [suffix & extra]
-  (apply shell/run-with-output "bb" (catalog/resolve-path suffix) extra))
+  (launch-book (catalog/resolve-path suffix) extra))
 
 (defn- book-path?
   "Whether a first argument names a book file rather than search terms."
   [arg]
-  (and (string? arg) (str/ends-with? arg ".clj")))
+  (and (string? arg) (or (str/ends-with? arg ".clj") (catalog/edn-book? arg))))
 
 (defn- launch-path
   "Runs the book a listed or local path names, forwarding the flags after it, or
@@ -50,7 +64,7 @@
   [path extra]
   (let [{book :path :keys [error near]} (catalog/resolve-book path (catalog/books) (catalog/casebook-root))]
     (if book
-      (apply shell/run-with-output "bb" book extra)
+      (launch-book book extra)
       (do (stdout/error error)
           (when (seq near)
             (stdout/err-println "did you mean:")
@@ -155,7 +169,7 @@
            (let [book (first (filter #(= choice (display %)) books))]
              (if (nil? book)
                (do (stdout/error "nothing selected - try again when you know the book you want") 1)
-               (apply shell/run-with-output "bb" (:path book) (passthrough opts))))))))))
+               (launch-book (:path book) (passthrough opts))))))))))
 
 ;; ---------------------------------------------------------------------------
 ;; ./detect - guided "what hurts?" scan of an area
@@ -329,7 +343,7 @@
          (if (= :back choice)
            :back
            (let [book (first (filter #(= choice (display %)) books))]
-             (if book (shell/run-with-output "bb" (:path book)) 1))))))))
+             (if book (launch-book (:path book) []) 1))))))))
 
 (defn- guided
   []

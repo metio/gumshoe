@@ -2,34 +2,38 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.dsl-books-test
-  "The gumshoe.dsl forms kept beside four books - a toggle pair (cronjobs
-   suspend and resume), a scale and a delete - compile to changes that keep
-   every transcript of the book in tests/golden/mutation_books.edn, and
-   that conformance judges as it judges the book."
+  "The gumshoe.dsl forms of four books - a toggle pair (cronjobs suspend and
+   resume), a scale and a delete - kept under tests/edn-books and loaded as
+   `bb run` loads them, compile to changes that keep every transcript of
+   the book in tests/golden/mutation_books.edn, and that conformance judges
+   as it judges the book."
   (:require [clojure.edn :as edn]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.change :as change]
             [gumshoe.conformance :as conformance]
             [gumshoe.dsl :as dsl]
+            [gumshoe.edn-book :as edn-book]
+            [gumshoe.edn-reader :as reader]
             [gumshoe.mutation-books-test :as harness]
             [gumshoe.ssh :as ssh]
             [gumshoe.verify :as verify]))
 
 (def books
   "Each book with a DSL form, by the path of its Clojure form."
-  {"runbooks/kubernetes/cronjobs/suspend.clj" "runbooks/kubernetes/cronjobs/suspend.edn"
-   "runbooks/kubernetes/cronjobs/resume.clj" "runbooks/kubernetes/cronjobs/resume.edn"
-   "runbooks/kubernetes/workloads/scale.clj" "runbooks/kubernetes/workloads/scale.edn"
-   "runbooks/kubernetes/objects/delete.clj" "runbooks/kubernetes/objects/delete.edn"})
+  {"runbooks/kubernetes/cronjobs/suspend.clj" "tests/edn-books/runbooks/kubernetes/cronjobs/suspend.edn"
+   "runbooks/kubernetes/cronjobs/resume.clj" "tests/edn-books/runbooks/kubernetes/cronjobs/resume.edn"
+   "runbooks/kubernetes/workloads/scale.clj" "tests/edn-books/runbooks/kubernetes/workloads/scale.edn"
+   "runbooks/kubernetes/objects/delete.clj" "tests/edn-books/runbooks/kubernetes/objects/delete.edn"})
 
 (defn- source
   [path]
-  (edn/read-string (slurp path)))
+  (reader/read-book path))
 
 (defn- compiled
+  "The change the file holds, loaded as `bb run` loads it."
   [path]
-  (dsl/compile (source path)))
+  (edn-book/load-book path))
 
 (def ^:private golden
   (delay (edn/read-string {:default (fn [_ v] v)} (slurp harness/golden-path))))
@@ -118,4 +122,4 @@
     (edn/read-string (second block))))
 
 (deftest the-readme-example-compiles-and-is-the-suspend-form
-  (is (= (source "runbooks/kubernetes/cronjobs/suspend.edn") (readme-example))))
+  (is (= (source "tests/edn-books/runbooks/kubernetes/cronjobs/suspend.edn") (readme-example))))

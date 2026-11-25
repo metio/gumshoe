@@ -9,7 +9,7 @@
    keyword (see gumshoe.dsl.registry). Every safeguard is on unless the
    change opts out of it with a reason.
 
-     {:gumshoe/dsl 0
+     {:gumshoe/dsl :v0-experimental
       :description \"Suspends a CronJob so no new Job starts\"
       :target {:pick :namespaced :label \"CronJob\" :type \"cronjobs\"
                :namespace-flag :namespace :name-flag :job
@@ -26,7 +26,10 @@
       :effect [[:kubectl :patch {:resource \"cronjob\" :merge {:spec {:suspend true}}}]]}
 
    Keys:
-     :gumshoe/dsl    0, the version of this vocabulary; required
+     :gumshoe/dsl    :v0-experimental, the version of this vocabulary;
+                     required. The vocabulary is experimental: a later
+                     release may change any word of it, and a change
+                     declares the marker to say its author knows
      :description    what the book does; required
      :title          optional
      :options        extra or reworded flags, merged over those the target
@@ -143,8 +146,10 @@
             [gumshoe.verify :as verify]))
 
 (def version
-  "The version of the vocabulary this namespace compiles."
-  0)
+  "The version of the vocabulary this namespace compiles. The vocabulary is
+   experimental and may change in any release, and the marker says so
+   wherever a change is written."
+  :v0-experimental)
 
 ;; --- refusing ----------------------------------------------------------------------
 
@@ -722,11 +727,20 @@
 (defn- compiled
   [{:keys [description title options prerequisites target reads values state refuse confirm items announce effect recovery opt-out]
     :as dsl}]
+  (when-not (map? dsl)
+    (invalid! [] (format "a change is a map, not %s" (pr-str dsl))))
+  ;; the marker is judged first, so a change written for another version
+  ;; is refused for that alone, before any word it uses
+  (cond
+    (not (contains? dsl :gumshoe/dsl))
+    (invalid! [:gumshoe/dsl] (format "the change declares no version - declare :gumshoe/dsl %s, the experimental vocabulary, whose format may change in any release"
+                                     version))
+
+    (not= version (:gumshoe/dsl dsl))
+    (invalid! [:gumshoe/dsl] (format "the change declares :gumshoe/dsl %s, and this compiles %s - declare :gumshoe/dsl %s, the experimental vocabulary, whose format may change in any release"
+                                     (pr-str (:gumshoe/dsl dsl)) version version)))
   (check-no-code! [] dsl)
   (check-keys! [] dsl top-keys "a change")
-  (when-not (= version (:gumshoe/dsl dsl))
-    (invalid! [:gumshoe/dsl] (format "the change is written in version %s of the vocabulary, and this compiles version %d"
-                                     (pr-str (:gumshoe/dsl dsl)) version)))
   (non-blank! [:description] description "the :description")
   (when (contains? dsl :title) (non-blank! [:title] title "the :title"))
   (when-not (map? prerequisites)

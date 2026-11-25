@@ -22,7 +22,7 @@
 
 (def ^:private base
   "A whole change, the cronjob suspend book's DSL form."
-  {:gumshoe/dsl 0
+  {:gumshoe/dsl :v0-experimental
    :description "Suspends a CronJob so no new Job starts"
    :target {:pick :namespaced :label "CronJob" :type "cronjobs"
             :namespace-flag :namespace :name-flag :job
@@ -222,8 +222,13 @@
 
 (def ^:private refused
   "[a change compile must refuse, the :path it names, a word its message holds]."
-  [[(dissoc base :gumshoe/dsl) [:gumshoe/dsl] "version nil"]
-   [(assoc base :gumshoe/dsl 1) [:gumshoe/dsl] "version 1"]
+  [[(dissoc base :gumshoe/dsl) [:gumshoe/dsl] "declares no version - declare :gumshoe/dsl :v0-experimental"]
+   [(assoc base :gumshoe/dsl 0) [:gumshoe/dsl] "declares :gumshoe/dsl 0, and this compiles :v0-experimental"]
+   [(assoc base :gumshoe/dsl 1) [:gumshoe/dsl] "declares :gumshoe/dsl 1"]
+   [(assoc base :gumshoe/dsl :v0) [:gumshoe/dsl] "declares :gumshoe/dsl :v0,"]
+   [(assoc base :gumshoe/dsl "v0-experimental") [:gumshoe/dsl] "declares :gumshoe/dsl \"v0-experimental\""]
+   [(assoc base :gumshoe/dsl 'v0-experimental) [:gumshoe/dsl] "declares :gumshoe/dsl v0-experimental,"]
+   [(assoc base :gumshoe/dsl :v1-experimental :announce 'format) [:gumshoe/dsl] "may change in any release"]
    [[] [] "a change is a map"]
    [(assoc base :steps []) [:steps] ":steps is not a key of a change"]
    [(assoc base :announce 'format) [:announce] "format is a symbol"]
@@ -461,7 +466,7 @@
                     (and state (not skip?)) (assoc :done "it is cheap to apply again")
                     (and deletes? (false? stated)) (assoc :destructive "a scratch namespace only")
                     (and destructive? (not recovery?)) (assoc :recovery "its controller recreates it"))]
-      (cond-> {:gumshoe/dsl 0
+      (cond-> {:gumshoe/dsl :v0-experimental
                :description "a generated change"
                :target (assoc target :candidates (if (and state (:type target) (not (:parse target)))
                                                    {:unless :state}

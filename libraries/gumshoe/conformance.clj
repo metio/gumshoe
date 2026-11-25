@@ -54,13 +54,24 @@
    Every check returns findings, {:file :check :message}, rather than
    asserting, so a caller decides how to report them. A file that does not
    parse is reported once as :unparseable and skipped by the structural
-   checks, which could only misjudge it."
+   checks, which could only misjudge it.
+
+   A book written as EDN (a .edn file below a book root, see
+   gumshoe.edn-book) carries the license header and is loaded as the run
+   door loads it - read as plain EDN within gumshoe.edn-reader's bounds,
+   compiled by gumshoe.dsl/compile - so a file the run door refuses is a
+   :load finding here, and the change it compiles to is judged against the
+   same spec contract and guard rule as a Clojure book's spec. The checks
+   of Clojure source (namespace, harness call, literal description and
+   options) do not apply to it: compile refuses what they would find."
   (:require [babashka.classpath :as classpath]
             [babashka.fs :as fs]
             [clojure.string :as str]
             [edamame.core :as edamame]
             [gumshoe.change :as change]
             [gumshoe.dispatch :as dispatch]
+            [gumshoe.edn-book :as edn-book]
+            [gumshoe.edn-reader :as edn-reader]
             [gumshoe.firebook :as firebook]
             [gumshoe.mutation :as mutation]
             [gumshoe.playbook :as playbook]
@@ -80,6 +91,22 @@
   (vec (sort (for [root roots
                    :when (fs/directory? root)
                    file (fs/glob root "**.clj")]
+               (str file)))))
+
+(defn edn-book?
+  "Whether a book file is written as EDN rather than Clojure."
+  [file]
+  (str/ends-with? (str file) ".edn"))
+
+(defn book-files
+  "Every book file below the roots, sorted: each .clj file, and each .edn
+   file, a book written as EDN. Every .edn file below a book root is a book,
+   so a misspelt one is refused by the gate instead of skipped; data a
+   casebook's books read lives outside its book roots."
+  [roots]
+  (vec (sort (for [root roots
+                   :when (fs/directory? root)
+                   file (fs/glob root "**.{clj,edn}")]
                (str file)))))
 
 (def ^:private parse-options
@@ -217,9 +244,14 @@
                               dispatch/book (capture :dispatch dispatch/book)
                               firebook/book (capture :firebook firebook/book)]
                   (binding [runbook/*loading* true]
-                    (load-file file)))
+                    (if (edn-book? file)
+                      (edn-book/book file)
+                      (load-file file))))
                 nil
-                (catch Throwable e (load-error e)))]
+                (catch Throwable e
+                  (if (edn-reader/refused? e)
+                    (str "does not load: " (:reason (ex-data e)))
+                    (load-error e))))]
     (if error
       {:file file :error error}
       {:file file :specs @captured})))
@@ -669,7 +701,9 @@
    hands a runbook its config, the specs its namespace's vars hold."
   [loaded parsed-books]
   (let [ns-of (into {} (for [{:keys [file forms]} parsed-books :when forms]
-                         [file (second (ns-form forms))]))]
+                         [file (second (ns-form forms))]))
+        ;; an EDN book has no namespace and is named by its file
+        ns-of (fn [file] (if (edn-book? file) file (ns-of file)))]
     (for [{:keys [file specs error]} loaded
           :when (not error)
           :let [book-ns (ns-of file)]
@@ -694,7 +728,7 @@
   "Every advisory for the book files (see without-recovery). None fails the
    gate."
   [{:keys [books]}]
-  (vec (without-recovery (keep #(let [parsed (parse %)] (when (:forms parsed) parsed)) books))))
+  (vec (without-recovery (keep #(let [parsed (parse %)] (when (:forms parsed) parsed)) (remove edn-book? books)))))
 
 (defn report
   "{:findings :advisories} for the book and library files. :findings holds
@@ -712,11 +746,12 @@
    into failing on it. :advisories holds them and every advisory of
    `advisories`."
   [{:keys [books libraries license load? spec-contract guards] :as opts}]
-  (let [parsed-books (mapv parse books)
+  (let [edn-books (filter edn-book? books)
+        parsed-books (mapv parse (remove edn-book? books))
         parsed-libraries (mapv parse libraries)
         parsed (concat parsed-books parsed-libraries)
         loaded (when-not (false? load?)
-                 (load-books (keep #(when (:forms %) (:file %)) parsed-books)
+                 (load-books (concat (keep #(when (:forms %) (:file %)) parsed-books) edn-books)
                              (select-keys opts [:classpath])))
         contract (when loaded (contract-findings loaded parsed-books parsed-libraries))
         advise? (= :advise spec-contract)
@@ -743,11 +778,11 @@
   (:findings (report opts)))
 
 (defn files-in
-  "{:books [...] :libraries [...]}: the .clj files below the roots of :books
-   and :libraries, relative to the working directory, default-paths for a
+  "{:books [...] :libraries [...]}: the book files below the roots of :books
+   (see book-files) and the .clj files below those of :libraries, relative to the working directory, default-paths for a
    root not given."
   [{:keys [books libraries]}]
-  {:books (clj-files (or books (:books default-paths)))
+  {:books (book-files (or books (:books default-paths)))
    :libraries (clj-files (or libraries (:libraries default-paths)))})
 
 (defn- with-library-classpath
