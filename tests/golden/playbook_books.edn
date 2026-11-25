@@ -176,7 +176,14 @@
    "FAILED after 6 effects - stopped at: kubectl -n apps delete databases.kinda.rocks podinfo --ignore-not-found --wait=false - the effects before it stay applied",
    :recovery
    ["Recovery:"
-    "  Some of the Database and its Secret may be gone and the rest not."]},
+    "  Some of the Database and its Secret may be gone and the rest not."
+    "  Flux does not reconcile HelmRelease apps/podinfo while these stay suspended:"
+    "    HelmRelease apps/podinfo - resume: kubectl --context=ctx -n apps patch helmreleases.helm.toolkit.fluxcd.io podinfo --type=merge --patch='{\"spec\":{\"suspend\":false}}'"
+    "    Kustomization flux-system/apps - resume: kubectl --context=ctx -n flux-system patch kustomizations.kustomize.toolkit.fluxcd.io apps --type=merge --patch='{\"spec\":{\"suspend\":false}}'"
+    "  The release's workloads, volumes and Helm storage stay as the steps before this one left them."
+    "  Resume the HelmRelease once its Helm storage no longer holds the revision that blocked it, then the owner."
+    "  Running this playbook again repeats every step, but no longer finds the claims a StatefulSet it"
+    "  already deleted made from its volumeClaimTemplates; delete those by hand."]},
   :surface
   {:description "Resets a podinfo instance to a clean install",
    :options
@@ -439,7 +446,12 @@
     "drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1"],
    :banner
    "FAILED after 1 effect - stopped at: kubectl drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1 - the effects before it stay applied",
-   :recovery []},
+   :recovery
+   ["Recovery:"
+    "  The drain stopped before every evictable pod left node n1. The pods it evicted are gone from the node: their controllers recreate them on other nodes, a pod without a controller is not recreated, and the emptyDir data of an evicted pod is deleted. A PodDisruptionBudget that allows no disruption blocks a drain; the disruption check above names those. Remove the blocker and run the playbook again, or bring the node back as below."
+    "  Node n1 stays cordoned: nothing new is scheduled on it."
+    "  It still runs 1 pod(s) a drain evicts: shop/web-1"
+    "  Bring it back into service once it is fit to run pods: kubectl --context=ctx uncordon n1"]},
   :from-segment-2
   {:result true,
    :out
@@ -519,14 +531,8 @@
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
    ["Recovery:"
-    "  This change declares no recovery guidance. What it left behind:"
-    "    1 effect of this change stayed applied - nothing was rolled back:"
-    "      kubectl cordon n1"
-    "    its post-check did not hold"
-    "  Look at:"
-    "    the post-check messages above"
-    "    the changelog entry this change posted"
-    "    the current state of n1 on cluster"]},
+    "  Cordoning node n1 did not complete or did not hold; no pod was evicted from it."
+    "  Node n1 is schedulable: nothing this run did keeps it out of service."]},
   :grace-period
   {:result true,
    :out
@@ -753,7 +759,10 @@
     "uncordon n1"],
    :banner
    "FAILED - read the messages above; 3 effects had been applied",
-   :recovery [],
+   :recovery
+   ["Recovery:"
+    "  The detectives found issues after node n1 came back; the findings above name them. Read them before taking another node out of service."
+    "  Node n1 is schedulable: nothing this run did keeps it out of service."],
    :waited ["perform the maintenance on the node now"]},
   :unpicked
   {:result false,

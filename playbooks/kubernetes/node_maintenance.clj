@@ -13,7 +13,10 @@
    5. verifies node health with the detectives
 
    Cordon, drain and uncordon are the steps of the node runbooks, so each one
-   verifies its result exactly as the runbook does."
+   verifies its result exactly as the runbook does. A failure at any step
+   prints what that step's failure means, followed by the node's state read
+   at the failure: whether it stays cordoned, the pods a drain still evicts
+   from it, and how to uncordon it."
   (:require [gumshoe.detective :as detective]
             [gumshoe.detectives.disruption :as disruption]
             [gumshoe.detectives.nodes :as node-detectives]
@@ -32,7 +35,8 @@
   {:title "🔬 Verification"
    :prerequisites {:installed-tools ["kubectl"]
                    :kubectl-can-get ["nodes" "pods"]}
-   :check (fn [{:keys [context]}] (detective/investigate! context node-detectives/detectives))})
+   :check (fn [{:keys [context]}] (detective/investigate! context node-detectives/detectives))
+   :recovery nodes/verification-recovery})
 
 (playbook/book
  {:description "Playbook: cordon, drain, maintain, uncordon, and verify a node"
@@ -41,9 +45,10 @@
                    :coerce :string}}
   :select {:mode :one :label "Node" :flag :node :candidates nodes/all-nodes}
   :confirm {:action "take a node out of service for maintenance and bring it back"}
+  :recovery nodes/maintenance-recovery
   :steps [disruption-check
-          (assoc nodes/cordon :title "🚧 Cordon")
-          (assoc nodes/drain :title "💨 Drain")
+          (assoc nodes/cordon :title "🚧 Cordon" :recovery nodes/cordon-recovery)
+          (assoc nodes/drain :title "💨 Drain" :recovery nodes/drain-recovery)
           {:pause "perform the maintenance on the node now"}
-          (assoc nodes/uncordon :title "✅ Uncordon")
+          (assoc nodes/uncordon :title "✅ Uncordon" :recovery nodes/uncordon-recovery)
           health-check]})

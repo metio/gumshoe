@@ -33,10 +33,14 @@
    the system back. A function receives the step's context with :applied, the
    effects applied so far, and runs at the failure, so it can read the state
    the failure left; one that throws leaves the banner intact and says the
-   guidance could not be rendered. The playbook's :recovery covers a step
-   without its own once the run has changed something. Every step whose
-   failure leaves a system parked or half-owned - a controller suspended, a
-   finalizer stripped - carries one.
+   guidance could not be rendered. Once the run has changed something, the
+   playbook's :recovery, its standing guidance, follows the step's own, so a
+   step a caller added at a position still prints what the playbook leaves
+   parked; a playbook without one names the effects its earlier steps
+   applied instead (see compose-recovery). Every step whose failure leaves a
+   system parked or half-owned - a controller suspended, a node cordoned, a
+   finalizer stripped - carries one, and so does a playbook whose steps
+   leave such a state for the steps after them to undo.
 
    The checks before the first change or pause run before the confirmation, so
    the operator decides with their report on screen. The confirmation lists
@@ -60,7 +64,9 @@
    it, [[position step] ..], and `with-extra` splices in a map of position ->
    steps, refusing an unknown position as the book loads."
   (:refer-clojure :exclude [run!])
-  (:require [gumshoe.flow :as flow]
+  (:require [clojure.string :as str]
+            [gumshoe.effect :as effect]
+            [gumshoe.flow :as flow]
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
@@ -255,37 +261,119 @@
 
       :else true)))
 
+(defn- run-change!
+  "Runs a change step through gumshoe.mutation, keeping the plan its :effect
+   built in `plan`, so the run can name what the step applied."
+  [step {:keys [target opts announcement-data]} plan]
+  (mutation/run-on! (-> step
+                        (assoc :confirmed? (not (separately? step)))
+                        (update :effect (fn [effect] (fn [ctx] (vreset! plan (effect ctx))))))
+                    target opts announcement-data))
+
 (defn- run-step!
-  [step {:keys [target opts announcement-data] :as ctx} wait?]
+  [step ctx wait? plan]
   (stdout/print-section (::title step))
   (case (kind step)
-    :change (mutation/run-on! (assoc step :confirmed? (not (separately? step))) target opts announcement-data)
+    :change (run-change! step ctx plan)
     :check (boolean ((:check step) ctx))
     :pause (pause! step ctx wait?)))
 
+;; --- recovery --------------------------------------------------------------------
+
+(defn applied-effects
+  "What a step applied, as gumshoe.effect/describe renders it: the first
+   `applied` effects of `plan`, which effect/run! applies in order, without
+   the notes, which change nothing."
+  [plan applied]
+  (->> (effect/as-plan plan)
+       (take applied)
+       (remove #(= :note (first %)))
+       (mapv effect/describe)))
+
+(defn- left-behind-text
+  [left-behind]
+  (str/join "\n"
+            (concat ["This playbook declares no recovery guidance. What the steps before this one left behind - nothing was rolled back:"]
+                    (mapcat (fn [{:keys [title effects]}]
+                              (cons (str "  " title ":") (map #(str "    " %) effects)))
+                            left-behind))))
+
+(defn- part-text
+  [role {:keys [text error]}]
+  (or text (format "The guidance for %s could not be rendered - %s" role error)))
+
+(defn compose-recovery
+  "The guidance under the FAILED banner of a run that stopped at a step, from
+   the state of the run, as gumshoe.outcome/render returns guidance: {:text
+   ..}, {:error ..} or nil.
+
+     :step        the step's own guidance as rendered, or for a change
+                  without any the engine's fallback naming what it applied
+     :changed?    whether the run changed anything before it stopped
+     :standing    the playbook's :recovery as rendered at the failure
+     :left-behind [{:title .. :effects [..]}], the steps before the stopped
+                  one that applied effects, in run order
+
+   The step's guidance comes first. Once the run changed something the
+   playbook's standing guidance follows it, so a step added at a position
+   still prints what the playbook leaves parked; a standing text equal to
+   the step's prints once. A playbook without standing guidance names the
+   effects its earlier steps applied instead, so every change still in
+   place reaches the operator. A run that changed nothing prints the step's
+   guidance alone. A single part keeps its rendered form; several join into
+   one text, a part that could not be rendered saying so in its place."
+  [{:keys [step changed? standing left-behind]}]
+  (let [listed (when (and changed? (nil? standing) (seq left-behind))
+                 {:text (left-behind-text left-behind)})
+        parts (keep identity [(when step ["the step the run stopped at" step])
+                              (when (and changed? standing (not= standing step)) ["the playbook" standing])
+                              (when listed ["the playbook" listed])])]
+    (case (count parts)
+      0 nil
+      1 (second (first parts))
+      {:text (str/join "\n" (map #(apply part-text %) parts))})))
+
 (defn- stopped-at!
-  "Records the recovery guidance for `step`, the one the run stopped at: its
-   own, or once the run changed something the playbook's `fallback`. A
-   rehearsal changed nothing and records none."
-  [step ctx fallback]
-  (when-not flow/*dry-run*
-    (outcome/recovery! (or (:recovery step) (when (outcome/changed-so-far?) fallback)) ctx)))
+  "Records the recovery guidance of the run stopped at `step`, composed by
+   compose-recovery: the step's part is what the step recorded while it ran
+   (a change records its own :recovery or the engine's fallback), else its
+   :recovery rendered here. A rehearsal changed nothing and records none,
+   and a run stopped at a pause it could not wait at did not fail."
+  [step ctx {:keys [recovery left-behind]}]
+  (when-not (or flow/*dry-run* (:paused (outcome/current)))
+    (let [ctx (assoc ctx :applied (outcome/applied-count))
+          recorded (outcome/recorded-recovery)
+          changed? (outcome/changed-so-far?)]
+      (outcome/settle-recovery!
+       (compose-recovery {:step (or (:recovery recorded)
+                                    (some-> (:recovery step) (outcome/render ctx))
+                                    (:fallback recorded))
+                          :changed? changed?
+                          :standing (when (and changed? recovery) (outcome/render recovery ctx))
+                          :left-behind left-behind})))))
 
 (defn- run-steps!
   "Runs the steps in order, stopping at the first that fails. `wait?` says
-   whether a pause that opens the run waits for the operator; `fallback` is
-   the playbook's recovery guidance for a step without its own."
-  [steps ctx wait? fallback]
-  (reduce (fn [_ [i step]]
-            (if (try (run-step! step ctx (or wait? (pos? i)))
-                     (catch Throwable e
-                       (stopped-at! step ctx fallback)
-                       (throw e)))
-              true
-              (do (stopped-at! step ctx fallback)
-                  (reduced false))))
-          true
-          (map-indexed vector steps)))
+   whether a pause that opens the run waits for the operator; `playbook`
+   gives the standing :recovery composed with a step's own. The steps that
+   applied effects are kept as the run goes, so a playbook without :recovery
+   still names them when a later step fails."
+  [steps ctx wait? playbook]
+  (let [left-behind (volatile! [])]
+    (reduce (fn [_ [i step]]
+              (let [plan (volatile! nil)
+                    before (outcome/applied-count)
+                    stop! #(stopped-at! step ctx {:recovery (:recovery playbook) :left-behind @left-behind})
+                    ok? (try (run-step! step ctx (or wait? (pos? i)) plan)
+                             (catch Throwable e (stop!) (throw e)))]
+                (if ok?
+                  (let [effects (applied-effects @plan (- (outcome/applied-count) before))]
+                    (when (seq effects)
+                      (vswap! left-behind conj {:title (::title step) :effects effects}))
+                    true)
+                  (do (stop!) (reduced false)))))
+            true
+            (map-indexed vector steps))))
 
 (defn- context-for
   [target opts announcement-data]
@@ -310,7 +398,7 @@
   [playbook n target opts announcement-data]
   (let [segs (segments (:steps playbook))]
     (if-let [steps (get segs (dec n))]
-      (run-steps! steps (context-for target opts announcement-data) false (:recovery playbook))
+      (run-steps! steps (context-for target opts announcement-data) false playbook)
       (do (stdout/error (format "the playbook has %d segments, there is no segment %d" (count segs) n))
           false))))
 
@@ -331,9 +419,9 @@
         ;; the operator did its manual step before running --from-segment.
         ;; A pause after the leading checks, or one opening a fresh run,
         ;; still has its manual step ahead of it
-        (and (run-steps! leading ctx false (:recovery playbook))
+        (and (run-steps! leading ctx false playbook)
              (confirmed! playbook later ctx)
-             (run-steps! later ctx (or (= 1 from) (boolean (seq leading))) (:recovery playbook)))))))
+             (run-steps! later ctx (or (= 1 from) (boolean (seq leading))) playbook))))))
 
 (defn run!
   "Selects the subject, honouring the flags, and runs the playbook against it.
