@@ -144,3 +144,44 @@
       (is (= :done result))
       (is (= "listing pods\n" (str err)))
       (is (not (clojure.string/includes? (str err) "\r"))))))
+
+(def ^:private diagnostic-calls
+  "One call per printing helper. Everything they print is diagnostic chatter,
+   which belongs on stderr so a result on stdout stays clean."
+  {#'stdout/err-println #(stdout/err-println "a" "line")
+   #'stdout/with-spinner #(stdout/with-spinner "reading pods" (constantly :done))
+   #'stdout/print-section-marker #(stdout/print-section-marker)
+   #'stdout/print-section #(stdout/print-section "Pods")
+   #'stdout/print-banner #(stdout/print-banner stdout/red "stop")
+   #'stdout/ok #(stdout/ok "fine")
+   #'stdout/error #(stdout/error "broken")
+   #'stdout/warn #(stdout/warn "careful")
+   #'stdout/check-ok #(stdout/check-ok "can connect to" "host")
+   #'stdout/check-error #(stdout/check-error "cannot connect to" "host")
+   #'stdout/selected #(stdout/selected "Node" "w-1")
+   #'stdout/print-data-table #(stdout/print-data-table {:node "w-1"})
+   #'stdout/print-table #(stdout/print-table [["POD" :pod]] [{:pod "web-1"}])
+   #'stdout/print-command #(stdout/print-command "kubectl" "get" "pods")})
+
+(def ^:private non-printing
+  "The public vars that print nothing: formatters returning strings, colour
+   and width settings."
+  #{#'stdout/fixed-width #'stdout/choose-width #'stdout/*width* #'stdout/width
+    #'stdout/results-wrap-width #'stdout/disable-colors! #'stdout/colors-enabled?
+    #'stdout/no-color-requested? #'stdout/strip-colors #'stdout/elide #'stdout/wrap
+    #'stdout/hanging #'stdout/shorten-path #'stdout/red #'stdout/green #'stdout/yellow
+    #'stdout/blue #'stdout/bold #'stdout/animate? #'stdout/data-table #'stdout/table})
+
+(deftest every-public-helper-is-classified
+  (is (= (set (vals (ns-publics 'gumshoe.stdout)))
+         (into non-printing (keys diagnostic-calls)))
+      "a new helper is either a printer with a stream test below or prints nothing"))
+
+(deftest diagnostics-go-to-stderr-and-leave-stdout-empty
+  (doseq [[helper call] diagnostic-calls]
+    (testing (str (symbol helper))
+      (let [out (java.io.StringWriter.)
+            err (java.io.StringWriter.)]
+        (binding [*out* out *err* err] (call))
+        (is (= "" (str out)) "nothing reaches stdout")
+        (is (not (clojure.string/blank? (str err))) "the text reaches stderr")))))
