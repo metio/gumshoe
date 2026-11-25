@@ -3,8 +3,10 @@
 
 (ns gumshoe.opennebula-test
   (:require [clojure.test :refer [deftest is testing]]
+            [gumshoe.detective :as detective]
             [gumshoe.detectives.opennebula :as detectives]
-            [gumshoe.opennebula :as opennebula]))
+            [gumshoe.opennebula :as opennebula]
+            [gumshoe.shell :as shell]))
 
 (defn- summaries
   [findings]
@@ -59,3 +61,38 @@
                             {:NAME "prolog" :ID "14" :STATE "3" :LCM_STATE "39"}
                             {:NAME "lost" :ID "15" :STATE "3" :LCM_STATE "16"}
                             {:NAME "off" :ID "16" :STATE "8" :LCM_STATE "36"}]}))))))
+
+(deftest pool-elements-test
+  (testing "an answered pool is its elements, an empty one an empty list"
+    (is (= [{:ID "0"}] (opennebula/pool-elements {:exit 0 :out "{\"HOST_POOL\":{\"HOST\":{\"ID\":\"0\"}}}"}
+                                                 :HOST_POOL :HOST)))
+    (is (= [] (opennebula/pool-elements {:exit 0 :out "{\"HOST_POOL\":{}}"} :HOST_POOL :HOST))))
+  (testing "a command that did not answer leaves the pool nil"
+    (is (nil? (opennebula/pool-elements {:exit 255 :out ""} :HOST_POOL :HOST)) "ssh failed")
+    (is (nil? (opennebula/pool-elements {:exit 0 :out ""} :HOST_POOL :HOST)) "printed nothing")
+    (is (nil? (opennebula/pool-elements {:exit 0 :out "[ONE] auth failure"} :HOST_POOL :HOST)) "not JSON")
+    (is (nil? (opennebula/pool-elements {:exit 0 :out "{\"VM_POOL\":{}}"} :HOST_POOL :HOST)) "another pool")
+    (is (nil? (opennebula/pool-elements {:exit 1 :out "{\"HOST_POOL\":{}}"} :HOST_POOL :HOST))
+        "a document printed before a failing exit")))
+
+(deftest failed-commands-leave-every-check-unread-test
+  (with-redefs [shell/execute (fn [& _] {:exit 255 :out "" :err "oned is not running"})]
+    (let [evidence (opennebula/collect-evidence! {:host "frontend.example.org"})]
+      (is (nil? (get evidence "hosts")))
+      (is (nil? (get evidence "vms")))
+      (is (nil? (get evidence "datastores")))
+      (is (= #{"opennebula-hosts" "opennebula-vms" "opennebula-datastores"}
+             (set (map :name (filter :unread (detective/mark-unread detectives/detectives evidence)))))))))
+
+(deftest answered-commands-are-read-test
+  (with-redefs [shell/execute (fn [& args]
+                                (let [command (some #{"onehost" "onevm" "onedatastore"} args)]
+                                  {:exit 0
+                                   :out (case command
+                                          "onehost" "{\"HOST_POOL\":{\"HOST\":[{\"NAME\":\"kvm-1\",\"STATE\":\"2\"}]}}"
+                                          "onevm" "{\"VM_POOL\":{}}"
+                                          "onedatastore" "{\"DATASTORE_POOL\":{\"DATASTORE\":{\"NAME\":\"ds\"}}}")}))]
+    (let [evidence (opennebula/collect-evidence! {:host "frontend.example.org"})]
+      (is (= 1 (count (get evidence "hosts"))))
+      (is (= [] (get evidence "vms")))
+      (is (empty? (filter :unread (detective/mark-unread detectives/detectives evidence)))))))
