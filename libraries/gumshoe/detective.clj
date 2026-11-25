@@ -442,12 +442,25 @@
 (defn- json-safe
   "data with every value cheshire has no encoder for replaced by its string
    form, so one exotic field in a finding or a book's :extra does not cost the
-   whole report."
+   whole report. cheshire encodes java.util.Date and java.time.Instant (both
+   inst?) and UUIDs; every other java.time value - LocalDate, ZonedDateTime,
+   OffsetDateTime and the rest - has no encoder and is written as its string."
   [data]
   (walk/postwalk (fn [v]
                    (if (or (nil? v) (string? v) (number? v) (boolean? v) (keyword? v) (symbol? v)
-                           (map? v) (coll? v) (map-entry? v) (inst? v) (uuid? v)
-                           (instance? java.time.temporal.TemporalAccessor v))
+                           (map? v) (coll? v) (map-entry? v) (inst? v) (uuid? v))
+                     v
+                     (str v)))
+                 data))
+
+(defn- json-plain
+  "data with every value that is not a string, number, boolean, keyword,
+   symbol, nil or collection replaced by its string form: the last resort
+   when even json-safe's output does not encode."
+  [data]
+  (walk/postwalk (fn [v]
+                   (if (or (nil? v) (string? v) (number? v) (boolean? v) (keyword? v) (symbol? v)
+                           (map? v) (coll? v) (map-entry? v))
                      v
                      (str v)))
                  data))
@@ -458,7 +471,29 @@
   [data]
   (try (json/generate-string data {:pretty true})
        (catch Exception _
-         (json/generate-string (json-safe data) {:pretty true}))))
+         (try (json/generate-string (json-safe data) {:pretty true})
+              (catch Exception _
+                (json/generate-string (json-plain data) {:pretty true}))))))
+
+(defn- written?
+  "Flushes *out* and whether everything printed to it arrived. A PrintWriter
+   swallows the IOException of a full disk or a closed stdout and only
+   remembers it for checkError, so without this a report that was never
+   written would end like one that was."
+  []
+  (if (instance? java.io.PrintWriter *out*)
+    (not (.checkError ^java.io.PrintWriter *out*))
+    (try (flush) true
+         (catch java.io.IOException _ false))))
+
+(defn- delivered
+  "healthy when the report reached stdout; otherwise names the failure on
+   stderr and returns false, so a scan whose report is missing never exits 0."
+  [healthy]
+  (if (written?)
+    healthy
+    (do (stdout/error "the report could not be written to stdout (a full disk or a closed pipe?) - nothing was reported")
+        false)))
 
 (defn report!
   "Renders findings in the requested format (text, json, edn) to stdout, always
@@ -484,22 +519,23 @@
      ;; keep the findings so the harness banners them and offers to share
      ;; them - every scan renders through here, the custom flows included
      (summary/capture! findings)
-     (case output
-       "json" (do (println (json-report data))
+     (delivered
+      (case output
+        "json" (do (println (json-report data))
+                   healthy)
+        "edn" (do (prn data)
                   healthy)
-       "edn" (do (prn data)
-                 healthy)
-       ;; a plugin's format (sarif, junit, …), else the rich terminal report
-       (if-let [render (report/format-fn output)]
-         (do (render data) healthy)
-         (if blind
-           (do (stdout/print-section "🔬 Findings")
-               (stdout/error (nothing-checked-message detectives))
-               false)
-           (let [shown (print-report! detectives findings)]
-             (when (seq crashed)
-               (stdout/error (crashed-message crashed)))
-             (and shown (empty? crashed)))))))))
+        ;; a plugin's format (sarif, junit, …), else the rich terminal report
+        (if-let [render (report/format-fn output)]
+          (do (render data) healthy)
+          (if blind
+            (do (stdout/print-section "🔬 Findings")
+                (stdout/error (nothing-checked-message detectives))
+                false)
+            (let [shown (print-report! detectives findings)]
+              (when (seq crashed)
+                (stdout/error (crashed-message crashed)))
+              (and shown (empty? crashed))))))))))
 
 (defn when-to-run!
   "Prints a short orientation before an investigation: what this book is for and

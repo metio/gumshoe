@@ -375,10 +375,10 @@
     :else nil))
 
 (defn- refuse!
-  "Prints why the change is refused and returns false, the verdict of a
-   precondition that refused."
+  "Prints why the change is refused on stderr, beside the banner that ends
+   the run, and returns false, the verdict of a precondition that refused."
   [why]
-  (println (str "refusing: " why))
+  (stdout/err-println (str "refusing: " why))
   false)
 
 (defn fetch-pinned

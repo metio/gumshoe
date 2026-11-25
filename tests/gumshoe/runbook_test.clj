@@ -7,6 +7,7 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [gumshoe.config :as config]
+            [gumshoe.flags :as flags]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.prerequisites :as prerequisites]
             [gumshoe.runbook :as runbook]))
@@ -175,6 +176,80 @@
     (testing "a book without the option refuses the letter"
       (is (thrown-with-msg? Exception #"Unknown option: -s"
                             (runbook/arguments {:host {:desc "h" :coerce :string}} ["-s" "web"]))))))
+
+(deftest a-positional-argument-is-refused-test
+  (let [options {:node {:desc "the node" :coerce :string}}
+        refused (fn [args]
+                  (try (runbook/arguments options args) :accepted
+                       (catch clojure.lang.ExceptionInfo e (ex-data e))))]
+    (testing "a stray word, wherever it stands, is refused and names itself"
+      (doseq [args [["--node" "n" "stray" "--dry-run"]
+                    ["stray" "--node" "n"]
+                    ["--node" "n" "--" "stray"]]]
+        (let [data (refused args)]
+          (is (= :unexpected-argument (:cause data)) (pr-str args))
+          (is (= "stray" (:argument data)))
+          (is (str/starts-with? (:msg data) "unexpected argument: \"stray\"")))))
+    (testing "a value given to a boolean flag is a positional argument too"
+      (let [data (refused ["--dry-run" "yes" "--node" "n"])]
+        (is (= "yes" (:argument data)))
+        (is (str/includes? (:msg data) "a boolean flag such as --dry-run takes no value"))))
+    (testing "the forms a boolean flag does take still parse"
+      (is (= {:opts {:node "n" :dry-run true} :notes []} (runbook/arguments options ["--node" "n" "--dry-run"])))
+      (is (= {:opts {:dry-run false} :notes []} (runbook/arguments options ["--dry-run=false"]))))
+    (testing "an error-fn sees the refusal, and one that returns still never gets the half-read options"
+      (let [seen (atom nil)]
+        (is (thrown? clojure.lang.ExceptionInfo
+                     (runbook/arguments options ["--node" "n" "stray" "--dry-run"] #(reset! seen %))))
+        (is (= :unexpected-argument (:cause @seen)))))))
+
+(deftest parse-without-positionals-test
+  (let [spec {:spec {:dry-run {:coerce :boolean}} :restrict true}]
+    (is (= {:dry-run true} (flags/parse-without-positionals ["--dry-run"] spec "a door")))
+    (is (= {} (flags/parse-without-positionals [] spec "a door")))
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unexpected argument: \"x\" - a door takes only options"
+                          (flags/parse-without-positionals ["x"] spec "a door")))
+    (testing "an unknown flag is still babashka.cli's own refusal"
+      (is (thrown-with-msg? Exception #"Unknown option: --nope"
+                            (flags/parse-without-positionals ["--nope"] spec "a door"))))))
+
+(defn- run-node-book
+  "Runs a book with a --node option in a fresh bb, from a scratch directory
+   with no env.edn, with the given arguments; its action prints whether it
+   rehearsed and writes the marker file under dir."
+  [dir & args]
+  (let [marker (str (fs/path dir "effect-ran"))
+        script (str "(require '[gumshoe.runbook :as runbook] '[gumshoe.flow :as flow])"
+                    "(binding [*command-line-args* " (pr-str (vec args)) "]"
+                    "  (runbook/execute! {:description \"cordons a node\" :announce? false :change? true"
+                    "                     :options {:node {:desc \"the node\" :coerce :string}}"
+                    "                     :action (fn [_ _] (println (str \"DRY-RUN=\" flow/*dry-run*))"
+                    "                                       (spit " (pr-str marker) " \"x\") true)}))")]
+    (assoc @(process/process {:dir (str dir) :out :string :err :string :continue true
+                              :extra-env {"GUMSHOE_ENV" (str (fs/path dir "env.edn")) "NO_COLOR" "1"}}
+                             "bb" "-cp" (absolute-classpath) "-e" script)
+           :effect-ran? (fs/exists? marker))))
+
+(deftest a-stray-word-before-dry-run-never-reaches-an-effect-test
+  (fs/with-temp-dir [dir {}]
+    (let [{:keys [exit out err effect-ran?]} (run-node-book dir "--node" "n" "stray" "--dry-run")]
+      (is (= 1 exit) (str out err))
+      (is (str/includes? err "unexpected argument: \"stray\"") err)
+      (is (not (str/includes? out "DRY-RUN=")) "the action never runs")
+      (is (false? effect-ran?) "nothing was changed"))))
+
+(deftest dry-run-without-a-stray-word-rehearses-test
+  (fs/with-temp-dir [dir {}]
+    (let [{:keys [exit out err]} (run-node-book dir "--node" "n" "--dry-run")]
+      (is (zero? exit) (str out err))
+      (is (str/includes? out "DRY-RUN=true")))))
+
+(deftest the-share-offer-is-asked-only-of-a-text-run-on-a-console-test
+  (is (true? (runbook/offers-share? {:output "text" :console? true})))
+  (is (true? (runbook/offers-share? {:output nil :console? true})) "a book without --output reports text")
+  (doseq [output ["json" "edn" "sarif"]]
+    (is (false? (runbook/offers-share? {:output output :console? true})) output))
+  (is (false? (runbook/offers-share? {:output "text" :console? false})) "a pipe, cron or CI never waits on fzf"))
 
 (deftest help-lists-the-deprecated-aliases-test
   (let [text (runbook/help {:description "names a release"

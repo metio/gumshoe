@@ -128,3 +128,19 @@
       (is (every? #(clojure.string/starts-with? % "              ") (rest lines)) "continuations sit under the text")
       (is (every? #(<= (count %) 60) lines))
       (is (= text (clojure.string/join " " (map clojure.string/trim (cons (subs (first lines) 14) (rest lines))))) "no word is lost"))))
+
+(deftest the-spinner-animates-only-on-a-live-stderr-test
+  (testing "stderr decides, not stdout or FORCE_COLOR"
+    (is (true? (stdout/animate? {:stderr-terminal? true})))
+    (is (false? (stdout/animate? {:stderr-terminal? false})) "`2> run.log` gets the line once")
+    (is (false? (stdout/animate? {:stderr-terminal? true :no-color? true})))
+    (is (false? (stdout/animate? {:stderr-terminal? true :no-color-flag? true}))))
+  (testing "off a live stderr the message is printed once, with no carriage-return frames"
+    (let [err (java.io.StringWriter.)
+          result (with-redefs-fn {#'stdout/stderr-live? (constantly false)
+                                  #'stdout/colors? (atom true)}
+                   (fn [] (binding [*err* err]
+                            (stdout/with-spinner "listing pods" #(do (Thread/sleep 250) :done)))))]
+      (is (= :done result))
+      (is (= "listing pods\n" (str err)))
+      (is (not (clojure.string/includes? (str err) "\r"))))))

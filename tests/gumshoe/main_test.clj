@@ -202,3 +202,16 @@
       (is (#'main/book-path? path) (str path " dispatches as a book path"))
       (is (some-> (:path (gumshoe.catalog/resolve-book path books root)) fs/regular-file?)
           (str "bb run " path " resolves to a book file")))))
+
+(deftest detect-refuses-a-positional-argument-test
+  (let [refusals (atom [])]
+    (with-redefs-fn {#'main/detect-refusal! (fn [data] (swap! refusals conj data))}
+      (fn []
+        (testing "a stray word before --dry-run is refused before any book is chosen"
+          (with-redefs [fuzzy/select-single (fn [& _] (throw (ex-info "the menu opened" {})))]
+            (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unexpected argument: \"stray\""
+                                  (main/detect ["stray" "--dry-run"]))))
+          (is (= :unexpected-argument (:cause (first @refusals))))
+          (is (= "stray" (:argument (first @refusals)))))
+        (testing "flags alone still parse"
+          (is (= {:dry-run true :no-color true} (main/detect-options ["--dry-run" "--no-color"]))))))))

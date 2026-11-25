@@ -12,7 +12,8 @@
    A deprecated alias keeps working where its option exists and no option of
    the book claims the letter for itself. A run that uses one prints a note
    naming the alias that replaces it, and --help lists it beside the option."
-  (:require [clojure.string :as str]))
+  (:require [babashka.cli :as cli]
+            [clojure.string :as str]))
 
 (def aliases
   "The short alias of each select flag, by the option it names."
@@ -146,3 +147,26 @@
            (format "%s is a deprecated alias of --%s; use %s"
                    (flag letter) (name option)
                    (if current (flag current) (str "--" (name option))))))))
+
+(defn parse-without-positionals
+  "babashka.cli's parse of args with spec, refusing the first positional
+   argument. babashka.cli stops reading options at the first token that is
+   not one, so every flag after a stray word, a typo or a value given to a
+   boolean flag would be dropped silently: a --dry-run behind it would turn
+   a rehearsal into a real change, an --output json behind it a text report.
+   The refusal goes to the spec's :error-fn as babashka.cli hands its own
+   over, with cause :unexpected-argument, and throws when there is none or
+   it returns, so the half-read options are never handed on. `takes` names
+   what the command accepts, for the message."
+  [args spec takes]
+  (let [{:keys [args] :as parsed} (cli/parse-args args spec)]
+    (if-let [arg (first args)]
+      (let [data {:type :org.babashka/cli
+                  :cause :unexpected-argument
+                  :msg (format (str "unexpected argument: %s - %s takes only options, and nothing after it was read;"
+                                    " a boolean flag such as --dry-run takes no value (write --dry-run=false to turn one off)")
+                               (pr-str arg) takes)
+                  :argument arg}]
+        (when-let [error-fn (:error-fn spec)] (error-fn data))
+        (throw (ex-info (:msg data) data)))
+      (:opts parsed))))

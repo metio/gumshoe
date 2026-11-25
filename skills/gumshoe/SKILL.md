@@ -114,10 +114,18 @@ otherwise ask for:
   The aliases `--name` and Thanos' `--service` had before (`-r`, `-s`,
   `-m`) still parse, and print a deprecation note on stderr naming the
   current one; write the current alias or the long flag.
+- **Pass options only.** A book, and `./detect`, refuses any positional
+  argument with exit 1 before anything runs, naming the word: babashka.cli
+  stops reading options at the first one, so a `--dry-run` or `--output
+  json` after it would otherwise be dropped. A boolean flag takes no value
+  (`--dry-run`, or `--dry-run=false`), so `--dry-run yes` is refused too.
 - **Use `--output json`** (or `edn`) on detectives and scans. Results go to
   standard output and diagnostics to standard error, so `2> scan.log | jq`
-  parses the report while the log keeps the prerequisite checklist and any
-  error.
+  parses the report while the log keeps the prerequisite checklist, any
+  error and a change's "refusing: …" reason. A report that could not be
+  written to standard output (a full disk, a closed pipe) fails the run
+  with exit 1. A json or edn run, or one without a console, never asks to
+  share its findings.
 - **Read the exit code.** `0` means success or nothing critical; `1` means a
   critical finding, a failure, an abort, or a failed post-check.
 - **Skip the interactive front doors.** `./gumshoe`, `./detect`,

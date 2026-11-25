@@ -25,7 +25,7 @@
   (:require [babashka.fs :as fs]
             [clojure.edn :as edn]
             [clojure.java.io :as io])
-  (:import (java.io PushbackReader StringReader)
+  (:import (java.io IOException PushbackReader StringReader)
            (java.nio ByteBuffer)
            (java.nio.charset CharacterCodingException CodingErrorAction StandardCharsets)))
 
@@ -50,13 +50,18 @@
 
 (defn- bounded-bytes
   "The file's bytes, read up to one past max-bytes, so a file that grows
-   between a size check and the read is still refused."
+   between a size check and the read is still refused. A file that exists
+   and cannot be read (its mode, its owner, an SELinux denial) is refused
+   like every other unreadable book."
   [file]
-  (with-open [in (io/input-stream (fs/file file))]
-    (let [bytes (.readNBytes in (int (inc max-bytes)))]
-      (when (> (alength bytes) max-bytes)
-        (refuse! file (format "is larger than %d bytes - a book file is at most %d bytes" max-bytes max-bytes)))
-      bytes)))
+  (let [bytes (try
+                (with-open [in (io/input-stream (fs/file file))]
+                  (.readNBytes in (int (inc max-bytes))))
+                (catch IOException e
+                  (refuse! file (str "cannot be read: " (or (ex-message e) (str e))))))]
+    (when (> (alength bytes) max-bytes)
+      (refuse! file (format "is larger than %d bytes - a book file is at most %d bytes" max-bytes max-bytes)))
+    bytes))
 
 (defn- utf-8
   [file bytes]

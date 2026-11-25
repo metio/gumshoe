@@ -2,7 +2,8 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.mutation-pin-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [gumshoe.effect :as effect]
             [gumshoe.flow :as flow]
             [gumshoe.interact :as interact]
@@ -41,6 +42,13 @@
                              (mutation/fingerprint (object :generation 3 :annotation "b") facts))))))
   (is (nil? (mutation/drift nil nil)) "nothing confirmed, nothing to compare"))
 
+(defmacro ^:private err-str
+  "What body prints on stderr."
+  [& body]
+  `(let [w# (java.io.StringWriter.)]
+     (binding [*err* w#] ~@body)
+     (str w#)))
+
 (deftest the-pinned-precondition
   (let [ref {:type "deployments" :namespace "shop" :name "web"}
         before (mutation/fingerprint (object :generation 3))]
@@ -52,14 +60,17 @@
     (testing "an object not read at confirmation is refused, since nothing confirms what is acted on"
       (is (false? ((mutation/pinned-precondition nil ref nil (constantly (object :generation 3))))))
       (is (re-find #"refusing: it could not be read when the change was confirmed"
-                   (with-out-str ((mutation/pinned-precondition nil ref nil (constantly (object :generation 3))))))))
+                   (err-str ((mutation/pinned-precondition nil ref nil (constantly (object :generation 3))))))))
     (testing "a failing book precondition skips the fetch"
       (let [fetched (atom 0)]
         (is (false? ((mutation/pinned-precondition (constantly false) ref before (fn [_] (swap! fetched inc) nil)))))
         (is (zero? @fetched))))
-    (testing "the refusal is printed"
+    (testing "the refusal is printed on stderr, beside the banner that ends the run"
       (is (re-find #"refusing: its spec changed"
-                   (with-out-str ((mutation/pinned-precondition nil ref before (constantly (object :generation 9))))))))))
+                   (err-str ((mutation/pinned-precondition nil ref before (constantly (object :generation 9)))))))
+      (is (= "" (with-out-str (binding [*err* (java.io.StringWriter.)]
+                                ((mutation/pinned-precondition nil ref before (constantly (object :generation 9)))))))
+          "nothing of the refusal reaches stdout"))))
 
 (deftest fetch-pinned-picks-the-scope
   (with-redefs [kubectl/get-namespaced-resource (fn [_ ns type name] [:ns ns type name])
@@ -74,14 +85,16 @@
                   interact/confirm! (constantly true)
                   effect/run! (fn [e] (swap! executed conj e) true)
                   mutation/fetch-pinned (fn [_ _] (let [[o & more] @calls] (reset! calls more) o))]
-      (let [out (with-out-str
-                  (mutation/run-on! (merge {:select {:mode :one :label "Deployment"}
-                                            :confirm {:action "x"}
-                                            :pin (constantly {:type "deployments" :namespace "shop" :name "web"})
-                                            :effect (fn [_] (effect/plan (effect/note "go")))}
-                                           spec)
-                                    "Deployment shop/web" {} nil))]
-        {:executed @executed :out out :left (count @calls)}))))
+      (let [err (java.io.StringWriter.)
+            out (with-out-str
+                  (binding [*err* err]
+                    (mutation/run-on! (merge {:select {:mode :one :label "Deployment"}
+                                              :confirm {:action "x"}
+                                              :pin (constantly {:type "deployments" :namespace "shop" :name "web"})
+                                              :effect (fn [_] (effect/plan (effect/note "go")))}
+                                             spec)
+                                      "Deployment shop/web" {} nil)))]
+        {:executed @executed :out out :err (str err) :left (count @calls)}))))
 
 (deftest run-on-refuses-an-object-that-changed-while-confirming
   (testing "unchanged: the effect runs"
@@ -89,20 +102,21 @@
       (is (zero? left) "fingerprinted at confirmation and again before the effect")
       (is (= [[[:note "go"]]] executed) "the plan ran once")))
   (testing "spec changed: refused before the effect"
-    (let [{:keys [executed out]} (run-with [(object :generation 3) (object :generation 4)] {})]
-      (is (re-find #"refusing: its spec changed after the confirmation" out))
+    (let [{:keys [executed out err]} (run-with [(object :generation 3) (object :generation 4)] {})]
+      (is (re-find #"refusing: its spec changed after the confirmation" err))
+      (is (not (str/includes? out "refusing")) "the refusal stays off stdout")
       (is (empty? executed))))
   (testing "replaced: refused"
     (is (empty? (:executed (run-with [(object :generation 3) (object :uid "u2" :generation 1)] {})))))
   (testing "unread before the confirmation: refused before asking, with nothing read again"
-    (let [{:keys [executed out left]} (run-with [nil (object :uid "u2" :generation 1)] {})]
+    (let [{:keys [executed err left]} (run-with [nil (object :uid "u2" :generation 1)] {})]
       (is (empty? executed))
       (is (= 1 left) "the object was not read again")
-      (is (re-find #"refusing: it does not exist or could not be read" out))))
+      (is (re-find #"refusing: it does not exist or could not be read" err))))
   (testing "unread when a covered change is shown: refused, whatever exists before the effect"
-    (let [{:keys [executed out]} (run-with [nil (object :uid "u2" :generation 1)] {:confirmed? true})]
+    (let [{:keys [executed err]} (run-with [nil (object :uid "u2" :generation 1)] {:confirmed? true})]
       (is (empty? executed))
-      (is (re-find #"refusing: it could not be read when the change was confirmed" out))))
+      (is (re-find #"refusing: it could not be read when the change was confirmed" err))))
   (testing "a pin returning nil checks nothing"
     (let [{:keys [executed left]} (run-with [] {:pin (constantly nil)})]
       (is (zero? left))

@@ -101,6 +101,20 @@
     (is (= "is not a file" (refusal reader/read-book (str dir))))
     (is (= "is not a file" (refusal reader/read-book (str (fs/path dir "missing.edn")))))))
 
+(deftest the-reader-refuses-a-file-it-cannot-read
+  (fs/with-temp-dir [dir {}]
+    (let [file (spit-bytes (fs/path dir "locked.edn") "{:description \"x\"}")]
+      (testing "an IOException opening the file is a refusal, never a raw exception"
+        (with-redefs [clojure.java.io/input-stream
+                      (fn [& _] (throw (java.io.FileNotFoundException. (str file " (Permission denied)"))))]
+          (is (= (str "cannot be read: " file " (Permission denied)") (refusal reader/read-book file)))))
+      (testing "a mode-000 file, where the user cannot read it (root, or a user namespace, can)"
+        (fs/set-posix-file-permissions file "---------")
+        (try
+          (when-not (fs/readable? file)
+            (is (str/starts-with? (refusal reader/read-book file) "cannot be read: ")))
+          (finally (fs/set-posix-file-permissions file "rw-------")))))))
+
 (deftest the-reader-accepts-what-sits-at-its-bounds
   (fs/with-temp-dir [dir {}]
     (testing "exactly max-bytes"
