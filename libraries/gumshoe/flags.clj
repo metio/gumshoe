@@ -170,3 +170,26 @@
         (when-let [error-fn (:error-fn spec)] (error-fn data))
         (throw (ex-info (:msg data) data)))
       (:opts parsed))))
+
+(defn parse-with-search-terms
+  "babashka.cli's parse of args with spec into {:opts :args}, where the
+   positional arguments are search terms, refusing an option among them.
+   babashka.cli stops reading options at the first search term that follows
+   an option, so `--no-color drain --dry-run` would hand --dry-run on as a
+   search term: the book chosen by the search would then run without it. A
+   positional that starts with \"-\" is therefore refused instead of searched
+   for, through the spec's :error-fn with cause :option-after-search-term,
+   and throws when there is none or it returns. `takes` names the command,
+   for the message."
+  [args spec takes]
+  (let [{:keys [args] :as parsed} (cli/parse-args args spec)]
+    (if-let [arg (first (filter #(str/starts-with? % "-") args))]
+      (let [data {:type :org.babashka/cli
+                  :cause :option-after-search-term
+                  :msg (format (str "%s was not read: an option after a search term is taken for one;"
+                                    " put every option of %s before the search terms")
+                               (pr-str arg) takes)
+                  :argument arg}]
+        (when-let [error-fn (:error-fn spec)] (error-fn data))
+        (throw (ex-info (:msg data) data)))
+      (select-keys parsed [:opts :args]))))

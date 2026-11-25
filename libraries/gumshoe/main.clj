@@ -20,8 +20,7 @@
    function returns an exit code; the caller decides whether to System/exit.
    A task wired with (exec 'gumshoe.main/run) still receives the raw flags, but
    babashka drops the returned exit code, so a casebook passes it to System/exit."
-  (:require [babashka.cli :as cli]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [gumshoe.catalog :as catalog]
             [gumshoe.flags :as flags]
             [gumshoe.fuzzy-finder :as fuzzy]
@@ -144,7 +143,7 @@
   ([args] (run args false))
   ([args back?]
    (let [raw (raw-args args)
-         {:keys [opts args]} (when-not (book-path? (first raw)) (cli/parse-args raw run-spec))]
+         {:keys [opts args]} (when-not (book-path? (first raw)) (flags/parse-with-search-terms raw run-spec "run"))]
      (when (:no-color opts) (stdout/disable-colors!))
      (cond
        (book-path? (first raw))
@@ -152,7 +151,7 @@
 
        (:help opts)
        (do (stdout/err-println (stdout/bold "run - launch any single book by fuzzy search"))
-           (stdout/err-println "  [search terms] [--dry-run] [--no-color]")
+           (stdout/err-println "  [--dry-run] [--no-color] [search terms]  (an option after a search term is refused)")
            (stdout/err-println "  <path> [flags]  run the book at a listed path, e.g. runbooks/detectives/fabric.clj")
            (stdout/err-println "  --list  print every book as path, tab, description")
            0)
@@ -379,7 +378,7 @@
   "The guided menu, a lead shortcut, or a fuzzy book search - the one door."
   [args]
   (let [raw (raw-args args)
-        {:keys [opts args]} (when-not (book-path? (first raw)) (cli/parse-args raw gumshoe-spec))]
+        {:keys [opts args]} (when-not (book-path? (first raw)) (flags/parse-with-search-terms raw gumshoe-spec "gumshoe"))]
     (cond
       (book-path? (first raw)) (launch-path (first raw) (rest raw))
       (:help opts)
