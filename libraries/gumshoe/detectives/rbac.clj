@@ -7,6 +7,7 @@
    every secret, and workloads that mount the default ServiceAccount token
    they never asked for."
   (:require [clojure.string :as str]
+            [gumshoe.evidence :as evidence]
             [gumshoe.kubectl :as kubectl]))
 
 (defn- system-name?
@@ -191,10 +192,18 @@
                                (kubectl/items-of serviceaccounts)))]
     (false? (:automountServiceAccountToken account))))
 
+(def default-token-joins
+  "The two reads the default token check joins: a namespace's default
+   ServiceAccount may switch the token off for every pod, so without the
+   ServiceAccounts every such pod would read as mounting it."
+  ["pods" "serviceaccounts"])
+
 (defn detect-default-token-pods
+  "Namespaces whose pods run with the default ServiceAccount token mounted.
+   Nothing is judged when a joined read did not answer."
   [evidence]
   (let [serviceaccounts (get evidence "serviceaccounts")
-        offenders (for [pod (kubectl/items-of (get evidence "pods"))
+        offenders (for [pod (when (evidence/joined? evidence default-token-joins) (kubectl/items-of (get evidence "pods")))
                         :let [spec (:spec pod)]
                         :when (contains? #{nil "default"} (:serviceAccountName spec))
                         :when (not (false? (:automountServiceAccountToken spec)))
@@ -229,5 +238,6 @@
     :detect detect-powerful-rolebindings}
    {:name "rbac-default-tokens"
     :description "Pods running with the default ServiceAccount token mounted"
-    :requires ["pods" "serviceaccounts"]
+    :requires default-token-joins
+    :joins default-token-joins
     :detect detect-default-token-pods}])

@@ -12,6 +12,7 @@
    Service, an empty namespace is the referring object's, and a name containing
    @ belongs to another provider and is not checked here."
   (:require [clojure.string :as str]
+            [gumshoe.evidence :as evidence]
             [gumshoe.kubectl :as kubectl]))
 
 (def ingressroute-type "ingressroutes.traefik.io")
@@ -94,9 +95,17 @@
    "Middleware" "every router that uses this middleware fails to load"
    "TraefikService" "the routes sending traffic through it fail"})
 
+(def reference-joins
+  "The four reads the reference check joins: each refers into the others, so
+   a missing one would make every reference into it read as dangling."
+  ["services" ingressroute-type middleware-type traefikservice-type])
+
 (defn detect-dangling-references
+  "References to a missing Service, Service port, TraefikService or
+   Middleware. Nothing is judged when a joined read did not answer."
   [evidence]
-  (let [items #(kubectl/items-of (get evidence %))
+  (let [joined? (evidence/joined? evidence reference-joins)
+        items #(when joined? (kubectl/items-of (get evidence %)))
         index (into {}
                     (for [[type kind] [["services" "Service"] [middleware-type "Middleware"] [traefikservice-type "TraefikService"]]
                           object (items type)]
@@ -115,5 +124,6 @@
 (def detectives
   [{:name "traefik-references"
     :description "Traefik IngressRoutes, Middlewares and TraefikServices that refer to a missing Service, Service port, TraefikService or Middleware"
-    :requires ["services" ingressroute-type middleware-type traefikservice-type]
+    :requires reference-joins
+    :joins reference-joins
     :detect detect-dangling-references}])

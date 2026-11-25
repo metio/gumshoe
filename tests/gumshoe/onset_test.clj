@@ -119,6 +119,7 @@
   (is (= ["2026-11-18T09:00:00Z" "2026-11-18T10:00:00Z"]
          (onsets (storage/detect-storage-problems
                   {:now now
+                   "storageclasses" {:items []}
                    "pods" {:items [{:metadata {:namespace "a" :name "p"}
                                     :spec {:volumes [{:persistentVolumeClaim {:claimName "pending"}}
                                                      {:persistentVolumeClaim {:claimName "resize"}}]}}]}

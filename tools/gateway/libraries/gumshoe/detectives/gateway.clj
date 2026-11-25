@@ -16,7 +16,8 @@
    listener legitimately has zero attached routes and is skipped rather than
    reported. Its name defaults to \"dummy\" and can be set with
    [:gateway :dummy-listener] in env.edn."
-  (:require [gumshoe.kubectl :as kubectl]))
+  (:require [gumshoe.evidence :as evidence]
+            [gumshoe.kubectl :as kubectl]))
 
 (def gateway-type "gateways.gateway.networking.k8s.io")
 (def httproute-type "httproutes.gateway.networking.k8s.io")
@@ -78,9 +79,19 @@
   (into {} (for [gateway (kubectl/items-of (get evidence gateway-type))]
              [[(kubectl/namespace-of gateway) (kubectl/name-of gateway)] gateway])))
 
+(def listenerset-joins
+  "The read the ListenerSet check joins beside the ListenerSets themselves: a
+   ListenerSet names its parent Gateway, and without the Gateway list every
+   parent would read as missing. The two ListenerSet types are alternatives,
+   one of them unserved, so neither is joined."
+  [gateway-type])
+
 (defn detect-listenerset-problems
+  "ListenerSets the Gateway refused, with a listener that failed, or whose
+   parent Gateway does not exist. Nothing is judged when the Gateway read did
+   not answer."
   [evidence]
-  (let [sets (listenersets evidence)
+  (let [sets (when (evidence/joined? evidence listenerset-joins) (listenersets evidence))
         gateways (gateway-index evidence)]
     (concat
      ;; A ListenerSet the Gateway refused reports Accepted=False (reason
@@ -147,7 +158,8 @@
     :detect detect-gateway-problems}
    {:name "listenersets"
     :description "ListenerSets the Gateway refused or that point at a missing Gateway"
-    :requires (into [gateway-type] listenerset-types)
+    :requires (into listenerset-joins listenerset-types)
+    :joins listenerset-joins
     :detect detect-listenerset-problems}
    {:name "httproutes"
     :description "HTTPRoutes that no Gateway or ListenerSet accepts"

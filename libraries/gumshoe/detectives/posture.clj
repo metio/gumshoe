@@ -9,6 +9,7 @@
   (:require [clojure.string :as str]
             [gumshoe.conditions :as conditions]
             [gumshoe.detectives.pod-security :as pod-security]
+            [gumshoe.evidence :as evidence]
             [gumshoe.kubectl :as kubectl]))
 
 (def ^:private replicated-types
@@ -16,6 +17,12 @@
 
 (def ^:private template-types
   (conj replicated-types ["daemonsets" "DaemonSet"]))
+
+(def ^:private replicated-reads (mapv first replicated-types))
+
+(def ^:private pod-spec-reads
+  "The reads pod-specs judges: every template type and the CronJobs."
+  (conj (mapv first template-types) "cronjobs"))
 
 (defn- templates
   "Each workload of the given types with its kind and pod template."
@@ -79,10 +86,19 @@
   [workload]
   (or (-> workload :spec :replicas) 1))
 
+(def single-replica-joins
+  "The reads the single replica check joins: an autoscaler's floor keeps a
+   workload above one replica, so without the autoscalers every workload at
+   one replica would read as staying there."
+  (conj replicated-reads "horizontalpodautoscalers"))
+
 (defn detect-single-replicas
+  "Deployments and StatefulSets at one replica that no autoscaler keeps
+   higher. Nothing is judged when a joined read did not answer."
   [evidence]
   (let [floors (hpa-floor evidence)]
-    (for [{:keys [kind workload]} (templates evidence replicated-types)
+    (for [{:keys [kind workload]} (when (evidence/joined? evidence single-replica-joins)
+                                    (templates evidence replicated-types))
           :let [floor (get floors [kind (kubectl/namespace-of workload) (kubectl/name-of workload)])]
           :when (and (= 1 (replicas workload)) (or (nil? floor) (= 1 floor)))]
       {:severity :info
@@ -90,10 +106,18 @@
        :summary (format "%s runs a single replica" kind)
        :hint "every node drain, eviction or rollout takes it down - run two or more replicas if it serves anything"})))
 
+(def unprotected-workload-joins
+  "The reads the disruption budget check joins: without the budgets every
+   replicated workload would read as unprotected."
+  (conj replicated-reads "poddisruptionbudgets"))
+
 (defn detect-unprotected-workloads
+  "Replicated Deployments and StatefulSets no PodDisruptionBudget covers.
+   Nothing is judged when a joined read did not answer."
   [evidence]
   (let [budgets (kubectl/items-of (get evidence "poddisruptionbudgets"))]
-    (for [{:keys [kind workload template]} (templates evidence replicated-types)
+    (for [{:keys [kind workload template]} (when (evidence/joined? evidence unprotected-workload-joins)
+                                             (templates evidence replicated-types))
           :when (< 1 (replicas workload))
           :let [labels (-> template :metadata :labels)]
           :when (not-any? #(and (= (kubectl/namespace-of %) (kubectl/namespace-of workload))
@@ -220,11 +244,20 @@
   (let [own (:automountServiceAccountToken spec)]
     (if (some? own) own (not (false? (:automountServiceAccountToken account))))))
 
+(def default-account-token-joins
+  "The reads the default account check joins: the default ServiceAccount may
+   switch the token off, so without the ServiceAccounts every workload on it
+   would read as mounting the token."
+  (conj pod-spec-reads "serviceaccounts"))
+
 (defn detect-default-account-tokens
+  "Workloads on the default ServiceAccount that mount its token. Nothing is
+   judged when a joined read did not answer."
   [evidence]
   (let [accounts (into {} (for [account (kubectl/items-of (get evidence "serviceaccounts"))]
                             [[(kubectl/namespace-of account) (kubectl/name-of account)] account]))]
-    (for [[kind workload spec] (hardening-specs evidence)
+    (for [[kind workload spec] (when (evidence/joined? evidence default-account-token-joins)
+                                 (hardening-specs evidence))
           :let [name (or (not-empty (:serviceAccountName spec)) "default")]
           :when (and (= "default" name)
                      (automount? spec (get accounts [(kubectl/namespace-of workload) name])))]
@@ -261,10 +294,19 @@
       (not (requested? :memory)) (conj "memory request")
       (not (has? :limits :memory)) (conj "memory limit"))))
 
+(def missing-resource-joins
+  "The reads the resource check joins: a namespace's LimitRange fills in what
+   a container leaves unset, so without the LimitRanges every such container
+   would read as lacking it."
+  (conj pod-spec-reads "limitranges"))
+
 (defn detect-missing-resources
+  "Containers without CPU or memory requests or a memory limit, after the
+   LimitRange defaults. Nothing is judged when a joined read did not answer."
   [evidence]
   (let [defaults (limit-range-defaults (get evidence "limitranges"))]
-    (for [[kind workload spec] (hardening-specs evidence)
+    (for [[kind workload spec] (when (evidence/joined? evidence missing-resource-joins)
+                                 (hardening-specs evidence))
           :let [gaps (for [container (containers-of spec)
                            :let [missing (missing-resources container (kubectl/namespace-of workload) defaults)]
                            :when (seq missing)]
@@ -373,11 +415,13 @@
     :detect detect-mutable-images}
    {:name "single-replicas"
     :description "Deployments and StatefulSets running a single replica"
-    :requires ["deployments" "statefulsets" "horizontalpodautoscalers"]
+    :requires single-replica-joins
+    :joins single-replica-joins
     :detect detect-single-replicas}
    {:name "unprotected-workloads"
     :description "Replicated Deployments and StatefulSets no PodDisruptionBudget covers"
-    :requires ["deployments" "statefulsets" "poddisruptionbudgets"]
+    :requires unprotected-workload-joins
+    :joins unprotected-workload-joins
     :detect detect-unprotected-workloads}
    {:name "rollouts-without-capacity"
     :description "Deployments whose rolling update may take every pod down at once"
@@ -389,7 +433,8 @@
     :detect detect-replicas-on-one-node}
    {:name "missing-resources"
     :description "Containers without CPU or memory requests or a memory limit"
-    :requires ["deployments" "statefulsets" "daemonsets" "cronjobs" "limitranges"]
+    :requires missing-resource-joins
+    :joins missing-resource-joins
     :detect detect-missing-resources}
    {:name "root-containers"
     :description "Workloads whose containers may run as root"
@@ -401,7 +446,8 @@
     :detect detect-writable-root-filesystems}
    {:name "default-account-tokens"
     :description "Workloads that mount the default ServiceAccount's token"
-    :requires ["deployments" "statefulsets" "daemonsets" "cronjobs" "serviceaccounts"]
+    :requires default-account-token-joins
+    :joins default-account-token-joins
     :detect detect-default-account-tokens}
    {:name "configmap-secrets"
     :description "ConfigMaps whose entries look like credentials"

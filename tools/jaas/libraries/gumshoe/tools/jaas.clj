@@ -15,6 +15,7 @@
    artifact. A stalled delivery and the snippet that failed to render for it sit
    on one chain you can follow object by object."
   (:require [gumshoe.conditions :as conditions]
+            [gumshoe.evidence :as evidence]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.plugin :as plugin]
             [gumshoe.subject :as subject]))
@@ -105,15 +106,22 @@
   [namespace name]
   (str namespace "/" name))
 
+(def library-ref-joins
+  "The two reads the library check joins: with no library list to compare
+   against, every ref would read as dangling."
+  [jsonnetsnippet-type jsonnetlibrary-type])
+
 (defn detect-missing-libraries
   "A snippet enumerating a JsonnetLibrary that is not in the cluster. The operator
    reports LibraryNotFound once it next evaluates, but holding the two lists side
    by side says it now - and names which ref is dangling and under which import
-   alias, which the condition message does not."
+   alias, which the condition message does not. Nothing is judged when either
+   read did not answer."
   [evidence]
-  (let [present (set (map #(library-key (kubectl/namespace-of %) (kubectl/name-of %))
+  (let [joined? (evidence/joined? evidence library-ref-joins)
+        present (set (map #(library-key (kubectl/namespace-of %) (kubectl/name-of %))
                           (kubectl/items-of (get evidence jsonnetlibrary-type))))]
-    (for [snippet (kubectl/items-of (get evidence jsonnetsnippet-type))
+    (for [snippet (when joined? (kubectl/items-of (get evidence jsonnetsnippet-type)))
           library (declared-libraries snippet)
           :when (not (contains? present (library-key (:namespace library) (:name library))))]
       {:severity :warning
@@ -131,9 +139,8 @@
     :detect detect-snippet-problems}
    {:name "jsonnetlibrary-refs"
     :description "JsonnetSnippets importing a JsonnetLibrary that is not present"
-    ;; Both types are required: with no library list to compare against, every
-    ;; ref would read as dangling.
-    :requires [jsonnetsnippet-type jsonnetlibrary-type]
+    :requires library-ref-joins
+    :joins library-ref-joins
     :detect detect-missing-libraries}])
 
 (defn snippet-edges

@@ -9,22 +9,38 @@
    the per-namespace findings would be noise."
   (:require [clojure.string :as str]
             [gumshoe.detectives.services :as services]
+            [gumshoe.evidence :as evidence]
             [gumshoe.kubectl :as kubectl]))
 
 (def global-policy-type "globalnetworkpolicies.projectcalico.org")
 
+(def unprotected-namespace-joins
+  "The reads the namespace check joins: without the NetworkPolicy list every
+   namespace running pods would read as unprotected. The GlobalNetworkPolicy
+   type is served only where Calico runs, so it is required but not joined."
+  ["networkpolicies" "pods"])
+
 (defn detect-unprotected-namespaces
+  "Namespaces running pods without any NetworkPolicy, unless Calico
+   GlobalNetworkPolicies govern the cluster. Nothing is judged when a joined
+   read did not answer."
   [evidence]
   (let [global (kubectl/items-of (get evidence global-policy-type))
         covered (set (map kubectl/namespace-of
                           (kubectl/items-of (get evidence "networkpolicies"))))
         workload-namespaces (distinct (map kubectl/namespace-of
                                            (kubectl/items-of (get evidence "pods"))))]
-    (if (seq global)
+    (cond
+      (not (evidence/joined? evidence unprotected-namespace-joins))
+      nil
+
+      (seq global)
       [{:severity :info
         :component "cluster"
         :summary (format "%d calico GlobalNetworkPolicies govern cluster traffic" (count global))
         :hint "per-namespace NetworkPolicy findings are suppressed - review the global policies instead"}]
+
+      :else
       (for [namespace (sort workload-namespaces)
             :when (not (str/starts-with? (str namespace) "kube-"))
             :when (not= namespace "fire-drill")
@@ -90,7 +106,8 @@
 (def detectives
   [{:name "network-policies"
     :description "Namespaces running pods without any NetworkPolicy"
-    :requires ["networkpolicies" "pods" global-policy-type]
+    :requires (conj unprotected-namespace-joins global-policy-type)
+    :joins unprotected-namespace-joins
     :detect detect-unprotected-namespaces}
    {:name "isolated-services"
     :description "Services whose every ready backend NetworkPolicies isolate without any ingress rule"

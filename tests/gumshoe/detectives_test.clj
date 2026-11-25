@@ -77,7 +77,8 @@
                                                     {:metadata {:namespace "moodle" :name "stuck"}
                                                      :status {:phase "Pending"}}]}
                   "pods" {:items [{:metadata {:namespace "moodle" :name "web-1"}
-                                   :spec {:volumes [{:persistentVolumeClaim {:claimName "data"}}]}}]}}
+                                   :spec {:volumes [{:persistentVolumeClaim {:claimName "data"}}]}}]}
+                  "storageclasses" {:items []}}
         findings (storage/detect-storage-problems evidence)]
     (is (= #{"PersistentVolumeClaim is Pending"
              "PersistentVolumeClaim is not used by any pod"}

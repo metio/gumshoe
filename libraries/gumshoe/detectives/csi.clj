@@ -6,6 +6,7 @@
    failed or were released, and nodes where the ceph-csi drivers are not
    registered."
   (:require [clojure.string :as str]
+            [gumshoe.evidence :as evidence]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
@@ -88,9 +89,18 @@
   (not-any? #(contains? #{"NoSchedule" "NoExecute"} (:effect %))
             (-> node :spec :taints)))
 
+(def driver-registration-joins
+  "The three reads the driver check joins: a driver is registered on a node
+   through its CSINode. Without the CSINodes every driver would read as
+   registered nowhere."
+  ["csidrivers" "csinodes" "nodes"])
+
 (defn detect-driver-registration
+  "Ceph CSI drivers not registered on schedulable nodes. Nothing is judged
+   when a joined read did not answer."
   [evidence]
-  (let [drivers (filter ceph-driver? (kubectl/names-of (get evidence "csidrivers")))
+  (let [drivers (when (evidence/joined? evidence driver-registration-joins)
+                  (filter ceph-driver? (kubectl/names-of (get evidence "csidrivers"))))
         csinodes (kubectl/items-of (get evidence "csinodes"))
         expected (set (map kubectl/name-of
                            (filter expected-plugin-node?
@@ -157,7 +167,8 @@
     :detect detect-volume-problems}
    {:name "csi-drivers"
     :description "Schedulable nodes missing the ceph CSI drivers registration"
-    :requires ["csidrivers" "csinodes" "nodes"]
+    :requires driver-registration-joins
+    :joins driver-registration-joins
     :detect detect-driver-registration}
    {:name "local-volumes"
     :description "Local volumes pinned to nodes that no longer exist"

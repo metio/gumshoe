@@ -93,8 +93,17 @@
   (testing "but one nobody mounts is still listed"
     (is (= ["PersistentVolumeClaim is not used by any pod"] (summaries (run [(claim "data")] :pods []))))))
 
-(deftest missing-storage-classes-and-events-do-not-break-the-check
+(deftest missing-events-do-not-break-the-check
   (is (= ["PersistentVolumeClaim is Pending"]
          (summaries (storage/detect-storage-problems
                      {:now now "persistentvolumeclaims" {:items [(claim "data" :phase "Pending" :class "local")]}
-                      "pods" {:items [(mounting "data" :node "n1")]}})))))
+                      "pods" {:items [(mounting "data" :node "n1")]}
+                      "storageclasses" {:items []}})))))
+
+(deftest missing-storage-classes-judge-nothing
+  ;; without the StorageClasses a claim waiting for its first consumer would
+  ;; read as stuck Pending
+  (is (empty? (storage/detect-storage-problems
+               {:now now "persistentvolumeclaims" {:items [(claim "data" :phase "Pending" :class "local")]}
+                "pods" {:items []}
+                "events" {:items []}}))))
