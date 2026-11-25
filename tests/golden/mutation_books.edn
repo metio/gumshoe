@@ -4058,7 +4058,8 @@
     :namespace-flag :namespace,
     :name-flag :name},
    :empty-message nil,
-   :confirm {:action "trigger a flux reconciliation"},
+   :confirm
+   {:action "trigger a flux reconciliation", :destructive? false},
    :details
    ["What it does:"
     "  picks one HelmRelease by namespace and name (--namespace and --name, or interactively)"
@@ -4214,7 +4215,9 @@
     :namespace-flag :namespace,
     :name-flag :name},
    :empty-message nil,
-   :confirm {:action "clear the failure counters and reconcile"},
+   :confirm
+   {:action "clear the failure counters and reconcile",
+    :destructive? false},
    :details
    ["What it does:"
     "  picks one HelmRelease by namespace and name (--namespace and --name, or interactively)"
