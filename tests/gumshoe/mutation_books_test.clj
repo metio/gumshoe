@@ -904,8 +904,8 @@
 
    "runbooks/kubernetes/nodes/restart_apiserver.clj"
    {:failed-after-applying {:objects [["nodes" (node "cp-1" :control-plane? true)]] :target "cp-1" :ssh (apiserver-host "ok")}
-    :failed-at-the-second-effect {:objects [["nodes" (node "cp-1" :control-plane? true)]] :target "cp-1"
-                                  :ssh (apiserver-host "ok") :fail-at 2}
+    :failed-at-the-first-effect {:objects [["nodes" (node "cp-1" :control-plane? true)]] :target "cp-1"
+                                 :ssh (apiserver-host "ok") :fail-at 1}
     :dry-run {:objects [["nodes" (node "cp-1" :control-plane? true)]] :target "cp-1" :ssh (apiserver-host "ok") :dry-run? true}}
 
    "runbooks/kubernetes/orders/recreate.clj"

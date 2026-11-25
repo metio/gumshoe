@@ -11,7 +11,31 @@
      :destructive? false}],
    :announcements [],
    :calls
-   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 bridge fdb show"],
+   :checks
+   [{:description
+     "the fire is out: the evpn-static-fdb detective no longer reports it",
+     :timeout 30,
+     :interval 5}],
+   :record {:applied 1, :verified true},
+   :out
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
+    "✅ verified: the fire is out: the evpn-static-fdb detective no longer reports it"]},
+  :extinguish-already-out
+  {:result true,
+   :confirmations
+   [{:action "put out the fire: remove the drill's fdb entry",
+     :target "hv1 lo.4208",
+     :items ["02:00:cb:00:71:01"],
+     :destructive? false}],
+   :announcements [],
+   :calls
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"
     "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"
     "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
     "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
@@ -39,7 +63,7 @@
     "────────────────────────────────────────────────────────────────────────────────"
     "This will put out the fire: remove the drill's fdb entry on 'hv1 lo.4208':"
     "  - 02:00:cb:00:71:01"
-    "  would run: ssh hv1 -- sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"]},
+    "  would run: ssh hv1 -- sudo sh -c out=$(bridge fdb show dev lo.4208) || exit 1; printf '%s\\n' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208"]},
   :extinguish-fdb-empty
   {:result false,
    :confirmations
@@ -49,7 +73,7 @@
      :destructive? false}],
    :announcements [],
    :calls
-   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"
     "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"
     "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
     "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
@@ -78,26 +102,17 @@
      :destructive? false}],
    :announcements [],
    :calls
-   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 bridge fdb show"],
-   :checks
-   [{:description
-     "the fire is out: the evpn-static-fdb detective no longer reports it",
-     :timeout 30,
-     :interval 5}],
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"],
+   :checks [],
    :record
-   {:applied 1,
-    :verified false,
+   {:applied 0,
+    :stopped
+    "ssh hv1 -- sudo sh -c out=$(bridge fdb show dev lo.4208) || exit 1; printf '%s\\n' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208",
     :recovery
     {:text
      "the drill's static entry 02:00:cb:00:71:01 may still be in hv1's table on lo.4208.\nCheck:  ssh hv1 -- bridge fdb show dev lo.4208\nRemove: ssh hv1 -- sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"}},
    :out
-   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire is out: the evpn-static-fdb detective no longer reports it - the last read did not answer: the evpn-static-fdb detective reads only an empty evpn-fdb, and an empty reading never shows the fire is out"]},
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"]},
   :extinguish-still-burning
   {:result false,
    :confirmations
@@ -107,7 +122,7 @@
      :destructive? false}],
    :announcements [],
    :calls
-   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"
     "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"
     "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
     "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
@@ -136,23 +151,17 @@
      :destructive? false}],
    :announcements [],
    :calls
-   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"],
-   :checks
-   [{:description
-     "the fire is out: the evpn-static-fdb detective no longer reports it",
-     :timeout 30,
-     :interval 5}],
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"],
+   :checks [],
    :record
-   {:applied 1,
-    :verified false,
+   {:applied 0,
+    :stopped
+    "ssh hv1 -- sudo sh -c out=$(bridge fdb show dev lo.4208) || exit 1; printf '%s\\n' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208",
     :recovery
     {:text
      "the drill's static entry 02:00:cb:00:71:01 may still be in hv1's table on lo.4208.\nCheck:  ssh hv1 -- bridge fdb show dev lo.4208\nRemove: ssh hv1 -- sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"}},
    :out
-   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire is out: the evpn-static-fdb detective no longer reports it - the last read did not answer: hv1: host is not reachable over ssh"]},
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"]},
   :extinguish-unpin-fails
   {:result false,
    :confirmations
@@ -162,12 +171,12 @@
      :destructive? false}],
    :announcements [],
    :calls
-   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"],
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"],
    :checks [],
    :record
    {:applied 0,
     :stopped
-    "ssh hv1 -- sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208",
+    "ssh hv1 -- sudo sh -c out=$(bridge fdb show dev lo.4208) || exit 1; printf '%s\\n' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208",
     :recovery
     {:text
      "the drill's static entry 02:00:cb:00:71:01 may still be in hv1's table on lo.4208.\nCheck:  ssh hv1 -- bridge fdb show dev lo.4208\nRemove: ssh hv1 -- sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"}},

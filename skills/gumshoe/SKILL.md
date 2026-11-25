@@ -130,7 +130,9 @@ otherwise ask for:
 
 A read-only run writes a reproducer script of the CLI calls it made and
 copies it to the clipboard when a clipboard tool is installed, so running
-books overwrites the user's clipboard. Every run also leaves an audit trail
+books overwrites the user's clipboard. A change book, even one that posts
+nothing to the changelog (a netshoot debug pod), and any run that reached a
+change write none. Every run also leaves an audit trail
 under `recordings/<book>/<timestamp>/` with its inputs, selections, commands,
 and outcome; the path is printed after the final banner.
 
@@ -282,7 +284,10 @@ and current list.
 A book whose change cannot be expressed as a plan says under `--dry-run` that
 it does not support a dry run, and runs nothing. Interactive sessions
 (`netshoot`, `psql` connections, `upterm` sharing) are for the human
-entirely.
+entirely. `runbooks/collaborate/share.clj` refuses to share a terminal unless
+`--with <github-user>` names who may join or the human passes `--open`; never
+pass `--open` on their behalf, since an open session lets anyone holding the
+connect string type into a shell with their credentials.
 
 ## Prerequisites and configuration
 

@@ -3,7 +3,8 @@
 
 (ns gumshoe.apiserver-test
   (:require [clojure.test :refer [deftest is testing]]
-            [gumshoe.apiserver :as apiserver]))
+            [gumshoe.apiserver :as apiserver]
+            [gumshoe.mutation :as mutation]))
 
 (defn- node [name labels]
   {:metadata {:name name :labels labels}})
@@ -50,10 +51,6 @@
     (is (true? (apiserver/restarted? nil "new")))))
 
 (deftest commands-test
-  (testing "crictl is configured for containerd on both endpoints"
-    (let [cmd (apiserver/configure-command)]
-      (is (= ["sudo" "crictl" "config"] (take 3 cmd)))
-      (is (= 2 (count (filter #(re-find #"containerd\.sock$" %) cmd))))))
   (testing "the id query asks only for kube-apiserver, quietly"
     (is (= ["sudo" "crictl" "ps" "--name" "kube-apiserver" "-q"]
            (apiserver/container-id-command))))
@@ -72,3 +69,15 @@
            (apiserver/restart-refusal "w-1" (node "w-1" {:kubernetes.io/os "linux"}))))
     (is (apiserver/control-plane? cp))
     (is (not (apiserver/control-plane? (node "w-1" nil))))))
+
+(deftest the-restart-leaves-the-nodes-crictl-configuration-alone
+  (let [_spec (with-redefs [mutation/book identity]
+                (load-file "runbooks/kubernetes/nodes/restart_apiserver.clj"))
+        restart-effect (requiring-resolve 'runbooks.kubernetes.nodes.restart-apiserver/restart-effect)
+        plan (restart-effect {:host "cp-1" :needs-sudo? true} "abc123")
+        commands (map #(vec (drop 2 %)) plan)]
+    (testing "the plan is the stop and nothing else"
+      (is (= [["sudo" "crictl" "stop" "abc123"]] commands)))
+    (testing "no step writes /etc/crictl.yaml"
+      (is (not-any? #(some #{"config"} %) commands)))
+    (is (nil? (resolve 'gumshoe.apiserver/configure-command)))))

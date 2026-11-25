@@ -95,6 +95,23 @@
   [x]
   (edn/read-string (str/replace (pr-str x) #"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z" "<instant>")))
 
+(defn- extinguish-script?
+  "Whether argv runs the fabric drill's idempotent extinguish script."
+  [argv]
+  (boolean (some #(and (string? %) (str/includes? % "exec bridge fdb del")) argv)))
+
+(defn- extinguish-answer
+  "What the extinguish script answers against the recorded table: it fails when
+   the table cannot be read, succeeds without a delete when the drill entry is
+   absent, and otherwise exits as the delete does (`del-exit`)."
+  [{:keys [fdb answering?]} del-exit]
+  (cond
+    (not answering?) ssh-unanswered
+    (= :unread fdb) {:exit 1 :out "" :err "bridge: command not found"}
+    (some #(str/includes? % "02:00:cb:00:71:01") fdb)
+    {:exit del-exit :out "" :err (if (zero? del-exit) "" "RTNETLINK answers: Operation not permitted")}
+    :else {:exit 0 :out "" :err ""}))
+
 (defn- change-command?
   [argv]
   (boolean (some #{"apply" "delete" "replace" "del"} argv)))
@@ -112,10 +129,15 @@
         exit-of (fn [argv] (get exits (some #{"apply" "delete" "replace" "del"} argv) 0))
         run-command (fn [argv]
                       (swap! calls conj (str/join " " argv))
-                      (if (change-command? argv)
+                      (cond
+                        (extinguish-script? argv)
+                        (extinguish-answer state (get exits "del" 0))
+
+                        (change-command? argv)
                         (let [exit (exit-of argv)]
                           {:exit exit :out "" :err (if (zero? exit) "" "Error from server (Forbidden): refused")})
-                        (if (= "ssh" (first argv)) (ssh-answer state argv) (kubectl-answer state argv))))
+                        (= "ssh" (first argv)) (ssh-answer state argv)
+                        :else (kubectl-answer state argv)))
         eventually verify/eventually
         out (java.io.StringWriter.)
         result (with-redefs [shell/execute (fn [& argv] (run-command argv))
@@ -234,6 +256,9 @@
     :ignite-dry-run {:opts fabric-opts :fdb [guest-row] :dry-run? true}
     :extinguish {:opts (assoc fabric-opts :extinguish true) :fdb [guest-row]}
     :extinguish-unpin-fails {:opts (assoc fabric-opts :extinguish true) :fdb [guest-row drill-row] :exits {"del" 1}}
+    ;; the entry is already gone and a delete would be refused by the kernel:
+    ;; the extinguish succeeds and the out-check runs
+    :extinguish-already-out {:opts (assoc fabric-opts :extinguish true) :fdb [guest-row] :exits {"del" 255}}
     :extinguish-still-burning {:opts (assoc fabric-opts :extinguish true) :fdb [guest-row drill-row]}
     :extinguish-unanswered {:opts (assoc fabric-opts :extinguish true) :fdb [guest-row drill-row] :answering? false}
     :extinguish-dry-run {:opts (assoc fabric-opts :extinguish true) :fdb [guest-row drill-row] :dry-run? true}

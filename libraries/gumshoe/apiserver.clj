@@ -72,18 +72,12 @@
   [before after]
   (boolean (and after (not= before after))))
 
-(def ^:private socket
-  "containerd's CRI socket. CRI-O hosts use /var/run/crio/crio.sock instead."
-  "unix:///run/containerd/containerd.sock")
-
-(defn configure-command
-  "Writes /etc/crictl.yaml. Without it crictl probes several sockets and prints
-   deprecation warnings on every call."
-  []
-  ["sudo" "crictl" "config"
-   "--set" (str "runtime-endpoint=" socket)
-   "--set" (str "image-endpoint=" socket)
-   "--set" "timeout=10"])
+;; There is no crictl configuration step. Every crictl call below runs with
+;; whatever /etc/crictl.yaml the node already has - the same configuration
+;; the read that found the container used - so the stop reaches the runtime
+;; that read did. Writing the file ourselves would replace the operator's
+;; settings, and a socket chosen for one runtime (containerd) breaks crictl on
+;; a node running another (CRI-O).
 
 (defn container-id-command
   []

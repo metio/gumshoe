@@ -221,24 +221,36 @@
     (catch Exception _ nil)))
 
 
+(def current-config-args
+  "Reads the kubeconfig's current context only, with its credentials redacted:
+   without --raw kubectl prints REDACTED or DATA+OMITTED in place of every key,
+   token and password, and --minify drops the other contexts, clusters and
+   users. We only need two names, so no credential enters this process."
+  ["kubectl" "config" "view" "--minify" "--output" "json"])
+
 (defn- current-config
   []
-  (parse-json (shell/stdout-of "kubectl" "config" "view" "--raw" "--output" "json")))
+  (parse-json (apply shell/stdout-of current-config-args)))
 
 (defn current-context
   []
   (:current-context (current-config)))
+
+(defn cluster-of
+  "Pure: the cluster name the current context of a kubeconfig (as `kubectl
+   config view` prints it) targets, or nil."
+  [config]
+  (let [context-name (:current-context config)]
+    (-> (first (filter #(= (:name %) context-name) (:contexts config)))
+        :context
+        :cluster)))
 
 (defn current-cluster
   "The name of the cluster the current kubectl context targets, verbatim from the
    kubeconfig. This is the operator's real cluster name; env.edn matches
    environments and capabilities against it."
   []
-  (let [config (current-config)
-        context-name (:current-context config)]
-    (-> (first (filter #(= (:name %) context-name) (:contexts config)))
-        :context
-        :cluster)))
+  (cluster-of (current-config)))
 
 (defn can-i?
   "Whether the current user may perform verb on a single resource type, cluster

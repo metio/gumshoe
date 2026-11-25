@@ -38,9 +38,10 @@
   (apply ssh/stdout-of conn (apiserver/started-at-command id)))
 
 (defn restart-effect
+  "Stops the container and nothing else: the node's crictl configuration is
+   left as the operator keeps it."
   [conn id]
   (effect/plan
-   (apply effect/ssh conn (apiserver/configure-command))
    (apply effect/ssh conn (apiserver/stop-command id))))
 
 (defn replaced-check

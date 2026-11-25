@@ -303,3 +303,20 @@
       (is (true? (kubectl/confirmed-gone? "ctx" nil "namespaces" "drill")))
       (is (some #{"--ignore-not-found"} @argv))
       (is (not-any? #(clojure.string/starts-with? (str %) "--namespace") @argv)))))
+
+(deftest current-cluster-reads-no-credentials
+  (testing "the kubeconfig is read minified and redacted, never --raw"
+    (is (= ["kubectl" "config" "view" "--minify" "--output" "json"] kubectl/current-config-args))
+    (is (not-any? #{"--raw"} kubectl/current-config-args)))
+  (testing "current-cluster and current-context use exactly that read"
+    (let [argv (atom [])
+          minified (str "{\"current-context\":\"ops\","
+                        "\"contexts\":[{\"name\":\"ops\",\"context\":{\"cluster\":\"kube.example\",\"user\":\"admin\"}}],"
+                        "\"users\":[{\"name\":\"admin\",\"user\":{\"client-key-data\":\"DATA+OMITTED\"}}]}")]
+      (with-redefs [shell/stdout-of (fn [& args] (swap! argv conj (vec args)) minified)]
+        (is (= "kube.example" (kubectl/current-cluster)))
+        (is (= "ops" (kubectl/current-context))))
+      (is (= [kubectl/current-config-args kubectl/current-config-args] @argv))))
+  (testing "no current context, or an unreadable config, is no cluster"
+    (is (nil? (kubectl/cluster-of nil)))
+    (is (nil? (kubectl/cluster-of {:current-context "gone" :contexts [{:name "ops" :context {:cluster "c"}}]})))))

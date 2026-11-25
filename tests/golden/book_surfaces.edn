@@ -173,9 +173,13 @@
    "  -h, --help          Show this help message"]},
  "runbooks/collaborate/share.clj"
  {:options
-  {:with
+  {:open
    {:desc
-    "A GitHub username allowed to join, repeatable - key-holders otherwise",
+    "Let anyone holding the connect string join - refused without it when no --with is given",
+    :coerce :boolean},
+   :with
+   {:desc
+    "A user allowed to join, repeatable - a GitHub username, or provider:name (gitlab:bob)",
     :alias :w,
     :coerce [:string]}},
   :help
@@ -185,8 +189,10 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -w, --with      A GitHub username allowed to join, repeatable - key-holders"
-   "                  otherwise"
+   "  -w, --with      A user allowed to join, repeatable - a GitHub username, or"
+   "                  provider:name (gitlab:bob)"
+   "      --open      Let anyone holding the connect string join - refused without"
+   "                  it when no --with is given"
    "      --dry-run   Show what would change without changing anything"
    "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
    "  -h, --help      Show this help message"]},

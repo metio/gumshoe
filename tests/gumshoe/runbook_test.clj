@@ -181,3 +181,22 @@
                             :options {:name {:desc "The release" :alias :N :coerce :string}}})]
     (is (str/includes? text "-N, --name"))
     (is (str/includes? text "The release (deprecated alias: -r, -s)"))))
+
+(deftest a-run-is-read-only-only-when-it-reached-no-change
+  (testing "a read-only book whose run touched nothing may hand out its calls"
+    (is (true? (runbook/read-only-run? false {:applied 0})))
+    (is (true? (runbook/read-only-run? false {}))))
+  (testing "a change book never does, even one that posts nothing"
+    (is (false? (runbook/read-only-run? true {:applied 0}))))
+  (testing "a run that applied, stopped at or ran a change never does"
+    (is (false? (runbook/read-only-run? false {:applied 1})))
+    (is (false? (runbook/read-only-run? false {:applied 0 :stopped "ssh h -- kubectl netshoot run"})))
+    (is (false? (runbook/read-only-run? false {:applied 0 :thunk :ok})))))
+
+(deftest a-mutation-book-is-a-change-even-without-an-announcement
+  (doseq [path ["runbooks/kubernetes/netshoot/node.clj"
+                "runbooks/kubernetes/netshoot/pod.clj"]]
+    (testing path
+      (let [config (binding [runbook/*loading* true] (load-file path))]
+        (is (false? (:announce? config)) "the book posts nothing to the changelog")
+        (is (true? (:change? config)) "pre-hooks still see a change")))))

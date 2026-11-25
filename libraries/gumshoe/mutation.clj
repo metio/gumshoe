@@ -75,9 +75,11 @@
       :connect  (fn [opts] -> {:context .. :cluster .. :announce-as ..} or nil)
                                     ; optional, what the change acts on when that
                                     ; is not the kube context, see below
-      :announce? false  ; optional, handed to the runbook harness; a book that
-                        ; changes nothing anyone else needs to hear of (a debug
-                        ; session) runs as a read-only book does
+      :announce? false  ; optional, handed to the runbook harness; a book whose
+                        ; change nobody else needs to hear of (a debug session)
+                        ; posts nothing to the changelog. It is still a change:
+                        ; pre-hooks see :change? true and no reproducer of its
+                        ; calls is offered
       :confirmed? true}  ; set by a playbook whose confirmation covered this step
 
    The :refusal, :precondition, :announce, :effect, :verify, :derive,
@@ -1209,5 +1211,6 @@
               :options (or options {})
               :prerequisites prerequisites
               :details (details spec)
+              :change? true
               :action (fn [opts {:keys [announcement-data]}] (run! spec opts announcement-data))}
        (false? announce) (assoc :announce? false)))))

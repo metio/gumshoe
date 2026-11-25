@@ -303,6 +303,18 @@
   (doseq [line (outcome/recovery-lines tone record)]
     (stdout/err-println (stdout/yellow line))))
 
+(defn read-only-run?
+  "Pure: whether a finished run only read, so the CLI calls it recorded are safe
+   to hand out as a reproducer. A change book never is, even one that posts
+   nothing to the changelog (a debug pod), and neither is any run that reached
+   an effect or a legacy thunk: a reproducer of it would replay the change."
+  [change? record]
+  (let [{:keys [applied stopped thunk]} record]
+    (and (not change?)
+         (zero? (or applied 0))
+         (nil? stopped)
+         (nil? thunk))))
+
 (defn execute!
   "Runs a runbook described by a config map:
 
@@ -310,6 +322,10 @@
    :options       babashka.cli option spec (standard flags are added)
    :prerequisites tooling/connection/permission checks to run first
    :announce?     whether the action posts to the changelog (default true)
+   :change?       whether the book changes anything (default :announce?); a
+                  change book that posts nothing, such as one starting a debug
+                  pod, sets it true so pre-hooks (a change freeze) see a change
+                  and no reproducer of its calls is offered
    :action        (fn [opts ctx]) -> truthy on success
    :details       optional lines --help shows under the description; an
                   unindented line is a heading
@@ -321,7 +337,8 @@
     :as config}]
   (if *loading*
     config
-    (let [error-fn (fn [{:keys [type cause msg option]}]
+    (let [change? (boolean (if (contains? config :change?) (:change? config) announce?))
+          error-fn (fn [{:keys [type cause msg option]}]
                      (when (= :org.babashka/cli type)
                        (case cause
                          :require (stdout/error (format "missing required option: --%s" (name option)))
@@ -355,7 +372,7 @@
           (let [gate (hooks/run-pre-hooks! {:description description
                                             :book (System/getProperty "babashka.file")
                                             :opts opts
-                                            :change? (boolean announce?)})]
+                                            :change? change?})]
             (when-not (:allowed? gate)
               (stdout/print-banner stdout/red (str (theme/token :error) " BLOCKED - " (:reason gate)))
               (System/exit 1)))
@@ -392,8 +409,8 @@
               ;; run summary: where the record is, how to reproduce, how to dig in together
               (when recording-path
                 (stdout/err-println (format "📼 Recording: %s" (stdout/shorten-path recording-path))))
-              (when-not announce?
-                ;; the exact CLI calls behind a read-only book's output are safe to replay
+              (when (read-only-run? change? @record)
+                ;; the exact CLI calls behind a read-only run's output are safe to replay
                 (reproducer/offer! description)
                 ;; the findings themselves, as Markdown, for a shared pad or a ticket
                 (summary/offer! description)
