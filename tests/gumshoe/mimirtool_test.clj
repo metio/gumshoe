@@ -97,3 +97,38 @@
     (testing "the prometheus analysis is listed as it came back"
       (is (str/includes? out "broken_metric"))
       (is (str/includes? out "orphan_metric")))))
+
+;; list_dashboard_metrics, run whole against a recorded mimirtool
+
+(binding [runbook/*loading* true]
+  (def ^:private dashboard-book (load-file "tools/prometheus/runbooks/list_dashboard_metrics.clj")))
+
+(defn- run-dashboards
+  "{:result :out :err} of list_dashboard_metrics with mimirtool writing grafana."
+  [grafana]
+  (let [out (java.io.StringWriter.)
+        err (java.io.StringWriter.)]
+    (with-redefs [shell/execute-env (fn [_env _tool _analyze _kind & args]
+                                      (let [output (subs (last args) (count "--output="))]
+                                        (spit output (json/generate-string grafana))
+                                        {:exit 0 :out "" :err ""}))
+                  stdout/print-command (fn [& _])]
+      (let [result (binding [*out* out *err* err]
+                     ((:action dashboard-book) {:grafana "http://grafana" :token "t"} {}))]
+        {:result result
+         :out (stdout/strip-colors (str out))
+         :err (stdout/strip-colors (str err))}))))
+
+(deftest dashboard-metrics-fail-and-name-a-query-that-did-not-parse
+  (let [{:keys [result out err]} (run-dashboards grafana-analysis)]
+    (is (false? result) "an incomplete list fails the run")
+    (is (str/includes? out "good_metric") "what did parse is still listed")
+    (is (str/includes? err "dashboard Shop (uid abc)"))
+    (is (str/includes? err "broken_metric[5m]"))
+    (is (not (str/includes? out "broken_metric")) "the unparsed query stays off stdout")))
+
+(deftest dashboard-metrics-pass-when-every-query-parsed
+  (let [{:keys [result out err]} (run-dashboards (update grafana-analysis :dashboards #(mapv (fn [d] (assoc d :parse_errors [])) %)))]
+    (is (true? result))
+    (is (str/includes? out "good_metric"))
+    (is (not (str/includes? err "could not parse")))))
