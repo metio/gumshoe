@@ -10,10 +10,9 @@
             [gumshoe.detective :as detective]
             [gumshoe.detectives.loki :as loki-detectives]
             [gumshoe.inputs :as inputs]
-            [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.loki :as loki]
-            [gumshoe.stdout :as stdout]))
+            [gumshoe.select :as select]))
 
 (def options
   (merge {:namespace {:desc "The Loki namespace - env.edn (:loki :namespace) or interactive when omitted"
@@ -38,12 +37,15 @@
    :kubectl-can-get ["deployments" "statefulsets" "services"]})
 
 (defn- resolve-namespace
-  "The Loki namespace: the flag or env.edn, else discovered from the namespaces
-   that hold Loki workloads - asked only when more than one exists."
+  "The Loki namespace: the flag or env.edn, else picked from the namespaces
+   that hold Loki workloads. nil, after saying why, when there is none."
   [context opts selector]
   (or (inputs/value :loki-namespace opts)
-      (let [deployments (kubectl/get-selected context "deployments" selector)]
-        (interact/choose-one "Loki namespace" (kubectl/namespaces-names deployments) nil))))
+      (select/pick {:mode :one :label "Loki namespace"
+                    :candidates #(kubectl/namespaces-names (kubectl/get-selected % "deployments" selector))
+                    :empty-message (format "no Loki namespace - set [:loki :namespace] in env.edn, pass --namespace, or check --selector (no deployment matches %s)" selector)
+                    :on-empty :fail}
+                   {} context)))
 
 (defn- distributor-service
   "The distributor's service in the namespace, the one that serves the ring
@@ -65,8 +67,7 @@
         selector (:selector opts)
         namespace (resolve-namespace context opts selector)]
     (if (str/blank? (str namespace))
-      (do (stdout/error "no Loki namespace - set [:loki :namespace] in env.edn, pass --namespace, or check --selector")
-          false)
+      false
       (let [opts (assoc opts :namespace namespace)]
         (if-let [service (distributor-service context namespace selector)]
           (kubectl/with-port-forward {:context context

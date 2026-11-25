@@ -2,8 +2,12 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.etcd
-  "Runs etcdctl inside kubeadm etcd pods using the certificates on the node."
-  (:require [gumshoe.shell :as shell]))
+  "Runs etcdctl inside kubeadm etcd pods using the certificates on the node,
+   and the pick of the etcd pod every etcd book starts with."
+  (:require [gumshoe.kubectl :as kubectl]
+            [gumshoe.select :as select]
+            [gumshoe.shell :as shell]
+            [gumshoe.stdout :as stdout]))
 
 (def pod-selector "component=etcd")
 
@@ -28,3 +32,46 @@
 (defn etcdctl-stdout
   [context namespace pod & arguments]
   (apply shell/stdout-of (etcdctl-args context namespace pod arguments)))
+
+(def pod-options
+  "The flags that name the etcd pod."
+  {:namespace {:desc "The namespace of the etcd pod - interactive selection when omitted"
+               :alias :n
+               :coerce :string}
+   :pod {:desc "The etcd pod to use - interactive selection when omitted"
+         :alias :p
+         :coerce :string}})
+
+(def pod-prerequisites
+  {:installed-tools ["kubectl" "fzf"]
+   :cluster-capabilities []
+   :kubectl-can-get ["pods"]
+   :kubectl-can-exec ["pods"]})
+
+(defn pod-candidates
+  "The etcd pods as namespace/name."
+  [context]
+  (kubectl/namespaces-names (kubectl/get-selected context "pods" pod-selector)))
+
+(def pod-select
+  "The pick of one etcd pod through pod-options. A book cannot run etcdctl
+   without one, so finding none fails the run."
+  {:mode :namespaced
+   :label "etcd pod"
+   :namespace-flag :namespace
+   :name-flag :pod
+   :candidates pod-candidates
+   :empty-message (format "no pod matches %s - is this a kubeadm cluster with stacked etcd?" pod-selector)
+   :on-empty :fail})
+
+(defn etcdctl-action
+  "A runbook action that picks an etcd pod and streams etcdctl with arguments
+   through it."
+  [& arguments]
+  (fn [opts _ctx]
+    (let [context (kubectl/current-context)]
+      (if-let [target (select/pick pod-select opts context)]
+        (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
+          (stdout/print-section-marker)
+          (apply etcdctl! context namespace name arguments))
+        false))))

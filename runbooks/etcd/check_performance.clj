@@ -8,39 +8,28 @@
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.runbook :as runbook]
+            [gumshoe.select :as select]
             [gumshoe.stdout :as stdout]))
 
 (def workloads #{"s" "m" "l" "xl"})
 
 (def options
-  {:namespace {:desc "The namespace of the etcd pod - interactive selection when omitted"
-               :alias :n
-               :coerce :string}
-   :pod {:desc "The etcd pod to use - interactive selection when omitted"
-         :alias :p
-         :coerce :string}
-   :workload {:desc "The workload model: s(mall), m(edium), l(arge), xl"
-              :alias :l
-              :default "s"
-              :validate workloads
-              :coerce :string}})
-
-(def prerequisites
-  {:installed-tools ["kubectl" "fzf"]
-   :cluster-capabilities []
-   :kubectl-can-get ["pods"]
-   :kubectl-can-exec ["pods"]})
+  (merge etcd/pod-options
+         {:workload {:desc "The workload model: s(mall), m(edium), l(arge), xl"
+                     :alias :l
+                     :default "s"
+                     :validate workloads
+                     :coerce :string}}))
 
 (defn- check-performance
   [opts _ctx]
   (let [context (kubectl/current-context)
         cluster (kubectl/current-cluster)
-        pods (kubectl/namespaces-names (kubectl/get-selected context "pods" etcd/pod-selector))
-        target (interact/choose-namespaced "Pod" pods (:namespace opts) (:pod opts))
+        target (select/pick etcd/pod-select opts context)
         workload (:workload opts)]
     (cond
       (nil? target)
-      (do (stdout/error "no etcd pod selected") false)
+      false
 
       (not (interact/confirm! {:action (format "run an etcd performance check with workload '%s' - this generates load" workload)
                                :target cluster
@@ -55,6 +44,6 @@
 (runbook/execute!
  {:description "Runs an etcd performance check through one etcd pod"
   :options options
-  :prerequisites prerequisites
+  :prerequisites etcd/pod-prerequisites
   :announce? false
   :action check-performance})

@@ -6,9 +6,8 @@
    endpoints, and rule evaluation health."
   (:require [gumshoe.detective :as detective]
             [gumshoe.detectives.thanos :as thanos-detectives]
-            [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.stdout :as stdout]
+            [gumshoe.select :as select]
             [gumshoe.thanos :as thanos]))
 
 (def options
@@ -41,13 +40,16 @@
    port-forward to it, handing it the forwarded base URL as :query-url."
   [opts run]
   (let [context (kubectl/current-context)
-        services (kubectl/get-selected context "services" (:selector opts))
-        target (interact/choose-namespaced "Thanos Query" (kubectl/namespaces-names services)
-                                           (:namespace opts) (:service opts))]
+        services (delay (kubectl/get-selected context "services" (:selector opts)))
+        target (select/pick {:mode :namespaced :label "Thanos Query" :namespace-flag :namespace :name-flag :service
+                             :candidates (fn [_] (kubectl/namespaces-names @services))
+                             :empty-message (format "no service matches %s - check --selector" (:selector opts))
+                             :on-empty :fail}
+                            opts context)]
     (if (nil? target)
-      (do (stdout/error "no Thanos Query service selected - check --selector") false)
+      false
       (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
-            remote-port (kubectl/service-port-or-first (kubectl/find-item services target) (:port-name opts))
+            remote-port (kubectl/service-port-or-first (kubectl/find-item @services target) (:port-name opts))
             local-port (:port opts)]
         (kubectl/with-port-forward {:context context
                                     :namespace namespace

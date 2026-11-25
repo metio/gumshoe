@@ -7,11 +7,11 @@
             [cheshire.core :as json]
             [gumshoe.watch :as watch]
             [gumshoe.flow :as flow]
-            [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.announce :as announce]
             [gumshoe.prometheus :as prometheus]
             [gumshoe.runbook :as runbook]
+            [gumshoe.select :as select]
             [gumshoe.stdout :as stdout]
             [gumshoe.verify :as verify]))
 
@@ -70,14 +70,17 @@
   [opts {:keys [announcement-data]}]
   (let [context (kubectl/current-context)
         cluster (kubectl/current-cluster)
-        services (kubectl/get-selected context "services" (:selector opts))
-        target (interact/choose-namespaced "Prometheus" (kubectl/namespaces-names services)
-                                           (:namespace opts) (:service opts))
+        services (delay (kubectl/get-selected context "services" (:selector opts)))
+        target (select/pick {:mode :namespaced :label "Prometheus" :namespace-flag :namespace :name-flag :service
+                             :candidates (fn [_] (kubectl/namespaces-names @services))
+                             :empty-message (format "no service matches %s - check --selector" (:selector opts))
+                             :on-empty :fail}
+                            opts context)
         metric (:metric opts)]
     (if (nil? target)
-      (do (stdout/error "no Prometheus service selected - check --selector") false)
+      false
       (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
-            remote-port (prometheus/api-port (kubectl/find-item services target) (:port-name opts))]
+            remote-port (prometheus/api-port (kubectl/find-item @services target) (:port-name opts))]
         (cond
           (nil? remote-port)
           (do (stdout/error (format "service %s has no port named '%s' - check --port-name" target (:port-name opts))) false)

@@ -3,9 +3,9 @@
 
 (ns runbooks.kubernetes.nodes.list-taints
   "Shows the taints of a single node."
-  (:require [gumshoe.interact :as interact]
-            [gumshoe.kubectl :as kubectl]
+  (:require [gumshoe.kubectl :as kubectl]
             [gumshoe.runbook :as runbook]
+            [gumshoe.select :as select]
             [gumshoe.stdout :as stdout]))
 
 (def options
@@ -21,11 +21,15 @@
 (defn- list-taints
   [opts _ctx]
   (let [context (kubectl/current-context)
-        nodes (kubectl/get-all context "nodes")
-        node-name (interact/choose-one "Node" (kubectl/names-of nodes) (:node opts))]
+        nodes (delay (kubectl/get-all context "nodes"))
+        node-name (select/pick {:mode :one :label "Node" :flag :node
+                                :candidates (fn [_] (kubectl/names-of @nodes))
+                                :empty-message "the cluster has no nodes"
+                                :on-empty :fail}
+                               opts context)]
     (if (nil? node-name)
-      (do (stdout/error "no node selected") false)
-      (let [taints (kubectl/taints-of (kubectl/find-item nodes node-name))]
+      false
+      (let [taints (kubectl/taints-of (kubectl/find-item @nodes node-name))]
         (if (empty? taints)
           (stdout/ok (format "node %s has no taints" node-name))
           (doseq [taint taints]

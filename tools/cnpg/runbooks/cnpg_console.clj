@@ -13,9 +13,9 @@
             [gumshoe.detectives.cnpg :as cnpg]
             [gumshoe.effect :as effect]
             [gumshoe.flow :as flow]
-            [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.runbook :as runbook]
+            [gumshoe.select :as select]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
@@ -125,13 +125,16 @@
 (defn- console
   [opts _ctx]
   (let [context (kubectl/current-context)
-        clusters (kubectl/items-of (kubectl/get-all context cnpg/cluster-type))
-        chosen (interact/choose-namespaced "Cluster" (mapv kubectl/namespace-name-of clusters)
-                                           (:namespace opts) (:cluster opts))]
+        clusters (delay (kubectl/items-of (kubectl/get-all context cnpg/cluster-type)))
+        chosen (select/pick {:mode :namespaced :label "Cluster" :namespace-flag :namespace :name-flag :cluster
+                             :candidates (fn [_] (mapv kubectl/namespace-name-of @clusters))
+                             :empty-message "no CloudNativePG Cluster exists"
+                             :on-empty :fail}
+                            opts context)]
     (if (nil? chosen)
-      (do (stdout/error "no cluster selected") false)
+      false
       (let [{:keys [namespace name]} (kubectl/namespace-name-map chosen)
-            cluster (kubectl/find-item clusters chosen)
+            cluster (kubectl/find-item @clusters chosen)
             pods (kubectl/items-of (kubectl/get-all context "pods"))
             instances (mapv kubectl/name-of (inst/instance-pods pods namespace name))]
         (if (empty? instances)

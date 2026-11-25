@@ -5,10 +5,10 @@
   "Reads a Pooler's PgBouncer admin console and recent log, and says which of
    the two look-alike faults it is."
   (:require [gumshoe.detectives.pooler :as pooler]
-            [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.pooler-console :as console]
             [gumshoe.runbook :as runbook]
+            [gumshoe.select :as select]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
@@ -51,14 +51,16 @@
 (defn- console
   [opts _ctx]
   (let [context (kubectl/current-context)
-        poolers (kubectl/items-of (kubectl/get-all context pooler/pooler-type))
-        candidates (mapv kubectl/namespace-name-of poolers)
-        chosen (interact/choose-namespaced "Pooler" candidates
-                                           (:namespace opts) (:pooler opts))]
+        poolers (delay (kubectl/items-of (kubectl/get-all context pooler/pooler-type)))
+        chosen (select/pick {:mode :namespaced :label "Pooler" :namespace-flag :namespace :name-flag :pooler
+                             :candidates (fn [_] (mapv kubectl/namespace-name-of @poolers))
+                             :empty-message "no CloudNativePG Pooler exists"
+                             :on-empty :fail}
+                            opts context)]
     (if (nil? chosen)
-      (do (stdout/error "no pooler selected") false)
+      false
       (let [{:keys [namespace name]} (kubectl/namespace-name-map chosen)
-            pooler (kubectl/find-item poolers chosen)
+            pooler (kubectl/find-item @poolers chosen)
             pod (pod-of context namespace name)]
         (if (nil? pod)
           (do (stdout/error (format "no pod found for pooler %s" chosen)) false)
