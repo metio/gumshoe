@@ -659,7 +659,11 @@ the same machine-enforced contract:
   `:effect` plan where they can, so they dry-run and their mutation is tested,
   and pick their subject with `(select/pick spec opts context)`, which lists
   the candidates under strict reads, so a cluster that did not answer is
-  reported as such and never as one with nothing to pick.
+  reported as such and never as one with nothing to pick. A book that validates a plan
+  and refuses before the confirmation hands the change it planned to
+  `mutation/run-on!`, which pins the subject, dry-runs the plan and prints
+  the change's `:recovery` when it stops part-way; the volume resize books
+  do this.
 
 A change is a plan of **effects as data** (`[[:kubectl "cordon" node]]`),
 interpreted three ways: run it, show it (`--dry-run`), or collect it in a test.

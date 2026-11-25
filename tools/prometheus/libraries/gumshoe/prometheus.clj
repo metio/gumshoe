@@ -4,7 +4,12 @@
 (ns gumshoe.prometheus
   "Prometheus-operator specifics for storage resizes; the generic planning
    and validation lives in gumshoe.storage."
-  (:require [gumshoe.kubectl :as kubectl]))
+  (:require [clojure.string :as str]
+            [gumshoe.effect :as effect]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.storage :as storage]))
+
+(def prometheus-type "prometheuses.monitoring.coreos.com")
 
 (def governing-service-selector
   "The label prometheus-operator puts on the governing service
@@ -57,3 +62,94 @@
       :resizable? (true? (:allowVolumeExpansion class))
       :current (-> pvc :spec :resources :requests :storage)
       :target capacity})))
+
+(defn pods-selector
+  "The label selector of the pods prometheus-operator runs for the
+   Prometheus called name."
+  [name]
+  (format "app.kubernetes.io/name=prometheus,app.kubernetes.io/instance=%s" name))
+
+(defn pods-of
+  "The pods of the Prometheus namespace/name, as a list document."
+  [context namespace name]
+  {:items (filter #(= namespace (kubectl/namespace-of %))
+                  (kubectl/items-of (kubectl/get-selected context "pods" (pods-selector name))))})
+
+(defn- patch-step
+  [stage context namespace name patch]
+  {:stage stage
+   :effect (apply effect/kubectl context (kubectl/merge-patch-args namespace prometheus-type name patch))})
+
+(defn unpause-args
+  "The kubectl command that unpauses the Prometheus, as an operator types it."
+  [context namespace name]
+  (format "kubectl --context=%s --namespace=%s patch %s %s --type=merge --patch='{\"spec\":{\"paused\":false}}'"
+          context namespace prometheus-type name))
+
+(defn resize-steps
+  "The steps that grow the storage of the Prometheus namespace/name to
+   capacity: pause it and request capacity in its volumeClaimTemplate, so the
+   operator leaves its StatefulSet alone; enlarge every claim of plan; delete
+   the StatefulSet with its pods orphaned, since a volumeClaimTemplate is
+   immutable; and unpause it, so the operator creates the StatefulSet again
+   from the new template."
+  [context namespace name capacity plan]
+  (-> [(patch-step :pause context namespace name
+                   {:spec {:paused true
+                           :storage {:volumeClaimTemplate (storage/claim-patch capacity)}}})]
+      (into (storage/resize-claim-steps context namespace plan capacity))
+      (conj {:stage :delete
+             :effect (effect/kubectl context (str "--namespace=" namespace)
+                                     "delete" "statefulset"
+                                     (str "--selector=operator.prometheus.io/name=" name)
+                                     "--cascade=orphan")}
+            (patch-step :unpause context namespace name {:spec {:paused false}}))))
+
+(defn resize-recovery
+  "What a run of resize-steps left behind after `applied` of its effects
+   ran, and what to do about it; nil when none ran. target names the
+   Prometheus as namespace/name."
+  [{:keys [context target]} steps applied]
+  (let [{:keys [stopped stages] :as where} (storage/progress steps applied)
+        {:keys [namespace name]} (kubectl/namespace-name-map target)
+        paused (format "Prometheus %s is PAUSED, and its volumeClaimTemplate already requests the new capacity:" target)]
+    (when (seq stages)
+      (str/join
+       "\n"
+       (case (:stage stopped)
+         :claims
+         (concat [paused
+                  "the operator leaves its StatefulSet alone while it is paused."]
+                 (storage/claims-left where)
+                 [(format "Find in the kubectl output above why %s could not be patched, then run this book again" (:claim stopped))
+                  "with the same capacity: it pauses and patches the Prometheus again, which changes nothing, and"
+                  "patches a claim that already requests the capacity to the same value."])
+
+         :delete
+         (concat [paused
+                  "its StatefulSet could not be deleted, so it still has the old volume claim template."]
+                 (storage/claims-left where)
+                 ["Find why in the kubectl output above, then run this book again with the same capacity."])
+
+         :unpause
+         (concat [(format "THE STATEFULSET OF PROMETHEUS %s IS DELETED, and the Prometheus is still PAUSED, so the" target)
+                  "operator does not create it again. Its pods were orphaned and keep running."]
+                 (storage/claims-left where)
+                 ["Unpause it now:"
+                  (str "  " (unpause-args context namespace name))])
+
+         (concat [(format "Every effect ran: Prometheus %s was unpaused with the new volume claim template." target)]
+                 (storage/claims-left where)
+                 ["Nothing was rolled back. The post-check messages above name what did not hold."]))))))
+
+(defn resize-checks
+  "The post-checks of a Prometheus resize: the claims report capacity, and
+   every pod of the Prometheus is Running again."
+  [context cluster namespace name capacity plan]
+  [(storage/claims-capacity-check context cluster namespace plan capacity)
+   {:description "every Prometheus pod is Running again"
+    :timeout 300 :interval 15
+    :check (fn []
+             (let [pods (kubectl/items-of (pods-of context namespace name))]
+               (boolean (and (seq pods)
+                             (every? #(= "Running" (-> % :status :phase)) pods)))))}])

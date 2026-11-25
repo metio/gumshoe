@@ -436,7 +436,15 @@ mostly data:
   :name}) …}` for any kind in `flux/suspendable` or a ResourceSet, and
   `reconcile` waits for `status.lastHandledReconcileAt` to equal the token
   it stamped;
-- a bespoke book calls `runbook/execute!` with its own `:action`;
+- a bespoke book calls `runbook/execute!` with its own `:action`. One whose
+  work before the confirmation goes beyond a select - a second pick, a plan
+  it validates and refuses before asking - builds a mutation spec from what
+  it found and runs it with `(mutation/run-on! spec target opts
+  announcement-data)`, so the change still pins its `:subject`, dry-runs and
+  records its `:recovery`. A plan whose recovery depends on where it stopped
+  is built from steps `{:effect … :stage …}`, and its `:recovery` reads
+  `(storage/progress steps applied)` to name what ran and where it stopped
+  (`statefulsets/enlarge_volumes`, `prometheus/set_capacity`);
 - status conditions are read through `gumshoe.conditions`, never by hand:
   `(conditions/condition o "Ready")`, `by-type`, `holds?` (True), `status?`
   (`(status? o "Ready" "False")` for an explicit failure), `ready?`,
