@@ -44,12 +44,15 @@
   [opts {:keys [announcement-data]}]
   (let [context (kubectl/current-context)
         cluster (kubectl/current-cluster)
-        nodes (kubectl/get-all context "nodes")
+        {nodes :doc :keys [unread]} (kubectl/read-all context "nodes")
         tainted (kubectl/nodes-with-taints nodes)
-        node (interact/choose-one "Node" tainted (:node opts))
+        node (when-not unread (interact/choose-one "Node" tainted (:node opts)))
         taint (when node
                 (interact/choose-one "Taint" (kubectl/taints-of (kubectl/find-item nodes node)) (:taint opts)))]
     (cond
+      unread
+      (do (stdout/error (str "could not read the nodes of the cluster - " unread)) false)
+
       (empty? tainted)
       (do (stdout/ok "no node has any taints") true)
 

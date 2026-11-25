@@ -435,7 +435,11 @@ mostly data:
   (`ceph/ceph-json-result` returns `{:ok? :doc}` for that, and
   `ceph/unarchived-crashes` shows the shape a book reads: `{:crashes [..]}`
   when ceph answered, `{:unread "why"}` when it did not, so a book refuses
-  instead of reporting "nothing to do");
+  instead of reporting "nothing to do"). A hand-written book that reports on
+  every object of a type reads it with `(kubectl/read-all context type)` in
+  the same shape, `{:doc ..}` or `{:unread "why"}`, and fails the run with
+  "could not read the <type> of the cluster - <why>" instead of printing an
+  all-clear;
 - a post-check fails closed. A check about the state of an object (resumed,
   schedulable, unfenced, Ready) judges it through
   `(verify/object-holds? object pred)`, which is false for nil, because a
