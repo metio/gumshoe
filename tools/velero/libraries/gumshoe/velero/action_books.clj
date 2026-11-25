@@ -47,10 +47,10 @@
     :applied? (fn [schedule wanted] (= wanted (actions/paused? schedule)))
     :verify {:timeout 30 :interval 3}
     :on {:verb "pause" :empty-message "every Schedule is paused already"
-         :confirm {:action "pause a backup schedule"}
+         :confirm {:action "pause a backup schedule" :destructive? false}
          :announce "Pause Schedule %s" :verified "Schedule %s is paused"}
     :off {:verb "resume" :empty-message "no Schedule is paused"
-          :confirm {:action "resume a backup schedule"}
+          :confirm {:action "resume a backup schedule" :destructive? false}
           :announce "Resume Schedule %s" :verified "Schedule %s is resumed"}}))
 
 (defn schedule-pause
@@ -70,7 +70,7 @@
                             (picks context velero/schedule-type
                                    (fn [_ s] (actions/backup-refusal s (in (kubectl/namespace-of s)))))))}
    :empty-message "no Schedule can take a backup now - every one failed validation or writes to an unavailable location"
-   :confirm {:action "start a backup from a schedule's template"}
+   :confirm {:action "start a backup from a schedule's template" :destructive? false}
    :subject {:type velero/schedule-type :parse actions/parse-pick
              :invalid "the pick is not \"<namespace>/<schedule>\""}
    :derive (fn [{:keys [object]}]

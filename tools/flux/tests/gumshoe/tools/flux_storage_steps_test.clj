@@ -72,11 +72,11 @@
    {:title "⏸  Suspend the owner (Kustomization or ResourceSet) that renders the HelmRelease"
     :keys #{:title :prerequisites :confirm :derive :recovery :precondition :items :effect :verify}
     :prerequisites {:kubectl-can-patch [kustomization]}
-    :confirm {:action "suspend the owner that renders the HelmRelease"}}
+    :confirm {:action "suspend the owner that renders the HelmRelease" :destructive? false}}
    {:title "⏸  Suspend the HelmRelease and wait for a running action to finish"
     :keys #{:title :prerequisites :confirm :derive :recovery :pin :precondition :items :effect :verify}
     :prerequisites {:kubectl-can-patch [helmrelease]}
-    :confirm {:action "suspend the HelmRelease"}}
+    :confirm {:action "suspend the HelmRelease" :destructive? false}}
    {:title "🗑  Delete the release's workloads"
     :keys #{:title :prerequisites :confirm :derive :recovery :precondition :items :effect :verify}
     :prerequisites {:kubectl-can-delete ["deployments" "statefulsets" "daemonsets" "jobs" "cronjobs"]}
@@ -90,13 +90,13 @@
     :prerequisites {:kubectl-can-delete ["secrets"]}
     :confirm {:action "delete the release's Helm storage" :destructive? true}}
    {:title "▶  Resume the HelmRelease, which installs"
-    :keys #{:title :confirm :derive :recovery :precondition :items :effect :verify}
-    :prerequisites nil
-    :confirm {:action "resume the HelmRelease"}}
+    :keys #{:title :prerequisites :confirm :derive :recovery :precondition :items :effect :verify}
+    :prerequisites {:kubectl-can-patch [helmrelease]}
+    :confirm {:action "resume the HelmRelease" :destructive? false}}
    {:title "▶  Resume the owner (Kustomization or ResourceSet)"
-    :keys #{:title :confirm :derive :recovery :precondition :items :effect :verify}
-    :prerequisites nil
-    :confirm {:action "resume the owner that renders the HelmRelease"}}])
+    :keys #{:title :prerequisites :confirm :derive :recovery :precondition :items :effect :verify}
+    :prerequisites {:kubectl-can-patch [kustomization]}
+    :confirm {:action "resume the owner that renders the HelmRelease" :destructive? false}}])
 
 (deftest every-step-keeps-its-title-prerequisites-and-confirmation
   (is (= expected-shapes (mapv shape (storage/steps)))))

@@ -44,7 +44,7 @@
   ;; The token is derived once, in :derive, so the effect that stamps it and the
   ;; post-check that waits for it are looking at the same value.
   :derive (fn [_] {:token (str (java.time.Instant/now))})
-  :confirm {:action "request a JsonnetSnippet re-evaluation"}
+  :confirm {:action "request a JsonnetSnippet re-evaluation" :destructive? false}
   :announce (fn [{:keys [target]}] (format "Reconcile JsonnetSnippet %s" target))
   :effect (fn [{:keys [context target token]}]
             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]

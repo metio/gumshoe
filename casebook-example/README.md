@@ -31,8 +31,12 @@ this casebook: every file under `runbooks/`, `playbooks/`, `firebooks/` and
 `libraries/` parses and carries its license and a namespace docstring, and
 every book enters the harness once, describes itself, documents its
 options and loads, without running, so a symbol that resolves to nothing
-fails here. Each finding names its file, and the task exits 1 when there is
-any. It needs a pinned gumshoe release that ships `gumshoe.conformance`.
+fails here. Every mutation spec your books and libraries define must state
+a confirmation action, whether it is destructive, its prerequisites, an
+effect, and a `:verify` or a `:no-verify "why"` reason, and a declared
+`:pin` must follow the picked namespace. Each finding names its file and
+spec, and the task exits 1 when there is any; `:spec-contract :advise` turns
+the spec findings into notes while you fix them. It needs a pinned gumshoe release that ships `gumshoe.conformance`.
 
 `:license` in the `verify` task of `bb.edn` names the SPDX identifier every
 file must carry. A casebook that carries no SPDX headers passes

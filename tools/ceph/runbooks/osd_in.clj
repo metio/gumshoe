@@ -27,7 +27,7 @@
            :candidates (fn [connection]
                          (sort (map ceph/osd-name (remove ceph/osd-in? (ceph/osds connection)))))}
   :empty-message "every OSD is already in"
-  :confirm {:action "bring an OSD back in - data migrates back onto it"}
+  :confirm {:action "bring an OSD back in - data migrates back onto it" :destructive? false}
   :precondition (fn [ctx] (some-> (osd-of ctx) ceph/osd-in? not))
   :announce (fn [{:keys [target]}] (format "Bring %s back in" target))
   :effect (fn [{:keys [context target]}]

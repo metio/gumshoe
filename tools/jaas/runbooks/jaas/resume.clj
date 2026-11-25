@@ -36,7 +36,7 @@
   :select {:mode :namespaced :label "suspended JsonnetSnippet"
            :namespace-flag :namespace :name-flag :name
            :candidates suspended-snippets}
-  :confirm {:action "resume a JsonnetSnippet"}
+  :confirm {:action "resume a JsonnetSnippet" :destructive? false}
   :announce (fn [{:keys [target]}] (format "Resume JsonnetSnippet %s" target))
   :effect (fn [{:keys [context target]}]
             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]

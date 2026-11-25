@@ -42,7 +42,7 @@
                   :kubectl-can-patch [flux/helmrelease-type]}
   :select {:mode :namespaced :label "HelmRelease" :namespace-flag :namespace :name-flag :name
            :candidates helmreleases}
-  :confirm {:action "clear the failure counters and reconcile"}
+  :confirm {:action "clear the failure counters and reconcile" :destructive? false}
   :announce (fn [{:keys [target]}] (format "Reset HelmRelease %s" target))
   ;; one timestamp per run, so the two annotations agree and a recorded
   ;; reproducer replays the same command

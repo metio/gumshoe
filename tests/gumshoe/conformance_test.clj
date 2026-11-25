@@ -63,6 +63,26 @@
                                         "casebook-example/firebooks"])
                 {:classpath ["casebook-example/libraries"]})))
 
+(def ^:private tool-library-files
+  ;; ui-charm builds on a terminal UI library that only its own deps.edn
+  ;; brings, so it cannot be required on this classpath; it defines no spec.
+  (conformance/clj-files (for [tool (fs/list-dir "tools")
+                               :when (not= "ui-charm" (str (fs/file-name tool)))]
+                           (str (fs/path tool "libraries")))))
+
+(deftest every-mutation-spec-keeps-its-contract
+  ;; Every core, tool and example book is loaded and every library required,
+  ;; and each mutation spec they define is judged as it evaluates.
+  (let [books (concat book-files tool-book-files
+                      (conformance/clj-files ["casebook-example/runbooks" "casebook-example/playbooks"]))
+        libraries (concat library-files tool-library-files
+                          (conformance/clj-files ["casebook-example/libraries"]))
+        parsed-books (parsed books)]
+    (assert-none (conformance/contract-findings
+                  (conformance/load-books books {:classpath ["casebook-example/libraries"]})
+                  parsed-books
+                  (parsed libraries)))))
+
 (deftest every-option-is-documented-and-aliases-never-collide
   (assert-none (conformance/option-problems (parsed book-files))))
 

@@ -24,7 +24,7 @@
                                     :when (nil? (actions/refresh-refusal app "normal"))]
                                 (kubectl/namespace-name-of app))))}
   :empty-message "every Application has a refresh pending"
-  :confirm {:action "refresh an Application"}
+  :confirm {:action "refresh an Application" :destructive? false}
   :subject {:type argocd/application-type :parse actions/parse-pick :invalid "the pick is not \"<namespace>/<name>\""}
   :items (fn [{:keys [object target opts]}]
            (if object (actions/refresh-items object (refresh-type opts)) [(str "refresh " target)]))

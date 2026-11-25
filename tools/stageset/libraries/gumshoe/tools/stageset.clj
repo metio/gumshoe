@@ -28,6 +28,21 @@
 (def stage-set-label "stages.metio.wtf/stage-set")
 (def stage-label "stages.metio.wtf/stage")
 
+;; stagesetctl promote stamps "<stage>@<token>" here, and the controller copies
+;; the token into status.stages[].lastHandledPromotion once it acted on it.
+(def promote-annotation :stages.metio.wtf/promote)
+
+(defn promotion-handled?
+  "Whether the stage acted on the promotion the StageSet's promote annotation
+   addresses to it: the annotation names the stage and a token, and the
+   stage's lastHandledPromotion is that token."
+  [stageset stage]
+  (let [[_ addressed token] (some->> (get-in stageset [:metadata :annotations promote-annotation])
+                                     (re-matches #"([^@]+)@(.+)"))]
+    (boolean (and (= stage addressed)
+                  (some #(and (= stage (:name %)) (= token (:lastHandledPromotion %)))
+                        (get-in stageset [:status :stages]))))))
+
 ;; A Ready=False reason says how loud the finding should be: hard failures are
 ;; critical, gated or budget-frozen states are warnings, and states that just mean
 ;; "waiting on a human or a soak window" are info - a rollout paused for approval

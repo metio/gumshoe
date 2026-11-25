@@ -17,8 +17,25 @@
    Each book is also loaded without running, so a symbol it names that
    resolves to nothing fails the gate instead of the run.
 
+   Every mutation spec a book or library defines is judged as it evaluates -
+   what a book hands mutation/book, playbook/book or dispatch/book, and what
+   a library var holds - against the part of its contract that needs no
+   cluster: a confirmation action an operator can read, whether it is
+   destructive, its :prerequisites, an :effect, and a :verify or a stated
+   reason for having none,
+
+     :no-verify \"the session is the result; nothing is left to check\"
+
+   A declared :pin is called with a synthetic pick in a namespace of its own
+   and must return a ref with a :type and a :name, in the picked namespace
+   when the ref has one. A library that cannot be required is reported too,
+   since its specs cannot be judged. A casebook that takes a release before
+   it has fixed or annotated its specs passes :spec-contract :advise, and
+   these findings are printed as notes until it drops the option.
+
    An advisory names something worth a look that the gate does not fail on:
-   a mutation book whose spec declares no :recovery. gumshoe.mutation prints
+   a mutation book whose spec declares no :recovery, and, under
+   :spec-contract :advise, the judgements of the mutation specs. gumshoe.mutation prints
    generic guidance when such a change fails after applying an effect, so
    the book works without one; verify! prints the advisories as notes and
    still passes.
@@ -31,6 +48,9 @@
             [babashka.fs :as fs]
             [clojure.string :as str]
             [edamame.core :as edamame]
+            [gumshoe.dispatch :as dispatch]
+            [gumshoe.mutation :as mutation]
+            [gumshoe.playbook :as playbook]
             [gumshoe.runbook :as runbook]))
 
 ;; --- files ------------------------------------------------------------------
@@ -162,6 +182,48 @@
       (format "does not load: %s (line %d%s)" message line (if column (str ", column " column) ""))
       (str "does not load: " message))))
 
+(defn- load-book
+  "Loads a book with runbook/*loading* bound, so the harness hands back the
+   book's config instead of running it. Returns {:file :error} for a book
+   that does not load, else {:file :ns :specs}, where :specs are the
+   specs the book handed to mutation/book, playbook/book and dispatch/book,
+   each as [builder spec], captured as the builders received them, so a
+   spec built with merge, toggle/pair or a library function is seen as it
+   runs."
+  [file]
+  (let [captured (atom [])
+        capture (fn [builder original]
+                  (fn [spec] (swap! captured conj [builder spec]) (original spec)))
+        error (try
+                (with-redefs [mutation/book (capture :mutation mutation/book)
+                              playbook/book (capture :playbook playbook/book)
+                              dispatch/book (capture :dispatch dispatch/book)]
+                  (binding [runbook/*loading* true]
+                    (load-file file)))
+                nil
+                (catch Throwable e (load-error e)))]
+    (if error
+      {:file file :error error}
+      {:file file :specs @captured})))
+
+(defn- add-classpath!
+  [classpath]
+  (when (seq classpath)
+    (classpath/add-classpath (str/join java.io.File/pathSeparator (map str classpath)))))
+
+(defn load-books
+  "load-book for each of books, after adding the directories `:classpath`
+   lists to the classpath."
+  [books {:keys [classpath]}]
+  (add-classpath! classpath)
+  (mapv load-book books))
+
+(defn- load-findings
+  [loaded]
+  (for [{:keys [file error]} loaded
+        :when error]
+    (finding file :load error)))
+
 (defn unloadable
   "Every book that does not load. Each is loaded in this process with
    runbook/*loading* bound, so the harness hands back the book's config
@@ -170,17 +232,8 @@
    lists directories added to the classpath first, such as a casebook's
    libraries when the caller's classpath lacks them."
   ([books] (unloadable books {}))
-  ([books {:keys [classpath]}]
-   (when (seq classpath)
-     (classpath/add-classpath (str/join java.io.File/pathSeparator (map str classpath))))
-   (vec (for [file books
-              :let [error (try
-                            (binding [runbook/*loading* true]
-                              (load-file file))
-                            nil
-                            (catch Throwable e (load-error e)))]
-              :when error]
-          (finding file :load error)))))
+  ([books opts]
+   (vec (load-findings (load-books books opts)))))
 
 ;; REUSE-IgnoreStart -- the tag every file must carry, not a declaration of this one.
 (defn missing-license
@@ -316,33 +369,284 @@
     (finding file :recovery
              "declares no :recovery, so a failure after an applied effect prints only the engine's generic guidance; say what the change leaves behind and how to undo it")))
 
+;; --- the contract of a mutation spec ---------------------------------------
+;;
+;; A spec is data whose callbacks run only when its book runs against a
+;; cluster, so an omission in it surfaces mid-change. These checks judge the
+;; evaluated spec - what mutation/book, playbook/book or dispatch/book
+;; receives, and what a library var holds - so a spec built with merge,
+;; toggle/pair or a library function is judged as it runs.
+
+(defn- callable?
+  [x]
+  (or (fn? x) (var? x)))
+
+(defn- non-blank?
+  [x]
+  (and (string? x) (not (str/blank? x))))
+
+(defn contract-problems
+  "What a mutation spec omits of the part of its contract a gate can judge
+   without a cluster, as messages: a confirmation action an operator can read,
+   whether it is destructive, its prerequisites, an effect, and a post-check
+   or the reason it has none, given as :no-verify \"why\"."
+  [{:keys [confirm prerequisites effect verify no-verify] :as spec}]
+  (remove nil?
+          [(when-not (non-blank? (:action confirm))
+             "has no confirmation action an operator can read (:confirm {:action \"...\"})")
+           (when-not (boolean? (:destructive? confirm))
+             "does not state whether it is destructive (:confirm {:destructive? true or false}), so a change that deletes would be confirmed with a bare keypress")
+           (when-not (map? prerequisites)
+             "declares no :prerequisites, so a missing permission is found partway through, after earlier effects applied")
+           (when-not (callable? effect)
+             "declares no :effect")
+           (cond
+             (and (some? verify) (contains? spec :no-verify))
+             "declares a :verify and a :no-verify reason for having none; drop the reason"
+             (callable? verify) nil
+             (non-blank? no-verify) nil
+             (contains? spec :no-verify)
+             ":no-verify must be a string saying why the spec has no post-check"
+             :else
+             "has no post-check (:verify) and states no reason for having none (:no-verify \"why\")")]))
+
+(def probe-namespace
+  "The namespace of the synthetic pick a declared :pin is called with."
+  "gumshoe-probe-namespace")
+
+(def ^:private probe-name "gumshoe-probe-name")
+
+(defn pin-probes
+  "The contexts a declared :pin is called with, one per shape a pick in
+   probe-namespace may take under select: \"<namespace>/<name>\" for a
+   :namespaced select; that or the bare namespace for a :one or :many
+   select, whose candidates may be either. Each carries the flags that name
+   the pick and, with a :subject, the ref its parser makes of the pick and no
+   object, as the engine hands a pin before anything is read."
+  [{:keys [subject]} {:keys [mode flag namespace-flag name-flag] :as select}]
+  (let [qualified (str probe-namespace "/" probe-name)
+        picks (case mode
+                :namespaced [qualified]
+                :many [[qualified] [probe-namespace]]
+                [qualified probe-namespace])]
+    (for [target picks]
+      (merge {:context "gumshoe-probe-context" :cluster "gumshoe-probe-cluster"
+              :target target
+              :opts (cond-> {:namespace probe-namespace}
+                      flag (assoc flag target)
+                      namespace-flag (assoc namespace-flag probe-namespace)
+                      name-flag (assoc name-flag probe-name))}
+             (when (and subject (not= :many mode))
+               {:ref (try (mutation/subject-ref subject select target) (catch Exception _ nil))
+                :object nil})))))
+
+(defn pin-problems
+  "What is wrong with a spec's declared :pin, judged by calling it with
+   pin-probes, as messages. It must return a ref carrying a :type and a
+   :name; a ref with a namespace must carry the picked one, since a pin that
+   ignores it fingerprints another namespace's object, and nothing says so.
+   A pin that returns nil for every probe pins nothing until derived values
+   it reads exist, which the engine permits, and is not judged."
+  [{:keys [pin] :as spec} select]
+  (when (some? pin)
+    (if-not (callable? pin)
+      ["declares a :pin that is not a function"]
+      (let [results (for [ctx (pin-probes spec select)]
+                      (try {:ref (pin ctx)} (catch Throwable e {:error (or (ex-message e) (str e))})))
+            refs (keep :ref results)
+            complete (filter #(and (map? %) (non-blank? (:type %)) (non-blank? (:name %))) refs)]
+        (cond
+          (every? :error results)
+          [(format "has a :pin that throws for a pick in namespace %s: %s" probe-namespace (:error (first results)))]
+
+          (and (seq refs) (empty? complete))
+          [(format "has a :pin that returns %s for a pick in namespace %s, which is no ref with a :type and a :name"
+                   (pr-str (first refs)) probe-namespace)]
+
+          (and (some :namespace complete) (not-any? #(= probe-namespace (:namespace %)) complete))
+          [(format "has a :pin that returns namespace %s for a pick in namespace %s, so it would fingerprint another namespace's object"
+                   (pr-str (some :namespace complete)) probe-namespace)]
+
+          :else nil)))))
+
+(defn- change-step?
+  [x]
+  (and (map? x) (contains? x :effect) (not (contains? x :pause))))
+
+(defn specs-in
+  "The mutation specs a value holds, as {:name :spec :select}, named after
+   `name`: a playbook's change steps, a dispatcher's routes, a spec itself
+   (a map with an :effect, as a playbook tells a change step), or the specs
+   among a map's values, such as the :on and :off of a toggle/pair. :select
+   is what picks the spec's subject: its own, else the enclosing one's."
+  [name value select]
+  (cond
+    (not (map? value)) nil
+
+    (contains? value :steps)
+    (let [select (or (:select value) select)]
+      (for [[i step] (map-indexed vector (:steps value))
+            :when (change-step? step)]
+        {:name (str name " step " (inc i) (when (:title step) (str " " (pr-str (:title step)))))
+         :spec step
+         :select (or (:select step) select)}))
+
+    (contains? value :routes)
+    (mapcat (fn [[k route]] (specs-in (str name " route " k) (dispatch/playbook-of route) (or (:select value) select)))
+            (sort-by (comp str key) (:routes value)))
+
+    (change-step? value) [{:name name :spec value :select (or (:select value) select)}]
+
+    :else
+    (for [[k v] (sort-by (comp str key) value)
+          :when (change-step? v)]
+      {:name (str name " " k) :spec v :select (or (:select v) select)})))
+
+(defn captured-specs
+  "The specs a book handed the harness builders (see load-book), named after
+   the book's namespace. A spec handed to mutation/book is one whether or not
+   it carries an :effect."
+  [book-name captured]
+  (mapcat (fn [[builder spec]]
+            (if (= :mutation builder)
+              (when (map? spec) [{:name (str book-name) :spec spec :select (:select spec)}])
+              (specs-in (str book-name) spec nil)))
+          captured))
+
+(defn var-specs
+  "The specs the vars of a loaded namespace hold, named ns/var, in name
+   order. Private vars count: a library builds a playbook's steps from them."
+  [ns-sym]
+  (when-let [ns (find-ns ns-sym)]
+    (mapcat (fn [[var-name v]]
+              (let [value (try @v (catch Throwable _ nil))]
+                (specs-in (str ns-sym "/" var-name) value nil)))
+            (sort-by (comp str key) (ns-interns ns)))))
+
+(defn spec-problems
+  "contract-problems and pin-problems of one spec, {:spec :select}."
+  [{:keys [spec select]}]
+  (concat (contract-problems spec) (pin-problems spec select)))
+
+(defn- contains-spec?
+  "Whether spec holds every entry of library-spec as the same value, as
+   (merge library-spec {...}) does."
+  [spec library-spec]
+  (and (not (identical? spec library-spec))
+       (every? (fn [[k v]] (identical? v (get spec k ::absent))) library-spec)))
+
+(defn spec-findings
+  "A finding per problem of each spec (see spec-problems), against the file
+   that defines it, from {:file :name :spec :select}. A spec that a book
+   builds by merging a library spec inherits that spec's problems, which are
+   reported once, against the library."
+  ([specs] (spec-findings specs []))
+  ([specs library-specs]
+   (let [library-problems (mapv (fn [l] [(:spec l) (set (spec-problems l))]) library-specs)]
+     (for [{:keys [file name spec] :as item} specs
+           :let [inherited (into #{} (comp (filter #(contains-spec? spec (first %))) (mapcat second))
+                                 library-problems)]
+           problem (spec-problems item)
+           :when (not (inherited problem))]
+       (finding file :spec-contract (str "mutation spec " name " " problem))))))
+
+(defn- distinct-specs
+  "specs without a spec value seen before, so a spec reached through a book
+   and through the var it came from is judged once."
+  [specs]
+  (let [seen (java.util.IdentityHashMap.)]
+    (filter (fn [{:keys [spec]}]
+              (when-not (.containsKey seen spec)
+                (.put seen spec true)
+                true))
+            specs)))
+
+(defn library-specs
+  "The specs the library files define, from the vars of each one's
+   namespace, required here, as {:file :name :spec :select}, and a :load
+   finding, {:file :finding}, for a library that cannot be required."
+  [parsed-libraries]
+  (for [{:keys [file forms]} parsed-libraries
+        :when forms
+        :let [ns-sym (second (ns-form forms))]
+        :when (symbol? ns-sym)
+        :let [error (try (require ns-sym) nil (catch Throwable e (load-error e)))]
+        item (if error
+               [{:file file :finding (finding file :load error)}]
+               (map #(assoc % :file file) (var-specs ns-sym)))]
+    item))
+
+(defn book-specs
+  "The specs of the loaded books (see load-book), as {:file :name :spec
+   :select}: what each handed the harness builders, else, for a book that
+   hands a runbook its config, the specs its namespace's vars hold."
+  [loaded parsed-books]
+  (let [ns-of (into {} (for [{:keys [file forms]} parsed-books :when forms]
+                         [file (second (ns-form forms))]))]
+    (for [{:keys [file specs error]} loaded
+          :when (not error)
+          :let [book-ns (ns-of file)]
+          spec (if (seq specs)
+                 (captured-specs book-ns specs)
+                 (when (symbol? book-ns) (var-specs book-ns)))]
+      (assoc spec :file file))))
+
+(defn contract-findings
+  "spec-findings for the specs the libraries and loaded books define, each
+   judged once, and a :load finding for each library that cannot be
+   required."
+  [loaded parsed-books parsed-libraries]
+  (let [libraries (library-specs parsed-libraries)
+        library-specs (remove :finding libraries)]
+    (concat (keep :finding libraries)
+            (spec-findings (distinct-specs (concat library-specs (book-specs loaded parsed-books)))
+                           library-specs))))
+
 (defn advisories
   "Every advisory for the book files (see without-recovery). None fails the
    gate."
   [{:keys [books]}]
   (vec (without-recovery (keep #(let [parsed (parse %)] (when (:forms parsed) parsed)) books))))
 
-(defn findings
-  "Every finding for the book and library files, unparseable ones first.
-   `license` names the SPDX identifier every file must carry; without it any
-   identifier will do, and false omits the header check for a repository
-   that carries no headers, leaving every other check in place. Every book that parses is also loaded (see
-   unloadable, which takes :classpath) unless `load?` is false."
-  [{:keys [books libraries license load?] :as opts}]
+(defn report
+  "{:findings :advisories} for the book and library files. :findings holds
+   every finding, unparseable ones first. `license` names the SPDX identifier
+   every file must carry; without it any identifier will do, and false omits
+   the header check for a repository that carries no headers, leaving every
+   other check in place. Every book that parses is also loaded (see
+   unloadable, which takes :classpath) unless `load?` is false, and the
+   mutation specs the books and libraries define are judged against their
+   contract (see contract-findings). `spec-contract` :advise reports those
+   judgements as advisories instead, for a casebook that takes a gumshoe
+   release before it has fixed or annotated its specs. :advisories holds
+   them and every advisory of `advisories`."
+  [{:keys [books libraries license load? spec-contract] :as opts}]
   (let [parsed-books (mapv parse books)
         parsed-libraries (mapv parse libraries)
-        parsed (concat parsed-books parsed-libraries)]
-    (vec (concat (unparseable parsed)
-                 (when-not (false? license)
-                   (missing-license (concat books libraries) license))
-                 (undocumented-namespaces parsed)
-                 (map-destructured-as-vector parsed)
-                 (harness-entries parsed-books)
-                 (undescribed-books parsed-books)
-                 (option-problems parsed-books)
-                 (when-not (false? load?)
-                   (unloadable (keep #(when (:forms %) (:file %)) parsed-books)
-                               (select-keys opts [:classpath])))))))
+        parsed (concat parsed-books parsed-libraries)
+        loaded (when-not (false? load?)
+                 (load-books (keep #(when (:forms %) (:file %)) parsed-books)
+                             (select-keys opts [:classpath])))
+        contract (when loaded (contract-findings loaded parsed-books parsed-libraries))
+        advise? (= :advise spec-contract)
+        advised (when advise? (filter #(= :spec-contract (:check %)) contract))]
+    {:findings (vec (concat (unparseable parsed)
+                            (when-not (false? license)
+                              (missing-license (concat books libraries) license))
+                            (undocumented-namespaces parsed)
+                            (map-destructured-as-vector parsed)
+                            (harness-entries parsed-books)
+                            (undescribed-books parsed-books)
+                            (option-problems parsed-books)
+                            (load-findings loaded)
+                            (if advise? (remove #(= :spec-contract (:check %)) contract) contract)))
+     :advisories (vec (concat (without-recovery (filter :forms parsed-books)) advised))}))
+
+(defn findings
+  "Every finding for the book and library files (see report, which takes the
+   same options)."
+  [opts]
+  (:findings (report opts)))
 
 (defn files-in
   "{:books [...] :libraries [...]}: the .clj files below the roots of :books
@@ -367,20 +671,28 @@
   [{:keys [file check message]}]
   (format "%s: %s (%s)" file message (name check)))
 
+(defn report-in
+  "report for the files below the roots (see files-in)."
+  [opts]
+  (report (merge (with-library-classpath opts) (files-in opts))))
+
 (defn verify!
   "Prints every finding below the roots (see files-in) and throws an ex-info
    carrying :babashka/exit 1 when there is any, so a bb task running it fails
    with the offending files named. Returns the number of files checked
-   otherwise. Advisories are printed first, as notes, and never fail it. opts are those of findings-in:
+   otherwise. Advisories are printed first, as notes, and never fail it. opts
+   are those of report:
 
      {:books [\"runbooks\"] :libraries [\"libraries\"] :license \"0BSD\"}
 
-   A casebook that carries no SPDX headers passes :license false."
+   A casebook that carries no SPDX headers passes :license false, and one
+   whose mutation specs should be noted rather than fail it :spec-contract
+   :advise."
   [opts]
   (let [{:keys [books libraries] :as files} (files-in opts)
-        found (findings (merge (with-library-classpath opts) files))]
+        {found :findings advised :advisories} (report (merge (with-library-classpath opts) files))]
     (binding [*out* *err*]
-      (doseq [f (advisories files)] (println (str "note: " (format-finding f))))
+      (doseq [f advised] (println (str "note: " (format-finding f))))
       (doseq [f found] (println (format-finding f))))
     (when (seq found)
       (throw (ex-info (format "%d conformance finding(s) in %d file(s)"

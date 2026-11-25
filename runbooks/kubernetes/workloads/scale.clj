@@ -29,7 +29,7 @@
                   :kubectl-can-patch ["deployments" "statefulsets"]}
   :select {:mode :one :label "Workload" :flag :pick :candidates candidates}
   :empty-message "no Deployment or StatefulSet to scale"
-  :confirm {:action "scale a workload"}
+  :confirm {:action "scale a workload" :destructive? false}
   :subject {:parse workloads/parse-pick
             :invalid "the pick is not \"<Kind> <namespace>/<name>\" of a Deployment or StatefulSet"}
   :derive (fn [{:keys [opts]}] {:replicas (:replicas opts)})

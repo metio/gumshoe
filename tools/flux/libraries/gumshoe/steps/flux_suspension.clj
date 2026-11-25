@@ -32,11 +32,11 @@
     :verify {:timeout 30 :interval 3}
     :on {:verb "suspend" :select {:label "Suspend"}
          :empty-message "every Flux object is suspended already"
-         :confirm {:action "suspend a Flux object"}
+         :confirm {:action "suspend a Flux object" :destructive? false}
          :announce "Suspend %s" :verified "%s is suspended"}
     :off {:verb "resume" :select {:label "Resume"}
           :empty-message "no Flux object is suspended"
-          :confirm {:action "resume a Flux object"}
+          :confirm {:action "resume a Flux object" :destructive? false}
           :announce "Resume %s" :verified "%s is no longer suspended"}}))
 
 (def suspend "Suspends a Flux object." (:on suspending))

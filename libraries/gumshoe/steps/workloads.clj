@@ -43,11 +43,11 @@
     :applied? workloads/pause-applied?
     :verify {:interval 5}
     :on {:verb "pause" :empty-message "every Deployment is paused already"
-         :confirm {:action "pause a Deployment's rollouts"}
+         :confirm {:action "pause a Deployment's rollouts" :destructive? false}
          :announce "Pause %s" :verified "%s is paused"
          :verify {:timeout 60}}
     :off {:verb "resume" :empty-message "no Deployment is paused"
-          :confirm {:action "resume a Deployment and roll out the changes made while it was paused"}
+          :confirm {:action "resume a Deployment and roll out the changes made while it was paused" :destructive? false}
           :announce "Resume %s" :verified "%s is resumed and rolled out"
           :verify {:timeout 600}}}))
 
@@ -75,10 +75,10 @@
     :applied? (fn [cronjob wanted] (= wanted (workloads/suspended? cronjob)))
     :verify {:timeout 30 :interval 3}
     :on {:verb "suspend" :empty-message "every CronJob is suspended already"
-         :confirm {:action "suspend a CronJob"}
+         :confirm {:action "suspend a CronJob" :destructive? false}
          :announce "Suspend CronJob %s" :verified "CronJob %s is suspended"}
     :off {:verb "resume" :empty-message "no CronJob is suspended"
-          :confirm {:action "resume a CronJob"}
+          :confirm {:action "resume a CronJob" :destructive? false}
           :announce "Resume CronJob %s" :verified "CronJob %s is resumed"}}))
 
 (def pause-deployment "Pauses a Deployment's rollouts." (:on deployment-pausing))
