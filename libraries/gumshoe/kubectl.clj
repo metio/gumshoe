@@ -346,6 +346,37 @@
    resource-kinds) ignore it."
   false)
 
+(def ^:dynamic *read-cache*
+  "nil, or an atom from read-cache that serves each read once while it is
+   bound. A read is keyed by its whole kubectl argv - context, namespace,
+   type, name, selectors and output format - so it is served only to a read
+   of exactly the same thing. Only a read that answered is kept: one that
+   exited cleanly with output that parses, or one that answered that its
+   object or resource type does not exist. A read that did not answer is
+   issued again by the next caller. Concurrent reads of the same argv wait
+   for the one in flight instead of issuing their own.
+
+   The entry is the raw result of the command, and each read interprets it
+   as it would a fresh one, so a strict and a lax read of the same object
+   share an entry and each keeps its own contract.
+
+   The cached readers are those built on get-json, get-json-result and the
+   namespaced reads: get-json, get-json-result, get-all, get-selected,
+   get-cluster-resource, get-namespaced, get-namespaced-result,
+   get-namespaced-resource, confirmed-absent? and pods-on-node. The other
+   readers always read.
+
+   Bind it for one unit of work whose reads must agree with one another and
+   need not see a change made during it, and never across a change or a
+   wait for one: gumshoe.mutation binds a fresh cache for each phase of a
+   change and none around its post-checks, which poll the cluster."
+  nil)
+
+(defn read-cache
+  "A fresh cache for *read-cache*."
+  []
+  (atom {}))
+
 (defn- answered-empty?
   "A failed kubectl get that still answered: the object or the resource type
    does not exist."
@@ -360,13 +391,37 @@
                    (or (not-empty (str/trim (str err))) (str "exit " exit)))
            {::unread true}))
 
+(defn answered?
+  "Whether the result of a kubectl get answered: it exited cleanly and its
+   output parses, or it answered that its object or resource type does not
+   exist."
+  [{:keys [exit out err]}]
+  (boolean (or (and (= 0 exit) (some? (parse-json out)))
+               (answered-empty? err))))
+
+(defn- execute-read
+  "The result of running the kubectl get argv, served from *read-cache* when
+   it is bound and holds an answer for argv. Within one cache the first
+   caller of an argv runs it and every concurrent caller waits for its
+   result; a result that did not answer is dropped from the cache once
+   delivered, so the next caller reads again."
+  [argv]
+  (if-let [cache *read-cache*]
+    (let [pending (delay (apply shell/execute argv))
+          entry (get (swap! cache #(if (contains? % argv) % (assoc % argv pending))) argv)
+          result @entry]
+      (when-not (answered? result)
+        (swap! cache #(if (identical? entry (get % argv)) (dissoc % argv) %)))
+      result)
+    (apply shell/execute argv)))
+
 (defn- read-result
   "{:ok? <the read answered> :doc <the parsed document>} of a kubectl get.
    :ok? is true only when kubectl exited cleanly and its output parsed. Under
    *strict-reads* a read that is not ok? and did not answer that its object
    or resource type is absent throws."
   [& argv]
-  (let [{:keys [exit out err]} (apply shell/execute argv)
+  (let [{:keys [exit out err]} (execute-read argv)
         doc (parse-json out)
         ok? (and (zero? exit) (some? doc))]
     (when (and *strict-reads* (not ok?) (not (answered-empty? err)))
@@ -377,10 +432,11 @@
   "The parsed output of a kubectl get, nil when it failed or did not parse.
    Under *strict-reads* a read that did not answer throws."
   [& argv]
-  (if-not *strict-reads*
-    (parse-json (apply shell/stdout-of argv))
-    (let [{:keys [ok? doc]} (apply read-result argv)]
-      (when ok? doc))))
+  (cond
+    *strict-reads* (let [{:keys [ok? doc]} (apply read-result argv)]
+                     (when ok? doc))
+    *read-cache* (parse-json (:out (execute-read argv)))
+    :else (parse-json (apply shell/stdout-of argv))))
 
 (defn get-json
   "Runs `kubectl get` with `args` - a type, names, selectors, a namespace, any

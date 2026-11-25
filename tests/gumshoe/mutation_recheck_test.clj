@@ -150,6 +150,9 @@
         "the subjects, :derive and the pin's fingerprint before the confirmation")
     (is (= #{[:after :judge]} (set (map rest (filter #(= :after (second %)) reads))))
         "the subjects, :recheck and every drift check after it")
-    (is (= ["volume" "database" "database" "settings" "volume" "database"]
-           (map first (filter #(= :after (second %)) reads)))
-        "the subjects read again, then :recheck, then the pin's and the subjects' drift checks")))
+    (is (= {"volume" 1 "database" 1 "settings" 1}
+           (frequencies (map first (filter #(= :before (second %)) reads))))
+        "the subjects, :derive's read of database and the pin's fingerprint fetch each object once")
+    (is (= {"volume" 1 "database" 1 "settings" 1}
+           (frequencies (map first (filter #(= :after (second %)) reads))))
+        "the subjects read again, :recheck's read of database and every drift check fetch each object once")))
