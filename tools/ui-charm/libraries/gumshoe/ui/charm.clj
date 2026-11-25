@@ -92,10 +92,17 @@
 (defn- toggle [indexes index]
   (if (contains? indexes index) (disj indexes index) (conj indexes index)))
 
+(defn- space?
+  "Whether message is a Space keypress. charm's input reader maps only bytes
+   0-31 and 127 to named keys, so the Space a terminal sends (byte 32) arrives
+   as the key \" \"; :space is accepted too, should a charm release name it."
+  [message]
+  (or (msg/key-match? message " ") (msg/key-match? message :space)))
+
 (defn multi-update
   "Space toggles the value under the cursor; every other key moves the list."
   [state message]
-  (if (msg/key-match? message :space)
+  (if (space? message)
     (update state chosen toggle (clist/selected-index state))
     (list-update state message)))
 
