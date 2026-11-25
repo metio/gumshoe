@@ -3,8 +3,12 @@
 
 (ns gumshoe.interact-test
   (:require [clojure.test :refer [deftest is testing]]
+            [gumshoe.command :as command]
             [gumshoe.fuzzy-finder :as fuzzy]
-            [gumshoe.interact :as interact]))
+            [gumshoe.interact :as interact]
+            [gumshoe.outcome :as outcome]
+            [gumshoe.shell :as shell]
+            [gumshoe.ui :as ui]))
 
 (deftest valid-choice-test
   (testing "accepts a candidate"
@@ -74,3 +78,50 @@
            (interact/confirmation-message {:action "delete a PersistentVolumeClaim"
                                            :target "kube.example.org"
                                            :items ["moodle/data" "moodle/cache"]})))))
+
+(defn- confirm-with
+  "Runs confirm! on `request` with `typed` on stdin (nil for an immediate EOF),
+   gum installed and a UI backend whose :confirm approves. Returns the verdict
+   and what reached the backend and gum, so a test can show a destructive change
+   never takes the yes/no path."
+  [request typed]
+  (let [backend-calls (atom 0)
+        gum-calls (atom [])
+        record (outcome/fresh)]
+    (with-redefs [ui/backend (fn [op] (when (= :confirm op) (fn [] (swap! backend-calls inc) true)))
+                  command/installed? (constantly true)
+                  shell/run-with-output (fn [& args] (swap! gum-calls conj (vec args)) 0)]
+      (binding [*err* (java.io.StringWriter.)
+                outcome/*record* record]
+        (let [approved (with-in-str (or typed "") (interact/confirm! request))]
+          {:approved approved
+           :backend @backend-calls
+           :gum @gum-calls
+           :record @record})))))
+
+(def ^:private destructive
+  {:action "delete a PersistentVolumeClaim" :target "kube.example.org"
+   :items ["moodle/data"] :destructive? true})
+
+(deftest a-destructive-change-approves-only-on-the-typed-word-yes
+  (doseq [typed ["yes\n" "  YES \n" "Yes\n"]]
+    (testing (pr-str typed)
+      (is (true? (:approved (confirm-with destructive typed))))))
+  (doseq [typed ["y\n" "no\n" "n\n" "\n" "yess\n" "ye\n" nil]]
+    (testing (pr-str typed)
+      (let [{:keys [approved record]} (confirm-with destructive typed)]
+        (is (false? approved))
+        (is (some? (:aborted record)) "a declined confirmation records the run as aborted")))))
+
+(deftest a-destructive-change-never-goes-to-the-backend-or-gum
+  (doseq [typed ["yes\n" "n\n" nil]]
+    (testing (pr-str typed)
+      (let [{:keys [backend gum]} (confirm-with destructive typed)]
+        (is (zero? backend) "an approving UI backend is never asked")
+        (is (empty? gum) "gum's yes/no picker is never run")))))
+
+(deftest a-non-destructive-change-goes-to-the-backend
+  (let [{:keys [approved backend gum]} (confirm-with (dissoc destructive :destructive?) "n\n")]
+    (is (true? approved) "the backend's answer decides, not stdin")
+    (is (= 1 backend))
+    (is (empty? gum))))
