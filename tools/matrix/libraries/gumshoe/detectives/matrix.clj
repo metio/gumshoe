@@ -83,8 +83,13 @@
         :summary (format "the signing keys endpoint returned HTTP %s" (:status keys))
         :hint "other servers can not fetch this homeserver's keys - check the reverse proxy for /_matrix/key/"}]
 
-      (nil? valid-until)
-      []
+      ;; A 2xx without valid_until_ts is no key document: a proxy or the web
+      ;; client answering its index.html for the key path publishes no key.
+      (not (number? valid-until))
+      [{:severity :critical
+        :component host
+        :summary "the signing keys endpoint answered without valid_until_ts"
+        :hint "the answer is not Synapse's key document - check that the reverse proxy routes /_matrix/key/ to Synapse"}]
 
       :else
       (let [expiry (java.time.Instant/ofEpochMilli valid-until)
@@ -170,4 +175,7 @@
    {:name "matrix-federation-destinations"
     :description "Federation to other servers is not silently failing (needs admin token)"
     :requires ["destinations" "admin?" "host"]
+    ;; without an admin token nothing is read, and "admin?" and "host" alone
+    ;; would count as a read
+    :joins ["destinations"]
     :detect detect-federation-destinations}])
