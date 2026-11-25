@@ -139,18 +139,20 @@
           (is (re-find #"refusing: the pick \"nightly\" does not name a CronJob\n$" out)))))))
 
 (deftest a-playbook-step-refuses-a-pick-that-does-not-parse
-  ;; The playbook asks its own one confirmation before its steps run; the
-  ;; step's refusal stops the change behind it.
+  ;; The playbook judges every step's pick before its own one confirmation,
+  ;; so the operator is never asked to approve a step that will be refused.
   (let [step (spec :title "start it")
+        asked (atom 0)
         book (binding [runbook/*loading* true]
                (playbook/book {:description "starts a CronJob"
                                :select (:select step)
                                :confirm {:action "start a CronJob" :destructive? false}
                                :steps [step]}))]
     (with-redefs [fuzzy/select-single (constantly "nightly")
-                  interact/confirm! (constantly true)]
+                  interact/confirm! (fn [_] (swap! asked inc) true)]
       (let [{:keys [result out]} (refused-run ((:action book) {} {}))]
         (is (false? result))
+        (is (zero? @asked) "the playbook's confirmation is not asked")
         (is (re-find #"refusing: the pick \"nightly\" does not name a CronJob" out))))))
 
 (deftest an-accepted-pick-still-runs

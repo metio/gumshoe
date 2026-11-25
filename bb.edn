@@ -62,6 +62,8 @@
                    [gumshoe.mutation-pick-test]
                    [gumshoe.mutation-subjects-test]
                    [gumshoe.mutation-recheck-test]
+                   [gumshoe.mutation-prejudge-test]
+                   [gumshoe.playbook-prejudge-test]
                    [gumshoe.mutation-reads-test]
                    [gumshoe.read-cache-test]
                    [gumshoe.concurrent-test]
@@ -239,6 +241,8 @@
                                                          'gumshoe.mutation-pick-test
                                                          'gumshoe.mutation-subjects-test
                                                          'gumshoe.mutation-recheck-test
+                                                         'gumshoe.mutation-prejudge-test
+                                                         'gumshoe.playbook-prejudge-test
                                                          'gumshoe.mutation-reads-test
                                                          'gumshoe.read-cache-test
                                                          'gumshoe.concurrent-test

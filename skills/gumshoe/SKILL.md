@@ -283,7 +283,17 @@ mostly data:
   state it rests on, or a `:subject`/`:subjects` the engine reads again and
   pins, or `:no-guard "why"`; give it both where you can, so a target that
   was deleted, replaced or left the state it was offered in is refused with
-  a reason naming it. Its effect plan (`[[:kubectl "cordon" node]]`) runs,
+  a reason naming it. The engine judges `:refusal` (and a `:precondition`,
+  folded into it) twice with the same `(fn [ctx])`: before the confirmation
+  over the derived context, with `:recheck`'s map merged over it, so the
+  operator is never asked to approve a change that will be refused, and
+  again after it over fresh reads; a subject or pinned object that is not
+  there is refused before the confirmation too. Write the refusal as a
+  pure judgement of `ctx` (it may read, never write); what it prints shows
+  only when it refuses before the confirmation, and after the confirmation
+  as before. A refusal that must tell the two apart reads
+  `mutation/*phase*` (`:derive` before, `:judge` after). A rehearsal and a
+  change a playbook's confirmation covered judge once. Its effect plan (`[[:kubectl "cordon" node]]`) runs,
   dry-runs, or is collected in a test. An `:effect` returning one effect,
   such as a bare `(effect/note …)`, runs as a plan of one; anything else
   that is not a plan, a keyword, a map or a plan holding a non-effect, is
@@ -424,7 +434,13 @@ mostly data:
   (`gumshoe.steps.workloads` holds the CronJob and Deployment pairs);
 - a playbook is `(playbook/book {:select … :confirm … :steps […]})`, whose
   steps are mutation specs, checks and pauses; it derives its prerequisites
-  and options from the steps and asks for one confirmation;
+  and options from the steps and asks for one confirmation. Before that
+  confirmation it judges every change's pick and the refusal of the first
+  change unless a waiting pause comes before it (`playbook/prejudgeable`);
+  a change after another change or after a waiting pause is judged only
+  when reached, because its evidence is what the run is about to change. A
+  driver that confirms a segment itself calls `(playbook/prejudge! steps
+  ctx waits-first?)` before its confirmation;
 - any step whose failure leaves a system parked or half-owned - a controller
   suspended, a finalizer stripped, an owner removed before its replacement
   exists - carries `:recovery`, a string or `(fn [ctx] …)` returning one,

@@ -132,10 +132,17 @@
            out))))
 
 (deftest a-missing-subject-is-refused-unless-optional
-  (testing "a required subject that did not exist when the change was confirmed refuses by name"
-    (let [{:keys [result out]} (run {:subjects (adoptees claim database)}
-                                    (fn [ref _] (when-not (= "moodle-data" (:name ref)) (object ref))))]
+  (testing "a required subject that does not exist refuses by name before the confirmation"
+    (let [{:keys [result out config]} (run {:subjects (adoptees claim database)}
+                                           (fn [ref _] (when-not (= "moodle-data" (:name ref)) (object ref))))]
       (is (false? result))
+      (is (nil? config) "no confirmation is shown")
+      (is (= "refusing: persistentvolumeclaims moodle/moodle-data: it does not exist\n" out))))
+  (testing "a covered change asks nothing, so the drift check after it names the missing subject"
+    (let [{:keys [result out config]} (run {:subjects (adoptees claim database) :confirmed? true}
+                                           (fn [ref _] (when-not (= "moodle-data" (:name ref)) (object ref))))]
+      (is (false? result))
+      (is (some? config))
       (is (= "refusing: persistentvolumeclaims moodle/moodle-data: it did not exist when the change was confirmed\n" out))))
   (testing "an optional subject may be absent and is handed over as nil"
     (let [objects (atom nil)
@@ -158,12 +165,12 @@
     (is (re-find #"could not read what the change rests on - kubectl get did not answer" out))))
 
 (deftest an-unread-subject-after-the-confirmation-refuses
-  (let [refused (atom false)
+  (let [refused (atom [])
         {:keys [result out]} (run {:subjects (adoptees claim database)
-                                   :refusal (fn [_] (reset! refused true) nil)}
+                                   :refusal (fn [_] (swap! refused conj mutation/*phase*) nil)}
                                   (fn [ref phase] (if (= :after phase) (unread!) (object ref))))]
     (is (false? result))
-    (is (false? @refused) "the refusal never judges a read that did not answer")
+    (is (= [:derive] @refused) "the refusal judged the answered reads before the confirmation, and never a read that did not answer")
     (is (re-find #"refusing: could not read what the precondition rests on - kubectl get did not answer" out))))
 
 (deftest subjects-compose-with-a-subject-and-a-pin

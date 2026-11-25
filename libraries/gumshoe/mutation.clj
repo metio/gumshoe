@@ -38,10 +38,11 @@
       :subjects (fn [ctx] -> seq of {:type :name :namespace? :facts? :optional?})
                                                   ; optional, the several objects the
                                                   ; change acts on, see below
-      :refusal  (fn [ctx] -> reason or nil)       ; optional, re-checked after confirm;
-                                                  ; a reason is printed as \"refusing: <reason>\"
-      :precondition (fn [ctx] -> bool)            ; optional, re-checked after confirm
-                                                  ; and after :refusal;
+      :refusal  (fn [ctx] -> reason or nil)       ; optional, judged before the confirmation
+                                                  ; and again after it; a reason is
+                                                  ; printed as \"refusing: <reason>\"
+      :precondition (fn [ctx] -> bool)            ; optional, judged after :refusal, before
+                                                  ; and after the confirmation;
                                                   ; reads only, a dry run calls it too
       :announce (fn [ctx] -> changelog message)   ; optional
       :effect   (fn [ctx] -> effect plan)         ; one effect runs as a plan of one;
@@ -145,7 +146,10 @@
    read after the confirmation is served from a read before it, and a
    post-check, which runs outside both phases, reads the cluster on every
    poll. A rehearsal under --dry-run has the same two phases, each with its
-   own cache.
+   own cache. A playbook hands the first change it judged before its own
+   confirmation the cache of that judgement: that :derive phase is the one
+   the playbook's confirmation rests on, as a standalone change's rests on
+   its own.
 
    Independent reads run concurrently: read-subjects reads its refs at
    once, and the :judge phase starts by fetching every object it is about
@@ -157,6 +161,31 @@
    :refusal returns why the change must not run, or nil. The engine prints
    the reason as \"refusing: <reason>\" and stops, and only a change no
    refusal stopped reaches :precondition.
+
+   A change is judged twice: before the confirmation is shown, so the
+   operator is never asked to approve a change that will be refused, and
+   again after it, over fresh reads, which guards the window between the
+   two. The judgement before (prejudgement) calls :refusal, with
+   :precondition folded into it, with the one signature it has after the
+   confirmation, over the derived context with what :recheck returns for it
+   merged over it, both in the :derive *phase* with that phase's read
+   cache; a value only :recheck reads is therefore real before the
+   confirmation, never missing, so nothing is refused for a key :derive
+   does not provide. A refusal that must tell the two apart reads *phase*.
+   It then refuses a pinned object or a subject that is not there
+   (gone-before-confirmation); drift needs a confirmed fingerprint, so it is
+   judged after the confirmation alone. A precondition that returned false
+   prints \"refusing: its precondition does not hold\" before the
+   confirmation, and gumshoe.flow's own words after it. What the judgement
+   before prints is held back unless it refuses, so a change that runs
+   prints its judgement once, after the confirmation, where it always did.
+   It reads nothing :derive already read; a :recheck or :refusal reading
+   something :derive did not, or reading outside kubectl (SSH), reads it
+   once more before the confirmation. A rehearsal asks for no confirmation
+   and judges once, as gumshoe.flow rehearses a precondition, and so does
+   a change a playbook's confirmation covered (:confirmed?), which the
+   playbook judged before its own confirmation where its evidence existed
+   (see gumshoe.playbook).
 
    The subject read, :derive, :refusal and :precondition run under
    kubectl/*strict-reads* (the :subjects reads and the :subjects function
@@ -204,7 +233,9 @@
    object without a generation is compared by resourceVersion. A change that
    rests on something outside the spec - an annotation, a status field - names
    it with :facts (fn [object] -> value), which must be equal too. An object
-   that cannot be read when the confirmation is shown is refused as well."
+   that cannot be read before the confirmation is refused before it is
+   shown, and in a change whose confirmation a playbook covered, when it is
+   shown."
   (:require [clojure.string :as str]
             [clojure.walk :as walk]
             [gumshoe.change :as change]
@@ -525,19 +556,139 @@
     thunk))
 
 (defn- pin-of
-  "The ref the change pins and its fingerprint at the confirmation: the ref
-   of its :reads subject when it has one, else the :pick subject's ref,
-   whose object ctx already holds from the strict read before the
-   confirmation."
+  "The ref the change pins, its fingerprint at the confirmation and where
+   the ref comes from (:reads or :pick): the ref of its :reads subject when
+   it has one, else the :pick subject's ref, whose object ctx already holds
+   from the strict read before the confirmation."
   [spec {:keys [context ref object] :as ctx}]
   (let [pin (change/pin spec)
         subject (change/pick-subject spec)]
     (cond
       pin (when-let [pinned (pin ctx)]
-            {:ref pinned :before (fingerprint (fetch-pinned context pinned) (:facts pinned))})
+            {:ref pinned :from :reads
+             :before (fingerprint (fetch-pinned context pinned) (:facts pinned))})
       (and subject ref) (let [pinned (cond-> ref (:facts subject) (assoc :facts (:facts subject)))]
-                          {:ref pinned :before (fingerprint object (:facts pinned))})
+                          {:ref pinned :from :pick :before (fingerprint object (:facts pinned))})
       :else nil)))
+
+(defn gone-before-confirmation
+  "Why the objects a change pins rule it out before the confirmation, or
+   nil: the pinned object is absent - for a :pick subject, whose read was
+   strict, it does not exist; for a :reads pin, whose read is not strict, it
+   does not exist or the cluster did not answer - or a subject that is not
+   :optional? does not exist. pinned is {:ref :from :before} as the
+   confirmation takes it; refs and objects are the subjects as :derive read
+   them. Drift is not judged here: before the confirmation the fingerprints
+   are the ones just taken, so the only drift is an object that is not
+   there. Pure."
+  [pinned refs objects]
+  (or (when (and (:ref pinned) (nil? (:before pinned)))
+        (if (= :pick (:from pinned))
+          "it does not exist"
+          "it does not exist or could not be read"))
+      (some (fn [[ref object]]
+              (when (and (nil? object) (not (:optional? ref)))
+                (str (describe-ref ref) ": it does not exist")))
+            (map vector refs objects))))
+
+(def unmet-before-confirmation
+  "The reason a refusal returning change/unmet - a :precondition that
+   returned false - prints before the confirmation."
+  "its precondition does not hold")
+
+(defn prejudgement
+  "Why the change must not be offered for confirmation, judged over the
+   evidence its :derive phase read, or nil to ask. ctx is the derived
+   context, pinned what pin-of took from it and cache the :derive phase's
+   kubectl/*read-cache*.
+
+   The :refusal runs first, with the signature and the context shape it has
+   after the confirmation: the derived context, with what :recheck returns
+   for it merged over it, so a refusal reading a value only :recheck
+   provides judges a real value, never a missing one. :recheck and
+   :refusal run in the :derive *phase* with cache and strict reads, so a
+   read :derive already made is served from cache and a read that did not
+   answer refuses with its reason. Then gone-before-confirmation judges
+   the pinned object and the subjects."
+  [{:keys [refusal recheck]} ctx pinned cache]
+  (or (when refusal
+        (try
+          ((in-phase :derive cache
+                     #(binding [kubectl/*strict-reads* true]
+                        (let [judged (if recheck
+                                       (merge ctx (walk/postwalk identity (recheck ctx)))
+                                       ctx)
+                              why (refusal judged)]
+                          (if (= change/unmet why) unmet-before-confirmation why)))))
+          (catch clojure.lang.ExceptionInfo e
+            (if (::kubectl/unread (ex-data e))
+              (str "could not read what the precondition rests on - " (ex-message e))
+              (throw e)))))
+      (gone-before-confirmation pinned (:refs ctx) (:objects ctx))))
+
+(defn- recording-writer
+  "A Writer appending what is written to it to chunks as [stream text]."
+  [chunks stream]
+  (proxy [java.io.Writer] []
+    (write
+      ([x]
+       (swap! chunks conj [stream (if (integer? x) (str (char x)) (String/valueOf x))]))
+      ([buf off len]
+       (swap! chunks conj [stream (if (string? buf)
+                                    (subs buf off (+ off len))
+                                    (String. ^chars buf (int off) (int len)))])))
+    (flush [])
+    (close [])))
+
+(defn- replay!
+  [chunks]
+  (doseq [[stream text] chunks]
+    (let [^java.io.Writer w (if (= :err stream) *err* *out*)]
+      (.write w ^String text)
+      (.flush w))))
+
+(defn held
+  "[what f returned, what it printed], with what f printed to *out* and
+   *err* held back instead of printed: a judgement before the confirmation
+   that lets the change run prints nothing, because the same judgement
+   after the confirmation prints it again where it always did. A judgement
+   that refuses replays its output with replay-held! before the reason, so
+   the operator reads what led to the refusal. Should f throw, what it
+   printed is replayed before the exception propagates."
+  [f]
+  (let [chunks (atom [])
+        result (try
+                 (binding [*out* (recording-writer chunks :out)
+                           *err* (recording-writer chunks :err)]
+                   (f))
+                 (catch Throwable e
+                   (replay! @chunks)
+                   (throw e)))]
+    [result @chunks]))
+
+(defn replay-held!
+  "Prints the output held returned, each part to the stream it was written
+   to, in the order written."
+  [chunks]
+  (replay! chunks))
+
+(defn- prejudged-reason
+  "prejudgement with its output held back unless it refuses: the reason,
+   printed after what the judgement printed, or nil, having printed
+   nothing."
+  [spec ctx pinned cache]
+  (let [[why chunks] (held #(prejudgement spec ctx pinned cache))]
+    (when why (replay-held! chunks))
+    why))
+
+(defn- prejudges?
+  "Whether a run of spec judges its refusal before asking: a real run that
+   asks for a confirmation. A rehearsal asks for none and judges the
+   refusal once, as gumshoe.flow runs it; a change a playbook's
+   confirmation covered (:confirmed?) asks for none either, and the
+   playbook judged it before its own confirmation where it could."
+  [spec]
+  (not (or flow/*dry-run* (:confirmed? spec))))
 
 (defn- connect
   "{:context :cluster :announce-as} for the spec: what its :connect returns
@@ -598,70 +749,128 @@
                           :subject (str/join ", " (select/items (:mode select) target))
                           :cluster cluster}))))
 
-(defn- run-connected!
-  "Runs spec against target, whose ref parse-pick made, on the connection."
-  [{:keys [select confirm announce effect verify] :as spec}
-   {:keys [context cluster announce-as]} target ref opts announcement-data]
+(defn- prepared
+  "The derived context of spec against target, whose ref parse-pick made,
+   on the connection, read in the :derive *phase* with cache:
+   {:ctx <the context every callback receives>} or {:unread <reason>}."
+  [spec {:keys [context cluster]} target ref opts announcement-data cache]
   (let [base (cond-> {:context context :cluster cluster :target target
                       :opts opts :announcement-data announcement-data}
                (change/pick-subject spec) (assoc :ref ref))
-        derive-cache (kubectl/read-cache)
-        {:keys [values unread]} (derived (subject-derive spec) base derive-cache)]
+        {:keys [values unread]} (derived (subject-derive spec) base cache)]
+    (if unread {:unread unread} {:ctx (merge base values)})))
+
+(defn- unread!
+  [why]
+  (stdout/error (format "could not read what the change rests on - %s" why))
+  false)
+
+(defn- run-connected!
+  "Runs spec against target, whose ref parse-pick made, on the connection.
+   cache is the :derive phase's read cache, a fresh one when nil."
+  [{:keys [select confirm announce effect verify] :as spec}
+   {:keys [context cluster announce-as] :as connection} target ref opts announcement-data cache]
+  (let [derive-cache (or cache (kubectl/read-cache))
+        {:keys [ctx unread]} (prepared spec connection target ref opts announcement-data derive-cache)]
     (if unread
-      (do (stdout/error (format "could not read what the change rests on - %s" unread))
-          false)
-      (let [ctx (merge base values)
-            applied-before (outcome/applied-count)
+      (unread! unread)
+      (let [applied-before (outcome/applied-count)
             plan (volatile! nil)
             failed! #(when-not flow/*dry-run*
                        (if (:recovery spec)
                          (outcome/recovery! (:recovery spec) ctx)
                          (when-let [guidance (left-behind spec ctx (effect/as-plan @plan) applied-before)]
                            (outcome/fallback! guidance ctx))))
-            ok? (try
-                  (let [{:keys [ref before]} ((in-phase :derive derive-cache #(pin-of spec ctx)))
-                        refs (:refs ctx)
-                        subjects-before (subjects-fingerprints refs (:objects ctx))
-                        items-fn (:items spec)]
-                    (flow/change!
-                     {:confirmation {:action (:action confirm)
-                                     :target cluster
-                                     :items (if items-fn (items-fn ctx) (select/items (:mode select) target))
-                                     :destructive? (:destructive? confirm)}
-                      :precondition (let [guard (strict-precondition
-                                                 (subjects-precondition
-                                                  (pinned-precondition (judged-precondition spec ctx)
-                                                                       ref before #(fetch-pinned context %))
-                                                  refs subjects-before #(read-subjects context %)))]
-                                      (in-phase :judge (prefetching context (judged-refs spec ctx ref) guard)))
-                      :confirmed? (:confirmed? spec)
-                      :announce! (when announce
-                                   #(announce/announce! announce-as announcement-data (announce ctx)))
-                      :effect (vreset! plan (effect ctx))
-                      :step (or (:title spec) (:action confirm))
-                      :post-checks (when verify (verify ctx))}))
-                  (catch Throwable e (failed!) (throw e)))]
-        (when-not ok? (failed!))
-        ok?))))
+            result (try
+                     (let [{:keys [ref before] :as pinned} ((in-phase :derive derive-cache #(pin-of spec ctx)))
+                           refused (when (prejudges? spec) (prejudged-reason spec ctx pinned derive-cache))
+                           refs (:refs ctx)
+                           subjects-before (subjects-fingerprints refs (:objects ctx))
+                           items-fn (:items spec)]
+                       (if refused
+                         (do (refuse! refused) ::refused)
+                         (flow/change!
+                          {:confirmation {:action (:action confirm)
+                                          :target cluster
+                                          :items (if items-fn (items-fn ctx) (select/items (:mode select) target))
+                                          :destructive? (:destructive? confirm)}
+                           :precondition (let [guard (strict-precondition
+                                                      (subjects-precondition
+                                                       (pinned-precondition (judged-precondition spec ctx)
+                                                                            ref before #(fetch-pinned context %))
+                                                       refs subjects-before #(read-subjects context %)))]
+                                           (in-phase :judge (prefetching context (judged-refs spec ctx ref) guard)))
+                           :confirmed? (:confirmed? spec)
+                           :announce! (when announce
+                                        #(announce/announce! announce-as announcement-data (announce ctx)))
+                           :effect (vreset! plan (effect ctx))
+                           :step (or (:title spec) (:action confirm))
+                           :post-checks (when verify (verify ctx))})))
+                     (catch Throwable e (failed!) (throw e)))]
+        (cond
+          (= ::refused result) false
+          result true
+          :else (do (failed!) false))))))
 
-(defn run-on!
-  "Runs a mutation spec against an ALREADY-CHOSEN `target`, skipping the spec's own
-   selection, through derive -> confirm -> [precondition] -> announce -> execute
-   -> verify. Returns true/false, false without asking for a confirmation when
-   parse-pick refuses `target` or a read in :derive did not answer. This is what a playbook calls per step after picking its
-   subject once (e.g. via gumshoe.select/pick), so the operator is not re-prompted
-   for every step. `run!` is this plus selection.
-
-   `opts` is the parsed CLI flags; `announcement-data` is the value the runbook
-   action receives in its ctx (nil when the book does not announce)."
+(defn prejudge
+  "What a playbook needs to judge a change step before its own confirmation
+   covers it, against target: {:refusal <why>} when parse-pick refuses the
+   pick or prejudgement refuses the change, with :printed, the output the
+   refusing judgement held back (see held), {:unread <why>} when a read of
+   its :derive phase did not answer, nil when what :connect names could
+   not be reached (connect said why), else {:cache <the :derive phase's
+   read cache>}. Handing that cache to run-on! makes the step's :derive
+   phase the one judged here, so the step reads nothing twice. Prints
+   nothing; prejudge-printed prints what it returned."
   [spec target opts announcement-data]
   (let [spec (change/normalize spec)
         {:keys [ref refusal]} (parse-pick spec target)]
     (if refusal
-      (refuse! refusal)
-      (if-let [connection (connect spec opts)]
-        (run-connected! spec connection target ref opts announcement-data)
-        false))))
+      {:refusal refusal}
+      (when-let [connection (connect spec opts)]
+        (let [cache (kubectl/read-cache)
+              {:keys [ctx unread]} (prepared spec connection target ref opts announcement-data cache)]
+          (if unread
+            {:unread unread}
+            (let [pinned ((in-phase :derive cache #(pin-of spec ctx)))
+                  [why chunks] (held #(prejudgement spec ctx pinned cache))]
+              (if why
+                {:refusal why :printed chunks}
+                {:cache cache}))))))))
+
+(defn prejudge-printed
+  "Prints what prejudge returned the way a standalone run prints it - what
+   the refusing judgement printed, then the reason - and returns whether
+   the change may be offered for confirmation."
+  [{:keys [refusal printed unread cache]}]
+  (cond
+    refusal (do (replay-held! printed) (refuse! refusal))
+    unread (unread! unread)
+    :else (some? cache)))
+
+(defn run-on!
+  "Runs a mutation spec against an ALREADY-CHOSEN `target`, skipping the spec's own
+   selection, through derive -> [refusal] -> confirm -> [refusal] -> announce ->
+   execute -> verify. Returns true/false, false without asking for a confirmation
+   when parse-pick refuses `target`, a read in :derive did not answer or the
+   judgement before the confirmation refuses the change. This is what a playbook calls per step after picking its
+   subject once (e.g. via gumshoe.select/pick), so the operator is not re-prompted
+   for every step. `run!` is this plus selection.
+
+   `opts` is the parsed CLI flags; `announcement-data` is the value the runbook
+   action receives in its ctx (nil when the book does not announce).
+   `:derive-cache`, in the last argument, is the read cache prejudge filled
+   for this change, which its :derive phase then reads through."
+  ([spec target opts announcement-data]
+   (run-on! spec target opts announcement-data nil))
+  ([spec target opts announcement-data {:keys [derive-cache]}]
+   (let [spec (change/normalize spec)
+         {:keys [ref refusal]} (parse-pick spec target)]
+     (if refusal
+       (refuse! refusal)
+       (if-let [connection (connect spec opts)]
+         (run-connected! spec connection target ref opts announcement-data derive-cache)
+         false)))))
 
 (defn run!
   "Selects the spec's subject (interactive, honouring the CLI flags) and runs it
@@ -688,7 +897,7 @@
           (let [{:keys [ref refusal]} (parse-pick spec target)]
             (if refusal
               (refuse! refusal)
-              (run-connected! spec connection target ref opts announcement-data)))))
+              (run-connected! spec connection target ref opts announcement-data nil)))))
       false)))
 
 (defn picks

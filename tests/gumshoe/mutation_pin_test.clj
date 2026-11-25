@@ -94,8 +94,13 @@
       (is (empty? executed))))
   (testing "replaced: refused"
     (is (empty? (:executed (run-with [(object :generation 3) (object :uid "u2" :generation 1)] {})))))
-  (testing "unread at confirmation: refused, whatever exists before the effect"
-    (let [{:keys [executed out]} (run-with [nil (object :uid "u2" :generation 1)] {})]
+  (testing "unread before the confirmation: refused before asking, with nothing read again"
+    (let [{:keys [executed out left]} (run-with [nil (object :uid "u2" :generation 1)] {})]
+      (is (empty? executed))
+      (is (= 1 left) "the object was not read again")
+      (is (re-find #"refusing: it does not exist or could not be read" out))))
+  (testing "unread when a covered change is shown: refused, whatever exists before the effect"
+    (let [{:keys [executed out]} (run-with [nil (object :uid "u2" :generation 1)] {:confirmed? true})]
       (is (empty? executed))
       (is (re-find #"refusing: it could not be read when the change was confirmed" out))))
   (testing "a pin returning nil checks nothing"

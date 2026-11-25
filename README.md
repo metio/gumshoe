@@ -362,7 +362,10 @@ the same mutation specs the runbooks run (`gumshoe.steps.nodes/cordon`), checks
 that read and report, and pauses where the operator acts outside gumshoe. Each
 step declares the prerequisites and options it needs, and the playbook checks
 all of them before its first step. The checks before the first change run
-before the one confirmation, which lists every later step. The pauses split
+before the one confirmation, which lists every later step. Before asking, the
+playbook judges every change's pick and the refusal of its first change, so it
+does not ask for a playbook whose first change will be refused; a change after
+another change or after a pause is judged when the run reaches it. The pauses split
 the playbook into segments: without a terminal it stops at a pause and names
 the `--from-segment` that continues it, and `playbook/run-segment!` takes one
 segment across a batch of subjects.
@@ -635,7 +638,9 @@ the same machine-enforced contract:
   the post-checks; the select → confirm → announce → execute → verify → banner
   flow is provided once and tested once. A change to one object declares it as
   `:subject` and says why it must not run with `:refusal`; the engine parses
-  the pick, reads and pins the object, and prints the refusal. A change to
+  the pick, reads and pins the object, and prints the refusal. The refusal
+  is judged before the confirmation, so the operator is not asked to approve
+  a change that will be refused, and again after it over fresh reads. A change to
   several objects declares them as `:subjects`, and each is read, pinned and,
   when it moved after the confirmation, named in the refusal. Live state the
   judgement rests on that no subject covers is read again after the

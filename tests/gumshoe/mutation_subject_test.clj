@@ -45,7 +45,8 @@
 
 (deftest the-subject-is-parsed-read-strictly-and-handed-to-every-callback
   (let [seen (atom [])
-        record (fn [k] (fn [ctx] (swap! seen conj [k (select-keys ctx [:ref :object])]) nil))
+        record (fn [k] (fn [ctx] (swap! seen conj [k mutation/*phase* (select-keys ctx [:ref :object])]) nil))
+        seen-in (fn [k phase] (some (fn [[k' phase' ctx]] (when (and (= k k') (= phase phase')) ctx)) @seen))
         {:keys [result reads]} (run {:subject {:type "cronjobs"}
                                      :derive (fn [ctx] ((record :derive) ctx) {})
                                      :items (fn [ctx] ((record :items) ctx) ["x"])
@@ -57,11 +58,14 @@
     (is (= {:type "cronjobs" :namespace "batch" :name "nightly"} (ffirst reads)))
     (is (every? second reads) "every read of the subject is strict")
     (testing ":derive and :items see the object read before the confirmation"
-      (is (= false (get-in (into {} (take 2 @seen)) [:derive :object :spec :suspend])))
-      (is (= false (get-in (into {} (take 2 @seen)) [:items :object :spec :suspend]))))
+      (is (= false (get-in (seen-in :derive :derive) [:object :spec :suspend])))
+      (is (= false (get-in (seen-in :items nil) [:object :spec :suspend]))))
+    (testing ":refusal and :precondition judge the object read before the confirmation first"
+      (is (= false (get-in (seen-in :refusal :derive) [:object :spec :suspend])))
+      (is (= false (get-in (seen-in :precondition :derive) [:object :spec :suspend]))))
     (testing ":refusal and :precondition see the object read again after it"
-      (is (= true (get-in (into {} (drop 2 @seen)) [:refusal :object :spec :suspend])))
-      (is (= true (get-in (into {} (drop 2 @seen)) [:precondition :object :spec :suspend]))))))
+      (is (= true (get-in (seen-in :refusal :judge) [:object :spec :suspend])))
+      (is (= true (get-in (seen-in :precondition :judge) [:object :spec :suspend]))))))
 
 (deftest a-refusal-is-printed-once-and-stops-the-change
   (let [precondition-ran (atom false)
@@ -133,13 +137,13 @@
     (is (re-find #"could not read what the change rests on - kubectl get did not answer" out))))
 
 (deftest an-unread-subject-after-the-confirmation-refuses
-  (let [refused (atom false)
+  (let [refused (atom [])
         {:keys [result out]} (run {:subject {:type "cronjobs"}
-                                   :refusal (fn [_] (reset! refused true) nil)}
+                                   :refusal (fn [_] (swap! refused conj mutation/*phase*) nil)}
                                   "batch/nightly"
                                   (fn [_ n] (if (= n 1) (cronjob) (unread!))))]
     (is (false? result))
-    (is (false? @refused) "the refusal never judges a read that did not answer")
+    (is (= [:derive] @refused) "the refusal judged the answered read before the confirmation, and never a read that did not answer")
     (is (re-find #"refusing: could not read what the precondition rests on - kubectl get did not answer" out))))
 
 (deftest a-subject-needs-a-select-that-picks-one
