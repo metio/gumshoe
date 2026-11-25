@@ -104,6 +104,23 @@
 ;; ---------------------------------------------------------------------------
 ;; describing (for dry-run and logs) - pure
 
+(def ^:private built-in-ops
+  "The ops perform! interprets itself."
+  #{:kubectl :kubectl-plugin :kubectl-stdin :ssh :cmd :note})
+
+(defn known-op?
+  "Whether an interpreter knows op: a built-in, or one a plugin or book
+   registered with register-effect-type!."
+  [op]
+  (or (contains? built-in-ops op) (contains? @effect-types op)))
+
+(defn unknown-ops
+  "The distinct ops of plan no interpreter knows, in plan order. run! stops at
+   the first such effect after applying the ones before it, so a change
+   refuses a plan holding one before anything of it runs."
+  [plan]
+  (into [] (comp (map first) (remove known-op?) (distinct)) plan))
+
 (defn describe
   "A one-line, human-readable form of an effect - never runs anything."
   [[op & args]]
