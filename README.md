@@ -371,7 +371,11 @@ all of them before its first step. The checks before the first change run
 before the one confirmation, which lists every later step. Before asking, the
 playbook judges every change's pick and the refusal of its first change, so it
 does not ask for a playbook whose first change will be refused; a change after
-another change or after a pause is judged when the run reaches it. The pauses split
+another change or after a pause is judged when the run reaches it. A change
+that declares `:done` is skipped when it is already done, so a playbook stopped
+part-way is run again from the top: the confirmation marks the steps that took
+effect, each is judged again when reached, and a run with nothing left asks
+nothing. The pauses split
 the playbook into segments: without a terminal it stops at a pause and names
 the `--from-segment` that continues it, and `playbook/run-segment!` takes one
 segment across a batch of subjects.
@@ -650,7 +654,9 @@ the same machine-enforced contract:
   `:subject` and says why it must not run with `:refusal`; the engine parses
   the pick, reads and pins the object, and prints the refusal. The refusal
   is judged before the confirmation, so the operator is not asked to approve
-  a change that will be refused, and again after it over fresh reads. A change to
+  a change that will be refused, and again after it over fresh reads. A
+  change with `:done true` is skipped, asking nothing, when its post-checks
+  already hold; a `:done` function narrows them and never replaces them. A change to
   several objects declares them as `:subjects`, and each is read, pinned and,
   when it moved after the confirmation, named in the refusal. Live state the
   judgement rests on that no subject covers is read again after the

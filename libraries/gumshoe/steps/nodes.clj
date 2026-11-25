@@ -10,7 +10,9 @@
    confirmation and refuses a node that was removed or replaced meanwhile. None
    refuses a node already in the state it brings about: cordon, drain and
    uncordon are idempotent, and the maintenance playbook runs again over a node
-   a failed run left cordoned. A step
+   a failed run left cordoned. Each is :done when its post-checks already
+   hold (see gumshoe.mutation), so that run skips the cordon, and the drain
+   of a node no evictable pod is left on, instead of applying them again. A step
    declares the prerequisites and options it needs, so whatever runs it derives
    its own from the steps. The book that runs a step names its :description,
    where the catalog reads it without loading the book. The bespoke parts - candidates, effect, checks - are
@@ -112,6 +114,7 @@
    :confirm {:action "cordon (mark unschedulable) a node" :destructive? false}
    :subject node-subject
    :refusal refusal
+   :done true
    :announce (fn [{:keys [target]}] (format "Cordon node %s" target))
    :effect (fn [{:keys [context target]}] (cordon-effect context target))
    :verify (fn [{:keys [context target]}] [(unschedulable-check context target)])})
@@ -130,6 +133,7 @@
              :destructive? true}
    :subject node-subject
    :refusal refusal
+   :done true
    :announce (fn [{:keys [target]}] (format "Drain node %s" target))
    ;; -1 lets each pod keep its own terminationGracePeriodSeconds
    :effect (fn [{:keys [context target opts]}] (drain-effect context target (:grace-period opts)))
@@ -143,6 +147,7 @@
    :confirm {:action "uncordon (mark schedulable) a node" :destructive? false}
    :subject node-subject
    :refusal refusal
+   :done true
    :announce (fn [{:keys [target]}] (format "Uncordon node %s" target))
    :effect (fn [{:keys [context target]}] (effect/plan (effect/kubectl context "uncordon" target)))
    :verify (fn [{:keys [context target]}] [(schedulable-check context target)])})

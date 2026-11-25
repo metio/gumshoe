@@ -223,12 +223,25 @@ and current list.
    pauses under `--dry-run`; a
    real run without a terminal stops at the first pause with a `PAUSED`
    banner naming the `--from-segment` that continues after the human acted.
+   A change whose `--help` says `skips it, asking nothing, when …` is
+   already done when its post-checks hold: the run, rehearsal included,
+   prints `already holds: <check>` and `skipped, already done: <step>`
+   instead of a plan. A playbook stopped part-way can therefore be run
+   again from the top: its confirmation marks the steps that took effect
+   `(already done)`, each is judged again when reached, and a playbook with
+   nothing left prints `every change of this playbook is already done -
+   nothing to confirm` and asks nothing. A rehearsal judges no change done
+   after one it would run or a pause it would wait at.
 3. Show the human the plan and the command without `--dry-run`, written so
    they can run it in their own session, for example
    `! bb run runbooks/kubernetes/nodes/cordon.clj --node worker-3`.
 4. After they run it, check the outcome with the matching detective. The
    final banner says what the run did: `DONE - applied and verified` is the
-   only one that promises its post-checks held, `DONE - applied; this book has
+   only one that promises its post-checks held (with `; skipped as already
+   done: …` naming the steps it found done), `DONE - already done, nothing
+   was changed - skipped: …` changed nothing because every change was
+   already done, and the run's `recordings/…/meta.edn` lists those steps
+   under `:skipped`; `DONE - applied; this book has
    no post-checks` verified nothing, and a `FAILED after N effects` banner
    names where it stopped while the effects before it stay applied. Lines
    under a failed banner headed `Recovery:` are the stopped step's guidance:
@@ -401,6 +414,23 @@ mostly data:
   name is a keyword, never one the engine binds itself (`:context`,
   `:target`, `:ref`, `:object`, `:refs`, `:objects`, …), and never in both
   maps;
+- a change that is idempotent and whose end state is cheap to read
+  declares `:done true`: when every post-check its `:verify` returns already
+  holds, each attempted once with strict reads before the confirmation, the
+  run skips the change, asks nothing, records it under `:skipped` and
+  returns true. `:refusal` is judged only for a change that is not done, so
+  "it is suspended already" becomes a skip. `:done (fn [ctx] -> bool)` adds
+  a judgement over the derived context to the post-checks and never
+  replaces them; a destructive change with a `:done` function needs a
+  `:verify`, and `:satisfied?` is an alias. A read that did not answer is
+  never done: the change then runs as one that is not done, after saying it
+  could not tell. Toggle pairs declare it for both sides (`:done false` in
+  the declaration opts out), and so do the node steps, `workloads/scale`
+  and the cnpg fence books. Write `:done` only where a post-check that holds
+  means the change has nothing left to do: a restart's "rolled out" holds
+  before the restart too. In a playbook a change judged done alters
+  nothing, so the change after it is judged before the confirmation as the
+  first one would be;
 - `:derive (fn [ctx] -> map)` and `:recheck (fn [ctx] -> map)` are the
   older spelling and keep working; a spec writes them or named `:reads` and
   `:values`, never both, since a map they return could hide a named entry.

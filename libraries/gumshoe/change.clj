@@ -23,6 +23,7 @@
       :announce (fn [ctx] -> message), or false for a change that posts nothing
       :effect   (fn [ctx] -> plan)
       :verify   (fn [ctx] -> post-checks)   or  :no-verify \"why\"
+      :done     true or (fn [ctx] -> bool)
       :recovery \"...\" or (fn [ctx] -> string)
       :confirmed? bool}
 
@@ -70,6 +71,19 @@
    before the confirmation, gumshoe.flow's \"its precondition no longer
    holds\" after it), which add nothing of their own.
 
+   :done says the change is already satisfied, so a run skips it instead
+   of confirming and applying it again. `true` means \"when every post-check
+   already holds\": the checks :verify returns are each attempted once, as
+   gumshoe.verify/attempt runs them, before the confirmation. A function
+   receives the derived context and returns whether what the change brings
+   about already holds; beside a :verify it narrows the post-checks and
+   never replaces them, so the change is done only when the function says
+   so and every post-check holds as well. A destructive change is never
+   skipped on evidence its post-check would not accept, so a destructive
+   :done function needs a :verify, and :done true always needs one.
+   Every read is strict, and a read that did not answer is never done (see
+   gumshoe.mutation).
+
    Aliases, accepted indefinitely:
      :subject {..}         the :pick entry of :subjects
      :subjects (fn)        the :target entry of :subjects
@@ -80,6 +94,7 @@
      :empty-message \"..\"  [:select :empty-message]
      :announce? false      :announce false; :announce? true is the default
                            and is dropped
+     :satisfied? x         :done x
      :derive (fn)          the :values entry named `derive-entry`: a value
                            whose result, a map, is merged into the context
                            instead of bound under one name. It runs after
@@ -97,7 +112,7 @@
    could hide a named entry, and the spec is refused instead of one of the
    two winning.
    A nil alias is absent, except :announce?, which the runbook harness reads
-   as given.
+   as given. A :done or :satisfied? of nil or false is absent too.
 
    normalize refuses, with an ex-info carrying ::invalid, a spec that names
    one thing two ways or that the engine could not run as written: a
@@ -256,6 +271,31 @@
                         (first (sort both)))
                 {:both (vec both)}))))
 
+(defn- done-of
+  "The canonical :done of spec: :done or its alias :satisfied?, true or a
+   function, nil when absent (nil or false)."
+  [spec]
+  (let [given (filter #(some? (get spec %)) [:done :satisfied?])]
+    (when (= 2 (count given))
+      (invalid! "the spec has :done and :satisfied? - write one of them" {}))
+    (let [done (some #(get spec %) [:done :satisfied?])]
+      (cond
+        (or (nil? done) (false? done)) nil
+        (or (true? done) (fn? done)) done
+        :else (invalid! (format ":done is true, to skip the change when its post-checks already hold, or (fn [ctx] -> bool), not %s"
+                                (pr-str done))
+                        {:done done})))))
+
+(defn- check-done!
+  [{:keys [done verify confirm]}]
+  (cond
+    (and (true? done) (nil? verify))
+    (invalid! ":done true skips the change when its post-checks already hold, and the spec has no :verify"
+              {:done done})
+    (and done (nil? verify) (true? (:destructive? confirm)))
+    (invalid! "a destructive change is skipped as done only on evidence its post-check accepts, so its :done needs a :verify"
+              {:done done})))
+
 (defn- check-runnable!
   [{:keys [select subjects refusal reads connect]}]
   (when (and (contains? reads recheck-entry) (nil? refusal))
@@ -282,16 +322,19 @@
         announce (announce-of spec)
         reads (named-of spec :reads :recheck recheck-entry)
         values (named-of spec :values :derive derive-entry)
+        done (done-of spec)
         canonical (cond-> (dissoc spec :subject :subjects :pin :precondition :refusal
                                   :empty-message :announce? :announce :select
-                                  :derive :recheck :reads :values)
+                                  :derive :recheck :reads :values :done :satisfied?)
                     (seq subjects) (assoc :subjects subjects)
                     (seq reads) (assoc :reads reads)
                     (seq values) (assoc :values values)
                     (some? refusal) (assoc :refusal refusal)
                     (some? select) (assoc :select select)
-                    (some? announce) (assoc :announce announce))]
+                    (some? announce) (assoc :announce announce)
+                    (some? done) (assoc :done done))]
     (check-entries-apart! canonical)
+    (check-done! canonical)
     (check-runnable! canonical)
     canonical))
 
@@ -327,6 +370,11 @@
   "The function a canonical spec's :derive alias declared, or nil."
   [spec]
   (get-in spec [:values derive-entry]))
+
+(defn done
+  "The :done of a canonical spec: true, a function, or nil."
+  [spec]
+  (:done spec))
 
 (defn recheck-alias
   "The function a canonical spec's :recheck alias declared, or nil."

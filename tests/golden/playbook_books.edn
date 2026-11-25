@@ -596,6 +596,209 @@
    :banner "DONE - applied and verified",
    :recovery [],
    :waited ["perform the maintenance on the node now"]},
+  :resumed-after-cordon
+  {:result true,
+   :out
+   ["▸ Node: n1"
+    "── 1/5 🔬 Disruption check ──────────────────────────────────────────────────────"
+    "── 🔍 Evidence ──────────────────────────────────────────────────────────────────"
+    "  ▸ horizontalpodautoscalers"
+    "  ▸ poddisruptionbudgets"
+    "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
+    "  pdbs (1 finding)"
+    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
+    "        shop/web"
+    "        hint: node drains will block on the pods this budget covers"
+    "────────────────────────────────────────────────────────────────────────────────"
+    "0 critical, 1 warning, 0 info"
+    "✓ 2 other checks came back clean: hpas, hpa-failures"
+    "── 2/5 🚧 Cordon ────────────────────────────────────────────────────────────────"
+    "✅ already holds: node n1 is unschedulable"
+    "✅ skipped, already done: 🚧 Cordon"
+    "── 3/5 💨 Drain ─────────────────────────────────────────────────────────────────"
+    "This will drain a node - every pod on it is evicted and emptyDir data is deleted on 'cluster':"
+    "  - n1"
+    "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
+    "✅ verified: node n1 is unschedulable"
+    "✅ verified: no evictable pods remain on node n1"
+    "── ⏸  perform the maintenance on the node now ──────────────────────────────────"
+    "── 4/5 ✅ Uncordon ──────────────────────────────────────────────────────────────"
+    "This will uncordon (mark schedulable) a node on 'cluster':"
+    "  - n1"
+    "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
+    "✅ verified: node n1 is schedulable"
+    "── 5/5 🔬 Verification ──────────────────────────────────────────────────────────"
+    "── 🔍 Evidence ──────────────────────────────────────────────────────────────────"
+    "  ▸ nodes"
+    "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
+    "  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
+    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
+    "  ✓ Nodes running different kubelet minor versions"
+    "────────────────────────────────────────────────────────────────────────────────"
+    "✅ no issues found - 3 checks passed"],
+   :confirmations
+   [{:action
+     "take a node out of service for maintenance and bring it back",
+     :destructive? true,
+     :items
+     ["n1"
+      "2/5 cordon (mark unschedulable) a node (already done)"
+      "3/5 drain a node - every pod on it is evicted and emptyDir data is deleted"
+      "⏸  perform the maintenance on the node now"
+      "4/5 uncordon (mark schedulable) a node"
+      "5/5 🔬 Verification"]}],
+   :writes
+   ["drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1"
+    "uncordon n1"],
+   :banner
+   "DONE - applied and verified; skipped as already done: 🚧 Cordon",
+   :recovery [],
+   :waited ["perform the maintenance on the node now"]},
+  :resumed-after-drain
+  {:result true,
+   :out
+   ["▸ Node: n1"
+    "── 1/5 🔬 Disruption check ──────────────────────────────────────────────────────"
+    "── 🔍 Evidence ──────────────────────────────────────────────────────────────────"
+    "  ▸ horizontalpodautoscalers"
+    "  ▸ poddisruptionbudgets"
+    "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
+    "  pdbs (1 finding)"
+    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
+    "        shop/web"
+    "        hint: node drains will block on the pods this budget covers"
+    "────────────────────────────────────────────────────────────────────────────────"
+    "0 critical, 1 warning, 0 info"
+    "✓ 2 other checks came back clean: hpas, hpa-failures"
+    "── 2/5 🚧 Cordon ────────────────────────────────────────────────────────────────"
+    "✅ already holds: node n1 is unschedulable"
+    "✅ skipped, already done: 🚧 Cordon"
+    "── 3/5 💨 Drain ─────────────────────────────────────────────────────────────────"
+    "✅ already holds: node n1 is unschedulable"
+    "✅ already holds: no evictable pods remain on node n1"
+    "✅ skipped, already done: 💨 Drain"
+    "── ⏸  perform the maintenance on the node now ──────────────────────────────────"
+    "── 4/5 ✅ Uncordon ──────────────────────────────────────────────────────────────"
+    "This will uncordon (mark schedulable) a node on 'cluster':"
+    "  - n1"
+    "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
+    "✅ verified: node n1 is schedulable"
+    "── 5/5 🔬 Verification ──────────────────────────────────────────────────────────"
+    "── 🔍 Evidence ──────────────────────────────────────────────────────────────────"
+    "  ▸ nodes"
+    "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
+    "  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
+    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
+    "  ✓ Nodes running different kubelet minor versions"
+    "────────────────────────────────────────────────────────────────────────────────"
+    "✅ no issues found - 3 checks passed"],
+   :confirmations
+   [{:action
+     "take a node out of service for maintenance and bring it back",
+     :destructive? true,
+     :items
+     ["n1"
+      "2/5 cordon (mark unschedulable) a node (already done)"
+      "3/5 drain a node - every pod on it is evicted and emptyDir data is deleted (already done)"
+      "⏸  perform the maintenance on the node now"
+      "4/5 uncordon (mark schedulable) a node"
+      "5/5 🔬 Verification"]}],
+   :writes ["uncordon n1"],
+   :banner
+   "DONE - applied and verified; skipped as already done: 🚧 Cordon, 💨 Drain",
+   :recovery [],
+   :waited ["perform the maintenance on the node now"]},
+  :resumed-after-drain-dry-run
+  {:result true,
+   :out
+   ["▸ Node: n1"
+    "── 1/5 🔬 Disruption check ──────────────────────────────────────────────────────"
+    "── 🔍 Evidence ──────────────────────────────────────────────────────────────────"
+    "  ▸ horizontalpodautoscalers"
+    "  ▸ poddisruptionbudgets"
+    "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
+    "  pdbs (1 finding)"
+    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
+    "        shop/web"
+    "        hint: node drains will block on the pods this budget covers"
+    "────────────────────────────────────────────────────────────────────────────────"
+    "0 critical, 1 warning, 0 info"
+    "✓ 2 other checks came back clean: hpas, hpa-failures"
+    "── 2/5 🚧 Cordon ────────────────────────────────────────────────────────────────"
+    "✅ already holds: node n1 is unschedulable"
+    "✅ skipped, already done: 🚧 Cordon"
+    "── 3/5 💨 Drain ─────────────────────────────────────────────────────────────────"
+    "✅ already holds: node n1 is unschedulable"
+    "✅ already holds: no evictable pods remain on node n1"
+    "✅ skipped, already done: 💨 Drain"
+    "── ⏸  perform the maintenance on the node now ──────────────────────────────────"
+    "  would pause: perform the maintenance on the node now"
+    "── 4/5 ✅ Uncordon ──────────────────────────────────────────────────────────────"
+    "────────────────────────────────────────────────────────────────────────────────"
+    "  🔍 DRY RUN - nothing will be changed"
+    "────────────────────────────────────────────────────────────────────────────────"
+    "This will uncordon (mark schedulable) a node on 'cluster':"
+    "  - n1"
+    "  would run: kubectl uncordon n1"
+    "── 5/5 🔬 Verification ──────────────────────────────────────────────────────────"
+    "── 🔍 Evidence ──────────────────────────────────────────────────────────────────"
+    "  ▸ nodes"
+    "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
+    "  nodes (1 finding)"
+    "    💡 INFO     node is cordoned (unschedulable)"
+    "        n1"
+    "        hint: uncordon with runbooks/kubernetes/nodes/uncordon.clj when the work on it is done"
+    "────────────────────────────────────────────────────────────────────────────────"
+    "0 critical, 0 warning, 1 info"
+    "✓ 2 other checks came back clean: node-removals, kubelet-skew"],
+   :confirmations [],
+   :writes [],
+   :banner
+   "DONE - already done, nothing was changed - skipped: 🚧 Cordon, 💨 Drain",
+   :recovery []},
+  :resumed-after-drain-unattended
+  {:result false,
+   :out
+   ["▸ Node: n1"
+    "── 1/5 🔬 Disruption check ──────────────────────────────────────────────────────"
+    "── 🔍 Evidence ──────────────────────────────────────────────────────────────────"
+    "  ▸ horizontalpodautoscalers"
+    "  ▸ poddisruptionbudgets"
+    "── 🔬 Findings ──────────────────────────────────────────────────────────────────"
+    "  pdbs (1 finding)"
+    "    🔶 WARNING  PodDisruptionBudget allows zero disruptions"
+    "        shop/web"
+    "        hint: node drains will block on the pods this budget covers"
+    "────────────────────────────────────────────────────────────────────────────────"
+    "0 critical, 1 warning, 0 info"
+    "✓ 2 other checks came back clean: hpas, hpa-failures"
+    "── 2/5 🚧 Cordon ────────────────────────────────────────────────────────────────"
+    "✅ already holds: node n1 is unschedulable"
+    "✅ skipped, already done: 🚧 Cordon"
+    "── 3/5 💨 Drain ─────────────────────────────────────────────────────────────────"
+    "✅ already holds: node n1 is unschedulable"
+    "✅ already holds: no evictable pods remain on node n1"
+    "✅ skipped, already done: 💨 Drain"
+    "── ⏸  perform the maintenance on the node now ──────────────────────────────────"
+    "🔶 no terminal to wait at - continue with --from-segment 2 once this is done: perform the maintenance on the node now"],
+   :confirmations
+   [{:action
+     "take a node out of service for maintenance and bring it back",
+     :destructive? true,
+     :items
+     ["n1"
+      "2/5 cordon (mark unschedulable) a node (already done)"
+      "3/5 drain a node - every pod on it is evicted and emptyDir data is deleted (already done)"
+      "⏸  perform the maintenance on the node now"
+      "4/5 uncordon (mark schedulable) a node"
+      "5/5 🔬 Verification"]}],
+   :writes [],
+   :banner
+   "PAUSED - continue with --from-segment 2 once this is done: perform the maintenance on the node now",
+   :recovery []},
   :surface
   {:description
    "Playbook: cordon, drain, maintain, uncordon, and verify a node",
@@ -629,10 +832,10 @@
     "  picks one Node (--node, or interactively), then:"
     "  1/5 🔬 Disruption check - reads and reports"
     "  - asks once to confirm every step below (destructive - type yes)"
-    "  2/5 🚧 Cordon - cordon (mark unschedulable) a node, verified"
-    "  3/5 💨 Drain - drain a node - every pod on it is evicted and emptyDir data is deleted (destructive), verified"
+    "  2/5 🚧 Cordon - cordon (mark unschedulable) a node, verified, skipped when already done"
+    "  3/5 💨 Drain - drain a node - every pod on it is evicted and emptyDir data is deleted (destructive), verified, skipped when already done"
     "  ⏸  perform the maintenance on the node now - waits for ENTER; --from-segment 2 continues here"
-    "  4/5 ✅ Uncordon - uncordon (mark schedulable) a node, verified"
+    "  4/5 ✅ Uncordon - uncordon (mark schedulable) a node, verified, skipped when already done"
     "  5/5 🔬 Verification - reads and reports"
     ""
     "Needs:"

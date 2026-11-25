@@ -19,6 +19,7 @@
        :patch      (fn [wanted] -> merge patch)     ; instead of :effect
        :applied?   (fn [object wanted] -> bool)     ; the subject read again
        :verify     {:timeout 30 :interval 3}
+       :done       false                            ; optional, see below
        :on  {:verb \"pause\"                          ; wanted true
              :empty-message \"every Schedule is paused already\"
              :confirm  {:action \"pause a backup schedule\"}
@@ -35,6 +36,13 @@
    one post-check waits until :applied? holds for the subject read again.
    :applied? judges an object that exists: a subject the read does not find
    verifies neither side, since an object that is gone is not resumed either.
+
+   Each side is :done when its post-check already holds (see
+   gumshoe.mutation): a run against an object already in the wanted state
+   skips it as done instead of refusing it, so a playbook started again
+   after an interruption walks past the side that took effect. A
+   declaration whose post-check holds before its change is needed says
+   :done false.
 
    :candidates defaults to the objects of the subject's type in every
    namespace that :refusal lets through, sorted, as \"<namespace>/<name>\".
@@ -63,7 +71,7 @@
 (defn side
   "The mutation spec of one side of a pair declaration, for wanted and its
    words (see the namespace doc)."
-  [{:keys [spec candidates refusal items effect patch applied? verify]} wanted
+  [{:keys [spec candidates refusal items effect patch applied? verify done] :or {done true}} wanted
    {:keys [verb announce verified] :as words}]
   (let [type (get-in spec [:subject :type])]
     (merge spec
@@ -80,6 +88,7 @@
             :effect (if effect
                       #(effect % wanted)
                       (fn [{:keys [context ref]}] (merge-patch-plan context type ref (patch wanted))))
+            :done done
             :verify (fn [{:keys [target] :as ctx}]
                       [(merge verify (:verify words)
                               {:description (format verified target)

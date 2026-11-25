@@ -30,6 +30,8 @@
             :invalid "the pick is not \"<namespace>/<cluster> <instance>\""
             :facts operations/fenced}
   :refusal (fn [{:keys [ref object]}] (operations/unfence-refusal object (:instance ref)))
+  ;; an instance already in the wanted fence state is skipped as done
+  :done true
   :announce (fn [{:keys [ref]}] (format "Unfence %s in %s/%s" (:instance ref) (:namespace ref) (:cluster ref)))
   :effect (fn [{:keys [context ref object]}]
             (if-let [change (operations/fence-change :unfence object (:instance ref))]

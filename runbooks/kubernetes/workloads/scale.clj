@@ -42,6 +42,8 @@
              ["scale a workload"]))
   :refusal (fn [{:keys [context ref object replicas]}]
              (workloads/scale-refusal-given (:kind ref) object (hpas context ref) replicas))
+  ;; a workload already running that many ready replicas is skipped as done
+  :done true
   :announce (fn [{:keys [target replicas]}] (format "Scale %s to %s replica(s)" target replicas))
   :effect (fn [{:keys [context ref replicas]}]
             (effect/plan (apply effect/kubectl context (workloads/scale-args ref replicas))))

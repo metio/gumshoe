@@ -220,7 +220,9 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
-  :refused {:stopped "refusing: it is not suspended"},
+  :refused
+  {:stopped
+   "✅ already holds: CronJob batch/nightly is resumed\n✅ skipped, already done: resume a CronJob"},
   :spec-changed
   {:action "resume a CronJob",
    :destructive? false,
@@ -275,6 +277,7 @@
    :details
    ["What it does:"
     "  picks one CronJob by namespace and name (--namespace and --job, or interactively)"
+    "  skips it, asking nothing, when its post-checks already hold"
     "  asks to confirm: resume a CronJob"
     "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
@@ -550,7 +553,9 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
-  :refused {:stopped "refusing: it is suspended already"},
+  :refused
+  {:stopped
+   "✅ already holds: CronJob batch/nightly is suspended\n✅ skipped, already done: suspend a CronJob"},
   :spec-changed
   {:action "suspend a CronJob",
    :destructive? false,
@@ -604,6 +609,7 @@
    :details
    ["What it does:"
     "  picks one CronJob by namespace and name (--namespace and --job, or interactively)"
+    "  skips it, asking nothing, when its post-checks already hold"
     "  asks to confirm: suspend a CronJob"
     "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
@@ -1121,18 +1127,8 @@
    :items ["n1"],
    :plan [[:kubectl "ctx" "cordon" "n1"]]},
   :refused
-  {:action "cordon (mark unschedulable) a node",
-   :destructive? false,
-   :items ["n1"],
-   :step "cordon (mark unschedulable) a node",
-   :plan [[:kubectl "ctx" "cordon" "n1"]],
-   :precondition {:result true, :out ""},
-   :announce "Cordon node n1",
-   :checks
-   [{:description "node n1 is unschedulable",
-     :timeout nil,
-     :interval nil,
-     :holds true}]},
+  {:stopped
+   "✅ already holds: node n1 is unschedulable\n✅ skipped, already done: cordon (mark unschedulable) a node"},
   :spec-changed
   {:action "cordon (mark unschedulable) a node",
    :destructive? false,
@@ -1170,6 +1166,7 @@
    :details
    ["What it does:"
     "  picks one Node (--node, or interactively)"
+    "  skips it, asking nothing, when its post-checks already hold"
     "  asks to confirm: cordon (mark unschedulable) a node"
     "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
@@ -1206,6 +1203,9 @@
    "🔶 Node 'n2' is not a valid choice, please select one\n❌ no Node selected"}},
  "runbooks/kubernetes/nodes/drain.clj"
  {:absent {:stopped "refusing: node n1 no longer exists"},
+  :done
+  {:stopped
+   "✅ already holds: node n1 is unschedulable\n✅ already holds: no evictable pods remain on node n1\n✅ skipped, already done: drain a node - every pod on it is evicted and emptyDir data is deleted"},
   :dry-run
   {:result true,
    :out
@@ -1269,7 +1269,7 @@
     {:description "no evictable pods remain on node n1",
      :timeout 120,
      :interval 10,
-     :holds true}]},
+     :holds false}]},
   :picked
   {:result true,
    :out "▸ Node: n1",
@@ -1336,7 +1336,7 @@
     {:description "no evictable pods remain on node n1",
      :timeout 120,
      :interval 10,
-     :holds true}]},
+     :holds false}]},
   :surface
   {:description
    "Drains a single node: cordons it and evicts every pod running on it",
@@ -1366,6 +1366,7 @@
    :details
    ["What it does:"
     "  picks one Node (--node, or interactively)"
+    "  skips it, asking nothing, when its post-checks already hold"
     "  asks to confirm: drain a node - every pod on it is evicted and emptyDir data is deleted (destructive - type yes)"
     "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
@@ -1718,18 +1719,8 @@
    :items ["n2"],
    :plan [[:kubectl "ctx" "uncordon" "n2"]]},
   :refused
-  {:action "uncordon (mark schedulable) a node",
-   :destructive? false,
-   :items ["n1"],
-   :step "uncordon (mark schedulable) a node",
-   :plan [[:kubectl "ctx" "uncordon" "n1"]],
-   :precondition {:result true, :out ""},
-   :announce "Uncordon node n1",
-   :checks
-   [{:description "node n1 is schedulable",
-     :timeout nil,
-     :interval nil,
-     :holds true}]},
+  {:stopped
+   "✅ already holds: node n1 is schedulable\n✅ skipped, already done: uncordon (mark schedulable) a node"},
   :spec-changed
   {:action "uncordon (mark schedulable) a node",
    :destructive? false,
@@ -1763,6 +1754,7 @@
    :details
    ["What it does:"
     "  picks one Node (--node, or interactively)"
+    "  skips it, asking nothing, when its post-checks already hold"
     "  asks to confirm: uncordon (mark schedulable) a node"
     "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
@@ -2417,7 +2409,9 @@
      :timeout 60,
      :interval 5,
      :holds false}]},
-  :refused {:stopped "refusing: it is paused already"},
+  :refused
+  {:stopped
+   "✅ already holds: Deployment shop/web is paused\n✅ skipped, already done: pause a Deployment's rollouts"},
   :spec-changed
   {:action "pause a Deployment's rollouts",
    :destructive? false,
@@ -2464,6 +2458,7 @@
    :details
    ["What it does:"
     "  picks one Deployment (--pick, or interactively)"
+    "  skips it, asking nothing, when its post-checks already hold"
     "  asks to confirm: pause a Deployment's rollouts"
     "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
@@ -2638,7 +2633,9 @@
      :timeout 600,
      :interval 5,
      :holds false}]},
-  :refused {:stopped "refusing: it is not paused"},
+  :refused
+  {:stopped
+   "✅ already holds: Deployment shop/web is resumed and rolled out\n✅ skipped, already done: resume a Deployment and roll out the changes made while it was paused"},
   :spec-changed
   {:action
    "resume a Deployment and roll out the changes made while it was paused",
@@ -2687,6 +2684,7 @@
    :details
    ["What it does:"
     "  picks one Deployment (--pick, or interactively)"
+    "  skips it, asking nothing, when its post-checks already hold"
     "  asks to confirm: resume a Deployment and roll out the changes made while it was paused"
     "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
@@ -2848,6 +2846,9 @@
      :holds false}]}},
  "runbooks/kubernetes/workloads/scale.clj"
  {:absent {:stopped "refusing: the workload no longer exists"},
+  :done
+  {:stopped
+   "✅ already holds: Deployment shop/web runs 3 ready replica(s)\n✅ skipped, already done: scale a workload"},
   :failed-after-applying
   {:result false,
    :out
@@ -2935,6 +2936,7 @@
    :details
    ["What it does:"
     "  picks one Workload (--pick, or interactively)"
+    "  skips it, asking nothing, when its post-checks already hold"
     "  asks to confirm: scale a workload"
     "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
@@ -3354,7 +3356,9 @@
      :timeout 60,
      :interval 5,
      :holds false}]},
-  :refused {:stopped "refusing: pg-2 is fenced already"},
+  :refused
+  {:stopped
+   "✅ already holds: pg-2 is fenced\n✅ skipped, already done: fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes"},
   :spec-changed
   {:action
    "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
@@ -3405,6 +3409,7 @@
    :details
    ["What it does:"
     "  picks one Fence (--pick, or interactively)"
+    "  skips it, asking nothing, when its post-checks already hold"
     "  asks to confirm: fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes (destructive - type yes)"
     "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
@@ -3929,7 +3934,9 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
-  :refused {:stopped "refusing: it is not suspended"},
+  :refused
+  {:stopped
+   "✅ already holds: ScheduledBackup db/nightly is resumed\n✅ skipped, already done: resume scheduled backups"},
   :spec-changed
   {:action "resume scheduled backups",
    :destructive? false,
@@ -3975,6 +3982,7 @@
    :details
    ["What it does:"
     "  picks one ScheduledBackup (--scheduled-backup, or interactively)"
+    "  skips it, asking nothing, when its post-checks already hold"
     "  asks to confirm: resume scheduled backups"
     "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
@@ -4040,7 +4048,9 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
-  :refused {:stopped "refusing: it is suspended already"},
+  :refused
+  {:stopped
+   "✅ already holds: ScheduledBackup db/nightly is suspended\n✅ skipped, already done: suspend scheduled backups"},
   :spec-changed
   {:action "suspend scheduled backups",
    :destructive? false,
@@ -4087,6 +4097,7 @@
    :details
    ["What it does:"
     "  picks one ScheduledBackup (--scheduled-backup, or interactively)"
+    "  skips it, asking nothing, when its post-checks already hold"
     "  asks to confirm: suspend scheduled backups"
     "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
@@ -4241,6 +4252,9 @@
      :holds false}]}},
  "tools/cnpg/runbooks/unfence.clj"
  {:absent {:stopped "refusing: the cluster no longer exists"},
+  :done
+  {:stopped
+   "✅ already holds: pg-2 is no longer fenced\n✅ skipped, already done: lift the fence - the operator takes the instance back into service"},
   :invalid
   {:stopped
    "refusing: the pick is not \"<namespace>/<cluster> <instance>\""},
@@ -4321,6 +4335,7 @@
    :details
    ["What it does:"
     "  picks one Unfence (--pick, or interactively)"
+    "  skips it, asking nothing, when its post-checks already hold"
     "  asks to confirm: lift the fence - the operator takes the instance back into service (destructive - type yes)"
     "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
@@ -4691,7 +4706,9 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
-  :refused {:stopped "refusing: it is not suspended"},
+  :refused
+  {:stopped
+   "✅ already holds: Kustomization flux-system/apps is no longer suspended\n✅ skipped, already done: resume a Flux object"},
   :spec-changed
   {:action "resume a Flux object",
    :destructive? false,
@@ -4756,6 +4773,7 @@
    :details
    ["What it does:"
     "  picks one Resume (--pick, or interactively)"
+    "  skips it, asking nothing, when its post-checks already hold"
     "  asks to confirm: resume a Flux object"
     "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
@@ -4834,7 +4852,9 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
-  :refused {:stopped "refusing: it is suspended already"},
+  :refused
+  {:stopped
+   "✅ already holds: Kustomization flux-system/apps is suspended\n✅ skipped, already done: suspend a Flux object"},
   :spec-changed
   {:action "suspend a Flux object",
    :destructive? false,
@@ -4890,6 +4910,7 @@
    :details
    ["What it does:"
     "  picks one Suspend (--pick, or interactively)"
+    "  skips it, asking nothing, when its post-checks already hold"
     "  asks to confirm: suspend a Flux object"
     "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
@@ -6174,7 +6195,9 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
-  :refused {:stopped "refusing: it is paused already"},
+  :refused
+  {:stopped
+   "✅ already holds: Schedule velero/daily is paused\n✅ skipped, already done: pause a backup schedule"},
   :spec-changed
   {:action "pause a backup schedule",
    :destructive? false,
@@ -6220,6 +6243,7 @@
    :details
    ["What it does:"
     "  picks one Schedule (--schedule, or interactively)"
+    "  skips it, asking nothing, when its post-checks already hold"
     "  asks to confirm: pause a backup schedule"
     "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
@@ -6286,7 +6310,9 @@
      :timeout 30,
      :interval 3,
      :holds false}]},
-  :refused {:stopped "refusing: it is not paused"},
+  :refused
+  {:stopped
+   "✅ already holds: Schedule velero/daily is resumed\n✅ skipped, already done: resume a backup schedule"},
   :spec-changed
   {:action "resume a backup schedule",
    :destructive? false,
@@ -6332,6 +6358,7 @@
    :details
    ["What it does:"
     "  picks one Schedule (--schedule, or interactively)"
+    "  skips it, asking nothing, when its post-checks already hold"
     "  asks to confirm: resume a backup schedule"
     "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
