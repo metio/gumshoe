@@ -56,6 +56,12 @@
                          "for ResourceExhausted. backend body: "
                          (clip body))
                 (clip body))}]
+      (and (contains? evidence :flows) (nil? (:flows evidence)))
+      [{:severity :critical
+        :component (str url)
+        :summary (format "the Whisker flow API answered %s without a flow log" status)
+        :hint (str "the body is not JSON - a proxy or the Whisker web app answered the "
+                   "backend path; body: " (clip body))}]
       :else [])))
 
 (defn detect-denied-flows

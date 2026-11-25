@@ -97,6 +97,37 @@
      :pending-action (:action pending)
      :pending-policy (policy-ref pending)}))
 
+(defn- sse-framing?
+  "Pure: a server-sent-event line that frames the stream rather than carrying
+   data - a comment, an event name, an id or a retry hint."
+  [line]
+  (boolean (re-find #"^\s*(:|event:|id:|retry:)" line)))
+
+(defn- unparsable-body?
+  "Pure: a body that carries content, none of which is JSON - the HTML of
+   Whisker's own web app or of an authenticating proxy answering 200 for the
+   backend path. Such an answer holds no flow log, and reading it as an empty
+   window would pass the flow checks on a window nobody read. A blank body,
+   or a stream of nothing but event framing, is an empty window."
+  [body json-body]
+  (and (nil? json-body)
+       (let [content (->> (str/split-lines (str body))
+                          (map #(str/replace % #"^\s*data:\s*" ""))
+                          (remove str/blank?)
+                          (remove sse-framing?))]
+         (and (seq content)
+              (not-any? #(try (some? (json/parse-string % true)) (catch Exception _ false))
+                        content)))))
+
+(defn window-flows
+  "Pure: the flows of one window as the rows the detectives judge, or nil when
+   the window was not read - the API did not answer, answered other than 2xx,
+   or answered 2xx with a body that holds no JSON. nil marks the flow checks
+   unread, where an empty list would report a clean window."
+  [response body json-body]
+  (when (and (http/ok? response) (not (unparsable-body? body json-body)))
+    (mapv normalise (parse-body body json-body))))
+
 (defn- list-evidence!
   "One buffered window. Returns the response map plus :flows and :mode."
   [{:keys [url user password window]}]
@@ -109,14 +140,13 @@
      :status (:status response)
      :error (:error response)
      :body (:body response)
-     :flows (if (http/ok? response)
-              (mapv normalise (parse-body (:body response) (:json response)))
-              [])}))
+     :flows (window-flows response (:body response) (:json response))}))
 
 (defn- stream-evidence!
   "The same window read from the watch stream for at most deadline-ms. A stream
    that delivers nothing is reported as reachable with no flows, which the
-   detectives read as a clean window rather than a fault."
+   detectives read as a clean window rather than a fault; a stream that does
+   not answer 2xx, or delivers only lines that are not JSON, has nil flows."
   [{:keys [url user password window deadline-ms]}]
   (let [target (watch-url url window)
         response (http/fetch-lines! target
@@ -131,9 +161,7 @@
      :status (:status response)
      :error (:error response)
      :body (:body response)
-     :flows (if (http/ok? response)
-              (mapv normalise (parse-body (str/join "\n" lines) nil))
-              [])}))
+     :flows (window-flows response (str/join "\n" lines) nil)}))
 
 (defn collect-evidence!
   "Fetches one window of flows, buffered where that works and streamed where the

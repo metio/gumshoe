@@ -5,7 +5,9 @@
   (:require [cheshire.core]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.calico.flows :as flows]
-            [gumshoe.detectives.flows :as detectives]))
+            [gumshoe.detective :as detective]
+            [gumshoe.detectives.flows :as detectives]
+            [gumshoe.http :as http]))
 
 (defn- summaries [findings] (set (map :summary findings)))
 
@@ -126,3 +128,53 @@
   (let [findings (detectives/detect-api-unreachable {:url "https://whisker.example.org"
                                                      :reachable false :error "connection refused"})]
     (is (= #{"the Whisker flow API did not answer"} (summaries findings)))))
+
+(defn- unread-checks
+  "The names of the flow checks a report would list as unread for evidence."
+  [evidence]
+  (set (map :name (filter :unread (detective/mark-unread detectives/detectives evidence)))))
+
+(deftest window-flows-is-nil-unless-the-api-answered-2xx-test
+  (let [line (cheshire.core/generate-string cert-manager-deny)]
+    (is (nil? (flows/window-flows {:reachable false :error "refused"} nil nil)) "unreachable")
+    (is (nil? (flows/window-flows {:reachable true :status 401} "nope" nil)) "401")
+    (is (nil? (flows/window-flows {:reachable true :status 500} line nil)) "500 with a flow body")
+    (is (= 1 (count (flows/window-flows {:reachable true :status 200} line nil))) "200 with a flow")))
+
+(deftest window-flows-is-nil-for-a-2xx-body-that-is-not-json-test
+  (is (nil? (flows/window-flows {:reachable true :status 200}
+                                "<!doctype html>\n<html><body>Whisker</body></html>" nil))
+      "the web app's index.html answered for the backend path"))
+
+(deftest window-flows-keeps-an-empty-window-empty-test
+  (is (= [] (flows/window-flows {:reachable true :status 200} "" nil)) "a blank body")
+  (is (= [] (flows/window-flows {:reachable true :status 200} "[]" [])) "an empty array")
+  (is (= [] (flows/window-flows {:reachable true :status 200} ": keepalive\nevent: ping\n" nil))
+      "a stream of nothing but event framing"))
+
+(deftest flow-checks-are-unread-when-the-api-did-not-answer-test
+  (doseq [[label response] [["unreachable" {:reachable false :error "connection refused"}]
+                            ["non-2xx" {:reachable true :status 503 :body "busy"}]
+                            ["html" {:reachable true :status 200 :body "<html></html>"}]]]
+    (with-redefs [http/fetch (fn [& _] response)
+                  http/fetch-lines! (fn [& _] (assoc response :lines []))]
+      (let [evidence (flows/collect-evidence! {:url "https://whisker.example.org" :window 60})]
+        (is (nil? (:flows evidence)) label)
+        (is (= #{"calico-denied-flows" "calico-staged-disagreement"} (unread-checks evidence)) label)))))
+
+(deftest flow-checks-read-an-answered-empty-window-test
+  (with-redefs [http/fetch (fn [& _] {:reachable true :status 200 :body "[]" :json []})]
+    (let [evidence (flows/collect-evidence! {:url "https://whisker.example.org" :window 60})]
+      (is (= [] (:flows evidence)))
+      (is (= #{} (unread-checks evidence))))))
+
+(deftest a-2xx-without-a-flow-log-is-critical-test
+  (let [findings (detectives/detect-api-unreachable {:url "https://whisker.example.org/whisker-backend/flows"
+                                                     :reachable true :status 200
+                                                     :body "<html></html>" :flows nil})]
+    (is (= #{"the Whisker flow API answered 200 without a flow log"} (summaries findings)))
+    (is (= :critical (:severity (first findings))))))
+
+(deftest a-2xx-with-a-flow-log-answers-test
+  (is (empty? (detectives/detect-api-unreachable {:url "https://whisker.example.org" :reachable true
+                                                  :status 200 :flows []}))))
