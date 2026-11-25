@@ -28,7 +28,7 @@
       (is (not (http/ok? response))))))
 
 (deftest a-throwing-detective-does-not-sink-the-investigation
-  (testing "one broken detective yields a warning; the others still report"
+  (testing "one broken detective yields a critical :crashed finding; the others still report"
     (let [detectives [{:name "boom" :requires [] :detect (fn [_] (throw (ex-info "kaboom" {})))}
                       {:name "fine" :requires []
                        :detect (fn [_] [{:severity :info :component "x" :summary "ok"}])}]
@@ -36,7 +36,7 @@
       (is (= 2 (count findings)))
       (is (contains? (set (map :summary findings)) "ok"))
       (is (contains? (set (map :summary findings)) "detective failed to run - investigate its input"))
-      (is (= "boom" (:detective (first (filter #(= :warning (:severity %)) findings)))))))
+      (is (= "boom" (:detective (first (filter :crashed findings)))))))
   (testing "a LAZILY throwing detective (the real shape - for-comprehensions) is isolated too"
     (let [detectives [{:name "lazy-boom" :requires []
                        :detect (fn [_] (for [x [1]] (throw (ex-info "lazy kaboom" {:x x}))))}
@@ -45,4 +45,4 @@
           findings (detective/run-detectives detectives {})]
       (is (= 2 (count findings)))
       (is (contains? (set (map :summary findings)) "ok"))
-      (is (= "lazy-boom" (:detective (first (filter #(= :warning (:severity %)) findings))))))))
+      (is (= "lazy-boom" (:detective (first (filter :crashed findings))))))))

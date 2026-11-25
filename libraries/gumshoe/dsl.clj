@@ -771,8 +771,10 @@
   (when (some? options)
     (when-not (and (map? options) (every? keyword? (keys options)) (every? map? (vals options)))
       (invalid! [:options] "the :options are a map of flag keyword to its option map")))
-  (check-names! [:reads] reads (set (keys values)))
+  ;; :values first: the :reads check takes the names of the values, so a
+  ;; :values that is no map must be refused before anything reads its keys
   (check-names! [:values] values #{})
+  (check-names! [:reads] reads (set (keys values)))
   (when-not (and (vector? effect) (seq effect))
     (invalid! [:effect] "the change names one or more effects, as [[:kubectl <verb> {..}] ..]"))
   (let [select (select-of target)

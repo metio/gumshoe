@@ -101,11 +101,15 @@
 (defn env-config-problems
   "Problems with an env.edn config map, plus a semantic nudge: an environment
    with no :select can never be auto-chosen from the current cluster. Returns
-   nil when the config is well-shaped."
+   nil when the config is well-shaped. Never throws, whatever shape
+   :environments has: the structural problems already name a wrong one."
   [config]
   (let [structural (problems ::env-config config)
-        no-select (for [[nm env] (:environments config)
-                        :when (not (seq (:select env)))]
-                    (format ":environments -> %s has no :select, so it is only usable via GUMSHOE_ENVIRONMENT"
-                            (pr-str nm)))]
-    (seq (concat structural no-select))))
+        envs (:environments config)
+        no-select (when (map? envs)
+                    (for [[nm env] envs
+                          :let [select (when (map? env) (:select env))]
+                          :when (and (map? env) (or (nil? select) (and (coll? select) (empty? select))))]
+                      (format ":environments -> %s has no :select, so it is only usable via GUMSHOE_ENVIRONMENT"
+                              (pr-str nm))))]
+    (seq (doall (concat structural no-select)))))

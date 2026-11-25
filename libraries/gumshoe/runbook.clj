@@ -202,6 +202,17 @@
                :label (format "unknown prerequisite %s - its providing plugin is not loaded, or the key is misspelled"
                               key)})])))
 
+(defn- built-items
+  "The checklist items (build) returns, or one failing item naming what
+   threw when it throws: a prerequisite builder a plugin or a tool package
+   registers runs while the list is built, before any item's own guard, and
+   one that throws must show as an unmet prerequisite, not a stack trace."
+  [label build]
+  (try (doall (build))
+       (catch Throwable e
+         (let [message (or (ex-message e) (str e))]
+           [[label (fn [] {:ok? false :label (format "%s could not be checked: %s" label message)})]]))))
+
 (defn- prerequisite-items
   [prerequisites opts]
   (let [blank? #(str/blank? (str %))
@@ -218,7 +229,9 @@
      (map tool-item tools)
      (map min-version-item min-versions)
      ;; and any extra checks the tool declared it needs (a service to reach, a login)
-     (mapcat (fn [t] (when-let [build (command/tool-prerequisites t)] (build opts))) tools)
+     (mapcat (fn [t] (when-let [build (command/tool-prerequisites t)]
+                       (built-items (format "the prerequisites of %s" t) #(build opts))))
+             tools)
      (map (partial ping-item 4) ipv4-hosts)
      (map (partial ping-item 6) ipv6-hosts)
      (map secret-item secrets)
@@ -231,7 +244,12 @@
      (map (partial can-i-item "delete") (:kubectl-can-delete prerequisites))
      (map can-exec-item (:kubectl-can-exec prerequisites))
      ;; plugin-registered checks (change windows, tickets, on-call acks) run last
-     (prerequisites/items prerequisites opts)
+     ;; one registered check at a time, so a builder that throws fails its
+     ;; own item and the others still run
+     (mapcat (fn [key]
+               (built-items (format "prerequisite %s" key)
+                            #(prerequisites/items (select-keys prerequisites [key]) opts)))
+             (prerequisites/registered-checks))
      ;; and a fail-closed item for any declared key nothing handles
      (unknown-prerequisite-items prerequisites))))
 

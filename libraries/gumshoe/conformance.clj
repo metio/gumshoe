@@ -126,6 +126,8 @@
   [file]
   (try
     {:file file :forms (edamame/parse-string-all (slurp file) parse-options)}
+    (catch StackOverflowError _
+      {:file file :error "nests too deep to read"})
     (catch Exception e
       {:file file :error (ex-message e)})))
 

@@ -28,6 +28,14 @@
   (format "note: %s is written in the experimental EDN book format (:gumshoe/dsl %s), which may change in any release"
           file dsl/version))
 
+(defn- does-not-compile
+  "The refusal of a book compile tripped over without naming the offending
+   form: still a book it cannot run, so it is refused with the message rather
+   than escaping as a stack trace."
+  [file e]
+  (let [reason (str "does not compile: " (or (ex-message e) (str e)))]
+    (ex-info (str file ": " reason) {::reader/refused true :file (str file) :reason reason})))
+
 (defn load-book
   "The change a book file holds, compiled by gumshoe.dsl/compile, or an
    ex-info carrying gumshoe.edn-reader/refused? naming the file and why it
@@ -41,10 +49,12 @@
         (if (dsl/invalid? e)
           (throw (ex-info (str file ": " (ex-message e))
                           (assoc (ex-data e) ::reader/refused true :file (str file) :reason (ex-message e))))
-          (throw e)))
+          (throw (does-not-compile file e))))
       (catch StackOverflowError _
         (throw (ex-info (str file ": nests too deep to compile")
-                        {::reader/refused true :file (str file) :reason "nests too deep to compile"}))))))
+                        {::reader/refused true :file (str file) :reason "nests too deep to compile"})))
+      (catch Exception e
+        (throw (does-not-compile file e))))))
 
 (defn book
   "Hands the change a book file holds to mutation/book: under

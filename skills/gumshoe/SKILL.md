@@ -175,6 +175,14 @@ and outcome; the path is printed after the final banner.
 - `nothing-checked: true` means no detective read anything. The book exits 1
   and the run is not a clean result; report it as unchecked, then look for
   the scope or capability that left every detective without evidence.
+- `crashed: [..]` names the detectives whose check threw. Each has one
+  `critical` finding, `detective failed to run - investigate its input`,
+  with the error as its `hint`. The book exits 1 whatever else it found,
+  because a check that could not judge its evidence has not passed. A
+  finding whose severity is not `critical`, `warning` or `info` counts as
+  `critical`, and its hint names the value the detective returned.
+- An evidence read that does not answer within 300 s counts as not read,
+  so the detectives that need it are `unread`, and stderr names the read.
 
 ## What gumshoe covers
 
@@ -301,7 +309,10 @@ With breto, `eval "$(breto env)"` puts every tool a book needs on `PATH`.
 holds per-host settings: environments selected by kubectl context, ceph mgr
 hosts, VPN interfaces, the secrets provider (`:gopass`, `:pass`, `:passage`,
 `:pasejo` or a `:command`), announcers, plugins, and the theme. A missing or
-broken file means no configuration and never an error. Secrets come from the
+broken file means no configuration and never an error. A part of the wrong
+shape (`:environments` or `:defaults` that is not a map, a `:select` that is
+not a map, `:plugins` that is neither a namespace nor a list of them) is ignored with a warning on
+stderr naming it, and the rest of the file still applies. Secrets come from the
 password manager at runtime and never appear in process arguments.
 
 ## Extending gumshoe
