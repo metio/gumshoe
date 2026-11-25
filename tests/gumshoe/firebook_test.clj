@@ -2,7 +2,9 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.firebook-test
-  (:require [cheshire.core :as json]
+  (:require [babashka.fs :as fs]
+            [babashka.process :as process]
+            [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing are]]
             [gumshoe.change :as change]
@@ -383,3 +385,49 @@
         (let [ctx {:context "ctx" :opts opts :gumshoe.firebook/drill ((:derive drill) opts)}]
           (is (= [] (binding [*err* (java.io.StringWriter.)]
                       (verify/fail-closed-findings ((:verify spec) ctx))))))))))
+
+(defn- run-extinguish
+  "Runs the extinguish script against a fake `bridge` whose `fdb show` prints
+   `table` and exits `show-exit`, and whose `fdb del` exits `del-exit`.
+   Returns {:exit .. :calls [argument lines]}."
+  [{:keys [table show-exit del-exit] :or {show-exit 0 del-exit 0}}]
+  (let [dir (fs/create-temp-dir)
+        log (str (fs/path dir "calls"))
+        bridge (fs/path dir "bridge")]
+    (try
+      (spit (str bridge)
+            (str "#!/bin/sh\n"
+                 "echo \"$*\" >> '" log "'\n"
+                 "case \"$2\" in\n"
+                 "  show) printf '%s' '" table "'; exit " show-exit ";;\n"
+                 "  del) exit " del-exit ";;\n"
+                 "esac\n"))
+      (fs/set-posix-file-permissions bridge "rwx------")
+      (let [[_sudo & argv] (firebook/fabric-extinguish-args 4208)
+            result (apply process/shell {:out :string :err :string :continue true
+                                         :extra-env {"PATH" (str dir ":" (System/getenv "PATH"))}}
+                          argv)]
+        {:exit (:exit result)
+         :calls (if (fs/exists? log) (str/split-lines (slurp log)) [])})
+      (finally (fs/delete-tree dir)))))
+
+(deftest fabric-extinguish-is-idempotent
+  (let [row (str firebook/drill-mac " dev lo.4208 dst " firebook/drill-vtep " self static\n")]
+    (testing "a burning drill is deleted"
+      (is (= {:exit 0
+              :calls ["fdb show dev lo.4208" (str "fdb del " firebook/drill-mac " dev lo.4208")]}
+             (run-extinguish {:table row}))))
+    (testing "an entry already gone is out, and no delete the kernel would refuse is attempted"
+      (is (= {:exit 0 :calls ["fdb show dev lo.4208"]}
+             (run-extinguish {:table "aa:bb:cc:dd:ee:ff dev lo.4208 dst 10.0.0.1 self\n" :del-exit 255}))))
+    (testing "a table that cannot be read is a failure, never out"
+      (is (= 1 (:exit (run-extinguish {:table "" :show-exit 1})))))
+    (testing "a delete that fails while the entry is there is a failure"
+      (is (= 255 (:exit (run-extinguish {:table row :del-exit 255})))))
+    (testing "the MAC matches in any case"
+      (is (= 2 (count (:calls (run-extinguish {:table (str/upper-case row)}))))))))
+
+(deftest fabric-extinguish-runs-as-root-and-the-recovery-stays-a-plain-command
+  (is (= ["sudo" "sh" "-c"] (take 3 (firebook/fabric-extinguish-args 4208))))
+  (is (str/includes? (firebook/fabric-recovery {:conn {:host "hv1"} :vni 4208})
+                     (str "sudo bridge fdb del " firebook/drill-mac " dev lo.4208"))))

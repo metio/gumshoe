@@ -45,18 +45,47 @@
             (when (and v (= (str/trim k) field-name)) (str/trim v))))
         (str/split-lines (str s))))
 
+(defn matches-term?
+  "Pure: whether a store path names `term` as one whole path segment
+   (`hosts/a.example.com/admin` names `a.example.com`). A substring is not
+   enough: `api/data.example.com` contains `a.example.com`, and its
+   credentials must never be sent to a.example.com."
+  [term path]
+  (let [term (str term)]
+    (boolean (and (not (str/blank? term))
+                  (some #(= term %) (str/split (str path) #"/"))))))
+
+(defn best-match
+  "Pure: the candidate store path for `term`, or nil. Only paths naming the
+   term as a whole segment qualify (see matches-term?); among them a path equal
+   to the term wins, then one whose last segment is the term, then the rest,
+   each group in sorted order so the choice is stable."
+  [term candidates]
+  (let [term (str term)
+        qualifying (->> candidates
+                        (map #(str/trim (str %)))
+                        (remove str/blank?)
+                        (filter #(matches-term? term %))
+                        distinct)
+        rank (fn [path]
+               (cond (= path term) 0
+                     (= term (last (str/split path #"/"))) 1
+                     :else 2))]
+    (first (sort-by (juxt rank identity) qualifying))))
+
 (defn- run [& argv] (apply shell/stdout-of (remove nil? argv)))
 
 ;; --- built-in providers ----------------------------------------------------
-;; Each is {:name :binary :password :field :find-path :available?}; a plugin adds
-;; more with the same shape.
+;; Each is {:name :binary :password :field :candidates :available?}; a plugin adds
+;; more with the same shape. :candidates lists the store paths a search for a
+;; term may pick from; find-path chooses among them with best-match.
 
 (def gopass
   "gopass has a native password flag, field getter, and fuzzy search."
   {:name :gopass :binary "gopass"
    :password (fn [path] (run "gopass" "show" "--password" path))
    :field (fn [path field] (run "gopass" "show" path field))
-   :find-path (fn [term] (first-line (run "gopass" "search" term)))
+   :candidates (fn [term] (str/split-lines (run "gopass" "search" term)))
    :available? (fn [path] (not (str/blank? (run "gopass" "search" path))))})
 
 (defn- home-relative
@@ -72,11 +101,9 @@
   {:name nm :binary binary
    :password (fn [path] (first-line (run binary "show" path)))
    :field (fn [path field] (field-in (run binary "show" path) field))
-   :find-path (fn [term]
-                (->> (fs/glob dir (str "**." ext))
-                     (map #(-> (fs/relativize dir %) str (str/replace (re-pattern (str "\\." ext "$")) "")))
-                     (filter #(str/includes? % term))
-                     sort first))
+   :candidates (fn [_term]
+                 (->> (fs/glob dir (str "**." ext))
+                      (map #(-> (fs/relativize dir %) str (str/replace (re-pattern (str "\\." ext "$")) "")))))
    :available? (fn [path] (fs/exists? (fs/path dir (str path "." ext))))})
 
 (def pass (pass-like :pass "pass" (home-relative "PASSWORD_STORE_DIR" ".password-store") "gpg"))
@@ -89,12 +116,7 @@
   {:name :pasejo :binary "pasejo"
    :password (fn [path] (first-line (run "pasejo" "secret" "show" path "--line" "1")))
    :field (fn [path field] (field-in (run "pasejo" "secret" "show" path) field))
-   :find-path (fn [term]
-                (->> (str/split-lines (run "pasejo" "secret" "list"))
-                     (map str/trim)
-                     (filter #(str/includes? % term))
-                     first
-                     not-empty))
+   :candidates (fn [_term] (str/split-lines (run "pasejo" "secret" "list")))
    :available? (fn [path]
                  (some #(= (str/trim %) path)
                        (str/split-lines (run "pasejo" "secret" "list"))))})
@@ -121,15 +143,18 @@
    :binary nil ; resolved from the configured :password template's first word
    :password (fn [path] (apply run (resolve-command (command-template :password) {:path path})))
    :field (fn [path field] (apply run (resolve-command (command-template :field) {:path path :field field})))
-   :find-path (fn [term] (first-line (apply run (resolve-command (command-template :search) {:path term}))))
+   :candidates (fn [term] (str/split-lines (apply run (resolve-command (command-template :search) {:path term}))))
    :available? (fn [path] (not (str/blank? (apply run (resolve-command (command-template :search) {:path path})))))})
 
 (defonce ^:private providers (atom {}))
 
 (defn register-provider!
   "Registers a secrets provider - a map with :name and the fns :password, :field,
-   :find-path, :available? (and optionally :binary for the Prerequisites check).
-   A plugin adds a native backend the CLI-template model can not express."
+   :candidates (the store paths a search for a term may pick from) and
+   :available? (and optionally :binary for the Prerequisites check). A provider
+   may give :find-path (term -> one path) instead of :candidates; its answer is
+   used only when it names the term as a whole path segment. A plugin adds a
+   native backend the CLI-template model can not express."
   [provider]
   (swap! providers assoc (:name provider) provider))
 
@@ -190,13 +215,30 @@
         (try (.getHost (java.net.URI. (str term))) (catch Exception _ nil)))
       term))
 
+(defn choose-path
+  "Pure over the provider's answers: the store path `provider` finds for
+   `term`, or nil. Its :candidates go through best-match; a legacy :find-path
+   answer is accepted only when it names the term as a whole path segment."
+  [provider term]
+  (cond
+    (:candidates provider)
+    (best-match term ((:candidates provider) term))
+
+    (:find-path provider)
+    (let [path (some-> ((:find-path provider) term) str str/trim not-empty)]
+      (when (and path (matches-term? term path))
+        path))))
+
 (defn find-path
-  "The secret path matching a fuzzy search term (a hostname, or a URL, which
-   searches for its host), or nil - so a book locates a secret without
-   hard-coding its full path."
+  "The secret path naming a search term (a hostname, or a URL, which searches
+   for its host) as a whole path segment, or nil - so a book locates a secret
+   without hard-coding its full path. The credentials found here are sent to
+   that host, so a path that merely contains the term (api/data.example.com
+   for a.example.com) never matches."
   [term]
-  (when-let [f (:find-path (active))]
-    (not-empty (f (search-term term)))))
+  (let [term (search-term term)]
+    (when-not (str/blank? (str term))
+      (choose-path (active) term))))
 
 (defn available?
   "Whether the secret exists - the prerequisites check."

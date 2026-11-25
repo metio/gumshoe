@@ -120,7 +120,9 @@ your clipboard (wl-copy on Wayland, xclip/xsel on X11, pbcopy on macOS). Hand
 it to a colleague, paste it into an incident ticket, or run it yourself to
 regenerate the same data by hand - the tooling stays transparent and learnable.
 Secrets never travel in command arguments, so the reproducer is always safe to
-keep.
+keep. A book that changes something gets no reproducer, even one that posts
+nothing to the changelog (a netshoot debug pod), and neither does any run that
+reached a change, because replaying its calls would make the change again.
 
 **Recordings.** Every run leaves a timestamped audit trail under
 `recordings/<book>/<when>/` (gitignored): `input.edn` (the flags it was given,
@@ -134,9 +136,12 @@ did that change, and with what inputs" a week later, it is on disk.
 **Investigate together.** When a read-only book turns something up, it offers
 (on a real terminal, only if [upterm](https://upterm.dev/) is installed,
 defaulting to No) to open a shared terminal. upterm prints an SSH join command
-you hand to your team and they attach instantly - access is key-gated. Start
-one proactively any time with `bb run runbooks/collaborate/share.clj` (restrict who
-joins with `--with alice --with bob`).
+you hand to your team and they attach instantly. Start one proactively any time
+with `bb run runbooks/collaborate/share.clj --with alice --with bob`: only the
+keys GitHub lists for the named users can join (`--with gitlab:carol` names
+another provider). Without `--with` the book refuses, because upterm lets anyone
+holding the connect string join a session that names no keys, into a shell with
+your credentials; `--open` asks for such a session explicitly.
 
 ## Execution
 
@@ -564,14 +569,19 @@ unifying convenience.
   every finished book (outcome, recording path) to push a metric or forward the
   audit trail; `(hooks/register-pre-hook! (fn [ctx] …))` is a global gate that
   can *veto* a run before it starts (a change freeze, a required ack) by
-  returning `{:allow? false :reason …}`. Both are bounded; pre-hooks fail *open*
+  returning `{:allow? false :reason …}`. A pre-hook's `:change?` is true for
+  every book that changes something, including mutation books that post nothing
+  to the changelog. Both are bounded; pre-hooks fail *open*
   so a broken gate never blocks emergency response. Distinct from announcers
   (fire on confirmation) and prerequisites (a single book declares its own).
 - **Secrets** - which password manager reads secrets at runtime. `:gopass`,
   `:pass`, `:passage`, and `:pasejo` are built in (select with `env.edn :secrets
   {:provider …}`); a `:command` provider drives any other CLI by templates, and
   a plugin registers a native backend with `(secrets/register-provider! { …
-  })`.
+  })`. A book that looks up the credentials for a URL takes only a store path
+  naming the URL's host as a whole segment (`monitoring/a.example.com`), never
+  one that merely contains it (`api/data.example.com`), so no host receives
+  another host's credentials.
 - **Prerequisite checks** - the built-ins (tools, versions, connectivity,
   secrets, directories an option names, cluster capabilities, permissions) plus any a plugin registers with
   `(prerequisites/register-check! :change-window (fn [value opts] …))` - gate a

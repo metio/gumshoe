@@ -134,10 +134,28 @@
    "dst" drill-vtep "self" "static"])
 
 (defn fabric-unpin-args
-  "Putting it out. The kernel errors when the entry is already gone, which the
-   caller treats as extinguished rather than as a failure."
+  "Putting it out by hand, as the recovery text prints it. The kernel errors
+   when the entry is already gone; a human reads that as done, while the
+   extinguish effect runs fabric-extinguish-args instead."
   [vni]
   ["sudo" "bridge" "fdb" "del" drill-mac "dev" (str "lo." vni)])
+
+(defn fabric-extinguish-script
+  "The shell script that puts the drill out idempotently: it reads the table
+   first and deletes the entry only when it is there, so a repeated extinguish,
+   or one after an ignite whose pin failed, succeeds without a delete the
+   kernel would refuse. A table that cannot be read (no such device, no
+   permission) still fails, so an unreadable fabric is never reported out."
+  [vni]
+  (let [dev (str "lo." (long vni))]
+    (str "out=$(bridge fdb show dev " dev ") || exit 1; "
+         "printf '%s\\n' \"$out\" | grep -qiF " drill-mac " || exit 0; "
+         "exec bridge fdb del " drill-mac " dev " dev)))
+
+(defn fabric-extinguish-args
+  "The extinguish effect's command: fabric-extinguish-script run as root."
+  [vni]
+  ["sudo" "sh" "-c" (fabric-extinguish-script vni)])
 
 (defn ignite!
   "Applies the drill manifests inside the drill namespace. Returns true when

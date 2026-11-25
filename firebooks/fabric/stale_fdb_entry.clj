@@ -51,7 +51,7 @@
            :effect (fn [{:keys [conn vni]}] (apply effect/ssh conn (firebook/fabric-pin-args vni)))}
   :extinguish {:put-out "remove the drill's fdb entry"
                :items (fn [_] [firebook/drill-mac])
-               :effect (fn [{:keys [conn vni]}] (apply effect/ssh conn (firebook/fabric-unpin-args vni)))
+               :effect (fn [{:keys [conn vni]}] (apply effect/ssh conn (firebook/fabric-extinguish-args vni)))
                :recovery firebook/fabric-recovery}
   :expect {:detectives (filterv #(= "evpn-static-fdb" (:name %)) evpn-detectives/detectives)
            :collect (fn [{:keys [conn vni]}] (firebook/fabric-evidence conn vni))

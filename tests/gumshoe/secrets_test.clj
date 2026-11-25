@@ -99,3 +99,61 @@
         (is (= "api/prometheus.example.org" (secrets/find-path "prometheus.example.org")))
         (is (= {:username "u" :password "p"}
                (gumshoe.promql/credentials "https://prometheus.example.org/" {})))))))
+
+(deftest a-path-names-a-term-only-as-a-whole-segment
+  (is (true? (secrets/matches-term? "a.example.com" "a.example.com")))
+  (is (true? (secrets/matches-term? "a.example.com" "api/a.example.com")))
+  (is (true? (secrets/matches-term? "a.example.com" "hosts/a.example.com/admin")))
+  (testing "a path that merely contains the host belongs to another host"
+    (is (false? (secrets/matches-term? "a.example.com" "api/data.example.com")))
+    (is (false? (secrets/matches-term? "a.example.com" "api/a.example.com.old")))
+    (is (false? (secrets/matches-term? "example.com" "api/a.example.com"))))
+  (is (false? (secrets/matches-term? "" "api/a.example.com"))))
+
+(deftest best-match-never-picks-another-hosts-secret
+  (testing "the substring hit that sorts first is not taken"
+    (is (nil? (secrets/best-match "a.example.com" ["api/data.example.com" "api/ba.example.com"])))
+    (is (= "api/a.example.com"
+           (secrets/best-match "a.example.com" ["api/data.example.com" "api/a.example.com"]))))
+  (testing "an exact path wins, then a path ending in the host, then the rest, each sorted"
+    (is (= "a.example.com"
+           (secrets/best-match "a.example.com" ["z/a.example.com" "a.example.com" "a.example.com/admin"])))
+    (is (= "b/a.example.com"
+           (secrets/best-match "a.example.com" ["z/a.example.com" "a.example.com/admin" "b/a.example.com"])))
+    (is (= "a.example.com/admin"
+           (secrets/best-match "a.example.com" ["a.example.com/readonly" "a.example.com/admin"]))))
+  (testing "blank lines and padding from a CLI's output are ignored"
+    (is (= "api/a.example.com" (secrets/best-match "a.example.com" ["" "  api/a.example.com  " nil])))))
+
+(deftest find-path-filters-every-providers-answer
+  (testing "a provider's candidates go through best-match"
+    (secrets/register-provider! {:name :candidate-store
+                                 :password (fn [_] "p") :field (fn [_ _] "u")
+                                 :candidates (fn [_] ["api/data.example.com" "monitoring/a.example.com"])
+                                 :available? (fn [_] true)})
+    (with-secrets {:provider :candidate-store}
+      (fn []
+        (is (= "monitoring/a.example.com" (secrets/find-path "https://a.example.com:9090/")))
+        (is (nil? (secrets/find-path "https://b.example.com/")))
+        (is (nil? (secrets/find-path ""))))))
+  (testing "a legacy :find-path answer that only contains the host is refused"
+    (secrets/register-provider! {:name :fuzzy-store
+                                 :password (fn [_] "p") :field (fn [_ _] "u")
+                                 :find-path (fn [_] "api/data.example.com")
+                                 :available? (fn [_] true)})
+    (with-secrets {:provider :fuzzy-store}
+      (fn []
+        (is (nil? (secrets/find-path "a.example.com")))
+        (is (= {:username nil :password nil}
+               (gumshoe.promql/credentials "https://a.example.com/" {})))))))
+
+(deftest the-built-in-providers-list-candidates-for-best-match
+  (doseq [provider [secrets/gopass secrets/pass secrets/passage secrets/pasejo secrets/command]]
+    (testing (name (:name provider))
+      (is (fn? (:candidates provider)))
+      (is (nil? (:find-path provider)) "no provider picks a path by substring itself"))))
+
+(deftest pasejo-picks-the-host-segment-from-its-listing
+  (with-redefs [gumshoe.shell/stdout-of (fn [& _] "api/data.example.com\napi/a.example.com\n")]
+    (is (= "api/a.example.com" (secrets/choose-path secrets/pasejo "a.example.com")))
+    (is (nil? (secrets/choose-path secrets/pasejo "ta.example.com")))))
