@@ -180,7 +180,7 @@ The detectives compose from one domain to the whole cluster:
 
 | Book | Looks at |
 | --- | --- |
-| `runbooks/detectives/cluster.clj` | every registered detective, except posture; takes `--hpa-grace-minutes` like `workloads.clj` |
+| `runbooks/detectives/cluster.clj` | every registered detective, except posture and the checks that exec into pods; takes `--hpa-grace-minutes` like `workloads.clj` |
 | `runbooks/detectives/workloads.clj` | controllers, jobs, pods, Services, their storage; an Ingress backend Service that is missing is critical, and info when ingress-nginx redirects every request of that Ingress (`permanent-redirect`, `temporal-redirect`, or a top-level catch-all redirecting `rewrite` or `return 30x` in `configuration-snippet`); an HPA whose AbleToScale or ScalingActive condition is False is critical once it has held for `--hpa-grace-minutes` (default 10, read from the condition's `lastTransitionTime` at collection time) and a warning naming its age before that, while one whose age cannot be read stays critical |
 | `runbooks/detectives/pods.clj` | restart loops, image pulls, OOM kills, Pending and Failed pods |
 | `runbooks/detectives/nodes.clj` | readiness, pressure, cordoned nodes |
@@ -191,14 +191,18 @@ The detectives compose from one domain to the whole cluster:
 | `runbooks/detectives/apiversions.clj` | CRD discovery drift |
 | `runbooks/detectives/security.clj`, `rbac.clj` | RBAC, pod security, network segmentation |
 | `runbooks/detectives/posture.clj` | probes, image tags, replicas, PDBs, deprecated APIs, template drift |
-| `runbooks/detectives/databases.clj` | CloudNativePG and db-operator; a CNPG Pooler declaring instances whose Service resolves to no ready EndpointSlice address is critical (`cnpg-pooler-endpoints`, component the Pooler), and the check is unread when the Pooler, Service or EndpointSlice read did not answer; a CNPG cluster whose client backends reach `max_connections` less the superuser-reserved and reserved slots is critical (`cnpg-connections`, component the Cluster), naming the holders split into Running pods, addresses no Running pod holds and the local socket. It reads `pg_stat_activity` with one constant read-only `psql` statement through `kubectl exec` into the primary's `postgres` container, so it needs `create` on `pods/exec`; a cluster it could not read is a warning naming why (exec denied or unanswered, no primary, answered from recovery), and the check is unread when no cluster was read or the Cluster, pod or connection read did not answer |
+| `runbooks/detectives/databases.clj` | CloudNativePG and db-operator; a CNPG Pooler declaring instances whose Service resolves to no ready EndpointSlice address is critical (`cnpg-pooler-endpoints`, component the Pooler), and the check is unread when the Pooler, Service or EndpointSlice read did not answer; it never execs into a pod |
+| `tools/cnpg/runbooks/scan.clj` | the databases scope plus the opt-in `cnpg-connections`: a CNPG cluster whose client backends reach `max_connections` less the superuser-reserved and reserved slots is critical (component the Cluster), naming the holders split into Running pods, addresses no Running pod holds and the local socket. It reads `pg_stat_activity` with one constant read-only `psql` statement through `kubectl exec` into the primary's `postgres` container, so this book alone needs `create` on `pods/exec` and declares it as a prerequisite; a cluster it could not read is a warning naming why (exec denied or unanswered, no primary, answered from recovery), and the check is unread when no cluster was read or the Cluster, pod or connection read did not answer |
 | `runbooks/detectives/observability.clj` | Prometheus, Alertmanager, ThanosRuler |
 | `runbooks/detectives/dns.clj` | nameservers, SOA replication, answer consistency |
 | `runbooks/detectives/mail.clj` | MX, SPF, DKIM, DMARC, rDNS, live SMTP/POP3/IMAP with TLS |
 | `runbooks/detectives/fabric.clj` | EVPN-VXLAN MAC ownership, over SSH; each `evpn-fdb-conflict` finding carries `local-uptime`, `bgp-route` (`present`/`absent`/`unread`) and `classification` (`live-misadvertisement`/`orphan`/`unknown`); takes `--hosts`, `--vni`, `--gateway-vteps` and `--guest-mac-prefixes`, each overriding env.edn's `:evpn` value |
 
 Posture findings describe risks that may be deliberate choices, so they run
-only when posture is asked for.
+only when posture is asked for. A check that execs into a pod registers into
+the opt-in `:exec` scope, so neither its scope's book nor the whole-cluster
+scan runs it; the one book that adds it with `:detectives` beside its `:scope`
+declares `:kubectl-can-exec ["pods"]`.
 
 Each tool package under `tools/<name>/` brings a `scan.clj` for its system,
 registers its detectives into the scopes above, and adds runbooks for its

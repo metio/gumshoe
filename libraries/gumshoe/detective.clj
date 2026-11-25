@@ -541,6 +541,14 @@
             scope)
     "this book lists no detectives, so the scan checked nothing"))
 
+(defn book-detectives
+  "The detectives a book runs: its scope's, resolved now, then the listed ones
+   the scope does not already hold."
+  [scope detectives]
+  (let [scoped (when scope (registry/for-scope scope))
+        names (set (map :name scoped))]
+    (into (vec scoped) (remove #(names (:name %))) detectives)))
+
 (defn book
   "Builds a read-only detective runbook. The whole book is this one call: the
    --output flag, the read-only harness wiring, and the investigate flow are
@@ -567,7 +575,9 @@
    With :scope the detectives are resolved from the registry when the book runs -
    so a plugin that registered detectives into that scope joins this scan. A
    scope that resolves to nothing fails rather than reporting a clean cluster;
-   see no-detectives-message."
+   see no-detectives-message. With both, the book runs the scope and the listed
+   detectives besides, which is how a book opts into a check its scope leaves
+   out, such as one registered into an opt-in scope."
   [{:keys [description detectives scope prerequisites when-to-run options collect around extra]}]
   (runbook/execute!
    {:description description
@@ -575,7 +585,7 @@
     :prerequisites prerequisites
     :announce? false
     :action (fn [opts _ctx]
-              (let [resolved (registry/with-capabilities (or detectives (registry/for-scope scope)))]
+              (let [resolved (registry/with-capabilities (book-detectives scope detectives))]
                 (if (empty? resolved)
                   (do (stdout/error (no-detectives-message scope)) false)
                   (do (when-to-run! when-to-run)

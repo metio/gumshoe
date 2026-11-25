@@ -19,6 +19,7 @@
             [gumshoe.joins-support :as joins]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.postgres :as postgres]
+            [gumshoe.runbook :as runbook]
             [gumshoe.shell :as shell]
             [gumshoe.tools.cnpg]))
 
@@ -194,9 +195,87 @@
   (is (= [connections/evidence-key] (:judges check)))
   (is (not (str/blank? (:description check)))))
 
-(deftest the-check-joins-the-databases-scope
-  (is (some #(= "cnpg-connections" (:name %)) (registry/for-scope :databases)))
+(deftest the-check-is-registered-into-the-opt-in-exec-scope
+  (is (some #(= "cnpg-connections" (:name %)) (registry/for-scope :exec)))
+  (is (contains? registry/opt-in-scopes :exec))
+  (is (some #(= "cnpg-connections" (:name %)) (registry/all)) "still registered, so every property test covers it")
   (is (= connections/collector (registry/collector-for connections/evidence-key))))
+
+;; --- which books exec ---------------------------------------------------------------
+
+(defn- book-run
+  "Loads the book at path and runs its action against a cluster holding one
+   CNPG Cluster with a named primary, every read but the connection reading
+   answering nothing and no command reaching a shell. on-exec is called with
+   the arguments of every connection reading. Returns the names of the
+   detectives the book collected for and the book's prerequisites."
+  [path on-exec]
+  (let [collected (atom nil)
+        collect-evidence! detective/collect-evidence!
+        collector-for registry/collector-for
+        {:keys [action prerequisites]}
+        (with-redefs [kubectl/current-cluster (constantly nil)]
+          (binding [runbook/*loading* true] (load-file path)))]
+    (with-redefs [shell/execute (fn [& _] {:exit 1 :out "" :err "no cluster in tests"})
+                  kubectl/current-context (constantly "ctx")
+                  kubectl/current-cluster (constantly nil)
+                  kubectl/get-all (fn [_ type] (when (= cluster-type type) {:items [pg]}))
+                  kubectl/get-selected (constantly nil)
+                  registry/collector-for (fn [key]
+                                           (if (= connections/evidence-key key)
+                                             (collector-for key)
+                                             (constantly nil)))
+                  detective/collect-evidence! (fn [context detectives]
+                                                (reset! collected (mapv :name detectives))
+                                                (collect-evidence! context detectives))
+                  detective/run-detectives (constantly [])
+                  postgres/connection-reading (fn [& args] (on-exec args) nil)]
+      (binding [*err* (java.io.StringWriter.)]
+        (with-out-str (action {:output "edn"} nil))))
+    {:names (set @collected) :prerequisites prerequisites}))
+
+(def ^:private exec-free-books
+  "The general databases book and every whole-cluster scan."
+  ["runbooks/detectives/databases.clj" "runbooks/detectives/cluster.clj"])
+
+(defn- exec-free-violations
+  "What makes the general databases scope, the whole-cluster scope or one of
+   their books exec into a pod: the check in its detectives, or a connection
+   reading during its collection. Empty when none does."
+  []
+  (let [execs (atom [])
+        scopes (vec (for [scope [:databases :all]
+                          :when (some #(= "cnpg-connections" (:name %)) (registry/for-scope scope))]
+                      [:scope scope]))
+        books (vec (for [path exec-free-books
+                         :let [{:keys [names]} (book-run path #(swap! execs conj %))]
+                         :when (names "cnpg-connections")]
+                     [:book path]))]
+    (concat scopes books (for [args @execs] [:exec (vec args)]))))
+
+(deftest the-general-scans-never-exec-into-a-database-pod
+  (is (empty? (exec-free-violations)))
+  (testing "the collection never takes a connection reading"
+    (doseq [path exec-free-books]
+      (book-run path (fn [args] (is false (str path " took a connection reading " (pr-str args))))))))
+
+(deftest the-cnpg-scan-book-adds-the-check-and-declares-exec
+  (let [execs (atom [])
+        {:keys [names prerequisites]} (book-run "tools/cnpg/runbooks/scan.clj" #(swap! execs conj %))]
+    (is (names "cnpg-connections"))
+    (is (some #{"pods"} (:kubectl-can-exec prerequisites)))
+    (is (= [["ctx" "db" "pg-1" "postgres"]] (mapv vec @execs)) "the collection reads the primary")
+    (is (every? names (map :name (registry/for-scope :databases))) "and still runs the whole databases scope")))
+
+(deftest re-registering-the-check-in-the-databases-scope-is-caught
+  (let [for-scope registry/for-scope]
+    (with-redefs [registry/for-scope (fn [scope]
+                                       (cond-> (for-scope scope)
+                                         (= :databases scope) (conj check)))]
+      (let [violations (set (exec-free-violations))]
+        (is (violations [:scope :databases]))
+        (is (violations [:book "runbooks/detectives/databases.clj"]))
+        (is (some #(= :exec (first %)) violations))))))
 
 ;; --- the collector ------------------------------------------------------------------
 

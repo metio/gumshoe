@@ -67,7 +67,9 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
   backends on the local socket. A cluster that could not be read - exec denied,
   no answer, no primary found, or a pod that answered from recovery - is a
   warning naming why, and when no cluster could be read the check is unread.
-  The scan book needs `create` on `pods/exec` for it.
+  The check is opt-in: it registers into the `:exec` scope, which the
+  databases book and the whole-cluster scan leave out, and only this package's
+  scan book adds it, so only that book needs `create` on `pods/exec`.
 - **Pooler login detective** - a pooler whose backend rejects the login it
   makes for each client is healthy in every field of the resource API: the pods
   are ready and the Pooler phase is active while no client reaches the database.
