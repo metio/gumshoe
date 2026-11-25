@@ -19,10 +19,12 @@
    :precondition nil,
    :announce "Renew certificates [shop/web-tls]",
    :checks
-   [{:description "certificate shop/web-tls is Ready",
+   [{:description
+     "certificate shop/web-tls was reissued (revision above 0) and is Ready",
      :timeout 180,
      :interval 10,
-     :holds false}]},
+     :holds false,
+     :abort nil}]},
   :dry-run
   {:result true,
    :out
@@ -40,7 +42,7 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: certificate shop/web-tls is Ready"],
+    "❌ NOT verified within 0s: certificate shop/web-tls was reissued (revision above 0) and is Ready"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -53,6 +55,53 @@
     "    the post-check messages above"
     "    the changelog entry this change posted"
     "    the current state of shop/web-tls on cluster"]},
+  :issuance-failed
+  {:action
+   "renew certificates - new certificates are requested from the issuer",
+   :destructive? false,
+   :items ["shop/web-tls"],
+   :step
+   "renew certificates - new certificates are requested from the issuer",
+   :plan
+   [[:cmd
+     "cmctl"
+     "renew"
+     "web-tls"
+     "--context=ctx"
+     "--namespace=shop"]],
+   :precondition nil,
+   :announce "Renew certificates [shop/web-tls]",
+   :checks
+   [{:description
+     "certificate shop/web-tls was reissued (revision above 1) and is Ready",
+     :timeout 180,
+     :interval 10,
+     :holds false,
+     :abort
+     "cert-manager failed the issuance at <instant>: The certificate request has failed to complete and will be retried: rate limited"}]},
+  :not-reissued
+  {:action
+   "renew certificates - new certificates are requested from the issuer",
+   :destructive? false,
+   :items ["shop/web-tls"],
+   :step
+   "renew certificates - new certificates are requested from the issuer",
+   :plan
+   [[:cmd
+     "cmctl"
+     "renew"
+     "web-tls"
+     "--context=ctx"
+     "--namespace=shop"]],
+   :precondition nil,
+   :announce "Renew certificates [shop/web-tls]",
+   :checks
+   [{:description
+     "certificate shop/web-tls was reissued (revision above 1) and is Ready",
+     :timeout 180,
+     :interval 10,
+     :holds false,
+     :abort nil}]},
   :permitted
   {:action
    "renew certificates - new certificates are requested from the issuer",
@@ -70,10 +119,12 @@
    :precondition nil,
    :announce "Renew certificates [shop/web-tls]",
    :checks
-   [{:description "certificate shop/web-tls is Ready",
+   [{:description
+     "certificate shop/web-tls was reissued (revision above 1) and is Ready",
      :timeout 180,
      :interval 10,
-     :holds true}]},
+     :holds false,
+     :abort nil}]},
   :picked
   {:result true,
    :out "▸ Certificate: shop/web-tls",
@@ -104,10 +155,35 @@
    :precondition nil,
    :announce "Renew certificates [shop/web-tls]",
    :checks
-   [{:description "certificate shop/web-tls is Ready",
+   [{:description
+     "certificate shop/web-tls was reissued (revision above 0) and is Ready",
      :timeout 180,
      :interval 10,
-     :holds false}]},
+     :holds false,
+     :abort nil}]},
+  :reissued
+  {:action
+   "renew certificates - new certificates are requested from the issuer",
+   :destructive? false,
+   :items ["shop/web-tls"],
+   :step
+   "renew certificates - new certificates are requested from the issuer",
+   :plan
+   [[:cmd
+     "cmctl"
+     "renew"
+     "web-tls"
+     "--context=ctx"
+     "--namespace=shop"]],
+   :precondition nil,
+   :announce "Renew certificates [shop/web-tls]",
+   :checks
+   [{:description
+     "certificate shop/web-tls was reissued (revision above 1) and is Ready",
+     :timeout 180,
+     :interval 10,
+     :holds true,
+     :abort nil}]},
   :spec-changed
   {:action
    "renew certificates - new certificates are requested from the issuer",
@@ -125,10 +201,12 @@
    :precondition nil,
    :announce "Renew certificates [shop/web-tls]",
    :checks
-   [{:description "certificate shop/web-tls is Ready",
+   [{:description
+     "certificate shop/web-tls was reissued (revision above 1) and is Ready",
      :timeout 180,
      :interval 10,
-     :holds true}]},
+     :holds false,
+     :abort nil}]},
   :surface
   {:description "Renews certificates managed by cert-manager",
    :options
@@ -176,10 +254,12 @@
    :precondition nil,
    :announce "Renew certificates [shop/web-tls]",
    :checks
-   [{:description "certificate shop/web-tls is Ready",
+   [{:description
+     "certificate shop/web-tls was reissued (revision above 1) and is Ready",
      :timeout 180,
      :interval 10,
-     :holds false}]},
+     :holds false,
+     :abort nil}]},
   :unanswered-pick
   {:result false,
    :out
