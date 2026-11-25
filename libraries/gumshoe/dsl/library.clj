@@ -6,10 +6,23 @@
    their var's name. Each is a library function the books already run and
    its tests already cover; registering it here is what admits it to the
    DSL, so this file is the list a reviewer reads to know what a DSL change
-   can do beyond the built-in vocabulary."
+   can do beyond the built-in vocabulary. A guard defined here, where a
+   function needs one in the DSL that its books give it inline, is
+   registered under the name of the function it guards."
   (:require [gumshoe.deletion :as deletion]
             [gumshoe.dsl.registry :as registry]
             [gumshoe.workloads :as workloads]))
+
+(defn scale-items
+  "workloads/scale-items, or the bare action while the workload or a whole
+   replica count is missing. :items are built before a --dry-run judges the
+   refusals, so a rehearsal without --replicas reaches them with nil and
+   reports the refusal only when they do not throw; the Clojure scale book
+   guards its :items the same way."
+  [kind workload replicas]
+  (if (and workload (integer? replicas))
+    (workloads/scale-items kind workload replicas)
+    ["scale a workload"]))
 
 (def ^:private functions
   {:gumshoe.workloads/parse-pick
@@ -25,7 +38,7 @@
     :doc "why scaling the workload to replicas is wrong or pointless, over a {:ok? :items} read of its namespace's HorizontalPodAutoscalers"}
 
    :gumshoe.workloads/scale-items
-   {:fn #'workloads/scale-items :kind :items :args ["kind" "workload" "replicas"]
+   {:fn #'scale-items :kind :items :args ["kind" "workload" "replicas"]
     :doc "the confirmation lines of a scale"}
 
    :gumshoe.workloads/scaled?
