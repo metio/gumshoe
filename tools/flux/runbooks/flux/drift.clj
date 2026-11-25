@@ -19,8 +19,6 @@
             [gumshoe.stdout :as stdout]
             [gumshoe.tools.flux :as flux]))
 
-(def helmrelease-type "helmreleases.helm.toolkit.fluxcd.io")
-
 (def options
   {:namespace {:desc "The namespace of the HelmRelease - interactive selection when omitted"
                :alias :n :coerce :string}
@@ -30,7 +28,7 @@
 (def prerequisites
   {:installed-tools ["kubectl" "helm" "fzf"]
    :cluster-capabilities [:flux]
-   :kubectl-can-get [helmrelease-type]})
+   :kubectl-can-get [flux/helmrelease-type]})
 
 (defn drifted?
   [release]
@@ -39,7 +37,7 @@
 (defn drifted-first
   "Releases reporting Drifted first, so the interesting ones head the picker."
   [context]
-  (let [releases (kubectl/items-of (kubectl/get-all context helmrelease-type))]
+  (let [releases (kubectl/items-of (kubectl/get-all context flux/helmrelease-type))]
     (mapv kubectl/namespace-name-of
           (concat (filter drifted? releases) (remove drifted? releases)))))
 
@@ -86,7 +84,7 @@
     (if (nil? target)
       false
       (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
-            release (kubectl/get-namespaced-resource context namespace helmrelease-type name)
+            release (kubectl/get-namespaced-resource context namespace flux/helmrelease-type name)
             ;; targetNamespace renames the release and moves its objects,
             ;; while Helm's records stay in the storage namespace
             helm-name (flux/release-name release)

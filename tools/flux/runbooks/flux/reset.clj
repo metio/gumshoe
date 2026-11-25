@@ -19,18 +19,16 @@
             [gumshoe.mutation :as mutation]
             [gumshoe.tools.flux :as flux]))
 
-(def helmrelease-type flux/helmrelease-type)
-
 (defn- helmreleases
   [context]
-  (flux/parked-first (kubectl/items-of (kubectl/get-all context helmrelease-type))))
+  (flux/parked-first (kubectl/items-of (kubectl/get-all context flux/helmrelease-type))))
 
 (defn ready-check
   [context namespace name target]
   (conditions/ready-check
    {:description (format "HelmRelease %s is Ready" target)
     :timeout 300 :interval 15
-    :fetch #(kubectl/get-namespaced-resource context namespace helmrelease-type name)}))
+    :fetch #(kubectl/get-namespaced-resource context namespace flux/helmrelease-type name)}))
 
 (mutation/book
  {:description "Clears a parked HelmRelease's failure counters and reconciles it"
@@ -40,8 +38,8 @@
                    :alias :r :coerce :string}}
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities [:flux]
-                  :kubectl-can-get [helmrelease-type]
-                  :kubectl-can-patch [helmrelease-type]}
+                  :kubectl-can-get [flux/helmrelease-type]
+                  :kubectl-can-patch [flux/helmrelease-type]}
   :select {:mode :namespaced :label "HelmRelease" :namespace-flag :namespace :name-flag :name
            :candidates helmreleases}
   :confirm {:action "clear the failure counters and reconcile"}

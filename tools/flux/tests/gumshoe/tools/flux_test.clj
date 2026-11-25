@@ -2,7 +2,9 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.tools.flux-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [gumshoe.capabilities :as capabilities]
             [gumshoe.command :as command]
             [gumshoe.detectives.registry :as registry]
@@ -236,3 +238,15 @@
                  {flux/helmrelease-type {:items [(release "other" "web")]}
                   "pods" {:items [(assoc-in crashing [:metadata :namespace] "flux-system")]}}))
         "a release kept in flux-system is not blamed for flux-system's pods when it targets elsewhere")))
+
+(deftest flux-books-name-the-delivery-types-through-the-library
+  (let [files (->> (concat (file-seq (io/file "tools/flux/runbooks"))
+                           (file-seq (io/file "tools/flux/libraries")))
+                   (map str)
+                   (filter #(str/ends-with? % ".clj"))
+                   (remove #(str/ends-with? % "libraries/gumshoe/tools/flux.clj")))]
+    (is (some #(str/ends-with? % "runbooks/flux/reconcile.clj") files) "the scan reaches the books")
+    (doseq [file files
+            type [flux/helmrelease-type flux/kustomization-type]]
+      (is (not (str/includes? (slurp file) (pr-str type)))
+          (str file " spells out " type "; use the gumshoe.tools.flux var")))))

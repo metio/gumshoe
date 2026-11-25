@@ -90,7 +90,7 @@
   {:select {:mode :namespaced :label "HelmRelease"}
    :confirm {:action "reset the release" :destructive? true}
    :derive (fn [{:keys [context target]}]
-             (let [{:keys [namespace name]} (kubectl/split-namespace-name target)]
+             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
                {:release (kubectl/get-namespaced-resource context namespace "helmreleases" name)
                 :pods (vec (kubectl/items-of (kubectl/get-namespaced context namespace "pods")))}))
    :precondition (fn [{:keys [release]}]
