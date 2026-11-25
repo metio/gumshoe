@@ -10,30 +10,74 @@
    happily accept much more."
   (:require [gumshoe.size :as size]))
 
-;; nginx's built-in default when client_max_body_size is never set.
-(def ^:private nginx-default-bytes 1048576)
+(defn- limiter
+  "The name of the link whose value is the effective limit."
+  [effective {:keys [nginx-body-size post-max upload-max]}]
+  (cond
+    (= effective nginx-body-size) "nginx client_max_body_size"
+    (= effective post-max) "PHP post_max_size"
+    (= effective upload-max) "PHP upload_max_filesize"
+    :else "the chain"))
+
+(defn- accepts
+  [noun limit]
+  (if (= :unlimited limit)
+    (format "accepts %s of any size" noun)
+    (format "accepts %s up to %s" noun (size/human limit))))
+
+(defn- one-side-read
+  "The warning for a chain judged on one side only: the side nobody read
+   leaves the effective limit unknown, so the check names it instead of
+   passing, and reports what the side that answered accepts."
+  [{:keys [component nginx-body-size nginx-explicit? found-nginx? found-php? upload-max post-max]
+    :as evidence}]
+  (let [nginx? (some? nginx-body-size)
+        php? (or (some? upload-max) (some? post-max))]
+    (cond
+      (and php? (not nginx?))
+      (let [php-limit (size/minimum [post-max upload-max])]
+        [{:severity :warning
+          :component component
+          :summary (str "nginx's client_max_body_size was not read, so the effective upload limit is unknown - PHP alone "
+                        (if php-limit
+                          (format "%s (capped by %s)" (accepts "uploads" php-limit) (limiter php-limit evidence))
+                          (accepts "uploads" :unlimited)))
+          :hint (if (true? found-nginx?)
+                  "client_max_body_size did not parse in 'nginx -T' - read it in the nginx container"
+                  "no nginx container answered 'nginx -T' - if nginx fronts this app, read client_max_body_size in its container; otherwise the server in front of PHP sets its own limit")}])
+
+      (and nginx? (not php?))
+      [{:severity :warning
+        :component component
+        :summary (format "PHP's upload limits were not read, so the effective upload limit is unknown - nginx alone %s (client_max_body_size%s)"
+                         (accepts "request bodies" nginx-body-size)
+                         (if (false? nginx-explicit?) ", nginx's default - not set" ""))
+        :hint (if (true? found-php?)
+                "upload_max_filesize and post_max_size did not parse in 'php -i' - read them in the php-fpm container"
+                "no php container answered 'php -i' - read upload_max_filesize and post_max_size in the php-fpm container")}])))
 
 (defn analyze
   "Pure: takes the parsed evidence and returns findings. Keys are byte counts,
-   :unlimited, or nil (not found / could not read)."
-  [{:keys [component nginx-body-size nginx-explicit? upload-max post-max memory-limit]}]
-  (let [effective (size/minimum [nginx-body-size post-max upload-max])]
+   :unlimited, or nil (not found / could not read). An effective limit is only
+   stated when both nginx and PHP were read; with one side unread the check
+   warns that the limit is unknown and still judges the side that answered."
+  [{:keys [component nginx-body-size nginx-explicit? upload-max post-max memory-limit]
+    :as evidence}]
+  (let [both? (and (some? nginx-body-size) (or (some? upload-max) (some? post-max)))
+        effective (size/minimum [nginx-body-size post-max upload-max])]
     (concat
      ;; the headline: what an upload actually maxes out at, and which link caps it
-     (when effective
-       (let [limiter (cond
-                       (= effective nginx-body-size) "nginx client_max_body_size"
-                       (= effective post-max) "PHP post_max_size"
-                       (= effective upload-max) "PHP upload_max_filesize"
-                       :else "the chain")]
-         [{:severity :info
-           :component component
-           :summary (format "effective upload limit is %s (capped by %s)" (size/human effective) limiter)
-           :hint (format "nginx %s%s / upload_max_filesize %s / post_max_size %s"
-                         (size/human nginx-body-size)
-                         (if nginx-explicit? "" " (default - not set)")
-                         (size/human upload-max)
-                         (size/human post-max))}]))
+     (when (and both? effective)
+       [{:severity :info
+         :component component
+         :summary (format "effective upload limit is %s (capped by %s)" (size/human effective) (limiter effective evidence))
+         :hint (format "nginx %s%s / upload_max_filesize %s / post_max_size %s"
+                       (size/human nginx-body-size)
+                       (if nginx-explicit? "" " (default - not set)")
+                       (size/human upload-max)
+                       (size/human post-max))}])
+
+     (one-side-read evidence)
 
      ;; nginx in front is stricter than PHP behind it -> 413 before PHP is even reached
      (when (size/smaller? nginx-body-size upload-max)

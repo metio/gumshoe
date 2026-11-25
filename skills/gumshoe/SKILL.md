@@ -207,7 +207,9 @@ flow logs), cert-manager, Cluster API, CloudNativePG, Crossplane, db-operator,
 external-dns, Flagger, Flux, Gateway API, JaaS, Karpenter, Kueue, Loki,
 Prometheus, StageSet, Strimzi, Thanos, Traefik, and Velero. Outside it they
 cover ceph and OpenNebula over SSH, Matrix homeservers, restic repositories,
-the nginx/php-fpm upload limit chain of an app, and host facts from
+the nginx/php-fpm upload limit chain of an app (when nginx or PHP did not
+answer, `upload-limits` warns that the effective limit is unknown and
+judges only the side that answered), and host facts from
 node_exporter: `tools/node-exporter/runbooks/facts.clj` reads every host's
 CPU count, memory, kernel, OS and exporter health through PromQL and compares
 the reporting hosts with a file of declared names (`--declared`), with the
@@ -318,6 +320,12 @@ mostly data:
   leave part of what the check covers unjudged (a kind of binding, a kind
   of owner), and leave out a read judged only when it answered, one that
   only adds to a hint, or one that a cluster may not serve.
+  A collection reading a command's output out of a container uses
+  `kubectl/exec-answer`, nil unless the command exited 0; `exec-stdout`
+  returns whatever reached stdout, so a failed command reads as an empty
+  answer. Keep a value nobody read nil in the evidence rather than
+  substituting the program's default for it, and apply the default only
+  when the program answered without setting the value.
   `(detective/check-step {:title … :detectives … :blocking? false})` is the
   playbook step for the same;
 - a book derives the options its select reads instead of writing them:

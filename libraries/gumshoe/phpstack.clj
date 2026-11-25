@@ -27,28 +27,50 @@
        vec))
 
 (defn php-directive
-  "The active (left-hand) value of a directive in a 'php -i' dump."
+  "The active (left-hand) value of a directive in a 'php -i' dump. The name
+   must start its line, so memory_limit never reads max_memory_limit."
   [php-info directive]
-  (some-> (re-find (re-pattern (str directive #"\s*=>\s*(\S+)")) (str php-info))
+  (some-> (re-find (re-pattern (str "(?m)^" (java.util.regex.Pattern/quote directive) #"\s*=>\s*(\S+)"))
+                   (str php-info))
           second))
 
+(defn nginx-dump?
+  "Whether output is an 'nginx -T' dump: nginx heads every file it dumps with
+   a '# configuration file <path>:' line, whether or not the file sets
+   client_max_body_size."
+  [output]
+  (boolean (re-find #"(?m)^# configuration file \S.*:\s*$" (str output))))
+
+(def nginx-default-body-size
+  "nginx's client_max_body_size when no block sets it: 1 MB."
+  1048576)
+
 (defn- nginx-limit
-  "The most restrictive configured client_max_body_size, or nil when none is
-   set (so the caller applies nginx's 1 MB default)."
+  "The most restrictive configured client_max_body_size, :unlimited when every
+   one is 0, or nil when none parses."
   [sizes]
   (let [parsed (map size/parse sizes)]
     (or (size/minimum parsed)
         (when (seq (remove nil? parsed)) :unlimited))))
 
 (defn parse-evidence
+  "The upload limits of an 'nginx -T' dump and a 'php -i' dump, either nil when
+   its container did not answer. nginx's limit is its 1 MB default only when
+   nginx answered without setting client_max_body_size; when nginx did not
+   answer, :nginx-body-size and :nginx-explicit? are nil, so nothing judges a
+   limit nobody read."
   [{:keys [component nginx-config php-info]}]
-  (let [sizes (nginx-body-sizes nginx-config)
+  (let [nginx? (not (str/blank? (str nginx-config)))
+        sizes (nginx-body-sizes nginx-config)
         explicit? (boolean (seq sizes))]
     {:component component
-     :found-nginx? (boolean (not (str/blank? (str nginx-config))))
+     :found-nginx? nginx?
      :found-php? (boolean (not (str/blank? (str php-info))))
-     :nginx-explicit? explicit?
-     :nginx-body-size (if explicit? (nginx-limit sizes) 1048576)
+     :nginx-explicit? (when nginx? explicit?)
+     :nginx-body-size (cond
+                        (not nginx?) nil
+                        explicit? (nginx-limit sizes)
+                        :else nginx-default-body-size)
      :upload-max (some-> (php-directive php-info "upload_max_filesize") size/parse)
      :post-max (some-> (php-directive php-info "post_max_size") size/parse)
      :memory-limit (some-> (php-directive php-info "memory_limit") size/parse)}))
@@ -56,12 +78,23 @@
 ;; ---------------------------------------------------------------------------
 ;; collecting from the cluster
 
-(defn- looks-like-nginx? [output] (str/includes? (str output) "client_max_body_size"))
 (defn- looks-like-php? [output] (str/includes? (str output) "=>"))
 
+(defn- first-answer
+  "The first answer of command among the pod's containers that answered? accepts,
+   logged as read from that container."
+  [context namespace pod-name containers command answered? label]
+  (some (fn [c]
+          (let [out (kubectl/exec-answer context namespace pod-name c command)]
+            (when (answered? out)
+              (stdout/err-println (format "  %s %s config from %s/%s" (stdout/blue "▸") label pod-name c))
+              out)))
+        containers))
+
 (defn collect-evidence!
-  "Finds the first container that answers 'nginx -T' and the first that answers
-   'php -i' across the namespace, and returns parsed evidence."
+  "Finds the first container that answers 'nginx -T' with a config dump and the
+   first that answers 'php -i' across the namespace, and returns parsed
+   evidence."
   [context namespace]
   (stdout/print-section "🔍 Evidence (kubectl exec)")
   (let [pods (kubectl/items-of (kubectl/get-namespaced context namespace "pods"))]
@@ -72,17 +105,7 @@
               pod-name (kubectl/name-of pod)
               containers (kubectl/container-names pod)
               nginx-config (or nginx-config
-                               (some (fn [c]
-                                       (let [out (kubectl/exec-stdout context namespace pod-name c ["nginx" "-T"])]
-                                         (when (looks-like-nginx? out)
-                                           (stdout/err-println (format "  %s nginx config from %s/%s" (stdout/blue "▸") pod-name c))
-                                           out)))
-                                     containers))
+                               (first-answer context namespace pod-name containers ["nginx" "-T"] nginx-dump? "nginx"))
               php-info (or php-info
-                           (some (fn [c]
-                                   (let [out (kubectl/exec-stdout context namespace pod-name c ["php" "-i"])]
-                                     (when (looks-like-php? out)
-                                       (stdout/err-println (format "  %s php config from %s/%s" (stdout/blue "▸") pod-name c))
-                                       out)))
-                                 containers))]
+                           (first-answer context namespace pod-name containers ["php" "-i"] looks-like-php? "php"))]
           (recur (rest pods) nginx-config php-info))))))

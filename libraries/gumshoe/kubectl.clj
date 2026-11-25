@@ -700,6 +700,18 @@
   (apply shell/stdout-of "kubectl" (str "--context=" context) (str "--namespace=" namespace) request-timeout
          "exec" pod "-c" container "--" command))
 
+(defn exec-answer
+  "The trimmed stdout of a command run in a pod's container, or nil unless it
+   exited 0. A command the container lacks, a failed exec and a command that
+   failed after printing part of its output are all unanswered, where
+   exec-stdout returns whatever reached stdout."
+  [context namespace pod container command]
+  (let [{:keys [exit out]} (apply shell/execute "kubectl" (str "--context=" context)
+                                  (str "--namespace=" namespace) request-timeout
+                                  "exec" pod "-c" container "--" command)]
+    (when (= 0 exit)
+      (str/trim (str out)))))
+
 (defn merge-patch-args
   "The kubectl arguments after --context that merge-patch a namespaced
    resource with patch, a map encoded as JSON. patch! runs them, and an effect

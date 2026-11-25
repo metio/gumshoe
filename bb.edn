@@ -160,6 +160,7 @@
                    [gumshoe.reproducer-test]
                    [gumshoe.recording-test]
                    [gumshoe.upload-test]
+                   [gumshoe.upload-evidence-test]
                    [gumshoe.ui-test]
                    [gumshoe.upterm-test]
                    [gumshoe.watch-test]
@@ -358,6 +359,7 @@
                                                          'gumshoe.runbook-test
                                                          'gumshoe.recording-test
                                                          'gumshoe.upload-test
+                                                         'gumshoe.upload-evidence-test
                                                          'gumshoe.ui-test
                                                          'gumshoe.upterm-test
                                                          'gumshoe.watch-test

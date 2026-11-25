@@ -1,0 +1,139 @@
+phpinfo()
+PHP Version => 8.6.0
+
+Build Date => Nov 24 2026 04:19:52
+Build System => Linux - Docker
+Build Provider => https://github.com/docker-library/php
+Configure Command =>  './configure'  '--build=x86_64-linux-gnu' '--sysconfdir=/usr/local/etc' '--with-config-file-path=/usr/local/etc/php' '--with-config-file-scan-dir=/usr/local/etc/php/conf.d' '--enable-option-checking=fatal' '--with-mhash' '--enable-mysqlnd' '--with-password-argon2' '--with-sodium=shared' '--with-pdo-sqlite=/usr' '--with-sqlite3=/usr' '--with-curl' '--with-iconv' '--with-openssl' '--with-readline' '--with-zlib' '--disable-phpdbg' '--with-libdir=lib/x86_64-linux-gnu' '--disable-cgi' '--enable-fpm' '--with-fpm-user=www-data' '--with-fpm-group=www-data' '--enable-zts' '--disable-zend-signals' 'build_alias=x86_64-linux-gnu' 'PHP_UNAME=Linux - Docker' 'PHP_BUILD_PROVIDER=https://github.com/docker-library/php'
+Server API => Command Line Interface
+Virtual Directory Support => enabled
+Configuration File (php.ini) Path => /usr/local/etc/php
+Loaded Configuration File => (none)
+Scan this dir for additional .ini files => /usr/local/etc/php/conf.d
+Additional .ini files parsed => /usr/local/etc/php/conf.d/docker-fpm.ini,
+/usr/local/etc/php/conf.d/docker-php-ext-sodium.ini
+
+PHP API => 20261112
+PHP Extension => 20261112
+Zend Extension => 420261112
+Zend Extension Build => API420261112,TS
+PHP Extension Build => API20261112,TS
+PHP Integer Size => 64 bits
+Debug Build => no
+Thread Safety => enabled
+Thread API => POSIX Threads
+Zend Signal Handling => disabled
+Zend Memory Manager => enabled
+Zend Multibyte Support => disabled
+Zend Max Execution Timers => enabled
+IPv6 Support => enabled
+DTrace Support => disabled
+
+Registered PHP Streams => https, ftps, compress.zlib, php, file, glob, data, http, ftp, phar
+Registered Stream Socket Transports => tcp, udp, unix, udg, ssl, tls, tlsv1.0, tlsv1.1, tlsv1.2, tlsv1.3
+Registered Stream Filters => zlib.*, convert.iconv.*, string.rot13, string.toupper, string.tolower, convert.*, consumed, dechunk
+
+This program makes use of the Zend Scripting Language Engine:
+Zend Engine v4.6.0, Copyright © Zend by Perforce
+    with Zend OPcache v8.6.0, Copyright ©, by Zend by Perforce
+
+
+ _______________________________________________________________________
+
+
+Configuration
+
+Core
+
+PHP Version => 8.6.0
+
+Directive => Local Value => Master Value
+allow_url_fopen => On => On
+allow_url_include => Off => Off
+arg_separator.input => & => &
+arg_separator.output => & => &
+auto_append_file => no value => no value
+auto_globals_jit => On => On
+auto_prepend_file => no value => no value
+browscap => no value => no value
+default_charset => UTF-8 => UTF-8
+default_mimetype => text/html => text/html
+disable_functions => no value => no value
+display_errors => STDOUT => STDOUT
+display_startup_errors => On => On
+doc_root => no value => no value
+docref_ext => no value => no value
+docref_root => no value => no value
+enable_dl => On => On
+enable_post_data_reading => On => On
+error_append_string => no value => no value
+error_include_args => Off => Off
+error_log => no value => no value
+error_log_mode => 0644 => 0644
+error_prepend_string => no value => no value
+error_reporting => no value => no value
+expose_php => On => On
+extension_dir => /usr/local/lib/php/extensions/no-debug-zts-20261112 => /usr/local/lib/php/extensions/no-debug-zts-20261112
+fatal_error_backtraces => On => On
+fiber.stack_size => no value => no value
+file_uploads => On => On
+hard_timeout => 2 => 2
+highlight.comment => <span style="color: #FF8000">#FF8000</span> => <span style="color: #FF8000">#FF8000</span>
+highlight.default => <span style="color: #0000BB">#0000BB</span> => <span style="color: #0000BB">#0000BB</span>
+highlight.html => <span style="color: #000000">#000000</span> => <span style="color: #000000">#000000</span>
+highlight.keyword => <span style="color: #007700">#007700</span> => <span style="color: #007700">#007700</span>
+highlight.string => <span style="color: #DD0000">#DD0000</span> => <span style="color: #DD0000">#DD0000</span>
+html_errors => Off => Off
+ignore_repeated_errors => Off => Off
+ignore_repeated_source => Off => Off
+ignore_user_abort => Off => Off
+implicit_flush => On => On
+include_path => .: => .:
+input_encoding => no value => no value
+internal_encoding => no value => no value
+log_errors => Off => Off
+mail.add_x_header => Off => Off
+mail.cr_lf_mode => crlf => crlf
+mail.force_extra_parameters => no value => no value
+mail.log => no value => no value
+mail.mixed_lf_and_crlf => Off => Off
+max_execution_time => 0 => 0
+max_file_uploads => 20 => 20
+max_input_nesting_level => 64 => 64
+max_input_time => -1 => -1
+max_input_vars => 1000 => 1000
+max_memory_limit => -1 => -1
+max_multipart_body_parts => -1 => -1
+memory_hard_limit_percent => no value => no value
+memory_limit => 128M => 128M
+open_basedir => no value => no value
+output_buffering => 0 => 0
+output_encoding => no value => no value
+output_handler => no value => no value
+post_max_size => 8M => 8M
+precision => 14 => 14
+realpath_cache_size => 4096K => 4096K
+realpath_cache_ttl => 120 => 120
+register_argc_argv => Off => Off
+report_memleaks => On => On
+report_zend_debug => Off => Off
+request_order => no value => no value
+sendmail_from => no value => no value
+sendmail_path => /usr/sbin/sendmail -t -i => /usr/sbin/sendmail -t -i
+serialize_precision => -1 => -1
+short_open_tag => On => On
+SMTP => localhost => localhost
+smtp_port => 25 => 25
+sys_temp_dir => no value => no value
+syslog.facility => LOG_USER => LOG_USER
+syslog.filter => no-ctrl => no-ctrl
+syslog.ident => php => php
+unserialize_callback_func => no value => no value
+upload_max_filesize => 2M => 2M
+upload_tmp_dir => no value => no value
+user_dir => no value => no value
+user_ini.cache_ttl => 300 => 300
+user_ini.filename => .user.ini => .user.ini
+variables_order => EGPCS => EGPCS
+xmlrpc_error_number => 0 => 0
+xmlrpc_errors => Off => Off
