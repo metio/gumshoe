@@ -7,7 +7,8 @@
    Each step is a mutation spec (see gumshoe.mutation): its runbook runs it on
    its own, and a playbook composes it with others (see gumshoe.playbook). Each
    step names the node as its :subject, so the engine reads it again after the
-   confirmation and refuses a node that was removed or replaced meanwhile. None
+   confirmation and refuses a node that was removed or replaced meanwhile, or
+   whose spec moved (node-subject). None
    refuses a node already in the state it brings about: cordon, drain and
    uncordon are idempotent, and the maintenance playbook runs again over a node
    a failed run left cordoned. Each is :done when its post-checks already
@@ -63,7 +64,13 @@
   [node]
   (true? (-> node :spec :unschedulable)))
 
-(def ^:private node-subject {:type "nodes"})
+(def node-subject
+  "The node a step acts on. A Node carries no metadata.generation and the
+   kubelet writes its status every few seconds, so its pin compares the
+   node's uid and spec (see gumshoe.change/comparisons): a heartbeat during
+   the confirmation leaves it alone, a taint or cordon added meanwhile
+   refuses the step."
+  {:type "nodes" :compare :spec})
 
 (defn node-refusal
   "Why a step must not act on the node named `name`, judged on the node as

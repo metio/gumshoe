@@ -38,8 +38,9 @@
       :subject  {:type \"cronjobs\"                ; the object the change acts on, see below
                  :parse pick/namespaced          ; optional, the pick as a ref
                  :invalid \"...\"                 ; optional, why a pick that does not parse is refused
-                 :facts (fn [object] -> value)}  ; optional, joins the pin
-      :subjects (fn [ctx] -> seq of {:type :name :namespace? :facts? :optional?})
+                 :facts (fn [object] -> value)   ; optional, joins the pin
+                 :compare :spec}                 ; optional, see below
+      :subjects (fn [ctx] -> seq of {:type :name :namespace? :facts? :compare? :optional?})
                                                   ; optional, the several objects the
                                                   ; change acts on, see below
       :refusal  (fn [ctx] -> reason or nil)       ; optional, judged before the confirmation
@@ -67,7 +68,7 @@
                                     ; and merged over ctx for :refusal and :precondition
                                     ; only, see below
       :items    (fn [ctx] -> seq)   ; optional, overrides the confirmation items
-      :pin      (fn [ctx] -> {:type :name :namespace? :facts?})  ; optional, see below
+      :pin      (fn [ctx] -> {:type :name :namespace? :facts? :compare?})  ; optional, see below
       :recovery \"...\" or (fn [ctx] -> string)   ; optional, printed under the
                                     ; FAILED banner when this change fails,
                                     ; see gumshoe.playbook and below
@@ -279,7 +280,12 @@
    the change is refused, because the operator confirmed an object that no
    longer exists in that form. Status and metadata updates leave the
    generation alone, so a controller reporting progress does not trip it. An
-   object without a generation is compared by resourceVersion. A change that
+   object without a generation is compared by resourceVersion, unless its
+   subject or ref names :compare :spec, for a type the API server never
+   gives a generation although it splits spec from status (a Node): then
+   its uid and spec are compared, and a refusal names the spec keys that
+   moved, as \"its spec changed after the confirmation: taints\". See
+   gumshoe.change/comparisons. A change that
    rests on something outside the spec - an annotation, a status field - names
    it with :facts (fn [object] -> value), which must be equal too. An object
    that cannot be read before the confirmation is refused before it is
@@ -303,18 +309,46 @@
 
 ;; --- the confirmed object --------------------------------------------------------
 
+(defn check-compare!
+  "compare when it names one of gumshoe.change/comparisons or is nil;
+   throws otherwise, so
+   a misspelt :compare never silently falls back to another comparison."
+  [compare]
+  (when-let [why (change/compare-problem compare)]
+    (throw (ex-info why {:compare compare})))
+  compare)
+
 (defn fingerprint
   "What identifies the object the operator confirmed: its uid, its generation
-   or, for a type without one, its resourceVersion, and the value of facts
-   when given."
-  ([object] (fingerprint object nil))
-  ([object facts]
+   or, for an object without one, what compare names (see
+   gumshoe.change/comparisons; resourceVersion when nil), and the value of facts when given."
+  ([object] (fingerprint object nil nil))
+  ([object facts] (fingerprint object facts nil))
+  ([object facts compare]
+   (check-compare! compare)
    (when object
      (let [{:keys [uid generation resourceVersion]} (:metadata object)]
-       (cond-> (if generation
-                 {:uid uid :generation generation}
-                 {:uid uid :resource-version resourceVersion})
+       (cond-> (cond
+                 generation {:uid uid :generation generation}
+                 (= :spec compare) {:uid uid :spec (or (:spec object) {})}
+                 :else {:uid uid :resource-version resourceVersion})
          facts (assoc :facts (facts object)))))))
+
+(defn ref-fingerprint
+  "The fingerprint of object as the ref that names it declares it: with its
+   :facts and its :compare."
+  [ref object]
+  (fingerprint object (:facts ref) (:compare ref)))
+
+(defn- moved-keys
+  "The keys of two maps whose values differ, sorted, as text."
+  [before after]
+  (->> (concat (keys before) (keys after))
+       distinct
+       (remove #(= (get before %) (get after %)))
+       (map #(if (keyword? %) (name %) (str %)))
+       sort
+       (str/join ", ")))
 
 (defn drift
   "Why the object no longer is the one confirmed, or nil."
@@ -325,6 +359,13 @@
     (not= (:uid before) (:uid after)) "it was deleted and created again after the confirmation"
     (and (:generation before) (not= (:generation before) (:generation after)))
     (format "its spec changed after the confirmation (generation %s, now %s)" (:generation before) (:generation after))
+    (and (contains? before :spec) (not= (:spec before) (:spec after)))
+    ;; an after without :spec was fingerprinted by another comparison (the
+    ;; object gained a generation), so no key-by-key difference is named
+    (let [moved (when (contains? after :spec) (moved-keys (:spec before) (:spec after)))]
+      (if (str/blank? moved)
+        "its spec changed after the confirmation"
+        (str "its spec changed after the confirmation: " moved)))
     (and (:resource-version before) (not= (:resource-version before) (:resource-version after)))
     "it changed after the confirmation"
     (not= (:facts before) (:facts after))
@@ -357,7 +398,7 @@
     (fn []
       (and (if precondition (precondition) true)
            (let [why (if before
-                       (drift before (fingerprint (fetch ref) (:facts ref)))
+                       (drift before (ref-fingerprint ref (fetch ref)))
                        "it could not be read when the change was confirmed")]
              (if why (refuse! why) true))))))
 
@@ -457,9 +498,9 @@
   (concurrent/all (map (fn [ref] #(fetch-pinned context ref)) refs)))
 
 (defn subjects-fingerprints
-  "The fingerprint of each object, with the :facts of its ref."
+  "The fingerprint of each object, as its ref declares it (ref-fingerprint)."
   [refs objects]
-  (mapv (fn [ref object] (fingerprint object (:facts ref))) refs objects))
+  (mapv ref-fingerprint refs objects))
 
 (defn subjects-drift
   "Why the first of the refs no longer is the object confirmed, named as
@@ -660,9 +701,9 @@
     (cond
       pin (when-let [pinned (pin ctx)]
             {:ref pinned :from :reads
-             :before (fingerprint (fetch-pinned context pinned) (:facts pinned))})
-      (and subject ref) (let [pinned (cond-> ref (:facts subject) (assoc :facts (:facts subject)))]
-                          {:ref pinned :from :pick :before (fingerprint object (:facts pinned))})
+             :before (ref-fingerprint pinned (fetch-pinned context pinned))})
+      (and subject ref) (let [pinned (merge ref (select-keys subject [:facts :compare]))]
+                          {:ref pinned :from :pick :before (ref-fingerprint pinned object)})
       :else nil)))
 
 (defn gone-before-confirmation

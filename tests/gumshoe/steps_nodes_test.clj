@@ -75,7 +75,7 @@
 (deftest every-node-step-pins-its-node-and-refuses-one-that-is-gone
   (doseq [[name step] {"cordon" nodes/cordon "drain" nodes/drain "uncordon" nodes/uncordon}]
     (testing name
-      (is (= {:type "nodes"} (:subject step)))
+      (is (= {:type "nodes" :compare :spec} (:subject step)) "a Node has no generation; its pin compares uid and spec")
       (is (= "node n1 no longer exists" ((:refusal step) {:target "n1" :object nil})))
       (is (nil? ((:refusal step) {:target "n1" :object {:metadata {:name "n1"}}})))
       (is (nil? ((:refusal step) {:target "n1" :object {:metadata {:name "n1"} :spec {:unschedulable true}}}))

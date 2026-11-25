@@ -419,6 +419,30 @@
                control-plane? (assoc :labels {:node-role.kubernetes.io/control-plane ""}))
    :spec (cond-> {} unschedulable (assoc :unschedulable true))})
 
+(defn- heartbeat
+  "[type node] as the kubelet leaves it after a status write: a higher
+   resourceVersion and a newer Ready condition, the spec untouched."
+  [[type node]]
+  [type (-> node
+            (assoc-in [:metadata :resourceVersion] "101")
+            (assoc-in [:status :conditions] [{:type "Ready" :status "True" :lastHeartbeatTime "2026-11-25T10:00:40Z"}]))])
+
+(defn- tainted
+  "[type node] with a NoSchedule taint added to its spec."
+  [[type node]]
+  [type (-> node
+            (assoc-in [:metadata :resourceVersion] "101")
+            (update-in [:spec :taints] (fnil conj []) {:key "node.kubernetes.io/maintenance" :effect "NoSchedule"}))])
+
+(defn- node-moves
+  "The scenarios of a node book in which its node moves during the
+   confirmation: a status write, which leaves the pin alone, and a taint,
+   which refuses the change. The node is the first of permitted."
+  [{:keys [target opts permitted]}]
+  (let [moved (fn [f] (into [(f (first permitted))] (rest permitted)))]
+    {:status-updated {:objects permitted :target target :opts opts :between {:objects (moved heartbeat)}}
+     :tainted {:objects permitted :target target :opts opts :between {:objects (moved tainted)}}}))
+
 (defn- pod-on
   [node-name name owner-kind]
   {:metadata {:namespace "shop" :name name :uid (str "uid-" name)
@@ -655,29 +679,33 @@
               :refused [["namespaces" (namespace-object "Active")]]})
 
    "runbooks/kubernetes/nodes/cordon.clj"
-   (standard {:target "n1"
-              :permitted [["nodes" (node "n1")]]
-              :refused [["nodes" (node "n1" :unschedulable true)]]})
+   (let [book {:target "n1"
+               :permitted [["nodes" (node "n1")]]
+               :refused [["nodes" (node "n1" :unschedulable true)]]}]
+     (merge (standard book) (node-moves book)))
 
    "runbooks/kubernetes/nodes/drain.clj"
-   (assoc (standard {:target "n1" :opts {:grace-period -1}
-                     :permitted [["nodes" (node "n1" :unschedulable true)] ["pods" (pod-on "n1" "agent" "DaemonSet")]
-                                 ["pods" (pod-on "n1" "api" "ReplicaSet")] ["pods" (pod-on "n2" "web" "ReplicaSet")]]
-                     :refused [["nodes" (node "n1")] ["pods" (pod-on "n1" "web" "ReplicaSet")]]})
-          ;; cordoned, with nothing a drain evicts left on it: already done
-          :done {:objects [["nodes" (node "n1" :unschedulable true)] ["pods" (pod-on "n1" "agent" "DaemonSet")]
-                           ["pods" (pod-on "n2" "web" "ReplicaSet")]]
-                 :target "n1" :opts {:grace-period -1}})
+   (let [book {:target "n1" :opts {:grace-period -1}
+               :permitted [["nodes" (node "n1" :unschedulable true)] ["pods" (pod-on "n1" "agent" "DaemonSet")]
+                           ["pods" (pod-on "n1" "api" "ReplicaSet")] ["pods" (pod-on "n2" "web" "ReplicaSet")]]
+               :refused [["nodes" (node "n1")] ["pods" (pod-on "n1" "web" "ReplicaSet")]]}]
+     (assoc (merge (standard book) (node-moves book))
+            ;; cordoned, with nothing a drain evicts left on it: already done
+            :done {:objects [["nodes" (node "n1" :unschedulable true)] ["pods" (pod-on "n1" "agent" "DaemonSet")]
+                             ["pods" (pod-on "n2" "web" "ReplicaSet")]]
+                   :target "n1" :opts {:grace-period -1}}))
 
    "runbooks/kubernetes/nodes/uncordon.clj"
-   (standard {:target "n1"
-              :permitted [["nodes" (node "n1" :unschedulable true)]]
-              :refused [["nodes" (node "n1")]]})
+   (let [book {:target "n1"
+               :permitted [["nodes" (node "n1" :unschedulable true)]]
+               :refused [["nodes" (node "n1")]]}]
+     (merge (standard book) (node-moves book)))
 
    "runbooks/kubernetes/nodes/restart_apiserver.clj"
-   (assoc (over-ssh (standard {:target "cp-1"
-                               :permitted [["nodes" (node "cp-1" :control-plane? true)]]
-                               :refused [["nodes" (node "cp-1" :control-plane? true)]]})
+   (assoc (over-ssh (let [book {:target "cp-1"
+                                :permitted [["nodes" (node "cp-1" :control-plane? true)]]
+                                :refused [["nodes" (node "cp-1" :control-plane? true)]]}]
+                      (merge (standard book) (node-moves book)))
                     (apiserver-host "ok") (apiserver-host "[-]etcd failed"))
           :no-container {:objects [["nodes" (node "cp-1" :control-plane? true)]] :target "cp-1"
                          :ssh (apiserver-host "ok" :container "")}
@@ -1154,6 +1182,24 @@
       (is (refused-with? (judged path (assoc scenario :between {:objects []})) #"refusing: .*n1"))
       (is (refused-with? (judged path (assoc scenario :between {:objects (mapv replaced start)}))
                          #"refusing: .*(deleted|created)")))))
+
+(deftest node-books-pin-the-spec-of-their-node
+  ;; a Node has no generation and the kubelet writes its status every few
+  ;; seconds, so a prompt left open while it does must not refuse the change
+  (doseq [[path target start ssh] [["runbooks/kubernetes/nodes/cordon.clj" "n1" [["nodes" (node "n1")]] nil]
+                                   ["runbooks/kubernetes/nodes/uncordon.clj" "n1" [["nodes" (node "n1" :unschedulable true)]] nil]
+                                   ["runbooks/kubernetes/nodes/drain.clj" "n1" [["nodes" (node "n1" :unschedulable true)]
+                                                                                ["pods" (pod-on "n1" "api" "ReplicaSet")]] nil]
+                                   ["runbooks/kubernetes/nodes/restart_apiserver.clj" "cp-1"
+                                    [["nodes" (node "cp-1" :control-plane? true)]] (apiserver-host "ok")]]
+          :let [scenario {:objects start :target target :opts {:grace-period -1} :ssh ssh}
+                moved (fn [f] (into [(f (first start))] (rest start)))]]
+    (testing path
+      (is (true? (:result (judged path (assoc scenario :between {:objects (moved heartbeat)}))))
+          "a status write during the confirmation")
+      (is (refused-with? (judged path (assoc scenario :between {:objects (moved tainted)}))
+                         #"refusing: its spec changed after the confirmation: taints")
+          "a taint added during the confirmation"))))
 
 (deftest restart-apiserver-never-reaches-a-node-the-cluster-no-longer-lists
   (let [path "runbooks/kubernetes/nodes/restart_apiserver.clj"

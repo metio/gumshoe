@@ -86,6 +86,19 @@
       (is (= {:description "CronJob batch/nightly is suspended" :timeout 30 :interval 3}
              (select-keys check [:description :timeout :interval :verifies-absence?]))))))
 
+(deftest a-target-declares-what-its-pin-compares
+  (let [node-target {:pick :one :label "Node" :type "nodes" :flag :node :compare :spec
+                     :candidates [:call :gumshoe.deletion/candidates [:context]]}
+        c (dsl/compile (-> base (assoc :target node-target) (dissoc :refuse :items)
+                           (assoc :state {:holds [:field [:spec :unschedulable] := true] :says "node {target} is cordoned"}
+                                  :effect [[:kubectl :patch {:merge {:spec {:unschedulable true}}}]])))]
+    (is (= [{:from :pick :type "nodes" :compare :spec}] (:subjects c)) "the subject carries :compare to the pin"))
+  (is (= [{:from :pick :type "cronjobs"}] (:subjects (dsl/compile base))) "without :compare the pin compares resourceVersion")
+  (doseq [[value word] [[:status "a pin compares :status"] ["spec" "a pin compares \"spec\""] [nil "a pin compares nil"]]]
+    (let [r (refusal (assoc-in base [:target :compare] value))]
+      (is (= [:target :compare] (:path r)) (pr-str value))
+      (is (str/includes? (str (:message r)) word) (:message r)))))
+
 (def ^:private accepted
   "[what, a change, what its compiled map must satisfy]."
   [["a :delete makes the change destructive when :destructive? is not stated"

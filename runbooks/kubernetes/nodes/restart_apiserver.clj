@@ -86,7 +86,10 @@
                   :kubectl-can-get ["nodes"]}
   :select node-select
   :empty-message "no node carries the control-plane role label"
-  :subject {:type "nodes"}
+  ;; a Node has no generation and the kubelet writes its status every few
+  ;; seconds; the control-plane label the refusal needs is judged on the
+  ;; node read again after the confirmation
+  :subject {:type "nodes" :compare :spec}
   :derive derive-state
   ;; judged before the SSH checks below, so a node the cluster no longer
   ;; lists is never connected to

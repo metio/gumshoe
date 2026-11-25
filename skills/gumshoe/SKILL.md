@@ -388,6 +388,17 @@ mostly data:
   pick must be `<namespace>/<name>`, a `:many` pick a non-empty collection of
   non-blank strings and any other pick a non-blank string, so a book that
   reads `:target` itself never sees nil or blank text.
+  The pin compares uid and generation. An object the API server gives no
+  generation is compared by resourceVersion, so any write to it, status
+  included, refuses the change; for a type that splits spec from status
+  but has no generation, such as a Node, whose status the kubelet writes
+  every few seconds, add `:compare :spec` to the subject (or to a
+  `:subjects`/`:pin` ref) and the pin compares uid and spec instead,
+  refusing as "its spec changed after the confirmation: taints"
+  (`gumshoe.steps.nodes/node-subject`; the values are in
+  `gumshoe.change/comparisons`, and an unknown one is refused). Metadata is
+  outside `:spec`, so judge a label the change needs in `:refusal`, which
+  sees the object read again, or name it with `:facts`.
   A change whose subject is no single object, such as a Helm release kept
   as many Secrets, uses `:refusal` alone (`runbooks/kubernetes/helm/rollback.clj`);
 - a change that acts on several objects at once - an adoption stamping a
@@ -515,7 +526,8 @@ mostly data:
   only (no tagged literals, at most 64 KiB and 32 levels deep), and
   functions a casebook registers load from a plugin named in `env.edn`.
   Prefer a Clojure book for anything an operator relies on until the
-  vocabulary is reviewed. Declare the target with its `:type` (or a registered `:parse`), the
+  vocabulary is reviewed. Declare the target with its `:type` (or a registered `:parse`;
+  add `:compare :spec` for a target such as `"nodes"` that has no generation), the
   `:state` the change brings about, `:refuse` entries, `:confirm` and
   `[:kubectl :patch|:scale|:annotate|:delete …]` effects; `compile` derives
   the pin, the fail-closed post-check, the skip as done and, for a delete,

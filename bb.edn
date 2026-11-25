@@ -52,6 +52,7 @@
                    [gumshoe.isolated-services-test]
                    [gumshoe.effect-plugin-test]
                    [gumshoe.mutation-pin-test]
+                   [gumshoe.mutation-compare-test]
                    [gumshoe.mutation-books-test]
                    [gumshoe.change-books-test]
                    [gumshoe.resize-books-test]
@@ -240,6 +241,7 @@
                                                          'gumshoe.isolated-services-test
                                                          'gumshoe.effect-plugin-test
                                                          'gumshoe.mutation-pin-test
+                                                         'gumshoe.mutation-compare-test
                                                          'gumshoe.mutation-books-test
                                                          'gumshoe.change-books-test
                                                          'gumshoe.resize-books-test
