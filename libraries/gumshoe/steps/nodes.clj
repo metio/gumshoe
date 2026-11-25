@@ -78,7 +78,7 @@
    :select {:mode :one :label "Node" :flag :node :candidates schedulable-nodes
             :preview "kubectl describe node {}"}
    :empty-message "every node is already cordoned"
-   :confirm {:action "cordon (mark unschedulable) a node"}
+   :confirm {:action "cordon (mark unschedulable) a node" :destructive? false}
    :announce (fn [{:keys [target]}] (format "Cordon node %s" target))
    :effect (fn [{:keys [context target]}] (cordon-effect context target))
    :verify (fn [{:keys [context target]}] [(unschedulable-check context target)])})
@@ -105,7 +105,7 @@
    :prerequisites node-prerequisites
    :select {:mode :one :label "Node" :flag :node :candidates cordoned-nodes}
    :empty-message "no node is cordoned"
-   :confirm {:action "uncordon (mark schedulable) a node"}
+   :confirm {:action "uncordon (mark schedulable) a node" :destructive? false}
    :announce (fn [{:keys [target]}] (format "Uncordon node %s" target))
    :effect (fn [{:keys [context target]}] (effect/plan (effect/kubectl context "uncordon" target)))
    :verify (fn [{:keys [context target]}] [(schedulable-check context target)])})

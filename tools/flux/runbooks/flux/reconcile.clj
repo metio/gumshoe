@@ -38,7 +38,7 @@
                   :kubectl-can-patch [flux/helmrelease-type]}
   :select {:mode :namespaced :label "HelmRelease" :namespace-flag :namespace :name-flag :name
            :candidates helmreleases}
-  :confirm {:action "trigger a flux reconciliation"}
+  :confirm {:action "trigger a flux reconciliation" :destructive? false}
   :announce (fn [{:keys [target]}] (format "Reconcile HelmRelease %s" target))
   :effect (fn [{:keys [context target]}]
             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]

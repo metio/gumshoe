@@ -32,7 +32,7 @@
                   :kubectl-can-patch [jaas/jsonnetsnippet-type]}
   :select {:mode :namespaced :label "JsonnetSnippet" :namespace-flag :namespace :name-flag :name
            :candidates snippets}
-  :confirm {:action "suspend a JsonnetSnippet"}
+  :confirm {:action "suspend a JsonnetSnippet" :destructive? false}
   :announce (fn [{:keys [target]}] (format "Suspend JsonnetSnippet %s" target))
   :effect (fn [{:keys [context target]}]
             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]

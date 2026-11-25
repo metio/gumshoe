@@ -593,7 +593,11 @@ parses every book and enforces the repository contract by machine: license
 headers, namespace docstrings, exactly one harness entry point per book, a
 description on every book, a description on every option, no colliding
 option aliases, and every book loading (without running) so a symbol that
-resolves to nothing fails the suite. The rules live in `gumshoe.conformance`, so a casebook runs
+resolves to nothing fails the suite. Every mutation spec a book or library
+defines is judged as it evaluates: it states a confirmation action, whether
+it is destructive, its prerequisites, an effect, and a post-check or the
+reason it has none (`:no-verify "why"`), and a declared `:pin` follows the
+picked namespace. The rules live in `gumshoe.conformance`, so a casebook runs
 the same checks against its own books and libraries with `bb verify` (see
 `casebook-example/bb.edn`).
 

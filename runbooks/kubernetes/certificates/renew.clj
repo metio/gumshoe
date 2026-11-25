@@ -41,7 +41,7 @@
                   :cluster-capabilities []
                   :kubectl-can-get [certificate-type]}
   :select {:mode :many :label "Certificate" :flag :certificates :candidates certificates}
-  :confirm {:action "renew certificates - new certificates are requested from the issuer"}
+  :confirm {:action "renew certificates - new certificates are requested from the issuer" :destructive? false}
   :announce (fn [{:keys [target]}] (format "Renew certificates [%s]" (str/join ", " target)))
   :effect (fn [{:keys [context target]}] (renew-effect context target))
   :verify (fn [{:keys [context target]}] (ready-checks context target))})

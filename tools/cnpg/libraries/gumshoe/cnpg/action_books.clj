@@ -75,7 +75,7 @@
   (cluster-annotation-book
    {:verb "Reload"
     :empty-message "no healthy cluster to reload"
-    :confirm {:action "reload a cluster's configuration"}
+    :confirm {:action "reload a cluster's configuration" :destructive? false}
     :refusal actions/reload-refusal
     :items actions/reload-items
     :arg #(actions/stamp-arg actions/reload-annotation %)
@@ -91,7 +91,7 @@
     :empty-message (if wanted "no healthy cluster to hibernate" "no cluster is hibernated")
     :confirm (if wanted
                {:action "hibernate a cluster - every instance pod is deleted and nothing accepts connections" :destructive? true}
-               {:action "rehydrate a cluster"})
+               {:action "rehydrate a cluster" :destructive? false})
     :refusal #(actions/hibernation-refusal % wanted)
     :items #(actions/hibernation-items % wanted)
     :arg (fn [_] (actions/hibernation-arg wanted))
@@ -110,7 +110,7 @@
    :select {:mode :one :label "Cluster" :flag :cluster
             :candidates (fn [context] (cluster-picks context #(actions/backup-refusal % nil)))}
    :empty-message "no healthy cluster configures a backup destination"
-   :confirm {:action "start an on-demand backup"}
+   :confirm {:action "start an on-demand backup" :destructive? false}
    :subject cluster-subject
    :derive (fn [{:keys [object]}]
              {:backup-name (when object (actions/backup-name object (java.time.Instant/now)))})
@@ -146,10 +146,10 @@
     :applied? (fn [scheduled-backup wanted] (= wanted (actions/suspended? scheduled-backup)))
     :verify {:timeout 30 :interval 3}
     :on {:verb "suspend" :empty-message "every ScheduledBackup is suspended already"
-         :confirm {:action "suspend scheduled backups"}
+         :confirm {:action "suspend scheduled backups" :destructive? false}
          :announce "Suspend ScheduledBackup %s" :verified "ScheduledBackup %s is suspended"}
     :off {:verb "resume" :empty-message "no ScheduledBackup is suspended"
-          :confirm {:action "resume scheduled backups"}
+          :confirm {:action "resume scheduled backups" :destructive? false}
           :announce "Resume ScheduledBackup %s" :verified "ScheduledBackup %s is resumed"}}))
 
 (defn scheduled-backup-suspension

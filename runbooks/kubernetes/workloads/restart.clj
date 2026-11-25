@@ -24,7 +24,8 @@
   :select {:mode :one :label "Workload" :flag :pick :candidates candidates}
   :empty-message "no workload runs pods that a rollout could restart"
   :confirm {:action (str "restart every pod of the workload, one batch at a time as its update strategy allows - "
-                         "a workload with a single replica is unavailable while its pod restarts")}
+                         "a workload with a single replica is unavailable while its pod restarts")
+            :destructive? false}
   :subject {:parse workloads/parse-pick :invalid "the pick is not \"<Kind> <namespace>/<name>\""}
   :refusal (fn [{:keys [ref object]}] (workloads/restart-refusal (:kind ref) object))
   :announce (fn [{:keys [target]}] (format "Restart %s" target))

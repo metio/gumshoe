@@ -271,7 +271,10 @@ mostly data:
   returns them, keywords or strings. `(detective/check-step {:title …
   :detectives … :blocking? false})` is the playbook step for the same;
 - a uniform change is `(mutation/book {:select … :confirm … :effect …
-  :verify …})`, whose effect plan (`[[:kubectl "cordon" node]]`) runs,
+  :verify …})`. Conformance requires each spec to carry a readable
+  `:confirm {:action …}`, an explicit `:destructive?` true or false,
+  `:prerequisites`, an `:effect`, and a `:verify` or, for a change with
+  nothing to check afterwards, `:no-verify "why"`. Its effect plan (`[[:kubectl "cordon" node]]`) runs,
   dry-runs, or is collected in a test. An `:effect` returning one effect,
   such as a bare `(effect/note …)`, runs as a plan of one; anything else
   that is not a plan, a keyword, a map or a plan holding a non-effect, is
@@ -534,3 +537,20 @@ nobody has to run the book to find out. The casebook's `libraries` (or the
 `:libraries` roots) go on the classpath first; `:load? false` skips the
 step. A book's top-level forms other than its harness call still run while
 it loads, so they must not act on anything.
+
+The same pass judges every mutation spec a book or library defines, as it
+evaluates: what a book hands `mutation/book`, `playbook/book` (each change
+step) or `dispatch/book`, and every library var holding a spec, a
+`toggle/pair` or a playbook. Each finding is a `spec-contract` line naming
+the spec (`gumshoe.steps.nodes/cordon`, `runbooks.flux.reset`,
+`… step 7 "▶  Resume the HelmRelease"`) and what it omits: a confirmation
+action, whether it is destructive, `:prerequisites`, an `:effect`, or a
+post-check without a `:no-verify "why"` reason. A declared `:pin` is called
+with a synthetic pick in its own namespace and must return a ref with a
+`:type` and a `:name`, in the picked namespace when it has one; a pin that
+returns nil there (it reads derived values) is not judged. A book whose spec
+merges a library spec inherits its problems, and they are named once,
+against the library. A library that cannot be required is a `load` finding.
+A casebook that takes a gumshoe release before fixing or annotating its
+specs passes `:spec-contract :advise`, which prints these as `note:` lines;
+`conformance/report-in` returns `{:findings :advisories}` as data.

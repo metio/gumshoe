@@ -231,7 +231,9 @@
   (let [root (casebook! {"runbooks/moodle/pair.clj" pair-book
                          "libraries/casebook/targets.clj" pair-library})]
     (try
-      (let [findings (conformance/findings-in (roots root))]
+      ;; the pair book's spec is no more than its effect, so its contract
+      ;; judgements are notes here
+      (let [findings (conformance/findings-in (assoc (roots root) :spec-contract :advise))]
         (is (= {"pair.clj" [:destructuring] "targets.clj" [:destructuring]} (by-file findings)))
         (is (some #(str/includes? (:message %) "binds kubectl/split-namespace-name to the vector [ns name]") findings))
         (is (some #(str/includes? (:message %) "{:namespace .. :name ..}") findings)))
@@ -291,4 +293,188 @@
         (is (= 3 (binding [*out* (java.io.StringWriter.) *err* err] (conformance/verify! opts))))
         (is (str/includes? (str err) "note: ") "verify! prints it as a note")
         (is (str/includes? (str err) "bare.clj") (str err)))
+      (finally (fs/delete-tree root)))))
+
+;; --- the contract of a mutation spec ----------------------------------------
+
+(def ^:private complete-spec
+  {:confirm {:action "cordon a node" :destructive? false}
+   :prerequisites {:kubectl-can-patch ["nodes"]}
+   :effect (fn [_] [])
+   :verify (fn [_] [])})
+
+(deftest a-complete-spec-has-no-contract-problems
+  (is (empty? (conformance/contract-problems complete-spec))))
+
+(deftest every-omission-of-the-contract-is-a-problem
+  (doseq [[omission spec expected]
+          [["no confirmation action" (assoc complete-spec :confirm {:destructive? false}) "no confirmation action"]
+           ["a blank confirmation action" (assoc-in complete-spec [:confirm :action] " ") "no confirmation action"]
+           ["no statement of destructiveness" (update complete-spec :confirm dissoc :destructive?) "whether it is destructive"]
+           ["no prerequisites" (dissoc complete-spec :prerequisites) "no :prerequisites"]
+           ["no effect" (dissoc complete-spec :effect) "no :effect"]
+           ["no post-check and no reason" (dissoc complete-spec :verify) "no post-check (:verify) and states no reason"]
+           ["a blank reason" (-> complete-spec (dissoc :verify) (assoc :no-verify "")) ":no-verify must be a string"]
+           ["a post-check and a reason" (assoc complete-spec :no-verify "none needed") "drop the reason"]]]
+    (testing omission
+      (let [problems (conformance/contract-problems spec)]
+        (is (= 1 (count problems)) (pr-str problems))
+        (is (str/includes? (first problems) expected) (pr-str problems))))))
+
+(deftest a-reason-stands-in-for-a-post-check
+  (is (empty? (conformance/contract-problems
+               (-> complete-spec (dissoc :verify) (assoc :no-verify "the session is the result"))))))
+
+(deftest a-declared-pin-is-called-with-a-pick-in-a-namespace-of-its-own
+  (let [ns conformance/probe-namespace
+        problems #(conformance/pin-problems (assoc complete-spec :pin %1) %2)
+        one {:mode :one :label "Namespace" :flag :namespace}
+        namespaced {:mode :namespaced :label "Database" :namespace-flag :namespace :name-flag :name}]
+    (testing "a pin on the picked namespace, as a namespace or as <namespace>/<name>"
+      (is (empty? (problems (fn [{:keys [target]}] {:type "databases" :namespace target :name "moodle"}) one)))
+      (is (empty? (problems (fn [{:keys [opts]}] {:type "databases" :namespace (:namespace opts) :name (:name opts)})
+                            namespaced))))
+    (testing "a pin on the subject's ref"
+      (is (empty? (conformance/pin-problems
+                   (assoc complete-spec :subject {:type "cronjobs"} :pin (fn [{:keys [ref]}] ref))
+                   namespaced))))
+    (testing "a cluster-scoped ref has no namespace to ignore"
+      (is (empty? (problems (fn [{:keys [target]}] {:type "nodes" :name target}) one))))
+    (testing "a pin that pins nothing before its derived values exist is not judged"
+      (is (empty? (problems (fn [{:keys [observed]}] (when observed {:type "x" :name "y"})) namespaced))))
+    (testing "a pin that ignores the picked namespace"
+      (let [[problem :as all] (problems (fn [_] {:type "databases" :namespace "default" :name "moodle"}) one)]
+        (is (= 1 (count all)))
+        (is (str/includes? problem "\"default\""))
+        (is (str/includes? problem ns))))
+    (testing "a pin that returns no ref with a type and a name"
+      (is (str/includes? (first (problems (fn [{:keys [target]}] {:namespace target :name "moodle"}) one))
+                         "no ref with a :type and a :name"))
+      (is (str/includes? (first (problems (fn [_] "moodle") one)) "no ref")))
+    (testing "a pin that throws, and one that is no function"
+      (is (str/includes? (first (problems (fn [_] (throw (ex-info "boom" {}))) one)) "throws"))
+      (is (= ["declares a :pin that is not a function"] (problems {:type "x"} one))))))
+
+(def ^:private contract-library
+  (str header
+       "(ns casebook.contract.steps\n"
+       "  \"A shared spec without a post-check, and a toggle pair.\"\n"
+       "  (:require [gumshoe.toggle :as toggle]))\n\n"
+       "(def unverified\n"
+       "  {:prerequisites {:kubectl-can-patch [\"nodes\"]}\n"
+       "   :select {:mode :one :label \"Node\" :flag :node :candidates (fn [_] [])}\n"
+       "   :confirm {:action \"cordon a node\" :destructive? false}\n"
+       "   :effect (fn [_] [])})\n\n"
+       "(def pausing\n"
+       "  (toggle/pair\n"
+       "   {:spec {:prerequisites {:kubectl-can-patch [\"cronjobs\"]}\n"
+       "           :select {:mode :namespaced :label \"CronJob\"}\n"
+       "           :subject {:type \"cronjobs\"}}\n"
+       "    :refusal (fn [_ _] nil) :items (fn [_ _] []) :patch (fn [_] \"{}\")\n"
+       "    :applied? (fn [_ _] true) :verify {:timeout 1 :interval 1}\n"
+       "    :on {:verb \"suspend\" :confirm {:action \"suspend a CronJob\"} :announce \"%s\" :verified \"%s\"}\n"
+       "    :off {:verb \"resume\" :confirm {:action \"resume a CronJob\" :destructive? false} :announce \"%s\" :verified \"%s\"}}))\n"))
+
+(def ^:private contract-merged-book
+  (str header
+       "(ns casebook.contract.cordon\n"
+       "  \"Runs the shared spec.\"\n"
+       "  (:require [casebook.contract.steps :as steps]\n"
+       "            [gumshoe.mutation :as mutation]))\n\n"
+       "(mutation/book (merge steps/unverified {:description \"Cordons a node\"}))\n"))
+
+(def ^:private contract-playbook
+  (str header
+       "(ns casebook.contract.maintenance\n"
+       "  \"A playbook whose second step does not say whether it is destructive.\"\n"
+       "  (:require [gumshoe.playbook :as playbook]))\n\n"
+       "(playbook/book\n"
+       " {:description \"Maintenance\"\n"
+       "  :select {:mode :one :label \"Node\" :flag :node :candidates (fn [_] [])}\n"
+       "  :confirm {:action \"maintain a node\" :destructive? true}\n"
+       "  :steps [{:title \"Check\" :check (fn [_] true)}\n"
+       "          {:title \"Drain\" :prerequisites {} :confirm {:action \"drain a node\"}\n"
+       "           :effect (fn [_] []) :no-verify \"the operator watches the drain\"}]})\n"))
+
+(def ^:private contract-pin-book
+  (str header
+       "(ns casebook.contract.stamp\n"
+       "  \"Pins an object in a namespace it does not pick.\"\n"
+       "  (:require [gumshoe.mutation :as mutation]))\n\n"
+       "(mutation/book\n"
+       " {:description \"Stamps\"\n"
+       "  :prerequisites {}\n"
+       "  :select {:mode :one :label \"Namespace\" :flag :namespace :candidates (fn [_] [])}\n"
+       "  :confirm {:action \"stamp a database\" :destructive? false}\n"
+       "  :pin (fn [_] {:type \"databases\" :namespace \"default\" :name \"moodle\"})\n"
+       "  :effect (fn [_] [])\n"
+       "  :verify (fn [_] [])})\n"))
+
+(deftest every-mutation-spec-a-casebook-defines-is-judged-as-it-evaluates
+  (let [root (casebook! {"libraries/casebook/contract/steps.clj" contract-library
+                         "runbooks/cordon.clj" contract-merged-book
+                         "runbooks/stamp.clj" contract-pin-book
+                         "playbooks/maintenance.clj" contract-playbook})]
+    (try
+      (let [findings (filter #(= :spec-contract (:check %)) (conformance/findings-in (roots root)))
+            messages (set (map :message findings))]
+        (is (= {"steps.clj" [:spec-contract :spec-contract] "stamp.clj" [:spec-contract]
+                "maintenance.clj" [:spec-contract]}
+               (by-file findings))
+            "the merged book inherits the library's problem, which is named once, against the library")
+        (is (contains? messages "mutation spec casebook.contract.steps/unverified has no post-check (:verify) and states no reason for having none (:no-verify \"why\")"))
+        (is (some #(str/starts-with? % "mutation spec casebook.contract.steps/pausing :on does not state whether it is destructive") messages)
+            "a toggle pair is judged per side, as toggle/pair built it")
+        (is (some #(str/starts-with? % "mutation spec casebook.contract.maintenance step 2 \"Drain\" does not state whether it is destructive") messages))
+        (is (some #(str/starts-with? % "mutation spec casebook.contract.stamp has a :pin that returns namespace \"default\"") messages)))
+      (testing ":spec-contract :advise turns the judgements into notes"
+        (is (not-any? #(= :spec-contract (:check %))
+                      (conformance/findings-in (assoc (roots root) :spec-contract :advise))))
+        (is (= 4 (count (filter #(= :spec-contract (:check %))
+                                (:advisories (conformance/report-in (assoc (roots root) :spec-contract :advise))))))))
+      (finally (fs/delete-tree root)))))
+
+(def ^:private verified-library
+  (str header
+       "(ns casebook.verified.steps\n"
+       "  \"A shared spec with its post-check.\")\n\n"
+       "(def cordon\n"
+       "  {:prerequisites {:kubectl-can-patch [\"nodes\"]}\n"
+       "   :select {:mode :one :label \"Node\" :flag :node :candidates (fn [_] [])}\n"
+       "   :confirm {:action \"cordon a node\" :destructive? false}\n"
+       "   :effect (fn [_] [])\n"
+       "   :verify (fn [_] [])})\n"))
+
+(defn- verified-book
+  [ns spec]
+  (str header
+       "(ns " ns "\n"
+       "  \"Cordons a node.\"\n"
+       "  (:require [casebook.verified.steps :as steps]\n"
+       "            [gumshoe.mutation :as mutation]))\n\n"
+       "(mutation/book " spec ")\n"))
+
+(deftest a-spec-with-its-verify-removed-makes-verify-fail-naming-the-spec
+  (let [root (casebook! {"libraries/casebook/verified/steps.clj" verified-library
+                         "runbooks/cordon.clj" (verified-book "casebook.verified.cordon"
+                                                              "(merge steps/cordon {:description \"Cordons\"})")
+                         "runbooks/unverified.clj" (verified-book "casebook.verified.unverified"
+                                                                  (str "{:description \"Cordons\" :prerequisites (:prerequisites steps/cordon)"
+                                                                       " :select (:select steps/cordon) :confirm (:confirm steps/cordon)"
+                                                                       " :effect (:effect steps/cordon)}"))})
+        run (fn [opts]
+              (let [err (java.io.StringWriter.)
+                    result (binding [*out* (java.io.StringWriter.) *err* err]
+                             (try (conformance/verify! opts) (catch clojure.lang.ExceptionInfo e e)))]
+                [result (str err)]))]
+    (try
+      (let [[e err] (run (roots root))]
+        (is (= 1 (:babashka/exit (ex-data e))))
+        (is (str/includes? err "runbooks/unverified.clj: mutation spec casebook.verified.unverified has no post-check") err)
+        (is (not (str/includes? err "cordon.clj")) err))
+      (testing "under :spec-contract :advise it is a note and verify! passes"
+        (let [[checked err] (run (assoc (roots root) :spec-contract :advise))]
+          (is (= 3 checked))
+          (is (str/includes? err "note: ") err)
+          (is (str/includes? err "casebook.verified.unverified has no post-check") err)))
       (finally (fs/delete-tree root)))))

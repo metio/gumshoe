@@ -127,7 +127,7 @@
     :namespace-flag :namespace,
     :name-flag :job},
    :empty-message "no CronJob is suspended",
-   :confirm {:action "resume a CronJob"},
+   :confirm {:action "resume a CronJob", :destructive? false},
    :details
    ["What it does:"
     "  picks one CronJob by namespace and name (--namespace and --job, or interactively)"
@@ -305,7 +305,7 @@
     :namespace-flag :namespace,
     :name-flag :job},
    :empty-message "every CronJob is suspended already",
-   :confirm {:action "suspend a CronJob"},
+   :confirm {:action "suspend a CronJob", :destructive? false},
    :details
    ["What it does:"
     "  picks one CronJob by namespace and name (--namespace and --job, or interactively)"
@@ -1042,7 +1042,8 @@
     :kubectl-can-patch ["deployments"]},
    :select {:mode :one, :label "Deployment", :flag :pick},
    :empty-message "every Deployment is paused already",
-   :confirm {:action "pause a Deployment's rollouts"},
+   :confirm
+   {:action "pause a Deployment's rollouts", :destructive? false},
    :details
    ["What it does:"
     "  picks one Deployment (--pick, or interactively)"
@@ -1211,7 +1212,8 @@
    :empty-message "no workload runs pods that a rollout could restart",
    :confirm
    {:action
-    "restart every pod of the workload, one batch at a time as its update strategy allows - a workload with a single replica is unavailable while its pod restarts"},
+    "restart every pod of the workload, one batch at a time as its update strategy allows - a workload with a single replica is unavailable while its pod restarts",
+    :destructive? false},
    :details
    ["What it does:"
     "  picks one Workload (--pick, or interactively)"
@@ -1378,7 +1380,8 @@
    :empty-message "no Deployment is paused",
    :confirm
    {:action
-    "resume a Deployment and roll out the changes made while it was paused"},
+    "resume a Deployment and roll out the changes made while it was paused",
+    :destructive? false},
    :details
    ["What it does:"
     "  picks one Deployment (--pick, or interactively)"
@@ -1728,7 +1731,7 @@
     :kubectl-can-patch ["deployments" "statefulsets"]},
    :select {:mode :one, :label "Workload", :flag :pick},
    :empty-message "no Deployment or StatefulSet to scale",
-   :confirm {:action "scale a workload"},
+   :confirm {:action "scale a workload", :destructive? false},
    :details
    ["What it does:"
     "  picks one Workload (--pick, or interactively)"
@@ -1907,7 +1910,7 @@
     :kubectl-can-patch ["applications.argoproj.io"]},
    :select {:mode :one, :label "Application", :flag :application},
    :empty-message "every Application has a refresh pending",
-   :confirm {:action "refresh an Application"},
+   :confirm {:action "refresh an Application", :destructive? false},
    :details
    ["What it does:"
     "  picks one Application (--application, or interactively)"
@@ -2272,7 +2275,7 @@
     :kubectl-can-create ["backups.postgresql.cnpg.io"]},
    :select {:mode :one, :label "Cluster", :flag :cluster},
    :empty-message "no healthy cluster configures a backup destination",
-   :confirm {:action "start an on-demand backup"},
+   :confirm {:action "start an on-demand backup", :destructive? false},
    :details
    ["What it does:"
     "  picks one Cluster (--cluster, or interactively)"
@@ -2823,7 +2826,7 @@
     :kubectl-can-patch ["clusters.postgresql.cnpg.io"]},
    :select {:mode :one, :label "Cluster", :flag :cluster},
    :empty-message "no cluster is hibernated",
-   :confirm {:action "rehydrate a cluster"},
+   :confirm {:action "rehydrate a cluster", :destructive? false},
    :details
    ["What it does:"
     "  picks one Cluster (--cluster, or interactively)"
@@ -2996,7 +2999,8 @@
     :kubectl-can-patch ["clusters.postgresql.cnpg.io"]},
    :select {:mode :one, :label "Cluster", :flag :cluster},
    :empty-message "no healthy cluster to reload",
-   :confirm {:action "reload a cluster's configuration"},
+   :confirm
+   {:action "reload a cluster's configuration", :destructive? false},
    :details
    ["What it does:"
     "  picks one Cluster (--cluster, or interactively)"
@@ -3365,7 +3369,7 @@
    :select
    {:mode :one, :label "ScheduledBackup", :flag :scheduled-backup},
    :empty-message "no ScheduledBackup is suspended",
-   :confirm {:action "resume scheduled backups"},
+   :confirm {:action "resume scheduled backups", :destructive? false},
    :details
    ["What it does:"
     "  picks one ScheduledBackup (--scheduled-backup, or interactively)"
@@ -3543,7 +3547,7 @@
    :select
    {:mode :one, :label "ScheduledBackup", :flag :scheduled-backup},
    :empty-message "every ScheduledBackup is suspended already",
-   :confirm {:action "suspend scheduled backups"},
+   :confirm {:action "suspend scheduled backups", :destructive? false},
    :details
    ["What it does:"
     "  picks one ScheduledBackup (--scheduled-backup, or interactively)"
@@ -4460,7 +4464,7 @@
      "ocirepositories.source.toolkit.fluxcd.io"]},
    :select {:mode :one, :flag :pick, :label "Resume"},
    :empty-message "no Flux object is suspended",
-   :confirm {:action "resume a Flux object"},
+   :confirm {:action "resume a Flux object", :destructive? false},
    :details
    ["What it does:"
     "  picks one Resume (--pick, or interactively)"
@@ -4662,7 +4666,7 @@
      "ocirepositories.source.toolkit.fluxcd.io"]},
    :select {:mode :one, :flag :pick, :label "Suspend"},
    :empty-message "every Flux object is suspended already",
-   :confirm {:action "suspend a Flux object"},
+   :confirm {:action "suspend a Flux object", :destructive? false},
    :details
    ["What it does:"
     "  picks one Suspend (--pick, or interactively)"
@@ -4833,7 +4837,9 @@
    :select {:mode :one, :label "Schedule", :flag :schedule},
    :empty-message
    "no Schedule can take a backup now - every one failed validation or writes to an unavailable location",
-   :confirm {:action "start a backup from a schedule's template"},
+   :confirm
+   {:action "start a backup from a schedule's template",
+    :destructive? false},
    :details
    ["What it does:"
     "  picks one Schedule (--schedule, or interactively)"
@@ -5175,7 +5181,7 @@
     :kubectl-can-patch ["schedules.velero.io"]},
    :select {:mode :one, :label "Schedule", :flag :schedule},
    :empty-message "every Schedule is paused already",
-   :confirm {:action "pause a backup schedule"},
+   :confirm {:action "pause a backup schedule", :destructive? false},
    :details
    ["What it does:"
     "  picks one Schedule (--schedule, or interactively)"
@@ -5351,7 +5357,7 @@
     :kubectl-can-patch ["schedules.velero.io"]},
    :select {:mode :one, :label "Schedule", :flag :schedule},
    :empty-message "no Schedule is paused",
-   :confirm {:action "resume a backup schedule"},
+   :confirm {:action "resume a backup schedule", :destructive? false},
    :details
    ["What it does:"
     "  picks one Schedule (--schedule, or interactively)"

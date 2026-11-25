@@ -34,7 +34,7 @@
                   :kubectl-can-get [stageset/stageset-type]}
   :select {:mode :namespaced :label "StageSet" :namespace-flag :namespace :name-flag :name
            :candidates stagesets}
-  :confirm {:action "trigger a StageSet reconciliation"}
+  :confirm {:action "trigger a StageSet reconciliation" :destructive? false}
   :announce (fn [{:keys [target]}] (format "Reconcile StageSet %s" target))
   :effect (fn [{:keys [target opts]}]
             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]

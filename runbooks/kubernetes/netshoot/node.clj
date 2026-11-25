@@ -17,10 +17,11 @@
                   :kubectl-can-get ["nodes"]
                   :kubectl-can-create ["pods"]}
   :announce? false
+  :no-verify "an interactive debug session: the operator works in it until they leave, and what they find there is the result, so nothing is left to check after it ends"
   :select {:mode :one
            :label "Node"
            :flag :node
            :candidates (fn [context] (kubectl/names-of (kubectl/get-all context "nodes")))}
-  :confirm {:action "start a privileged netshoot debug pod on a node"}
+  :confirm {:action "start a privileged netshoot debug pod on a node" :destructive? false}
   :effect (fn [{:keys [context target]}]
             (effect/plan (effect/kubectl-plugin context "netshoot" "debug" (str "node/" target))))})

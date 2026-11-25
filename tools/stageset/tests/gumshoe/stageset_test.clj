@@ -138,3 +138,22 @@
            (map :relation (investigation/plugin-fetched-edges
                            "ctx" (subject/subject "StageSet" "apps" "web") {})))
         "provide! wired inventory-edges into the fetched-edges seam")))
+
+(defn- promoted-stageset
+  [annotation handled]
+  {:metadata {:namespace "apps" :name "web"
+              :annotations (when annotation {:stages.metio.wtf/promote annotation})}
+   :status {:stages [{:name "canary" :lastHandledPromotion handled}
+                     {:name "prod"}]}})
+
+(deftest promotion-handled-test
+  (testing "the stage handled the token the promote annotation addresses to it"
+    (is (true? (stageset/promotion-handled? (promoted-stageset "canary@tok2" "tok2") "canary"))))
+  (testing "the controller has not yet acted on the newest token"
+    (is (false? (stageset/promotion-handled? (promoted-stageset "canary@tok2" "tok1") "canary"))))
+  (testing "the annotation addresses another stage, or is missing or malformed"
+    (is (false? (stageset/promotion-handled? (promoted-stageset "prod@tok2" "tok2") "canary")))
+    (is (false? (stageset/promotion-handled? (promoted-stageset nil "tok2") "canary")))
+    (is (false? (stageset/promotion-handled? (promoted-stageset "canary@" "") "canary"))))
+  (testing "a StageSet that could not be read is not promoted"
+    (is (false? (stageset/promotion-handled? nil "canary")))))

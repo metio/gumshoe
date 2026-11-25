@@ -37,7 +37,7 @@
                   :kubectl-can-create ["jobs"]}
   :select {:mode :namespaced :label "CronJob" :namespace-flag :namespace :name-flag :job
            :candidates cronjobs}
-  :confirm {:action "start a Job from a CronJob outside its schedule"}
+  :confirm {:action "start a Job from a CronJob outside its schedule" :destructive? false}
   ;; the random job name is computed once here and shared by effect and verify
   :derive (fn [{:keys [target]}]
             (let [{:keys [name]} (kubectl/namespace-name-map target)]

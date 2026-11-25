@@ -37,9 +37,17 @@
   :derive (fn [{:keys [context target opts]}]
             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               {:stage (interact/choose-one "Stage" (stage-names context namespace name) (:stage opts))}))
-  :confirm {:action "promote a StageSet stage"}
+  :confirm {:action "promote a StageSet stage" :destructive? false}
   :announce (fn [{:keys [target stage]}] (format "Promote stage %s of StageSet %s" stage target))
   :effect (fn [{:keys [target stage]}]
             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               (effect/plan (effect/cmd "stagesetctl" "promote" name "--stage" stage
-                                       (str "--namespace=" namespace)))))})
+                                       (str "--namespace=" namespace)))))
+  ;; stagesetctl's own --wait gives up after five minutes; so does this.
+  :verify (fn [{:keys [context target stage]}]
+            (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
+              [{:description (format "stage %s of StageSet %s acted on the promotion" stage target)
+                :timeout 300 :interval 5
+                :check #(stageset/promotion-handled?
+                         (kubectl/get-namespaced-resource context namespace stageset/stageset-type name)
+                         stage)}]))})

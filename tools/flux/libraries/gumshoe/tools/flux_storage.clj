@@ -441,7 +441,7 @@
        (merge
         {:title "⏸  Suspend the owner (Kustomization or ResourceSet) that renders the HelmRelease"
          :prerequisites {:kubectl-can-patch [flux/kustomization-type]}
-         :confirm {:action "suspend the owner that renders the HelmRelease"}
+         :confirm {:action "suspend the owner that renders the HelmRelease" :destructive? false}
          :precondition (fn [{:keys [observed]}] (readable? observed))
          :items (unless-unread
                  (fn [{:keys [observed]}]
@@ -456,7 +456,7 @@
        (merge
         {:title "⏸  Suspend the HelmRelease and wait for a running action to finish"
          :prerequisites {:kubectl-can-patch [flux/helmrelease-type]}
-         :confirm {:action "suspend the HelmRelease"}
+         :confirm {:action "suspend the HelmRelease" :destructive? false}
          :pin release-pin
          :precondition (fn [{:keys [observed]}] (readable? observed))
          :items (unless-unread
@@ -513,7 +513,8 @@
       (change
        (merge
         {:title "▶  Resume the HelmRelease, which installs"
-         :confirm {:action "resume the HelmRelease"}
+         :prerequisites {:kubectl-can-patch [flux/helmrelease-type]}
+         :confirm {:action "resume the HelmRelease" :destructive? false}
          :precondition (fn [{:keys [observed]}] (readable? observed))
          :items (fn [{:keys [target]}] [(format "resume HelmRelease %s and request a reconcile, which installs it" target)])}
         (flux-steps/resume {:object release-object :none "no HelmRelease to resume"
@@ -525,7 +526,8 @@
       (change
        (merge
         {:title "▶  Resume the owner (Kustomization or ResourceSet)"
-         :confirm {:action "resume the owner that renders the HelmRelease"}
+         :prerequisites {:kubectl-can-patch [flux/kustomization-type]}
+         :confirm {:action "resume the owner that renders the HelmRelease" :destructive? false}
          :precondition (fn [{:keys [observed]}] (or (some? (:known-owner observed)) (readable? observed)))
          :items (fn [{:keys [observed]}]
                   [(if-let [{:keys [kind namespace name]} (:known-owner observed)]
