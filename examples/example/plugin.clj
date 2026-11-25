@@ -11,13 +11,14 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.plugin :as plugin]
             [gumshoe.prerequisites :as prerequisites]
+            [gumshoe.stdout :as stdout]
             [gumshoe.subject :as subject]))
 
 (plugin/provide!
  {;; A change-announcement target: env.edn :announce [{:type :example …}].
   :announcers
   {:example (fn [_announcer system {:keys [actor]} message]
-             (println (format "[example announcer] %s: %s by %s" system message actor)))}
+             (stdout/err-println (format "[example announcer] %s: %s by %s" system message actor)))}
 
   ;; A detective that joins the workloads scan.
   :detectives
@@ -41,10 +42,12 @@
                                                           {:pass "example-tool service is reachable"
                                                            :fail "example-tool service is unreachable"})])}}
 
-  ;; Observe every finished book (push a metric, forward the recording).
+  ;; Observe every finished book (push a metric, forward the recording). A hook
+  ;; runs after a scan printed its report to stdout, so it writes to stderr:
+  ;; anything on stdout would follow the JSON or EDN document a script parses.
   :post-hooks
   [(fn [{:keys [description outcome]}]
-     (println (format "[example hook] \"%s\" finished: %s" description (name outcome))))]
+     (stdout/err-println (format "[example hook] \"%s\" finished: %s" description (name outcome))))]
 
   ;; A global gate: block changes during a freeze, let read-only books through.
   :pre-hooks

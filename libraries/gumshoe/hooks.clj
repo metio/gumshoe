@@ -37,7 +37,10 @@
       :opts         the parsed flags
       :outcome      :ok | :failed | :error
       :recording-path  where the audit trail was written (or nil)
-      :meta         the announcement-data for a change (nil for a read-only book)}"
+      :meta         the announcement-data for a change (nil for a read-only book)}
+   A hook runs after a scan printed its report to stdout, so whatever it
+   prints goes to stderr (gumshoe.stdout/err-println): a line on stdout would
+   follow the JSON or EDN document a script parses."
   [f]
   (swap! post-hooks conj f))
 

@@ -8,6 +8,7 @@
             [gumshoe.detectives.registry :as registry]
             [gumshoe.investigation :as investigation]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.plugin]
             [gumshoe.plugins :as plugins]
             [gumshoe.subject :as subject]))
 
@@ -43,3 +44,30 @@
                                 "ctx" (subject/subject "WidgetSet" "apps" "widgets") {}))))
                    "widget pod")
         "a cluster-querying edge builder joined the drill-down")))
+
+(defn- example-manifest
+  "The map the example plugin hands plugin/provide!, captured without
+   registering anything."
+  []
+  (let [manifest (atom nil)]
+    (with-redefs [gumshoe.plugin/provide! (fn [m] (reset! manifest m))]
+      (load-file "examples/example/plugin.clj"))
+    @manifest))
+
+(defn- printed
+  "What (f) prints, as {:out :err}."
+  [f]
+  (let [out (java.io.StringWriter.) err (java.io.StringWriter.)]
+    (binding [*out* out *err* err] (f))
+    {:out (str out) :err (str err)}))
+
+(deftest the-example-plugin-keeps-stdout-for-the-report-test
+  (let [{:keys [post-hooks announcers]} (example-manifest)]
+    (testing "its post-hook writes to stderr"
+      (let [{:keys [out err]} (printed #((first post-hooks) {:description "d" :outcome :ok}))]
+        (is (= "" out))
+        (is (clojure.string/includes? err "[example hook] \"d\" finished: ok"))))
+    (testing "its announcer writes to stderr"
+      (let [{:keys [out err]} (printed #((:example announcers) {:type :example} "prod" {:actor "seb"} "drain n1"))]
+        (is (= "" out))
+        (is (clojure.string/includes? err "[example announcer] prod: drain n1 by seb"))))))
