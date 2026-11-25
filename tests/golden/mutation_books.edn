@@ -399,26 +399,7 @@
    "FAILED at the first effect: kubectl --namespace=batch create job nightly-abcde --from cronjob/nightly - nothing was changed",
    :recovery []},
   :invalid
-  {:action "start a Job from a CronJob outside its schedule",
-   :destructive? false,
-   :items ["nightly"],
-   :step "start a Job from a CronJob outside its schedule",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=nightly"
-     "create"
-     "job"
-     "-abcde"
-     "--from"
-     "cronjob/"]],
-   :precondition nil,
-   :announce "Start CronJob nightly",
-   :checks
-   [{:description "job nightly/-abcde exists and has not failed",
-     :timeout 30,
-     :interval nil,
-     :holds true}]},
+  {:stopped "refusing: the pick \"nightly\" does not name a CronJob"},
   :permitted
   {:action "start a Job from a CronJob outside its schedule",
    :destructive? false,
@@ -562,6 +543,10 @@
   {:result false,
    :out
    "❌ could not list the CronJob candidates - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+  :unparsable-pick
+  {:result false,
+   :out
+   "▸ CronJob: nightly\nrefusing: the pick \"nightly\" does not name a CronJob"},
   :unpicked
   {:result false,
    :out
@@ -771,30 +756,8 @@
      :interval 5,
      :holds true}]},
   :invalid
-  {:action
-   "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
-   :destructive? true,
-   :items ["deployments shop/web"],
-   :step
-   "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
-   :plan
-   [[:kubectl
-     "ctx"
-     "patch"
-     nil
-     nil
-     "--type=json"
-     "--patch=[{\"op\":\"test\",\"path\":\"/metadata/uid\",\"value\":null},{\"op\":\"test\",\"path\":\"/metadata/finalizers/-1\",\"value\":null},{\"op\":\"remove\",\"path\":\"/metadata/finalizers/-1\"}]"]],
-   :precondition
-   {:result false,
-    :out "refusing: the pick is not \"<type> <object> <finalizer>\""},
-   :announce "Remove finalizer from deployments shop/web",
-   :checks
-   [{:description
-     "deployments shop/web no longer waits on that finalizer",
-     :timeout 60,
-     :interval 5,
-     :holds "threw: "}]},
+  {:stopped
+   "refusing: the pick is not \"<type> <object> <finalizer>\""},
   :permitted
   {:action
    "remove a finalizer - the cleanup its controller would do (deleting cloud resources, backups, DNS records) is skipped for good; do this only when that controller is gone",
@@ -2276,22 +2239,8 @@
      :interval 5,
      :holds true}]},
   :invalid
-  {:action "delete an object",
-   :destructive? true,
-   :items ["delete secrets shop/web"],
-   :step "delete an object",
-   :plan
-   [[:kubectl "ctx" "--namespace=" "delete" nil nil "--wait=false"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: the pick is not \"<type> <namespace>/<name>\" of deployments, statefulsets, daemonsets, jobs, cronjobs, pods, services, ingresses, configmaps, persistentvolumeclaims"},
-   :announce "Delete secrets shop/web",
-   :checks
-   [{:description "secrets shop/web is gone or terminating",
-     :timeout 60,
-     :interval 5,
-     :holds "threw: "}]},
+  {:stopped
+   "refusing: the pick is not \"<type> <namespace>/<name>\" of deployments, statefulsets, daemonsets, jobs, cronjobs, pods, services, ingresses, configmaps, persistentvolumeclaims"},
   :permitted
   {:action "delete an object",
    :destructive? true,
@@ -2838,26 +2787,8 @@
     "    the changelog entry this change posted"
     "    the current state of shop/data on cluster"]},
   :invalid
-  {:action
-   "delete a PersistentVolumeClaim - the data on the volume is lost",
-   :destructive? true,
-   :items ["data"],
-   :step
-   "delete a PersistentVolumeClaim - the data on the volume is lost",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=data"
-     "delete"
-     "persistentvolumeclaim"
-     nil]],
-   :precondition {:result true, :out ""},
-   :announce "Delete unused PersistentVolumeClaim data",
-   :checks
-   [{:description "PersistentVolumeClaim data is gone",
-     :timeout 120,
-     :interval 10,
-     :holds true}]},
+  {:stopped
+   "refusing: the pick \"data\" does not name a PersistentVolumeClaim"},
   :permitted
   {:action
    "delete a PersistentVolumeClaim - the data on the volume is lost",
@@ -3003,6 +2934,10 @@
   {:result false,
    :out
    "❌ could not list the PersistentVolumeClaim candidates - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+  :unparsable-pick
+  {:result false,
+   :out
+   "▸ PersistentVolumeClaim: data\nrefusing: the pick \"data\" does not name a PersistentVolumeClaim"},
   :unpicked
   {:result false,
    :out
@@ -3029,22 +2964,8 @@
      :interval 5,
      :holds false}]},
   :invalid
-  {:action "pause a Deployment's rollouts",
-   :destructive? false,
-   :items ["pause StatefulSet shop/web"],
-   :step "pause a Deployment's rollouts",
-   :plan
-   [[:kubectl "ctx" "--namespace=" "rollout" "pause" "deployment/"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: the pick is not \"Deployment <namespace>/<name>\""},
-   :announce "Pause StatefulSet shop/web",
-   :checks
-   [{:description "StatefulSet shop/web is paused",
-     :timeout 60,
-     :interval 5,
-     :holds false}]},
+  {:stopped
+   "refusing: the pick is not \"Deployment <namespace>/<name>\""},
   :permitted
   {:action "pause a Deployment's rollouts",
    :destructive? false,
@@ -3197,22 +3118,7 @@
      :interval 10,
      :holds false}]},
   :invalid
-  {:action
-   "restart every pod of the workload, one batch at a time as its update strategy allows - a workload with a single replica is unavailable while its pod restarts",
-   :destructive? false,
-   :items ["Deployment web"],
-   :step
-   "restart every pod of the workload, one batch at a time as its update strategy allows - a workload with a single replica is unavailable while its pod restarts",
-   :plan [[:note "nothing to restart - the precondition says why"]],
-   :precondition
-   {:result false,
-    :out "refusing: the pick is not \"<Kind> <namespace>/<name>\""},
-   :announce "Restart Deployment web",
-   :checks
-   [{:description "Deployment web rolled out",
-     :timeout 600,
-     :interval 10,
-     :holds false}]},
+  {:stopped "refusing: the pick is not \"<Kind> <namespace>/<name>\""},
   :permitted
   {:action
    "restart every pod of the workload, one batch at a time as its update strategy allows - a workload with a single replica is unavailable while its pod restarts",
@@ -3363,24 +3269,8 @@
      :interval 5,
      :holds false}]},
   :invalid
-  {:action
-   "resume a Deployment and roll out the changes made while it was paused",
-   :destructive? false,
-   :items ["resume StatefulSet shop/web"],
-   :step
-   "resume a Deployment and roll out the changes made while it was paused",
-   :plan
-   [[:kubectl "ctx" "--namespace=" "rollout" "resume" "deployment/"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: the pick is not \"Deployment <namespace>/<name>\""},
-   :announce "Resume StatefulSet shop/web",
-   :checks
-   [{:description "StatefulSet shop/web is resumed and rolled out",
-     :timeout 600,
-     :interval 5,
-     :holds false}]},
+  {:stopped
+   "refusing: the pick is not \"Deployment <namespace>/<name>\""},
   :permitted
   {:action
    "resume a Deployment and roll out the changes made while it was paused",
@@ -3529,22 +3419,7 @@
      :interval 10,
      :holds false}]},
   :invalid
-  {:action "roll a workload back",
-   :destructive? true,
-   :items ["roll Deployment web back"],
-   :step "roll a workload back",
-   :plan
-   [[:note "nothing to roll back to - the precondition says why"]],
-   :precondition
-   {:result false,
-    :out "refusing: the pick is not \"<Kind> <namespace>/<name>\""},
-   :announce "Roll Deployment web back to revision null",
-   :checks
-   [{:description
-     "Deployment web runs revision null's images and rolled out",
-     :timeout 600,
-     :interval 10,
-     :holds false}]},
+  {:stopped "refusing: the pick is not \"<Kind> <namespace>/<name>\""},
   :permitted
   {:action "roll a workload back",
    :destructive? true,
@@ -3881,28 +3756,7 @@
      :interval 5,
      :holds false}]},
   :invalid
-  {:action "refresh an Application",
-   :destructive? false,
-   :items ["refresh shop"],
-   :step "refresh an Application",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace="
-     "annotate"
-     "applications.argoproj.io"
-     nil
-     "--overwrite"
-     "argocd.argoproj.io/refresh=hard"]],
-   :precondition
-   {:result false,
-    :out "refusing: the pick is not \"<namespace>/<name>\""},
-   :announce "Refresh Application shop",
-   :checks
-   [{:description "the controller refreshed shop",
-     :timeout 300,
-     :interval 5,
-     :holds false}]},
+  {:stopped "refusing: the pick is not \"<namespace>/<name>\""},
   :permitted
   {:action "refresh an Application",
    :destructive? false,
@@ -4065,31 +3919,7 @@
      :holds false,
      :abort nil}]},
   :invalid
-  {:action
-   "sync an Application - the cluster is changed to match its source",
-   :destructive? true,
-   :items ["sync shop"],
-   :step
-   "sync an Application - the cluster is changed to match its source",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace="
-     "patch"
-     "applications.argoproj.io"
-     nil
-     "--type=merge"
-     "--patch={\"operation\":{\"initiatedBy\":{\"username\":\"gumshoe\"},\"sync\":{\"syncStrategy\":{\"hook\":{}},\"prune\":true}}}"]],
-   :precondition
-   {:result false,
-    :out "refusing: the pick is not \"<namespace>/<name>\""},
-   :announce "Sync Application shop",
-   :checks
-   [{:description "shop synced",
-     :timeout 900,
-     :interval 10,
-     :holds false,
-     :abort nil}]},
+  {:stopped "refusing: the pick is not \"<namespace>/<name>\""},
   :permitted
   {:action
    "sync an Application - the cluster is changed to match its source",
@@ -4256,21 +4086,7 @@
      :holds false,
      :abort nil}]},
   :invalid
-  {:action "start an on-demand backup",
-   :destructive? false,
-   :items ["back up pg"],
-   :step "start an on-demand backup",
-   :plan [[:note "nothing to back up - the precondition says why"]],
-   :precondition
-   {:result false,
-    :out "refusing: the pick is not \"<namespace>/<cluster>\""},
-   :announce "Back up pg as null",
-   :checks
-   [{:description "Backup null/null completed",
-     :timeout 3600,
-     :interval 15,
-     :holds false,
-     :abort nil}]},
+  {:stopped "refusing: the pick is not \"<namespace>/<cluster>\""},
   :permitted
   {:action "start an on-demand backup",
    :destructive? false,
@@ -4429,32 +4245,8 @@
      :interval 5,
      :holds false}]},
   :invalid
-  {:action
-   "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
-   :destructive? true,
-   :items ["db/pg"],
-   :step
-   "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace"
-     nil
-     "annotate"
-     "clusters.postgresql.cnpg.io"
-     nil
-     "--overwrite"
-     "cnpg.io/fencedInstances=[null]"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: the pick is not \"<namespace>/<cluster> <instance>\""},
-   :announce "Fence null in null/null",
-   :checks
-   [{:description "null is fenced",
-     :timeout 60,
-     :interval 5,
-     :holds false}]},
+  {:stopped
+   "refusing: the pick is not \"<namespace>/<cluster> <instance>\""},
   :permitted
   {:action
    "fence an instance - the operator takes it out of service and will not promote it; fencing the primary or * leaves nothing accepting writes",
@@ -4619,30 +4411,7 @@
      :interval 10,
      :holds false}]},
   :invalid
-  {:action
-   "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
-   :destructive? true,
-   :items ["Hibernate pg"],
-   :step
-   "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace="
-     "annotate"
-     "clusters.postgresql.cnpg.io"
-     nil
-     "--overwrite"
-     "cnpg.io/hibernation=on"]],
-   :precondition
-   {:result false,
-    :out "refusing: the pick is not \"<namespace>/<cluster>\""},
-   :announce "Hibernate pg",
-   :checks
-   [{:description "pg is hibernated",
-     :timeout 300,
-     :interval 10,
-     :holds false}]},
+  {:stopped "refusing: the pick is not \"<namespace>/<cluster>\""},
   :permitted
   {:action
    "hibernate a cluster - every instance pod is deleted and nothing accepts connections",
@@ -4807,28 +4576,7 @@
      :interval 10,
      :holds false}]},
   :invalid
-  {:action "rehydrate a cluster",
-   :destructive? false,
-   :items ["Rehydrate pg"],
-   :step "rehydrate a cluster",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace="
-     "annotate"
-     "clusters.postgresql.cnpg.io"
-     nil
-     "--overwrite"
-     "cnpg.io/hibernation=off"]],
-   :precondition
-   {:result false,
-    :out "refusing: the pick is not \"<namespace>/<cluster>\""},
-   :announce "Rehydrate pg",
-   :checks
-   [{:description "pg is rehydrated and healthy",
-     :timeout 900,
-     :interval 10,
-     :holds false}]},
+  {:stopped "refusing: the pick is not \"<namespace>/<cluster>\""},
   :permitted
   {:action "rehydrate a cluster",
    :destructive? false,
@@ -4977,28 +4725,7 @@
      :interval 10,
      :holds false}]},
   :invalid
-  {:action "reload a cluster's configuration",
-   :destructive? false,
-   :items ["Reload pg"],
-   :step "reload a cluster's configuration",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace="
-     "annotate"
-     "clusters.postgresql.cnpg.io"
-     nil
-     "--overwrite"
-     "cnpg.io/reloadedAt=<instant>"]],
-   :precondition
-   {:result false,
-    :out "refusing: the pick is not \"<namespace>/<cluster>\""},
-   :announce "Reload pg",
-   :checks
-   [{:description "pg took the reload and is healthy",
-     :timeout 600,
-     :interval 10,
-     :holds false}]},
+  {:stopped "refusing: the pick is not \"<namespace>/<cluster>\""},
   :permitted
   {:action "reload a cluster's configuration",
    :destructive? false,
@@ -5154,31 +4881,7 @@
      :interval 10,
      :holds false}]},
   :invalid
-  {:action
-   "restart every instance of a cluster - each is briefly unavailable, the primary included",
-   :destructive? true,
-   :items ["Restart pg"],
-   :step
-   "restart every instance of a cluster - each is briefly unavailable, the primary included",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace="
-     "annotate"
-     "clusters.postgresql.cnpg.io"
-     nil
-     "--overwrite"
-     "kubectl.kubernetes.io/restartedAt=<instant>"]],
-   :precondition
-   {:result false,
-    :out "refusing: the pick is not \"<namespace>/<cluster>\""},
-   :announce "Restart pg",
-   :checks
-   [{:description
-     "every instance of pg restarted and the cluster is healthy",
-     :timeout 1200,
-     :interval 10,
-     :holds false}]},
+  {:stopped "refusing: the pick is not \"<namespace>/<cluster>\""},
   :permitted
   {:action
    "restart every instance of a cluster - each is briefly unavailable, the primary included",
@@ -5350,28 +5053,7 @@
      :interval 3,
      :holds true}]},
   :invalid
-  {:action "resume scheduled backups",
-   :destructive? false,
-   :items ["resume nightly"],
-   :step "resume scheduled backups",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace="
-     "patch"
-     "scheduledbackups.postgresql.cnpg.io"
-     nil
-     "--type=merge"
-     "--patch={\"spec\":{\"suspend\":false}}"]],
-   :precondition
-   {:result false,
-    :out "refusing: the pick is not \"<namespace>/<name>\""},
-   :announce "Resume ScheduledBackup nightly",
-   :checks
-   [{:description "ScheduledBackup nightly is resumed",
-     :timeout 30,
-     :interval 3,
-     :holds true}]},
+  {:stopped "refusing: the pick is not \"<namespace>/<name>\""},
   :permitted
   {:action "resume scheduled backups",
    :destructive? false,
@@ -5524,28 +5206,7 @@
      :interval 3,
      :holds false}]},
   :invalid
-  {:action "suspend scheduled backups",
-   :destructive? false,
-   :items ["suspend nightly"],
-   :step "suspend scheduled backups",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace="
-     "patch"
-     "scheduledbackups.postgresql.cnpg.io"
-     nil
-     "--type=merge"
-     "--patch={\"spec\":{\"suspend\":true}}"]],
-   :precondition
-   {:result false,
-    :out "refusing: the pick is not \"<namespace>/<name>\""},
-   :announce "Suspend ScheduledBackup nightly",
-   :checks
-   [{:description "ScheduledBackup nightly is suspended",
-     :timeout 30,
-     :interval 3,
-     :holds false}]},
+  {:stopped "refusing: the pick is not \"<namespace>/<name>\""},
   :permitted
   {:action "suspend scheduled backups",
    :destructive? false,
@@ -5703,30 +5364,8 @@
      :interval 10,
      :holds false}]},
   :invalid
-  {:action
-   "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
-   :destructive? true,
-   :items ["pg 2"],
-   :step
-   "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
-   :plan
-   [[:cmd
-     "kubectl-cnpg"
-     "promote"
-     nil
-     nil
-     "--context=ctx"
-     "--namespace="]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: the pick is not \"<namespace>/<cluster> <instance>\""},
-   :announce "Promote null in null/null",
-   :checks
-   [{:description "null is the primary",
-     :timeout 300,
-     :interval 10,
-     :holds true}]},
+  {:stopped
+   "refusing: the pick is not \"<namespace>/<cluster> <instance>\""},
   :permitted
   {:action
    "switch the primary over - the old primary restarts as a replica, and clients of the -rw Service lose their connections and must reconnect",
@@ -5884,32 +5523,8 @@
      :interval 5,
      :holds true}]},
   :invalid
-  {:action
-   "lift the fence - the operator takes the instance back into service",
-   :destructive? true,
-   :items ["db/pg"],
-   :step
-   "lift the fence - the operator takes the instance back into service",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace"
-     nil
-     "annotate"
-     "clusters.postgresql.cnpg.io"
-     nil
-     "--overwrite"
-     "cnpg.io/fencedInstances-"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: the pick is not \"<namespace>/<cluster> <instance>\""},
-   :announce "Unfence null in null/null",
-   :checks
-   [{:description "null is no longer fenced",
-     :timeout 60,
-     :interval 5,
-     :holds true}]},
+  {:stopped
+   "refusing: the pick is not \"<namespace>/<cluster> <instance>\""},
   :permitted
   {:action
    "lift the fence - the operator takes the instance back into service",
@@ -6396,39 +6011,8 @@
     "    the changelog entry this change posted"
     "    the current state of Kustomization flux-system/apps on cluster"]},
   :invalid
-  {:action "resume a Flux object",
-   :destructive? false,
-   :items ["resume Bucket flux-system/apps"],
-   :step "resume a Flux object",
-   :plan
-   [[:kubectl
-     "ctx"
-     "-n"
-     nil
-     "patch"
-     nil
-     nil
-     "--type=merge"
-     "--patch={\"spec\":{\"suspend\":false}}"]
-    [:kubectl
-     "ctx"
-     "-n"
-     nil
-     "annotate"
-     nil
-     nil
-     "--overwrite"
-     "reconcile.fluxcd.io/requestedAt=<instant>"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: the pick is not \"<Kind> <namespace>/<name>\" of a HelmRelease, Kustomization, GitRepository or OCIRepository"},
-   :announce "Resume Bucket flux-system/apps",
-   :checks
-   [{:description "Bucket flux-system/apps is no longer suspended",
-     :timeout 30,
-     :interval 3,
-     :holds true}]},
+  {:stopped
+   "refusing: the pick is not \"<Kind> <namespace>/<name>\" of a HelmRelease, Kustomization, GitRepository or OCIRepository"},
   :permitted
   {:action "resume a Flux object",
    :destructive? false,
@@ -6633,30 +6217,8 @@
      :interval 3,
      :holds false}]},
   :invalid
-  {:action "suspend a Flux object",
-   :destructive? false,
-   :items ["suspend Bucket flux-system/apps"],
-   :step "suspend a Flux object",
-   :plan
-   [[:kubectl
-     "ctx"
-     "-n"
-     nil
-     "patch"
-     nil
-     nil
-     "--type=merge"
-     "--patch={\"spec\":{\"suspend\":true}}"]],
-   :precondition
-   {:result false,
-    :out
-    "refusing: the pick is not \"<Kind> <namespace>/<name>\" of a HelmRelease, Kustomization, GitRepository or OCIRepository"},
-   :announce "Suspend Bucket flux-system/apps",
-   :checks
-   [{:description "Bucket flux-system/apps is suspended",
-     :timeout 30,
-     :interval 3,
-     :holds false}]},
+  {:stopped
+   "refusing: the pick is not \"<Kind> <namespace>/<name>\" of a HelmRelease, Kustomization, GitRepository or OCIRepository"},
   :permitted
   {:action "suspend a Flux object",
    :destructive? false,
@@ -6844,26 +6406,8 @@
     "    the changelog entry this change posted"
     "    the current state of apps/site on cluster"]},
   :invalid
-  {:action "request a JsonnetSnippet re-evaluation",
-   :destructive? false,
-   :items ["site"],
-   :step "request a JsonnetSnippet re-evaluation",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=site"
-     "annotate"
-     "jsonnetsnippets.jaas.metio.wtf"
-     nil
-     "reconcile.fluxcd.io/requestedAt=<instant>"
-     "--overwrite"]],
-   :precondition nil,
-   :announce "Reconcile JsonnetSnippet site",
-   :checks
-   [{:description "JsonnetSnippet site handled the reconcile request",
-     :timeout 120,
-     :interval 5,
-     :holds false}]},
+  {:stopped
+   "refusing: the pick \"site\" does not name a JsonnetSnippet"},
   :permitted
   {:action "request a JsonnetSnippet re-evaluation",
    :destructive? false,
@@ -7011,6 +6555,10 @@
   {:result false,
    :out
    "❌ could not list the JsonnetSnippet candidates - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+  :unparsable-pick
+  {:result false,
+   :out
+   "▸ JsonnetSnippet: site\nrefusing: the pick \"site\" does not name a JsonnetSnippet"},
   :unpicked
   {:result false,
    :out
@@ -7058,27 +6606,8 @@
     "    the changelog entry this change posted"
     "    the current state of apps/site on cluster"]},
   :invalid
-  {:action "resume a JsonnetSnippet",
-   :destructive? false,
-   :items ["site"],
-   :step "resume a JsonnetSnippet",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=site"
-     "patch"
-     "jsonnetsnippets.jaas.metio.wtf"
-     nil
-     "--type=merge"
-     "--patch"
-     "{\"spec\":{\"suspend\":false}}"]],
-   :precondition nil,
-   :announce "Resume JsonnetSnippet site",
-   :checks
-   [{:description "JsonnetSnippet site is no longer suspended",
-     :timeout 60,
-     :interval 5,
-     :holds true}]},
+  {:stopped
+   "refusing: the pick \"site\" does not name a suspended JsonnetSnippet"},
   :permitted
   {:action "resume a JsonnetSnippet",
    :destructive? false,
@@ -7224,6 +6753,10 @@
   {:result false,
    :out
    "❌ could not list the suspended JsonnetSnippet candidates - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+  :unparsable-pick
+  {:result false,
+   :out
+   "▸ suspended JsonnetSnippet: site\nrefusing: the pick \"site\" does not name a suspended JsonnetSnippet"},
   :unpicked
   {:result false,
    :out
@@ -7282,29 +6815,8 @@
    "FAILED after 1 effect - stopped at: kubectl --namespace=apps patch jsonnetsnippets.jaas.metio.wtf site --type=merge --patch {\"spec\":{\"suspend\":true}} - the effects before it stay applied",
    :recovery []},
   :invalid
-  {:action "suspend a JsonnetSnippet",
-   :destructive? false,
-   :items ["site"],
-   :step "suspend a JsonnetSnippet",
-   :plan
-   [[:note
-     "consumers keep serving the last published artifact while suspended"]
-    [:kubectl
-     "ctx"
-     "--namespace=site"
-     "patch"
-     "jsonnetsnippets.jaas.metio.wtf"
-     nil
-     "--type=merge"
-     "--patch"
-     "{\"spec\":{\"suspend\":true}}"]],
-   :precondition nil,
-   :announce "Suspend JsonnetSnippet site",
-   :checks
-   [{:description "JsonnetSnippet site reports itself suspended",
-     :timeout 60,
-     :interval 5,
-     :holds false}]},
+  {:stopped
+   "refusing: the pick \"site\" does not name a JsonnetSnippet"},
   :permitted
   {:action "suspend a JsonnetSnippet",
    :destructive? false,
@@ -7461,6 +6973,10 @@
   {:result false,
    :out
    "❌ could not list the JsonnetSnippet candidates - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+  :unparsable-pick
+  {:result false,
+   :out
+   "▸ JsonnetSnippet: site\nrefusing: the pick \"site\" does not name a JsonnetSnippet"},
   :unpicked
   {:result false,
    :out
@@ -7509,25 +7025,7 @@
    "FAILED at the first effect: stagesetctl promote site --stage prod --namespace=apps - nothing was changed",
    :recovery []},
   :invalid
-  {:action "promote a StageSet stage",
-   :destructive? false,
-   :items ["site"],
-   :step "promote a StageSet stage",
-   :plan
-   [[:cmd
-     "stagesetctl"
-     "promote"
-     nil
-     "--stage"
-     nil
-     "--namespace=site"]],
-   :precondition nil,
-   :announce "Promote stage null of StageSet site",
-   :checks
-   [{:description "stage null of StageSet site acted on the promotion",
-     :timeout 300,
-     :interval 5,
-     :holds false}]},
+  {:stopped "refusing: the pick \"site\" does not name a StageSet"},
   :permitted
   {:checks
    [{:description
@@ -7695,6 +7193,10 @@
      "--namespace=apps"]],
    :step "promote a StageSet stage",
    :precondition nil},
+  :unparsable-pick
+  {:result false,
+   :out
+   "▸ StageSet: site\nrefusing: the pick \"site\" does not name a StageSet"},
   :unpicked
   {:result false,
    :out
@@ -7739,24 +7241,7 @@
     "    the changelog entry this change posted"
     "    the current state of apps/site on cluster"]},
   :invalid
-  {:action "trigger a StageSet reconciliation",
-   :destructive? false,
-   :items ["site"],
-   :step "trigger a StageSet reconciliation",
-   :plan
-   [[:cmd
-     "stagesetctl"
-     "reconcile"
-     nil
-     "--namespace=site"
-     "--update-now"]],
-   :precondition nil,
-   :announce "Reconcile StageSet site",
-   :checks
-   [{:description "StageSet site is Ready",
-     :timeout 120,
-     :interval 10,
-     :holds false}]},
+  {:stopped "refusing: the pick \"site\" does not name a StageSet"},
   :permitted
   {:action "trigger a StageSet reconciliation",
    :destructive? false,
@@ -7883,6 +7368,10 @@
   {:result false,
    :out
    "❌ could not list the StageSet candidates - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
+  :unparsable-pick
+  {:result false,
+   :out
+   "▸ StageSet: site\nrefusing: the pick \"site\" does not name a StageSet"},
   :unpicked
   {:result false,
    :out
@@ -7904,21 +7393,7 @@
      :holds false,
      :abort nil}]},
   :invalid
-  {:action "start a backup from a schedule's template",
-   :destructive? false,
-   :items ["back up from daily"],
-   :step "start a backup from a schedule's template",
-   :plan [[:note "nothing to back up - the precondition says why"]],
-   :precondition
-   {:result false,
-    :out "refusing: the pick is not \"<namespace>/<schedule>\""},
-   :announce "Back up from Schedule daily as null",
-   :checks
-   [{:description "Backup null/null completed",
-     :timeout 3600,
-     :interval 15,
-     :holds false,
-     :abort nil}]},
+  {:stopped "refusing: the pick is not \"<namespace>/<schedule>\""},
   :permitted
   {:action "start a backup from a schedule's template",
    :destructive? false,
@@ -8073,21 +7548,7 @@
      :holds true,
      :abort nil}]},
   :invalid
-  {:action "delete a backup and its data",
-   :destructive? true,
-   :items ["delete daily-1"],
-   :step "delete a backup and its data",
-   :plan [[:note "nothing to delete - the precondition says why"]],
-   :precondition
-   {:result false,
-    :out "refusing: the pick is not \"<namespace>/<backup>\""},
-   :announce "Delete Backup daily-1",
-   :checks
-   [{:description "Backup daily-1 and its data are deleted",
-     :timeout 1800,
-     :interval 10,
-     :holds false,
-     :abort nil}]},
+  {:stopped "refusing: the pick is not \"<namespace>/<backup>\""},
   :permitted
   {:action "delete a backup and its data",
    :destructive? true,
@@ -8248,28 +7709,7 @@
      :interval 3,
      :holds false}]},
   :invalid
-  {:action "pause a backup schedule",
-   :destructive? false,
-   :items ["pause daily"],
-   :step "pause a backup schedule",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace="
-     "patch"
-     "schedules.velero.io"
-     nil
-     "--type=merge"
-     "--patch={\"spec\":{\"paused\":true}}"]],
-   :precondition
-   {:result false,
-    :out "refusing: the pick is not \"<namespace>/<schedule>\""},
-   :announce "Pause Schedule daily",
-   :checks
-   [{:description "Schedule daily is paused",
-     :timeout 30,
-     :interval 3,
-     :holds false}]},
+  {:stopped "refusing: the pick is not \"<namespace>/<schedule>\""},
   :permitted
   {:action "pause a backup schedule",
    :destructive? false,
@@ -8425,28 +7865,7 @@
      :interval 3,
      :holds true}]},
   :invalid
-  {:action "resume a backup schedule",
-   :destructive? false,
-   :items ["resume daily"],
-   :step "resume a backup schedule",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace="
-     "patch"
-     "schedules.velero.io"
-     nil
-     "--type=merge"
-     "--patch={\"spec\":{\"paused\":false}}"]],
-   :precondition
-   {:result false,
-    :out "refusing: the pick is not \"<namespace>/<schedule>\""},
-   :announce "Resume Schedule daily",
-   :checks
-   [{:description "Schedule daily is resumed",
-     :timeout 30,
-     :interval 3,
-     :holds true}]},
+  {:stopped "refusing: the pick is not \"<namespace>/<schedule>\""},
   :permitted
   {:action "resume a backup schedule",
    :destructive? false,
