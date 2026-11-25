@@ -540,8 +540,8 @@ unifying convenience.
 
 **The seams (each is one key above, and one register function):**
 
-- **Announcers** - `:announce` in `env.edn` is a list of announcer configs
-  (`:matrix`, `:webhook`, …); a change fans out to all of them. A plugin adds a
+- **Announcers** - `:announce` in `env.edn` is one announcer config or a list
+  of them (`:matrix`, `:webhook`, …); a change fans out to all of them. A plugin adds a
   type via the `:announcers` key, or directly with
   `(announce/register-announcer! :irc (fn …))` /
   `(defmethod announce/announce-via :irc …)`.

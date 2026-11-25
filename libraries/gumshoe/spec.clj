@@ -51,7 +51,7 @@
 (s/def :env/select (s/map-of keyword? some?))
 (s/def :env/type keyword?)
 (s/def :env/announcer (s/keys :req-un [:env/type]))
-;; one announcer map is read as a list of one (gumshoe.announce/announcers-of)
+;; one announcer map or a list of them (gumshoe.announce/announcers-of)
 (s/def :env/announce (s/or :one :env/announcer
                            :many (s/coll-of :env/announcer :kind #(or (sequential? %) (set? %)))))
 (s/def :env/clusters (s/or :one non-blank-string?
