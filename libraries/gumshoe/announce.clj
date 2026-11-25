@@ -9,8 +9,9 @@
    announcer shipped as a separate git dep, loaded via env.edn :plugins - with no
    change to the core.
 
-   env.edn configures which announcers are active, per environment, as a list -
-   so one change can be announced to several places at once:
+   env.edn configures which announcers are active, per environment, as one
+   announcer map or a list of them - so one change can be announced to several
+   places at once:
 
      :announce [{:type :matrix  :homeserver \"https://synapse.example.org\"
                                 :room \"%21room:example.org\" :token-secret \"matrix/bot\"
@@ -18,8 +19,8 @@
                 {:type :webhook :url \"https://hooks.slack.com/services/...\" :format :slack}]
 
    An announcement never blocks the change it describes: a failing announcer is a
-   warning, never an error. An :announce that can not be read as a list of
-   announcers is the exception: it refuses the change before anything runs,
+   warning, never an error. An :announce that can not be read as announcers is
+   the exception: it refuses the change before anything runs,
    since nobody chose to make the change unannounced."
   (:require [babashka.http-client :as http]
             [cheshire.core :as json]
@@ -106,7 +107,7 @@
 (defn announcers-of
   "Pure: the announcers an :announce value configures, as
    {:announcers [..]} or {:problem \"..\"}. An absent or empty :announce
-   configures none. A single announcer map counts as a list of one. Anything
+   configures none. One announcer map and a list of them are both supported. Anything
    else - a keyword, a boolean, a list holding something other than an
    announcer map with a keyword :type - is a problem, named so the operator
    can fix env.edn."
@@ -114,12 +115,11 @@
   (let [announcer? #(and (map? %) (keyword? (:type %)))]
     (cond
       (nil? announce) {:announcers []}
-      (announcer? announce) {:announcers [announce]
-                             :warning ":announce is a list of announcers; a single map is read as a list of one"}
+      (announcer? announce) {:announcers [announce]}
       (and (or (sequential? announce) (set? announce)) (every? announcer? announce))
       {:announcers (vec announce)}
       :else
-      {:problem (format ":announce in env.edn is a list of announcer maps with a keyword :type, such as [{:type :webhook :url \"https://..\"}], not %s"
+      {:problem (format ":announce in env.edn is an announcer map with a keyword :type, or a list of them, such as {:type :webhook :url \"https://..\"}, not %s"
                         (pr-str announce))})))
 
 (defn announce!
@@ -133,7 +133,7 @@
    chosen that; the change runs after the announcement, so it is refused and
    nothing is changed."
   [system {:keys [cluster] :as data} message]
-  (let [{:keys [announcers problem warning]}
+  (let [{:keys [announcers problem]}
         (announcers-of (config/env-value {:kubernetes-cluster cluster} [:announce]))]
     (cond
       problem
@@ -144,9 +144,8 @@
       (stdout/warn "no announcers configured (:announce in env.edn) - skipping the announcement")
 
       :else
-      (do (when warning (stdout/warn warning))
-          (doseq [announcer announcers]
-            (try
-              (announce-via announcer system data message)
-              (catch Exception e
-                (stdout/warn "announcer failed:" (ex-message e)))))))))
+      (doseq [announcer announcers]
+        (try
+          (announce-via announcer system data message)
+          (catch Exception e
+            (stdout/warn "announcer failed:" (ex-message e))))))))

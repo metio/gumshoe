@@ -99,7 +99,7 @@
   (is (= [{:type :webhook :url "u"}] (:announcers (announce/announcers-of [{:type :webhook :url "u"}]))))
   (let [one (announce/announcers-of {:type :webhook :url "u"})]
     (is (= [{:type :webhook :url "u"}] (:announcers one)) "a single announcer map is a list of one")
-    (is (string? (:warning one))))
+    (is (nil? (:warning one)) "a single announcer map is a supported shape"))
   (doseq [bad [:matrix true false 5 "matrix" [:matrix] [{:url "u"}] [{:type "webhook"}] {:url "u"}]]
     (is (string? (:problem (announce/announcers-of bad))) (pr-str bad))))
 
@@ -122,7 +122,7 @@
                   announce/announce-via (fn [announcer & _] (swap! posted conj announcer))]
       (let [[_ _ err] (quietly #(announce/announce! "kube.example.org" {:cluster "k"} "change"))]
         (is (= [{:type :webhook :url "u"}] @posted))
-        (is (str/includes? err "list of one"))))))
+        (is (not (str/includes? err ":announce")) "a supported shape is not warned about")))))
 
 (deftest spec-names-a-malformed-clusters-and-announce
   (is (some #(str/includes? % ":clusters") (spec/env-config-problems {:clusters 'kube.example.org})))
