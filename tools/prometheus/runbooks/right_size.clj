@@ -59,9 +59,14 @@
                                                                    :password (:prometheus-password opts)})))
         cpu (query ep (rightsizing/cpu-query window namespace))
         memory (query ep (rightsizing/memory-query window namespace))
-        pods (if namespace
-               (kubectl/get-namespaced (kubectl/current-context) namespace "pods")
-               (kubectl/get-all (kubectl/current-context) "pods"))
+        {pods-read? :ok? pods :doc} (apply kubectl/get-json-result (kubectl/current-context) "pods"
+                                           (if namespace
+                                             [(str "--namespace=" namespace)]
+                                             ["--all-namespaces"]))
+        ;; a pods read that did not answer would match no usage and report
+        ;; the cluster as having nothing to right-size
+        _ (when-not pods-read?
+            (throw (ex-info "could not list the pods - the cluster did not answer" {})))
         rows (map rightsizing/judge (rightsizing/usage-rows pods cpu memory))
         shown (if all rows (filter rightsizing/actionable? rows))]
     (if (empty? shown)
