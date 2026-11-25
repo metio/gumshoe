@@ -14,6 +14,7 @@
             [clojure.string :as str]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.verify :as verify]
             [gumshoe.watch :as watch]))
 
 (defn normalize-capacity
@@ -278,6 +279,5 @@
     :timeout 300
     :interval 10
     :check (fn []
-             (let [recreated (kubectl/get-namespaced-resource context namespace "statefulsets" name)]
-               (= (-> recreated :spec :replicas)
-                  (-> recreated :status :readyReplicas))))}])
+             (verify/object-holds? (kubectl/get-namespaced-resource context namespace "statefulsets" name)
+                                   #(= (-> % :spec :replicas) (-> % :status :readyReplicas))))}])

@@ -37,5 +37,5 @@
   :effect (fn [{:keys [context target]}] (finalize-effect context target))
   :verify (fn [{:keys [context target]}]
             [{:description (format "namespace %s is gone" target)
-              :timeout 120 :interval 10
+              :timeout 120 :interval 10 :verifies-absence? true
               :check (fn [] (kubectl/confirmed-gone? context nil "namespaces" target))}])})

@@ -45,14 +45,30 @@
    "Pending" :info
    "Suspended" :info})
 
+(defn snippet
+  "The live JsonnetSnippet, or nil when the read found none."
+  [context namespace name]
+  (kubectl/get-namespaced-resource context namespace jsonnetsnippet-type name))
+
+(defn reason-of
+  "The Ready condition's reason on a snippet, nil when it reports none."
+  [snippet]
+  (:reason (conditions/condition snippet "Ready")))
+
 (defn ready-reason
   "The Ready condition's reason on a live snippet - what the suspend and resume
    books post-check against, so the two books share the read instead of one
    reaching into the other."
   [context namespace name]
-  (:reason (conditions/condition
-            (kubectl/get-namespaced-resource context namespace jsonnetsnippet-type name)
-            "Ready")))
+  (reason-of (snippet context namespace name)))
+
+(defn resumed?
+  "Whether the operator reports the snippet as no longer suspended: it
+   reconciles a snippet into a Ready condition whatever the outcome, so a
+   snippet without one has not been looked at since it was resumed."
+  [snippet]
+  (let [reason (reason-of snippet)]
+    (and (some? reason) (not= "Suspended" reason))))
 
 (defn- snippet-subject
   [snippet]

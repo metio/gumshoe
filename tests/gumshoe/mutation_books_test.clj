@@ -141,9 +141,12 @@
   [f]
   (try (f) (catch Exception e (str "threw: " (ex-message e)))))
 
-(defn transcript
-  "What the book does in one scenario."
-  [spec {:keys [objects target opts dry-run ssh between]}]
+(defn- reach-change
+  "(f out config state) after the book ran in one scenario up to its change,
+   with flow/change! captured and the recorded cluster still stubbed: what
+   the run printed, the config it handed flow/change! (nil when it stopped
+   before) and the cluster's state atom."
+  [spec {:keys [objects target opts dry-run ssh]} f]
   (let [state (atom {:objects objects :answering? true :dry-run dry-run :ssh ssh})
         seen (atom nil)]
     (with-redefs [shell/execute (fn [& argv] (answer @state (vec argv)))
@@ -154,27 +157,36 @@
                   announce/announce! (fn [_ _ message] message)
                   flow/change! (fn [config] (reset! seen config) true)]
       (let [{:keys [out]} (capture #(try (mutation/run-on! spec target (or opts {}) nil)
-                                         (catch Exception e (println "threw:" (type e) (ex-message e)))))
-            {:keys [confirmation precondition announce! effect step post-checks]} @seen]
-        (case between
-          :spec-changed (swap! state update :objects bump-generation)
-          :unanswered (swap! state assoc :answering? false)
-          nil)
-        (normalise
-         (if-not @seen
-           {:stopped out}
-           (cond-> {:action (:action confirmation)
-                    :destructive? (boolean (:destructive? confirmation))
-                    :items (vec (:items confirmation))
-                    :step step
-                    :plan effect
-                    :precondition (when precondition (capture precondition))}
-             (seq out) (assoc :out out)
-             announce! (assoc :announce (announce!))
-             post-checks (assoc :checks (vec (for [{:keys [description timeout interval check abort]} post-checks]
-                                               (cond-> {:description description :timeout timeout :interval interval
-                                                        :holds (attempt check)}
-                                                 abort (assoc :abort (attempt abort)))))))))))))
+                                         (catch Exception e (println "threw:" (type e) (ex-message e)))))]
+        (f out @seen state)))))
+
+(defn transcript
+  "What the book does in one scenario. A post-check holds as
+   verify/eventually would judge it, with strict reads."
+  [spec {:keys [between] :as scenario}]
+  (reach-change
+   spec scenario
+   (fn [out seen state]
+     (let [{:keys [confirmation precondition announce! effect step post-checks]} seen]
+       (case between
+         :spec-changed (swap! state update :objects bump-generation)
+         :unanswered (swap! state assoc :answering? false)
+         nil)
+       (normalise
+        (if-not seen
+          {:stopped out}
+          (cond-> {:action (:action confirmation)
+                   :destructive? (boolean (:destructive? confirmation))
+                   :items (vec (:items confirmation))
+                   :step step
+                   :plan effect
+                   :precondition (when precondition (capture precondition))}
+            (seq out) (assoc :out out)
+            announce! (assoc :announce (announce!))
+            post-checks (assoc :checks (vec (for [{:keys [description timeout interval check abort]} post-checks]
+                                              (cond-> {:description description :timeout timeout :interval interval
+                                                       :holds (attempt #(true? (verify/attempt check)))}
+                                                abort (assoc :abort (attempt abort)))))))))))))
 
 (defn failed-transcript
   "What the book prints when it runs for real against objects and the
@@ -969,3 +981,19 @@
           (is (false? result))
           (is (nil? action) "no confirmation is shown")
           (is (re-find #"refusing: the pick \"\w+\" does not name a [\w ]+$" out) out))))))
+
+(defn- post-checks-of
+  "The post-checks the book hands flow/change! in its permitted scenario."
+  [spec scenarios]
+  (reach-change spec (:permitted scenarios) (fn [_ seen _] (vec (:post-checks seen)))))
+
+(deftest every-post-check-fails-closed
+  (binding [ssh/*user-config* nil]
+    (doseq [[path scenarios] books
+            :when (:permitted scenarios)
+            :let [spec (load-spec path)
+                  checks (with-book-redefs path #(post-checks-of spec scenarios))]]
+      (testing path
+        (is (seq checks) "the permitted scenario reaches the change and its post-checks")
+        (is (= [] (verify/fail-closed-findings checks))
+            "no post-check holds on a cluster that does not answer, nor on one holding nothing unless it verifies an absence")))))

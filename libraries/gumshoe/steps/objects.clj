@@ -34,7 +34,7 @@
   ([context objects timeout interval]
    (for [{:keys [type namespace name] :as object} objects]
      {:description (str (line object) " is gone")
-      :timeout timeout :interval interval
+      :timeout timeout :interval interval :verifies-absence? true
       :check #(kubectl/confirmed-gone? context namespace type name)})))
 
 (defn delete

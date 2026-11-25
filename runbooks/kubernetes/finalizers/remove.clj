@@ -33,5 +33,5 @@
             (effect/plan (apply effect/kubectl context (finalizers/patch-args object ref))))
   :verify (fn [{:keys [context ref target]}]
             [{:description (format "%s no longer waits on that finalizer" target)
-              :timeout 60 :interval 5
+              :timeout 60 :interval 5 :verifies-absence? true
               :check #(finalizers/released? context ref)}])})

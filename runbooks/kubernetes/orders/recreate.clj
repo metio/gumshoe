@@ -30,11 +30,12 @@
   (for [order selected
         :let [{:keys [namespace name]} (kubectl/namespace-name-map order)]]
     {:description (format "invalid order %s is cleared" order)
-     :timeout 60 :interval 5
+     :timeout 60 :interval 5 :verifies-absence? true
+     ;; gone needs a read that answered NotFound, whatever reads it
      :check (fn []
-              (let [o (kubectl/get-namespaced-resource context namespace order-type name)]
-                (or (nil? o)
-                    (not (contains? #{"invalid" "errored"} (-> o :status :state))))))}))
+              (if-let [o (kubectl/get-namespaced-resource context namespace order-type name)]
+                (not (contains? #{"invalid" "errored"} (-> o :status :state)))
+                (kubectl/confirmed-gone? context namespace order-type name)))}))
 
 (mutation/book
  {:description "Deletes invalid ACME orders so cert-manager recreates them"

@@ -210,7 +210,7 @@
    [{:description "CronJob batch/nightly is resumed",
      :timeout 30,
      :interval 3,
-     :holds true}]},
+     :holds false}]},
   :failed-at-the-first-effect
   {:result false,
    :out
@@ -356,7 +356,7 @@
    [{:description "CronJob batch/nightly is resumed",
      :timeout 30,
      :interval 3,
-     :holds true}]}},
+     :holds false}]}},
  "runbooks/kubernetes/cronjobs/start.clj"
  {:absent
   {:action "start a Job from a CronJob outside its schedule",
@@ -2100,7 +2100,7 @@
    [{:description "node n1 is schedulable",
      :timeout nil,
      :interval nil,
-     :holds true}]},
+     :holds false}]},
   :empty {:result true, :out "✅ no node is cordoned"},
   :failed-after-applying
   {:result false,
@@ -2205,7 +2205,7 @@
    [{:description "node n1 is schedulable",
      :timeout nil,
      :interval nil,
-     :holds true}]},
+     :holds false}]},
   :unanswered-pick
   {:result false,
    :out
@@ -2547,7 +2547,7 @@
    [{:description "invalid order shop/web-1 is cleared",
      :timeout 60,
      :interval 5,
-     :holds true}]},
+     :holds false}]},
   :unanswered-pick
   {:result false,
    :out
@@ -5051,7 +5051,7 @@
    [{:description "ScheduledBackup db/nightly is resumed",
      :timeout 30,
      :interval 3,
-     :holds true}]},
+     :holds false}]},
   :invalid
   {:stopped "refusing: the pick is not \"<namespace>/<name>\""},
   :permitted
@@ -5180,7 +5180,7 @@
    [{:description "ScheduledBackup db/nightly is resumed",
      :timeout 30,
      :interval 3,
-     :holds true}]}},
+     :holds false}]}},
  "tools/cnpg/runbooks/suspend_scheduled_backup.clj"
  {:absent
   {:action "suspend scheduled backups",
@@ -5521,7 +5521,7 @@
    [{:description "pg-2 is no longer fenced",
      :timeout 60,
      :interval 5,
-     :holds true}]},
+     :holds false}]},
   :invalid
   {:stopped
    "refusing: the pick is not \"<namespace>/<cluster> <instance>\""},
@@ -5567,7 +5567,7 @@
    [{:description "pg-2 is no longer fenced",
      :timeout 60,
      :interval 5,
-     :holds true}]},
+     :holds false}]},
   :spec-changed
   {:action
    "lift the fence - the operator takes the instance back into service",
@@ -5654,7 +5654,7 @@
    [{:description "pg-2 is no longer fenced",
      :timeout 60,
      :interval 5,
-     :holds true}]}},
+     :holds false}]}},
  "tools/flux/runbooks/flux/reconcile.clj"
  {:absent
   {:action "trigger a flux reconciliation",
@@ -5993,7 +5993,7 @@
      "Kustomization flux-system/apps is no longer suspended",
      :timeout 30,
      :interval 3,
-     :holds true}]},
+     :holds false}]},
   :failed-after-applying
   {:result false,
    :out
@@ -6191,7 +6191,7 @@
      "Kustomization flux-system/apps is no longer suspended",
      :timeout 30,
      :interval 3,
-     :holds true}]}},
+     :holds false}]}},
  "tools/flux/runbooks/flux/suspend.clj"
  {:absent
   {:action "suspend a Flux object",
@@ -6585,7 +6585,7 @@
    [{:description "JsonnetSnippet apps/site is no longer suspended",
      :timeout 60,
      :interval 5,
-     :holds true}]},
+     :holds false}]},
   :empty {:result true, :out "✅ nothing to do"},
   :failed-after-applying
   {:result false,
@@ -6748,7 +6748,7 @@
    [{:description "JsonnetSnippet apps/site is no longer suspended",
      :timeout 60,
      :interval 5,
-     :holds true}]},
+     :holds false}]},
   :unanswered-pick
   {:result false,
    :out
@@ -7683,7 +7683,7 @@
    [{:description "Backup velero/daily-1 and its data are deleted",
      :timeout 1800,
      :interval 10,
-     :holds true,
+     :holds false,
      :abort nil}]}},
  "tools/velero/runbooks/pause_schedule.clj"
  {:absent
@@ -7863,7 +7863,7 @@
    [{:description "Schedule velero/daily is resumed",
      :timeout 30,
      :interval 3,
-     :holds true}]},
+     :holds false}]},
   :invalid
   {:stopped "refusing: the pick is not \"<namespace>/<schedule>\""},
   :permitted
@@ -7995,4 +7995,4 @@
    [{:description "Schedule velero/daily is resumed",
      :timeout 30,
      :interval 3,
-     :holds true}]}}}
+     :holds false}]}}}

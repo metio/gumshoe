@@ -20,14 +20,31 @@
    counts as not-yet-verified, so a check asserting an absence or a negation
    waits for an answer instead of holding on the nil a failed read returns.
    A read that answered NotFound still returns nil, so a deletion check holds.
-   The :watch and :abort samplers read lax."
-  (:require [gumshoe.kubectl :as kubectl]
+   The :watch and :abort samplers read lax.
+
+   A post-check fails closed. One that did not get an answer never holds,
+   and one about the state of an object never holds on an object that does
+   not exist: build it on object-holds?, which is false for nil. Only a
+   check whose success is an absence - something deleted, nothing left -
+   holds on NotFound, and it says so with :verifies-absence? true.
+   fail-closed-findings tests a set of checks against both rules."
+  (:require [clojure.string :as str]
+            [gumshoe.kubectl :as kubectl]
             [gumshoe.outcome :as outcome]
+            [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
-(defn- attempt
-  "One run of check with strict reads: true when it held, the message of a
-   read that did not answer, or false."
+(defn object-holds?
+  "Whether object exists and (holds? object) is true. A post-check about the
+   state of an object judges it through here, so that an object no read
+   found - NotFound, or the nil of a lax read that did not answer - never
+   verifies a state."
+  [object holds?]
+  (boolean (and (some? object) (holds? object))))
+
+(defn attempt
+  "One run of check as eventually runs it, with strict reads: true when it
+   held, the message of a read that did not answer, or false."
   [check]
   (try (binding [kubectl/*strict-reads* true] (boolean (check)))
        (catch clojure.lang.ExceptionInfo e
@@ -90,3 +107,44 @@
   (let [held? (every? true? (mapv eventually checks))]
     (outcome/verified! held?)
     held?))
+
+;; --- failing closed ------------------------------------------------------------------
+
+(def ^:private unanswered
+  {:exit 1 :out "" :err "Unable to connect to the server: dial tcp 192.0.2.1:6443: i/o timeout"})
+
+(defn- answered-absent
+  "What a cluster holding nothing answers for argv: NotFound for a kubectl get
+   of one named object, an empty list for a listing, and no output for a get
+   that ignores a missing object or prints names or a jsonpath. Every other
+   command fails as an unreachable host does, since only the API server can
+   answer that something does not exist."
+  [argv]
+  (let [positional (remove #(str/starts-with? % "-") (rest (drop-while #(not= "get" %) argv)))]
+    (cond
+      (not (and (= "kubectl" (first argv)) (some #{"get"} argv))) unanswered
+      (some #(or (= "--ignore-not-found" %)
+                 (str/starts-with? % "--output=name")
+                 (str/starts-with? % "--output=jsonpath"))
+            argv)
+      {:exit 0 :out "" :err ""}
+      (second positional)
+      {:exit 1 :out "" :err (format "Error from server (NotFound): %s \"%s\" not found" (first positional) (second positional))}
+      :else {:exit 0 :out "{\"apiVersion\":\"v1\",\"items\":[]}" :err ""})))
+
+(defn fail-closed-findings
+  "The checks among post-checks that hold where they must not, as
+   {:description .. :answer :unanswered|:absent}. Each check runs once, as
+   eventually runs it, with gumshoe.shell/execute answering every command:
+   once as a cluster that does not answer, where no check may hold, and
+   once as a cluster that answers that nothing exists, where only a check
+   declaring :verifies-absence? may hold. Every read a post-check makes runs
+   a command through gumshoe.shell/execute, so nothing is reached; a check
+   that talks to a host by other means is outside what this can judge."
+  [post-checks]
+  (vec (for [{:keys [description check verifies-absence?]} post-checks
+             [answer respond] [[:unanswered (constantly unanswered)] [:absent answered-absent]]
+             :when (not (and (= :absent answer) verifies-absence?))
+             :when (true? (with-redefs [shell/execute (fn [& argv] (respond (filterv string? argv)))]
+                            (attempt check)))]
+         {:description description :answer answer})))

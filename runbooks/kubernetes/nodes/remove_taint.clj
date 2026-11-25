@@ -11,7 +11,8 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.announce :as announce]
             [gumshoe.runbook :as runbook]
-            [gumshoe.stdout :as stdout]))
+            [gumshoe.stdout :as stdout]
+            [gumshoe.verify :as verify]))
 
 (def options
   {:node {:desc "The node to remove a taint from - interactive selection when omitted"
@@ -36,8 +37,8 @@
 (defn gone-check
   [context node taint]
   {:description (format "node %s no longer carries taint %s" node taint)
-   :check (fn [] (not-any? #(= taint %)
-                           (kubectl/taints-of (kubectl/get-cluster-resource context "nodes" node))))})
+   :check (fn [] (verify/object-holds? (kubectl/get-cluster-resource context "nodes" node)
+                                       #(not-any? #{taint} (kubectl/taints-of %))))})
 
 (defn- remove-taint
   [opts {:keys [announcement-data]}]

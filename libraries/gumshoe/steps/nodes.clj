@@ -17,7 +17,8 @@
    playbooks/kubernetes/node_maintenance.clj."
   (:require [clojure.string :as str]
             [gumshoe.effect :as effect]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.verify :as verify]))
 
 (def ^:private node-prerequisites
   {:installed-tools ["kubectl" "fzf"]
@@ -43,9 +44,14 @@
   [context]
   (kubectl/names-of (kubectl/get-all context "nodes")))
 
-(defn- unschedulable?
-  [context node]
-  (true? (-> (kubectl/get-cluster-resource context "nodes" node) :spec :unschedulable)))
+(defn- node-holds?
+  "Whether the node exists and (holds? node) is true for it, read now."
+  [context node holds?]
+  (verify/object-holds? (kubectl/get-cluster-resource context "nodes" node) holds?))
+
+(defn- cordoned?
+  [node]
+  (true? (-> node :spec :unschedulable)))
 
 (defn cordon-effect
   [context node]
@@ -54,12 +60,12 @@
 (defn unschedulable-check
   [context node]
   {:description (format "node %s is unschedulable" node)
-   :check (fn [] (unschedulable? context node))})
+   :check (fn [] (node-holds? context node cordoned?))})
 
 (defn schedulable-check
   [context node]
   {:description (format "node %s is schedulable" node)
-   :check (fn [] (not (unschedulable? context node)))})
+   :check (fn [] (node-holds? context node (complement cordoned?)))})
 
 (defn drain-effect
   [context node grace-period]
@@ -71,7 +77,7 @@
   [context node]
   [(unschedulable-check context node)
    {:description (format "no evictable pods remain on node %s" node)
-    :timeout 120 :interval 10
+    :timeout 120 :interval 10 :verifies-absence? true
     ;; only a read that answered can show the node empty; a failed one
     ;; would read as no pods and verify a drain that did not happen
     :check (fn [] (let [{:keys [ok? doc]} (kubectl/get-json-result context "pods" "--all-namespaces"

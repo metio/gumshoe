@@ -7,7 +7,8 @@
             [gumshoe.detectives.cnpg :as cnpg]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.mutation :as mutation]))
+            [gumshoe.mutation :as mutation]
+            [gumshoe.verify :as verify]))
 
 (mutation/book
  {:description "Lifts the fence on a CloudNativePG instance, or on every instance with *"
@@ -35,4 +36,7 @@
   :verify (fn [{:keys [ref] :as ctx}]
             [{:description (format "%s is no longer fenced" (:instance ref))
               :timeout 60 :interval 5
-              :check (fn [] (not (contains? (or (operations/fenced (mutation/read-subject ctx)) #{}) (:instance ref))))}])})
+              ;; an annotation that does not parse says nothing about the fence
+              :check (fn [] (verify/object-holds? (mutation/read-subject ctx)
+                                                  #(and (some? (operations/fenced %))
+                                                        (not (operations/fenced? % (:instance ref))))))}])})

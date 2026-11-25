@@ -298,7 +298,20 @@ mostly data:
   a `NotFound` answer still reads nil and confirms a deletion. A `:soft?`
   check still turns that timeout into a warning. Reads over SSH, among them
   every `gumshoe.ceph` read, ignore the binding, so a check built on them
-  still has to tell a failed read from an empty one itself;
+  still has to tell a failed read from an empty one itself
+  (`ceph/ceph-json-result` returns `{:ok? :doc}` for that);
+- a post-check fails closed. A check about the state of an object (resumed,
+  schedulable, unfenced, Ready) judges it through
+  `(verify/object-holds? object pred)`, which is false for nil, because a
+  `NotFound` answer reads nil and an object that is gone is in no state.
+  Only a check whose success is an absence (deleted, gone, nothing left)
+  holds on `NotFound`; it confirms the absence with
+  `kubectl/confirmed-gone?`, which needs an answer whatever the binding, and
+  declares `:verifies-absence? true`. `(verify/fail-closed-findings checks)`
+  runs checks once against a cluster that does not answer and once against
+  one holding nothing, with `gumshoe.shell/execute` stubbed, and names each
+  check that holds where it must not; a casebook can call it from its own
+  tests, as gumshoe's mutation-book harness does for every book;
 - a change that acts on one object declares it as `:subject {:type
   "cronjobs"}`, with `:parse` for a pick of another shape (`gumshoe.pick`
   has `namespaced`, `cluster-scoped`, `(kinded kind->type)` and `(typed

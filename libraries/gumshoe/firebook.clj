@@ -158,6 +158,7 @@
           (verify/all [{:description "the fire-drill namespace is gone"
                         :timeout 180
                         :interval 10
+                        :verifies-absence? true
                         :check #(kubectl/confirmed-gone? context nil "namespaces" drill-namespace)}])))))
 
 (defn burning-check
@@ -222,6 +223,7 @@
   {:description (str "the fire is out: " (detectives-report detectives "no longer report") " it")
    :timeout out-timeout
    :interval interval
+   :verifies-absence? true
    :check #(empty? (fire-findings expect (judged-evidence expect ctx) ctx))})
 
 ;; --- the kubernetes drill ----------------------------------------------------
@@ -241,6 +243,7 @@
   {:description "the fire-drill namespace is gone"
    :timeout 180
    :interval 10
+   :verifies-absence? true
    :check #(kubectl/confirmed-gone? context nil "namespaces" drill-namespace)})
 
 (defn- kubernetes-recovery

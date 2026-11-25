@@ -10,7 +10,7 @@
 (defn gone-check
   [context namespace name target]
   {:description (format "PersistentVolumeClaim %s is gone" target)
-   :timeout 120 :interval 10
+   :timeout 120 :interval 10 :verifies-absence? true
    :check (fn [] (kubectl/confirmed-gone? context namespace "persistentvolumeclaims" name))})
 
 (mutation/book

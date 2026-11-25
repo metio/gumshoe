@@ -506,7 +506,7 @@
                                    "--ignore-not-found")))
         :verify (fn [{:keys [context observed]}]
                   [{:description "the release's Helm storage is empty"
-                    :timeout (:deletion (waits observed)) :interval 5
+                    :timeout (:deletion (waits observed)) :interval 5 :verifies-absence? true
                     :check #(= [] (revisions context observed))}])})]
 
      [nil

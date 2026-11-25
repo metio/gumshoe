@@ -10,6 +10,7 @@
   (:require [cheshire.core :as json]
             [clojure.string :as str]
             [gumshoe.effect :as effect]
+            [gumshoe.shell :as shell]
             [gumshoe.ssh :as ssh]
             [gumshoe.stdout :as stdout]))
 
@@ -29,6 +30,17 @@
   (let [output (apply ceph-stdout connection (concat args ["--format" "json"]))]
     (when-not (str/blank? output)
       (try (json/parse-string output true) (catch Exception _ nil)))))
+
+(defn ceph-json-result
+  "{:ok? <the command answered> :doc <its parsed JSON>} of a ceph command.
+   :ok? is true only when it exited cleanly and its output parsed, so a check
+   on an absence - no crash left - can tell an empty answer from none, which
+   ceph-json returns as the same nil."
+  [connection & args]
+  (let [{:keys [exit out]} (apply shell/execute (ssh/ssh-args connection (ceph-args connection (concat ["ceph"] args ["--format" "json"]))))
+        doc (when-not (str/blank? out)
+              (try (json/parse-string out true) (catch Exception _ nil)))]
+    {:ok? (and (zero? exit) (some? doc)) :doc doc}))
 
 (defn ceph-stream!
   "Runs a ceph command streaming its output. Returns true on a clean exit."

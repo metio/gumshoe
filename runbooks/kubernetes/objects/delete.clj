@@ -51,7 +51,7 @@
             (effect/plan (apply effect/kubectl context (deletion/delete-args (or ref {})))))
   :verify (fn [{:keys [context ref target] :as ctx}]
             [{:description (format "%s is gone or terminating" target)
-              :timeout 60 :interval 5
+              :timeout 60 :interval 5 :verifies-absence? true
               ;; a fetch that failed returns nil like a deleted object, so
               ;; gone needs a read that answered NotFound
               :check (fn [] (or (some-> (mutation/read-subject ctx) :metadata :deletionTimestamp some?)
