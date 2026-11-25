@@ -161,4 +161,5 @@
   :options options
   :prerequisites prerequisites
   :announce? false
+  :change? (fn [opts] (some? (:promote opts)))
   :action console})

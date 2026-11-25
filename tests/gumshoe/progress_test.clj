@@ -2,8 +2,10 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.progress-test
-  (:require [clojure.test :refer [deftest is testing]]
-            [gumshoe.progress :as progress]))
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [gumshoe.progress :as progress]
+            [gumshoe.stdout]))
 
 ;; Tests run off a terminal, so the plain (non-animated) path is exercised - the
 ;; behaviour that matters: results and control flow, not the cursor choreography.
@@ -49,7 +51,27 @@
     (is (true? (progress/animate? {:stderr-terminal? true :stdout-terminal? true :colors-enabled? true}))))
   (testing "NO_COLOR and --no-color stop it"
     (is (false? (progress/animate? {:stderr-terminal? true :stdout-terminal? false :no-color? true})))
-    (is (false? (progress/animate? {:stderr-terminal? true :stdout-terminal? true :colors-enabled? false})))))
+    (is (false? (progress/animate? {:stderr-terminal? true :stdout-terminal? true :colors-enabled? false :no-color-flag? true}))))
+  (testing "--no-color stops it with stdout captured as well, where colours are off anyway"
+    (is (false? (progress/animate? {:stderr-terminal? true :stdout-terminal? false :colors-enabled? false :no-color-flag? true})))))
+
+(deftest live-reads-the-no-color-flag
+  (let [flag @#'gumshoe.stdout/no-color-flag?
+        colors @#'gumshoe.stdout/colors?
+        before [@flag @colors]]
+    (try
+      (with-redefs-fn {#'progress/terminal? (fn [fd] (= 2 fd))}
+        (fn []
+          (reset! flag false)
+          (reset! colors false)
+          (is (= (str/blank? (System/getenv "NO_COLOR")) (#'progress/live?))
+              "stdout captured, stderr a terminal: the list animates unless NO_COLOR is set")
+          (gumshoe.stdout/disable-colors!)
+          (is (true? (gumshoe.stdout/no-color-requested?)))
+          (is (false? (#'progress/live?)) "--no-color stops it although stdout is captured")))
+      (finally
+        (reset! flag (first before))
+        (reset! colors (second before))))))
 
 (deftest a-redirected-stderr-gets-no-cursor-escapes
   (let [err (java.io.StringWriter.)]

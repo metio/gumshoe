@@ -102,10 +102,13 @@
   [cluster]
   (when cluster
     (stdout/err-println (format "  probing %s for capabilities (flux, cert-manager, cnpg, ...)" cluster))
-    (let [found (capabilities/detect-present)]
+    (let [{found :present unanswered :unanswered} (capabilities/detect-answers)]
       (if (seq found)
         (stdout/ok (format "detected: %s" (str/join ", " (map name found))))
         (stdout/err-println "  none detected - you can add :capabilities to env.edn by hand"))
+      (when (seq unanswered)
+        (stdout/warn (format "could not tell whether the cluster has %s - the probe did not answer; add any it has to :capabilities in env.edn by hand"
+                             (str/join ", " (map name unanswered)))))
       found)))
 
 (defn- init

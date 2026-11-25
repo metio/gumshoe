@@ -526,7 +526,7 @@ in terms of "plugins", and one can extend the whole engine at the same time:
 (gumshoe.plugin/provide!
   {:announcers    {:irc      (fn [announcer system data message] …)}
    :detectives    {:workloads [ … ]}
-   :capabilities  {:ceph     (fn [] boolean)}
+   :capabilities  {:ceph     (fn [] true|false|nil)}
    :tools         {"amtool"  {:version-command […] :min-version "0.25"}}
    :pre-hooks     [ … ]  :post-hooks [ … ]  :secrets [ … ]  :themes [ … ]
    :prerequisites {:change-window (fn [value opts] …)}
@@ -549,7 +549,10 @@ unifying convenience.
   `(registry/register! :workloads [ … ])`, resolved when the scan runs.
 - **Capability detectors** - `(capabilities/register-detector! :ceph #(…))`, so
   the setup wizard recognises what a cluster can do and books can require it
-  with `:cluster-capabilities [:ceph]`.
+  with `:cluster-capabilities [:ceph]`. A detector returns true when the
+  capability is present, false when the cluster answered that it is absent,
+  and nil when the probe did not answer; `kubectl/serves-crd?`,
+  `kubectl/resource-exists?` and `kubectl/any-matching?` answer that way.
 - **Tool support** - a tool's profile: `(command/register-tool! "mytool"
   {:version-command ["--version"] :min-version "2.0" :prerequisites (fn [opts]
   …)})`. A book that lists the tool in `:installed-tools` inherits its version
@@ -571,7 +574,8 @@ unifying convenience.
   can *veto* a run before it starts (a change freeze, a required ack) by
   returning `{:allow? false :reason …}`. A pre-hook's `:change?` is true for
   every book that changes something, including mutation books that post nothing
-  to the changelog. Both are bounded; pre-hooks fail *open*
+  to the changelog; a bespoke book that posts nothing declares `:change? true`,
+  or `:change? (fn [opts] …)` when only a flag makes it change something. Both are bounded; pre-hooks fail *open*
   so a broken gate never blocks emergency response. Distinct from announcers
   (fire on confirmation) and prerequisites (a single book declares its own).
 - **Secrets** - which password manager reads secrets at runtime. `:gopass`,

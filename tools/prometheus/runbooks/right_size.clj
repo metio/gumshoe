@@ -48,7 +48,7 @@
     (rightsizing/samples (:json response))))
 
 (def ^:private verdict-labels
-  {:missing (stdout/yellow "unset") :under (stdout/red "under") :over (stdout/yellow "over") :fits (stdout/green "fits")})
+  {:missing (stdout/yellow "unset") :unreadable (stdout/yellow "unreadable") :under (stdout/red "under") :over (stdout/yellow "over") :fits (stdout/green "fits")})
 
 (defn- right-size
   [{:keys [prometheus namespace window all] :as opts} _ctx]
@@ -78,11 +78,11 @@
          [["WORKLOAD" #(str (:namespace %) "/" (:workload %))]
           ["CONTAINER" :container]
           ["PODS" :pods]
-          ["CPU REQ" #(rightsizing/format-cpu (:cpu-request %))]
+          ["CPU REQ" #(rightsizing/format-request % :cpu)]
           ["P95" #(rightsizing/format-cpu (:cpu %))]
           ["→" #(rightsizing/format-cpu (:cpu-recommendation %))]
           ["" #(verdict-labels (:cpu-verdict %) "")]
-          ["MEM REQ" #(rightsizing/format-memory (:memory-request %))]
+          ["MEM REQ" #(rightsizing/format-request % :memory)]
           ["PEAK" #(rightsizing/format-memory (:memory %))]
           ["→ " #(rightsizing/format-memory (:memory-recommendation %))]
           [" " #(verdict-labels (:memory-verdict %) "")]]

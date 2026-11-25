@@ -165,6 +165,17 @@
     (not ok?) "could not read the cluster's health - refusing to upgrade a cluster whose health is unknown"
     (= "HEALTH_ERR" status) "cluster is HEALTH_ERR - resolve that before upgrading"))
 
+(defn change-refusal
+  "Pure: why a change to a single daemon or OSD must not start on a
+   health-result, or nil. It needs HEALTH_OK, or --force (forced?) for a
+   status that was read and is anything else. An unread status refuses even
+   under --force: forcing accepts a known degraded cluster, and a status
+   nobody read is not known to be merely degraded."
+  [{:keys [ok? status]} forced?]
+  (cond
+    (not ok?) "could not read the cluster's health - refusing to change a cluster whose health is unknown"
+    (and (not= "HEALTH_OK" status) (not forced?)) (format "cluster is %s - resolve that first, or rerun with --force" status)))
+
 (defn daemons
   [connection]
   (ceph-json connection "orch" "ps"))

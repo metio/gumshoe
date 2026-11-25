@@ -156,3 +156,48 @@
     (is (true? result))
     (is (str/includes? out "no container usage over 7d that matches a running pod"))
     (is (some #(some #{"--namespace=shop"} %) reads) "the namespace narrows the read")))
+
+;; --- unparseable requests --------------------------------------------------------
+
+(deftest an-unparseable-request-is-not-an-unset-one
+  (let [pods {:items [(pod "web-a" :owner ["ReplicaSet" "web-1"] :hash "1" :containers [["app" "lots" "512Mi"]])
+                      (pod "web-b" :owner ["ReplicaSet" "web-1"] :hash "1" :containers [["app" "500m" "512Mi"]])
+                      (pod "db-0" :containers [["pg" nil "1 Gi"]])]}
+        usage {["shop" "web-a" "app"] 0.3 ["shop" "web-b" "app"] 0.2 ["shop" "db-0" "pg"] 0.1}
+        memory {["shop" "web-a" "app"] (* 400 mi) ["shop" "db-0" "pg"] (* 100 mi)}
+        rows (rs/usage-rows pods usage memory)
+        by-container (into {} (map (juxt :container identity)) rows)]
+    (testing "a replica whose request is not a quantity marks that resource unreadable for the workload"
+      (is (= #{:cpu} (:unreadable-requests (by-container "app"))))
+      (is (= #{:memory} (:unreadable-requests (by-container "pg")))))
+    (testing "the verdict names it unreadable, never unset"
+      (let [app (rs/judge (by-container "app"))
+            pg (rs/judge (by-container "pg"))]
+        (is (= :unreadable (:cpu-verdict app)))
+        (is (= :fits (:memory-verdict app)))
+        (is (= :missing (:cpu-verdict pg)) "an absent request stays unset")
+        (is (= :unreadable (:memory-verdict pg)))
+        (is (rs/actionable? app))))
+    (testing "the table shows ? for an unreadable request and - for an unset one"
+      (is (= "?" (rs/format-request (by-container "app") :cpu)))
+      (is (= "512Mi" (rs/format-request (by-container "app") :memory)))
+      (is (= "-" (rs/format-request (by-container "pg") :cpu)))
+      (is (= "?" (rs/format-request (by-container "pg") :memory)))))
+  (testing "a row without usage has no verdict, readable or not"
+    (is (nil? (:cpu-verdict (rs/judge {:unreadable-requests #{:cpu} :cpu nil}))))))
+
+(deftest the-book-reports-an-unparseable-request-as-unreadable
+  (let [printed (java.io.StringWriter.)
+        answer {:status "success" :data {:resultType "vector"
+                                         :result [{:metric {:namespace "shop" :pod "web-a" :container "app"} :value [1 "0.3"]}]}}
+        pods {:items [(pod "web-a" :owner ["ReplicaSet" "web-1"] :hash "1" :containers [["app" "lots" "512Mi"]])]}]
+    (with-redefs [http/fetch (fn [& _] {:reachable true :status 200 :json answer})
+                  promql/credentials (fn [& _] {})
+                  kubectl/current-context (constantly "ctx")
+                  shell/execute (fn [& _] {:exit 0 :out (json/generate-string pods) :err ""})]
+      (let [result (binding [*out* printed *err* printed]
+                     ((:action right-size-book) {:prometheus "https://prometheus.example.org" :window "7d"} {}))
+            out (str printed)]
+        (is (true? result))
+        (is (str/includes? out "unreadable"))
+        (is (not (str/includes? out "unset")))))))

@@ -333,6 +333,17 @@
          (nil? stopped)
          (nil? thunk))))
 
+(defn change-book?
+  "Pure: whether a run of the book with the parsed opts may change anything.
+   :change? is a boolean or a (fn [opts]) for a book that changes something
+   only under a flag; without it a book that announces is a change book."
+  [{:keys [announce?] :or {announce? true} :as config} opts]
+  (let [declared (:change? config)]
+    (boolean (cond
+               (fn? declared) (declared opts)
+               (contains? config :change?) declared
+               :else announce?))))
+
 (defn execute!
   "Runs a runbook described by a config map:
 
@@ -343,7 +354,9 @@
    :change?       whether the book changes anything (default :announce?); a
                   change book that posts nothing, such as one starting a debug
                   pod, sets it true so pre-hooks (a change freeze) see a change
-                  and no reproducer of its calls is offered
+                  and no reproducer of its calls is offered. A book that
+                  changes something only under a flag passes (fn [opts] ..),
+                  judged on the parsed options
    :action        (fn [opts ctx]) -> truthy on success
    :details       optional lines --help shows under the description; an
                   unindented line is a heading
@@ -355,8 +368,7 @@
     :as config}]
   (if *loading*
     config
-    (let [change? (boolean (if (contains? config :change?) (:change? config) announce?))
-          error-fn (fn [{:keys [type cause msg option]}]
+    (let [error-fn (fn [{:keys [type cause msg option]}]
                      (when (= :org.babashka/cli type)
                        (case cause
                          :require (stdout/error (format "missing required option: --%s" (name option)))
@@ -373,7 +385,8 @@
       ;; stand between the user and the usage text
       (if (some #{"-h" "--help"} *command-line-args*)
         (println (help config))
-        (let [{:keys [opts notes]} (arguments options *command-line-args* error-fn)]
+        (let [{:keys [opts notes]} (arguments options *command-line-args* error-fn)
+              change? (change-book? config opts)]
           ;; select the output theme and the interactive backend from env.edn (or a
           ;; plugin's, just loaded) before anything prints or prompts
           (theme/apply!)

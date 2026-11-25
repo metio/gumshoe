@@ -120,12 +120,24 @@
           (not (str/blank? (System/getenv "NO_COLOR"))) false
           :else (terminal? 1))))
 
+(def ^:private no-color-flag?
+  ;; Whether the operator passed --no-color, kept apart from colors?, which
+  ;; is also off when stdout is merely captured: a captured stdout says
+  ;; nothing about the terminal on stderr, the flag says no decoration at all.
+  (atom false))
+
 (defn disable-colors!
   "Turns off ANSI coloring for the rest of the run (the --no-color flag)."
   []
+  (reset! no-color-flag? true)
   (reset! colors? false))
 
 (defn colors-enabled? [] @colors?)
+
+(defn no-color-requested?
+  "Whether the operator asked for no colour with --no-color this run."
+  []
+  @no-color-flag?)
 
 (defn- colorize
   [escape text]

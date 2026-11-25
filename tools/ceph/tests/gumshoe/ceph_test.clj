@@ -19,23 +19,38 @@
 (deftest command-assembly-test
   (testing "ssh runs unattended, and '--' precedes the host so the remote command is clean"
     (is (= ["ssh" "-q" "-o" "BatchMode=yes" "-o" "ConnectTimeout=5"
+            "-o" "ServerAliveInterval=15" "-o" "ServerAliveCountMax=4"
             "--" "ceph-1.example.org" "exit" "0"]
            (binding [ssh/*user-config* nil]
              (ssh/ssh-args {:host "ceph-1.example.org"} ["exit" "0"])))))
   (testing "a user ssh config is named with -F, so a system config owned by an unmapped uid is never read"
     (is (= ["ssh" "-q" "-F" "/home/op/.ssh/config" "-o" "BatchMode=yes" "-o" "ConnectTimeout=5"
+            "-o" "ServerAliveInterval=15" "-o" "ServerAliveCountMax=4"
             "--" "h" "exit" "0"]
            (binding [ssh/*user-config* "/home/op/.ssh/config"]
              (ssh/ssh-args {:host "h"} ["exit" "0"])))))
   (testing "an argument with a space is quoted, or the remote shell splits it"
-    (is (= ["ssh" "-q" "-o" "BatchMode=yes" "-o" "ConnectTimeout=5" "--" "h"
+    (is (= ["ssh" "-q" "-o" "BatchMode=yes" "-o" "ConnectTimeout=5"
+            "-o" "ServerAliveInterval=15" "-o" "ServerAliveCountMax=4" "--" "h"
             "vtysh" "-c" "'show evpn mac vni 4208'"]
            (binding [ssh/*user-config* nil]
              (ssh/ssh-args {:host "h"} ["vtysh" "-c" "show evpn mac vni 4208"])))))
   (testing "a token needing no quoting is passed through, so a reproducer stays readable"
     (is (= ["ceph" "status"]
            (binding [ssh/*user-config* nil]
-             (subvec (ssh/ssh-args {:host "h"} ["ceph" "status"]) 8)))))
+             (subvec (ssh/ssh-args {:host "h"} ["ceph" "status"]) 12)))))
+  (testing "keepalives are on by default and a connection overrides them"
+    (let [options (fn [connection]
+                    (binding [ssh/*user-config* nil]
+                      (filterv #(re-find #"^ServerAlive" %) (ssh/ssh-args connection ["true"]))))]
+      (is (= ["ServerAliveInterval=15" "ServerAliveCountMax=4"] (options {:host "h"})))
+      (is (= ["ServerAliveInterval=30" "ServerAliveCountMax=2"]
+             (options {:host "h" :server-alive-interval 30 :server-alive-count-max 2})))
+      (is (= ["ServerAliveInterval=0" "ServerAliveCountMax=4"] (options {:host "h" :server-alive-interval 0}))
+          "an interval of 0 turns the keepalives off")
+      (is (= ["ServerAliveInterval=15" "ServerAliveCountMax=4"]
+             (options {:host "h" :server-alive-interval -1 :server-alive-count-max "x"}))
+          "a value ssh would refuse falls back to the default")))
   (testing "an embedded single quote survives"
     (is (= "'it'\\''s'" (ssh/shell-quote "it's"))))
   (testing "the '--' option terminator is never placed after the host"
@@ -219,7 +234,7 @@
         (binding [ssh/*user-config* nil]
           (ceph/unarchived-crashes {:host "h" :cephadm-shell? true})))
       (is (= ["sudo" "cephadm" "shell" "--" "ceph" "crash" "ls-new" "--format" "json"]
-             (subvec @seen 8))))))
+             (subvec @seen 12))))))
 
 (deftest archiving-names-each-confirmed-crash
   (is (= [[:ssh {:host "h"} "ceph" "crash" "archive" "c1"]
@@ -321,3 +336,47 @@
       (is (not-any? #(some #{"upgrade"} %) streamed) label)))
   (testing "a readable HEALTH_OK reaches the confirmation, so the refusals are the health read's"
     (is (= 1 (:asked (run-upgrade {:out "{\"health\":{\"status\":\"HEALTH_OK\"}}"}))))))
+
+(deftest change-refusal-test
+  (is (nil? (ceph/change-refusal {:ok? true :status "HEALTH_OK"} false)))
+  (is (re-find #"HEALTH_WARN.*--force" (ceph/change-refusal {:ok? true :status "HEALTH_WARN"} false)))
+  (is (nil? (ceph/change-refusal {:ok? true :status "HEALTH_ERR"} true)) "--force accepts a read degraded status")
+  (testing "an unread status refuses, even under --force"
+    (is (re-find #"could not read" (ceph/change-refusal {:ok? false :status nil} false)))
+    (is (re-find #"could not read" (ceph/change-refusal {:ok? false :status nil} true)))))
+
+(defn- run-single-change
+  "Runs the :action of the ceph book at path with the health read answered by
+   status-result and every other ssh command by `{}` JSON naming one daemon
+   and two in-OSDs. Every confirmation is declined and counted."
+  [path opts status-result]
+  (let [book (binding [runbook/*loading* true] (load-file path))
+        asked (atom 0)
+        health-read? (fn [args] (and (some #{"status"} args) (some #{"json"} args)))
+        other {:out (str "{\"osds\":[{\"osd\":1,\"in\":1,\"up\":1},{\"osd\":2,\"in\":1,\"up\":1}]}")}]
+    (with-redefs [ssh/check-connection? (constantly true)
+                  ceph/daemons (constantly [{:daemon_name "osd.1" :status_desc "running"}])
+                  shell/execute (fn [& args]
+                                  (if (health-read? args) ((answering status-result)) ((answering other))))
+                  shell/run-with-output (fn [& _] 0)
+                  gumshoe.interact/choose-one (fn [_ _ provided] provided)
+                  gumshoe.interact/confirm! (fn [& _] (swap! asked inc) false)]
+      {:result (with-out-str-and-err #((:action book) opts {}))
+       :asked @asked})))
+
+(deftest single-changes-refuse-an-unread-health-status-test
+  (doseq [[path opts] [["tools/ceph/runbooks/restart_daemon.clj" {:host "ceph-1" :daemon "osd.1"}]
+                       ["tools/ceph/runbooks/osd_out.clj" {:host "ceph-1" :osd "osd.1"}]]
+          forced [false true]
+          [label result] [["ssh failed" {:exit 255 :out ""}]
+                          ["mgr restarting" {:out "not json"}]
+                          ["no health in the document" {:out "{\"fsid\":\"x\"}"}]]]
+    (let [{:keys [result asked]} (run-single-change path (assoc opts :force forced) result)]
+      (is (false? result) (str path " " label " forced " forced))
+      (is (zero? asked) (str path " " label " forced " forced))))
+  (testing "a read HEALTH_OK, and a read HEALTH_WARN under --force, reach the confirmation"
+    (doseq [[path opts] [["tools/ceph/runbooks/restart_daemon.clj" {:host "ceph-1" :daemon "osd.1"}]
+                         ["tools/ceph/runbooks/osd_out.clj" {:host "ceph-1" :osd "osd.1"}]]]
+      (is (= 1 (:asked (run-single-change path opts {:out "{\"health\":{\"status\":\"HEALTH_OK\"}}"}))) path)
+      (is (= 1 (:asked (run-single-change path (assoc opts :force true) {:out "{\"health\":{\"status\":\"HEALTH_WARN\"}}"}))) path)
+      (is (zero? (:asked (run-single-change path opts {:out "{\"health\":{\"status\":\"HEALTH_WARN\"}}"}))) path))))

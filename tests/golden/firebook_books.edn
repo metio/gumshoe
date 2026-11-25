@@ -11,11 +11,11 @@
      :destructive? false}],
    :announcements [],
    :calls
-   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 bridge fdb show"],
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 exit 0"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 bridge fdb show"],
    :checks
    [{:description
      "the fire is out: the evpn-static-fdb detective no longer reports it",
@@ -35,11 +35,11 @@
      :destructive? false}],
    :announcements [],
    :calls
-   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 bridge fdb show"],
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 exit 0"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 bridge fdb show"],
    :checks
    [{:description
      "the fire is out: the evpn-static-fdb detective no longer reports it",
@@ -73,11 +73,11 @@
      :destructive? false}],
    :announcements [],
    :calls
-   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 bridge fdb show"],
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 exit 0"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 bridge fdb show"],
    :checks
    [{:description
      "the fire is out: the evpn-static-fdb detective no longer reports it",
@@ -102,7 +102,7 @@
      :destructive? false}],
    :announcements [],
    :calls
-   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"],
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"],
    :checks [],
    :record
    {:applied 0,
@@ -122,11 +122,11 @@
      :destructive? false}],
    :announcements [],
    :calls
-   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 bridge fdb show"],
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 exit 0"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 bridge fdb show"],
    :checks
    [{:description
      "the fire is out: the evpn-static-fdb detective no longer reports it",
@@ -151,7 +151,7 @@
      :destructive? false}],
    :announcements [],
    :calls
-   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"],
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"],
    :checks [],
    :record
    {:applied 0,
@@ -171,7 +171,7 @@
      :destructive? false}],
    :announcements [],
    :calls
-   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"],
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo sh -c 'out=$(bridge fdb show dev lo.4208) || exit 1; printf '\\''%s\\n'\\'' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208'"],
    :checks [],
    :record
    {:applied 0,
@@ -192,11 +192,11 @@
      :destructive? false}],
    :announcements [["hv1" "Fire drill started: stale fdb entry"]],
    :calls
-   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo bridge fdb replace 02:00:cb:00:71:01 dev lo.4208 dst 192.0.2.1 self static"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 bridge fdb show"],
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo bridge fdb replace 02:00:cb:00:71:01 dev lo.4208 dst 192.0.2.1 self static"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 exit 0"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 bridge fdb show"],
    :checks
    [{:description
      "the fire is burning: the evpn-static-fdb detective reports it",
@@ -250,7 +250,7 @@
      :destructive? false}],
    :announcements [["hv1" "Fire drill started: stale fdb entry"]],
    :calls
-   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo bridge fdb replace 02:00:cb:00:71:01 dev lo.4208 dst 192.0.2.1 self static"],
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo bridge fdb replace 02:00:cb:00:71:01 dev lo.4208 dst 192.0.2.1 self static"],
    :checks [],
    :record
    {:applied 0,
@@ -271,8 +271,8 @@
      :destructive? false}],
    :announcements [["hv1" "Fire drill started: stale fdb entry"]],
    :calls
-   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo bridge fdb replace 02:00:cb:00:71:01 dev lo.4208 dst 192.0.2.1 self static"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"],
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo bridge fdb replace 02:00:cb:00:71:01 dev lo.4208 dst 192.0.2.1 self static"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 exit 0"],
    :checks
    [{:description
      "the fire is burning: the evpn-static-fdb detective reports it",
@@ -298,11 +298,11 @@
      :destructive? false}],
    :announcements [["hv1" "Fire drill started: stale fdb entry"]],
    :calls
-   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo bridge fdb replace 02:00:cb:00:71:01 dev lo.4208 dst 192.0.2.1 self static"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 exit 0"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
-    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -- hv1 bridge fdb show"],
+   ["ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo bridge fdb replace 02:00:cb:00:71:01 dev lo.4208 dst 192.0.2.1 self static"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 exit 0"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo vtysh -c 'show evpn vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 sudo vtysh -c 'show evpn mac vni 4208'"
+    "ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -- hv1 bridge fdb show"],
    :checks
    [{:description
      "the fire is burning: the evpn-static-fdb detective reports it",
