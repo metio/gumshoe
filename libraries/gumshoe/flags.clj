@@ -44,6 +44,62 @@
   {:name [:r :s]
    :service [:m]})
 
+;; --- option order -------------------------------------------------------------
+;;
+;; --help lists a book's options in the order of its option map's keys. A map
+;; literal of more than eight entries is read as a hash map, and assoc'ing a
+;; ninth key onto an array map turns it into one, so either loses the order
+;; the options were written in. These functions build array maps of any size
+;; instead, which keep their insertion order as long as no new key is
+;; assoc'ed onto them.
+
+(defn merge-ordered-with
+  "Like merge-with, keeping the keys in order of first appearance: the keys
+   of the first map in its order, then each later map's new keys in theirs.
+   A key a later map repeats keeps its first position and takes
+   (f earlier later). nil maps are skipped. Returns an array map, nil when
+   every map is nil."
+  [f & maps]
+  (when (some some? maps)
+    (let [[order values] (reduce (fn [[order values] [k v]]
+                                   (if (contains? values k)
+                                     [order (assoc values k (f (get values k) v))]
+                                     [(conj order k) (assoc values k v)]))
+                                 [[] {}]
+                                 (mapcat seq maps))]
+      (apply array-map (mapcat (juxt identity values) order)))))
+
+(defn merge-ordered
+  "Like merge, keeping the keys in order of first appearance (see
+   merge-ordered-with): a key a later map repeats keeps its first position
+   and takes the later value."
+  [& maps]
+  (apply merge-ordered-with (fn [_ later] later) maps))
+
+(defn ordered
+  "An option map that keeps the order its options are written in, at any
+   size, from flag keyword and option map pairs:
+
+     (flags/ordered :url {:desc ..} :flavor {:desc ..} ..)
+
+   A repeated key keeps its first position and takes the later option. Use
+   it for a book with more than eight options, whose map literal would lose
+   the order."
+  [& kvs]
+  (when (odd? (count kvs))
+    (throw (ex-info "flags/ordered takes flag and option pairs" {:kvs kvs})))
+  (or (apply merge-ordered (map (fn [[k v]] {k v}) (partition 2 kvs))) {}))
+
+(defn order-lost?
+  "True when an option map cannot carry the order its options were written
+   in: a hash map, as a map literal of more than eight entries or a plain
+   merge past eight becomes. An array map keeps its order and a sorted map
+   orders by name on purpose."
+  [options]
+  (and (map? options)
+       (not (sorted? options))
+       (not (instance? clojure.lang.PersistentArrayMap options))))
+
 (defn- flag
   [letter]
   (str "-" (name letter)))
@@ -62,7 +118,7 @@
 
 (defn documented
   "The options, each one that still takes deprecated aliases naming them at
-   the end of its :desc, so --help lists them."
+   the end of its :desc, so --help lists them. The options keep their order."
   [options]
   (let [by-option (group-by val (deprecated-aliases options))]
     (reduce-kv (fn [options option pairs]

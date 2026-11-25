@@ -318,6 +318,13 @@ mostly data:
   book loads. A bespoke book declares its select once without
   `:candidates` and adds them at the pick, `(select/pick (assoc
   node-select :candidates …) opts context)`;
+- `--help` lists options in the order of the option map's keys: a select's
+  derived flags first, then the book's own, then the standard flags. A map
+  literal of more than eight entries is a hash map and loses that order, so
+  a book with more options writes them as `(flags/ordered :url {…} :flavor
+  {…} …)` and joins option maps with `flags/merge-ordered`, never a plain
+  `merge`; conformance notes a book whose options lost their order
+  (`:option-order`);
 - a uniform change is `(mutation/book {:select … :confirm … :effect …
   :verify …})`. Conformance requires each spec to carry a readable
   `:confirm {:action …}`, an explicit `:destructive?` true or false,

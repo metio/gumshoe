@@ -26,6 +26,7 @@
             [gumshoe.config :as config]
             [gumshoe.correlation :as correlation]
             [gumshoe.detectives.registry :as registry]
+            [gumshoe.flags :as flags]
             [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.investigation :as investigation]
             [gumshoe.kubectl :as kubectl]
@@ -556,7 +557,7 @@
   [{:keys [description detectives scope prerequisites when-to-run options collect around extra]}]
   (runbook/execute!
    {:description description
-    :options (merge options output-option)
+    :options (flags/merge-ordered options output-option)
     :prerequisites prerequisites
     :announce? false
     :action (fn [opts _ctx]

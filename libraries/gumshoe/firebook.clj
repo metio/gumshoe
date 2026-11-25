@@ -69,6 +69,7 @@
             [gumshoe.detective :as detective]
             [gumshoe.effect :as effect]
             [gumshoe.evpn :as evpn]
+            [gumshoe.flags :as flags]
             [gumshoe.flow :as flow]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
@@ -417,7 +418,7 @@
     (when-let [problem (expect-problem (:expect merged))]
       (throw (ex-info (str "a firebook's :expect is refused: " problem) {:expect (:expect merged)})))
     (assoc merged
-           :options (merge options (extinguish-option (get-in merged [:extinguish :put-out])))
+           :options (flags/merge-ordered options (extinguish-option (get-in merged [:extinguish :put-out])))
            :prerequisites (prerequisites/union (:prerequisites derived) (:prerequisites spec)))))
 
 (defn- drill-ctx

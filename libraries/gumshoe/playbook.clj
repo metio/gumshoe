@@ -86,6 +86,7 @@
   (:require [clojure.string :as str]
             [gumshoe.change :as change]
             [gumshoe.effect :as effect]
+            [gumshoe.flags :as flags]
             [gumshoe.flow :as flow]
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
@@ -183,16 +184,15 @@
                     {:option key :declarations [a b]}))))
 
 (defn all-options
-  "Every option any step reads, and the playbook's own."
+  "Every option any step reads, in order of first appearance across the
+   steps, then the playbook's own."
   [{:keys [steps options]}]
-  (merge (reduce (fn [acc step]
-                   (reduce-kv (fn [acc k v]
-                                (assoc acc k (if-let [seen (get acc k)] (join-option k seen v) v)))
-                              acc
-                              (:options step)))
-                 {}
-                 steps)
-         options))
+  (flags/merge-ordered
+   (reduce (fn [acc [k v]]
+             (flags/merge-ordered acc {k (if-let [seen (get acc k)] (join-option k seen v) v)}))
+           {}
+           (mapcat :options steps))
+   options))
 
 (defn- label
   [step]
@@ -639,7 +639,7 @@
   (runbook/execute!
    {:description description
     :options (cond-> (all-options playbook)
-               (some #(= :pause (kind %)) steps) (merge segment-option))
+               (some #(= :pause (kind %)) steps) (flags/merge-ordered segment-option))
     :prerequisites (all-prerequisites playbook)
     :details (details playbook)
     :action (fn [opts {:keys [announcement-data]}] (run! playbook opts announcement-data))}))
