@@ -16,7 +16,8 @@
       :namespace-flag :namespace       ; :namespaced
       :name-flag :name                 ; :namespaced
       :preview \"kubectl describe node {}\"  ; :one, optional fzf side pane
-      :empty-message \"every node is already cordoned\"}  ; shown by pick when empty"
+      :empty-message \"every node is already cordoned\"  ; shown by pick when empty
+      :on-empty :ok | :fail}           ; how pick shows it, :ok by default"
   (:require [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.stdout :as stdout]))
@@ -71,19 +72,29 @@
 
 (defn pick
   "Discovers candidates for a select spec and lets the operator choose, returning
-   the chosen target or nil. Prints the spec's :empty-message when there is
-   nothing to pick, and an error when the pick is empty - so a read-only or
-   bespoke book selects its subject in one line:
+   the chosen target or nil. Prints why it returns nil: that the candidates could
+   not be listed, the spec's :empty-message when there is nothing to pick, or an
+   error when the pick is empty - so a read-only or bespoke book selects its
+   subject in one line:
 
-     (when-let [ns (select/pick namespace-select opts context)]
-       ...)
+     (if-let [ns (select/pick namespace-select opts context)]
+       ...
+       false)
+
+   The :empty-message prints as a success unless the spec says :on-empty :fail,
+   which suits a book that cannot do its work without a subject.
+
+   A book that needs the objects behind the names reads them once in a delay
+   the :candidates function derefs: pick realizes it under strict reads, and
+   the book derefs it again after the pick without a second read.
 
    mutation/book uses resolve-target instead, because it maps empty candidates to
    its own success (nothing-to-do) rather than to nil."
-  [{:keys [mode label empty-message] :as spec} opts context]
-  (let [{:keys [candidates target unread]} (resolve-target spec opts context)]
+  [{:keys [mode label empty-message on-empty] :as spec} opts context]
+  (let [{:keys [candidates target unread]} (resolve-target spec opts context)
+        empty! (if (= :fail on-empty) stdout/error stdout/ok)]
     (cond
       unread (do (unread! spec unread) nil)
-      (empty? candidates) (do (stdout/ok (or empty-message "nothing to select")) nil)
+      (empty? candidates) (do (empty! (or empty-message "nothing to select")) nil)
       (nothing-selected? mode target) (do (stdout/error (format "no %s selected" label)) nil)
       :else target)))
