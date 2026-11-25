@@ -17,6 +17,7 @@
             [gumshoe.conditions :as conditions]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.plugin :as plugin]
+            [gumshoe.steps.flux :as flux-steps]
             [gumshoe.subject :as subject]))
 
 (def stageset-type "stagesets.stages.metio.wtf")
@@ -65,6 +66,44 @@
     (boolean (and (= stage addressed)
                   (some #(and (= stage (:name %)) (= token (:lastHandledPromotion %)))
                         (get-in stageset [:status :stages]))))))
+
+;; The window override stagesetctl reconcile --update-now stamps; the
+;; controller copies the value it honoured into status.lastHandledUpdateOverride
+;; and clears status.pendingUpdate.
+(def update-now-annotation "stages.metio.wtf/update-now")
+
+(defn reconcile-annotations
+  "The annotations that ask the StageSet to reconcile at `token`, as
+   key=value arguments of kubectl annotate: requestedAt and, with
+   `update-now?`, the window override, both carrying the same token."
+  [token update-now?]
+  (cond-> [(str flux-steps/requested-at "=" token)]
+    update-now? (conj (str update-now-annotation "=" token))))
+
+(defn reconcile-refusal
+  "Why the StageSet named `target` must not be asked to reconcile, judged on
+   the StageSet as read now: it no longer exists, or it is suspended and so
+   will not act on the request."
+  [target stageset]
+  (cond
+    (nil? stageset) (format "StageSet %s no longer exists" target)
+    (true? (-> stageset :spec :suspend)) (format "StageSet %s is suspended; it will not act on a reconcile request" target)
+    :else nil))
+
+(defn reconcile-handled?
+  "Whether the controller handled the reconcile request stamped at `token`:
+   status.lastHandledReconcileAt is the token, and with `update-now?` the
+   override with that token was honoured and no update is held any more.
+   stagesetctl reconcile --wait waits for the same state. Readiness is not
+   the test, since a StageSet Ready before the request stays Ready whether
+   or not it was handled."
+  [stageset token update-now?]
+  (boolean
+   (and (some? stageset)
+        (flux-steps/handled? stageset token)
+        (or (not update-now?)
+            (and (= token (-> stageset :status :lastHandledUpdateOverride))
+                 (nil? (-> stageset :status :pendingUpdate)))))))
 
 ;; A Ready=False reason says how loud the finding should be: hard failures are
 ;; critical, gated or budget-frozen states are warnings, and states that just mean

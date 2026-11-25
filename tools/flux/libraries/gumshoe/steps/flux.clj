@@ -31,7 +31,10 @@
 
 (def ^:private resourceset-reconcile :fluxcd.controlplane.io/reconcile)
 
-(def ^:private requested-at "reconcile.fluxcd.io/requestedAt")
+(def requested-at
+  "The annotation a Flux controller reads a reconcile request from; it writes
+   the value it acted on to status.lastHandledReconcileAt."
+  "reconcile.fluxcd.io/requestedAt")
 
 (defn suspended?
   "Whether the object is told not to reconcile: spec.suspend, or the reconcile
@@ -99,7 +102,7 @@
                   [{:description (or description (default-description o))
                     :timeout (seconds timeout ctx) :interval interval
                     :check #(let [live (fetch context o)]
-                              (and (done? (:kind o) live)
+                              (and (done? (:kind o) live (token-of ctx))
                                    (if also (also ctx live) true)))}]))})))
 
 (defn suspend
@@ -115,26 +118,7 @@
      :also        (fn [ctx live] -> bool), a further condition the post-check
                   waits for, given the object as just read"
   [spec]
-  (switch spec true suspended? #(str (label %) " is suspended")))
-
-(defn resume
-  "The :values, :effect and :verify of a step that resumes the object
-   `(object ctx)` returns, requesting a reconcile at the token, and waits
-   until it is no longer suspended and Ready. Takes what `suspend` takes, and
-   :token, the name of the caller's value holding the token; the default
-   description is \"<Kind> <ns>/<name> is resumed and Ready\". Without
-   :token the token is the value :timestamp, which the returned :values
-   declares with `timestamp`."
-  [spec]
-  (switch spec false (fn [kind live] (and (not (suspended? kind live)) (ready? live)))
-          #(str (label %) " is resumed and Ready")))
-
-(defn reconcile-effect
-  "Asks the object to reconcile now, stamping `token` as requestedAt."
-  [context {:keys [type namespace name]} token]
-  (effect/plan
-   (effect/kubectl context "-n" namespace "annotate" type name "--overwrite"
-                   (str requested-at "=" token))))
+  (switch spec true (fn [kind live _] (suspended? kind live)) #(str (label %) " is suspended")))
 
 (defn handled?
   "Whether the object reconciled since `token` was stamped: a Flux controller
@@ -143,6 +127,32 @@
    request stays Ready whether or not the request was handled."
   [object token]
   (= token (-> object :status :lastHandledReconcileAt)))
+
+(defn resumed?
+  "Whether the object is no longer suspended, its controller handled the
+   reconcile request stamped at `token`, and it is Ready. An object keeps its
+   last Ready condition while suspended, so Ready alone would hold before the
+   controller looked at the resumed object."
+  [kind object token]
+  (and (not (suspended? kind object)) (handled? object token) (ready? object)))
+
+(defn resume
+  "The :values, :effect and :verify of a step that resumes the object
+   `(object ctx)` returns, requesting a reconcile at the token, and waits
+   until it is `resumed?`: no longer suspended, the request handled, and
+   Ready. Takes what `suspend` takes, and :token, the name of the caller's
+   value holding the token; the default description is \"<Kind> <ns>/<name>
+   is resumed and Ready\". Without :token the token is the value :timestamp,
+   which the returned :values declares with `timestamp`."
+  [spec]
+  (switch spec false resumed? #(str (label %) " is resumed and Ready")))
+
+(defn reconcile-effect
+  "Asks the object to reconcile now, stamping `token` as requestedAt."
+  [context {:keys [type namespace name]} token]
+  (effect/plan
+   (effect/kubectl context "-n" namespace "annotate" type name "--overwrite"
+                   (str requested-at "=" token))))
 
 (defn reconcile
   "The :values, :effect and :verify of a step that asks the object

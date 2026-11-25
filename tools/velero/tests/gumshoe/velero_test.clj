@@ -7,7 +7,8 @@
             [gumshoe.detective :as detective]
             [gumshoe.detectives.registry :as registry]
             [gumshoe.detectives.velero :as velero]
-            [gumshoe.tools.velero]))
+            [gumshoe.tools.velero]
+            [gumshoe.velero.phases :as phases]))
 
 (def ^:private now (java.time.Instant/parse "2026-11-19T12:00:00Z"))
 
@@ -191,3 +192,27 @@
   (is (= (set (map :name velero/detectives)) (set (map :name (registry/for-scope :backups)))))
   (testing "every detective survives a cluster without Velero"
     (is (empty? (detective/run-detectives velero/detectives {:now now})))))
+
+(deftest a-pending-backup-does-not-hide-the-failure-before-it
+  (doseq [phase ["New" "Queued" "ReadyToStart" nil]]
+    (is (= ["velero/nightly-1"]
+           (map :component (run velero/detect-failed-backups velero/backup-type
+                                [(backup "nightly-1" "Failed" :schedule "nightly" :start "2026-11-18T03:00:00Z")
+                                 (backup "nightly-2" phase :schedule "nightly" :start "2026-11-19T03:00:00Z")])))
+        (str phase))))
+
+(deftest a-backup-waiting-to-start-for-hours-is-stuck
+  (doseq [[phase label] [["New" "New"] ["Queued" "Queued"] ["ReadyToStart" "ReadyToStart"] [nil "New"]]]
+    (is (= [(format "Backup has been %s for 15 hours" label)]
+           (map :summary (run velero/detect-stuck-backups velero/backup-type
+                              [(backup "waiting" phase :start "2026-11-18T21:00:00Z")])))
+        (str phase))))
+
+(deftest every-running-phase-is-judged-as-running
+  (doseq [phase phases/running-phases]
+    (is (empty? (run velero/detect-failed-backups velero/backup-type
+                     [(backup "b" phase :schedule "s" :start "2026-11-19T03:00:00Z")]))
+        phase)
+    (is (seq (run velero/detect-stuck-backups velero/backup-type
+                  [(backup "b" phase :start "2026-11-18T21:00:00Z")]))
+        phase)))

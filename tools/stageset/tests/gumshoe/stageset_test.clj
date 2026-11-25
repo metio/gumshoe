@@ -2,8 +2,13 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.stageset-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [cheshire.core :as json]
+            [clojure.test :refer [deftest is testing]]
             [gumshoe.capabilities :as capabilities]
+            [gumshoe.effect :as effect]
+            [gumshoe.mutation :as mutation]
+            [gumshoe.runbook :as runbook]
+            [gumshoe.shell :as shell]
             [gumshoe.detectives.registry :as registry]
             [gumshoe.investigation :as investigation]
             [gumshoe.kubectl :as kubectl]
@@ -182,3 +187,58 @@
     (is (= "no stage was chosen" (stageset/promotion-refusal "apps/site" site nil nil)))
     (is (= "StageSet apps/site no longer declares stage qa"
            (stageset/promotion-refusal "apps/site" site "qa" nil)))))
+
+(defn- reconciled
+  [& {:keys [handled override pending suspend]}]
+  {:metadata {:namespace "apps" :name "site"}
+   :spec (cond-> {} suspend (assoc :suspend true))
+   :status (cond-> {:conditions [{:type "Ready" :status "True"}]}
+             handled (assoc :lastHandledReconcileAt handled)
+             override (assoc :lastHandledUpdateOverride override)
+             pending (assoc :pendingUpdate pending))})
+
+(deftest a-reconcile-is-handled-once-the-controller-wrote-the-token
+  (is (true? (stageset/reconcile-handled? (reconciled :handled "T") "T" false)))
+  (testing "a StageSet Ready before the request has not handled it"
+    (is (false? (stageset/reconcile-handled? (reconciled :handled "earlier") "T" false)))
+    (is (false? (stageset/reconcile-handled? (reconciled) "T" false))))
+  (testing "a StageSet that could not be read has not handled it"
+    (is (false? (stageset/reconcile-handled? nil "T" false)))))
+
+(deftest an-update-now-is-handled-once-the-override-was-honoured-and-nothing-is-held
+  (is (true? (stageset/reconcile-handled? (reconciled :handled "T" :override "T") "T" true)))
+  (is (false? (stageset/reconcile-handled? (reconciled :handled "T") "T" true))
+      "the reconcile was handled, the override not yet")
+  (is (false? (stageset/reconcile-handled? (reconciled :handled "T" :override "earlier") "T" true)))
+  (is (false? (stageset/reconcile-handled? (reconciled :handled "T" :override "T" :pending {:reason "Window"}) "T" true))
+      "an update still held has not rolled"))
+
+(deftest a-reconcile-stamps-the-token-on-every-annotation-it-sets
+  (is (= ["reconcile.fluxcd.io/requestedAt=T"] (stageset/reconcile-annotations "T" false)))
+  (is (= ["reconcile.fluxcd.io/requestedAt=T" "stages.metio.wtf/update-now=T"]
+         (stageset/reconcile-annotations "T" true))))
+
+(deftest a-reconcile-is-refused-for-a-suspended-or-missing-stageset
+  (is (nil? (stageset/reconcile-refusal "apps/site" (reconciled))))
+  (is (= "StageSet apps/site is suspended; it will not act on a reconcile request"
+         (stageset/reconcile-refusal "apps/site" (reconciled :suspend true))))
+  (is (= "StageSet apps/site no longer exists" (stageset/reconcile-refusal "apps/site" nil))))
+
+(defn- reconcile-spec []
+  (binding [runbook/*loading* true]
+    (with-redefs [mutation/book identity]
+      (load-file "tools/stageset/runbooks/stageset/reconcile.clj"))))
+
+(deftest the-reconcile-book-waits-for-its-own-token
+  (let [spec (reconcile-spec)
+        ctx {:context "ctx" :target "apps/site" :ref {:namespace "apps" :name "site"} :token "T"
+             :opts {:update-now true}}
+        [check] ((:verify spec) ctx)
+        serving (fn [object] (fn [& _] {:exit 0 :out (json/generate-string object) :err ""}))]
+    (is (= [[:kubectl "ctx" "--namespace=apps" "annotate" stageset/stageset-type "site"
+             "reconcile.fluxcd.io/requestedAt=T" "stages.metio.wtf/update-now=T" "--overwrite"]]
+           (effect/collect ((:effect spec) ctx))))
+    (with-redefs [shell/execute (serving (reconciled :handled "earlier" :override "earlier"))]
+      (is (false? ((:check check))) "Ready=True from before the request does not pass"))
+    (with-redefs [shell/execute (serving (reconciled :handled "T" :override "T"))]
+      (is (true? ((:check check)))))))

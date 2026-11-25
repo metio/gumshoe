@@ -7,6 +7,10 @@
 ;;   env.edn: {:plugins [gumshoe.ui.charm] :ui :charm}
 ;; charm.clj runs under babashka (pure Clojure over JLine 3), so this drops the
 ;; two external binaries entirely.
+;;
+;; charm.clj is pinned to a release on Clojars, which refuses to replace a
+;; released version, and the code is written against that release's API.
+;; `bb test` in this directory runs the backend's tests against it.
 {:paths ["libraries"]
  :deps {io.github.metio/gumshoe-core {:local/root "../.."}
-        io.github.TimoKramer/charm.clj {:git/sha "REPLACE_WITH_PINNED_SHA"}}}
+        de.timokramer/charm.clj {:mvn/version "0.2.71"}}}

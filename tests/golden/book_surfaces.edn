@@ -4019,17 +4019,19 @@
    {:desc "Override the update window and roll a held revision now",
     :coerce :boolean}},
   :help
-  ["Triggers a StageSet reconciliation via stagesetctl"
+  ["Requests a StageSet reconciliation"
    ""
    "What it does:"
    "  picks one StageSet by namespace and name (--namespace and --name, or interactively)"
    "  asks to confirm: trigger a StageSet reconciliation"
+   "  checks again right before acting that what was confirmed still holds"
    "  announces the change to the changelog"
    "  verifies the result before it reports success"
    ""
    "Needs:"
-   "  tools: stagesetctl, kubectl, fzf"
+   "  tools: kubectl, fzf"
    "  kubectl get: stagesets.stages.metio.wtf"
+   "  kubectl patch: stagesets.stages.metio.wtf"
    "  cluster capabilities: stageset"
    ""
    "Usage:"

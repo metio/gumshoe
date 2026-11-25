@@ -41,7 +41,8 @@
         url (get evidence "url")
         endpoints (store-endpoints evidence)]
     (cond
-      (not (:reachable stores))
+      ;; a stores read that did not answer is nil, and the check is unread
+      (nil? stores)
       []
 
       ;; A non-2xx or non-JSON /api/v1/stores response leaves endpoints empty for
@@ -78,8 +79,8 @@
   (let [rules (get evidence "rules")
         url (get evidence "url")]
     (cond
-      ;; the readiness detective reports an unreachable query layer
-      (not (:reachable rules))
+      ;; a rules read that did not answer is nil, and the check is unread
+      (nil? rules)
       []
 
       ;; no groups from an erroring or non-JSON response would read as every
@@ -113,8 +114,10 @@
    {:name "thanos-stores"
     :description "Store endpoints are connected and error-free"
     :requires ["stores" "url"]
+    :joins ["stores"]
     :detect detect-stores}
    {:name "thanos-rules"
     :description "Recording and alerting rules evaluate cleanly"
     :requires ["rules" "url"]
+    :joins ["rules"]
     :detect detect-rules}])

@@ -4,6 +4,7 @@
 (ns gumshoe.gateway-test
   (:require [clojure.test :refer [deftest is testing]]
             [gumshoe.capabilities :as capabilities]
+            [gumshoe.detective :as detective]
             [gumshoe.detectives.gateway :as gateway]
             [gumshoe.detectives.registry :as registry]
             [gumshoe.tools.gateway]))
@@ -92,3 +93,26 @@
 (deftest package-registers-traffic-scope-and-capability-test
   (is (seq (registry/for-scope :traffic)) "the package fills the :traffic scan scope")
   (is (contains? (set (capabilities/registered)) :gateway-api)))
+
+(defn- listenersets-check []
+  (first (filter #(= "listenersets" (:name %)) gateway/detectives)))
+
+(deftest the-listenerset-check-is-unread-when-neither-listenerset-read-answered
+  (let [evidence {gateway/gateway-type {:items []}}]
+    (is (true? (detective/unread? (listenersets-check) evidence)))
+    (is (empty? (gateway/detect-listenerset-problems evidence))))
+  (testing "either ListenerSet read answering is enough, an empty one too"
+    (doseq [type gateway/listenerset-types]
+      (is (false? (detective/unread? (listenersets-check)
+                                     {gateway/gateway-type {:items []} type {:items []}}))
+          type))))
+
+(deftest a-listenerset-is-judged-only-when-its-reads-answered
+  (let [dangling {:items [{:metadata {:namespace "moodle" :name "dangling"}
+                           :spec {:parentRef {:namespace "traffic" :name "gone"}}}]}]
+    (is (= 1 (count (gateway/detect-listenerset-problems
+                     {gateway/gateway-type {:items []}
+                      "listenersets.gateway.networking.k8s.io" dangling}))))
+    (is (empty? (gateway/detect-listenerset-problems
+                 {"listenersets.gateway.networking.k8s.io" dangling}))
+        "without the Gateway read every parent would read as missing")))

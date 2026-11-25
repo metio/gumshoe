@@ -25,10 +25,11 @@ charm.clj; without it (or unset) gumshoe keeps the built-in fzf/gum.
 
 ## Status
 
-This backend needs verification on a real terminal — a TUI can't run in a headless
-test suite, so it is intentionally **not** on the monorepo's `bb test` classpath.
-The Elm loops follow charm.clj's documented `program/run` API; two accessors that
-read a value out of a component's final state (`selected-item`, `input-value`) are
-isolated at the top of `gumshoe.ui.charm` and are the place to adjust if the
-installed charm.clj names them differently. Fuzzy-filtering (fzf's incremental
-match) is a follow-up; the first cut is a scrollable select.
+A TUI can't run in a headless test suite, so the backend is not on the
+monorepo's `bb test` classpath. Its programs' states and update functions are
+pure, and `bb test` in `tools/ui-charm` runs them against the pinned charm.clj
+release without a terminal; the loop that drives them, `program/run`, still
+needs a real terminal to check. A confirmation starts on "no", so a bare Enter
+declines, as the built-in `gum confirm --default=false` does. Space marks
+values in a multi-select. Fuzzy-filtering (fzf's incremental match) is a
+follow-up; the first cut is a scrollable select.

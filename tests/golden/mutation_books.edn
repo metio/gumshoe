@@ -5966,39 +5966,21 @@
    :out
    "🔶 no StageSet matches the given flags, please select from all instead\n🔶 StageSet 'apps/nope' is not a valid choice, please select one\n❌ no StageSet selected"}},
  "tools/stageset/runbooks/stageset/reconcile.clj"
- {:absent
-  {:action "trigger a StageSet reconciliation",
-   :destructive? false,
-   :items ["apps/site"],
-   :step "trigger a StageSet reconciliation",
-   :plan
-   [[:cmd
-     "stagesetctl"
-     "reconcile"
-     "site"
-     "--namespace=apps"
-     "--update-now"]],
-   :precondition nil,
-   :announce "Reconcile StageSet apps/site",
-   :checks
-   [{:description "StageSet apps/site is Ready",
-     :timeout 120,
-     :interval 10,
-     :holds false}]},
+ {:absent {:stopped "refusing: StageSet apps/site no longer exists"},
   :empty {:result true, :out "✅ nothing to do"},
   :failed-after-applying
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: StageSet apps/site is Ready"],
+    "❌ NOT verified within 0s: StageSet apps/site handled the reconcile request and rolled the held update"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
-    "      stagesetctl reconcile site --namespace=apps --update-now"
+    "      kubectl --namespace=apps annotate stagesets.stages.metio.wtf site reconcile.fluxcd.io/requestedAt=<instant> stages.metio.wtf/update-now=<instant> --overwrite"
     "    its post-check did not hold"
     "  Look at:"
     "    the post-check messages above"
@@ -6012,65 +5994,68 @@
    :items ["apps/site"],
    :step "trigger a StageSet reconciliation",
    :plan
-   [[:cmd
-     "stagesetctl"
-     "reconcile"
-     "site"
+   [[:kubectl
+     "ctx"
      "--namespace=apps"
-     "--update-now"]],
-   :precondition nil,
+     "annotate"
+     "stagesets.stages.metio.wtf"
+     "site"
+     "reconcile.fluxcd.io/requestedAt=<instant>"
+     "stages.metio.wtf/update-now=<instant>"
+     "--overwrite"]],
+   :precondition {:result true, :out ""},
    :announce "Reconcile StageSet apps/site",
    :checks
-   [{:description "StageSet apps/site is Ready",
-     :timeout 120,
-     :interval 10,
-     :holds true}]},
+   [{:description
+     "StageSet apps/site handled the reconcile request and rolled the held update",
+     :timeout 300,
+     :interval 5,
+     :holds false}]},
   :picked
   {:result true,
    :out "▸ StageSet: apps/site",
    :action "trigger a StageSet reconciliation",
    :items ["apps/site"],
-   :plan [[:cmd "stagesetctl" "reconcile" "site" "--namespace=apps"]]},
-  :refused
-  {:action "trigger a StageSet reconciliation",
-   :destructive? false,
-   :items ["apps/site"],
-   :step "trigger a StageSet reconciliation",
    :plan
-   [[:cmd
-     "stagesetctl"
-     "reconcile"
-     "site"
+   [[:kubectl
+     "ctx"
      "--namespace=apps"
-     "--update-now"]],
-   :precondition nil,
-   :announce "Reconcile StageSet apps/site",
-   :checks
-   [{:description "StageSet apps/site is Ready",
-     :timeout 120,
-     :interval 10,
-     :holds false}]},
+     "annotate"
+     "stagesets.stages.metio.wtf"
+     "site"
+     "reconcile.fluxcd.io/requestedAt=<instant>"
+     "--overwrite"]]},
+  :refused
+  {:stopped
+   "refusing: StageSet apps/site is suspended; it will not act on a reconcile request"},
   :spec-changed
   {:action "trigger a StageSet reconciliation",
    :destructive? false,
    :items ["apps/site"],
    :step "trigger a StageSet reconciliation",
    :plan
-   [[:cmd
-     "stagesetctl"
-     "reconcile"
-     "site"
+   [[:kubectl
+     "ctx"
      "--namespace=apps"
-     "--update-now"]],
-   :precondition nil,
+     "annotate"
+     "stagesets.stages.metio.wtf"
+     "site"
+     "reconcile.fluxcd.io/requestedAt=<instant>"
+     "stages.metio.wtf/update-now=<instant>"
+     "--overwrite"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
    :announce "Reconcile StageSet apps/site",
    :checks
-   [{:description "StageSet apps/site is Ready",
-     :timeout 120,
-     :interval 10,
-     :holds true}]},
+   [{:description
+     "StageSet apps/site handled the reconcile request and rolled the held update",
+     :timeout 300,
+     :interval 5,
+     :holds false}]},
   :surface
-  {:description "Triggers a StageSet reconciliation via stagesetctl",
+  {:description "Requests a StageSet reconciliation",
    :options
    {:namespace
     {:desc
@@ -6086,9 +6071,10 @@
     {:desc "Override the update window and roll a held revision now",
      :coerce :boolean}},
    :prerequisites
-   {:installed-tools ["stagesetctl" "kubectl" "fzf"],
+   {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [:stageset],
-    :kubectl-can-get ["stagesets.stages.metio.wtf"]},
+    :kubectl-can-get ["stagesets.stages.metio.wtf"],
+    :kubectl-can-patch ["stagesets.stages.metio.wtf"]},
    :select
    {:mode :namespaced,
     :label "StageSet",
@@ -6101,12 +6087,14 @@
    ["What it does:"
     "  picks one StageSet by namespace and name (--namespace and --name, or interactively)"
     "  asks to confirm: trigger a StageSet reconciliation"
+    "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
     "  verifies the result before it reports success"
     ""
     "Needs:"
-    "  tools: stagesetctl, kubectl, fzf"
+    "  tools: kubectl, fzf"
     "  kubectl get: stagesets.stages.metio.wtf"
+    "  kubectl patch: stagesets.stages.metio.wtf"
     "  cluster capabilities: stageset"],
    :candidates {:permitted ["apps/site"], :refused ["apps/site"]}},
   :unanswered
@@ -6115,18 +6103,25 @@
    :items ["apps/site"],
    :step "trigger a StageSet reconciliation",
    :plan
-   [[:cmd
-     "stagesetctl"
-     "reconcile"
-     "site"
+   [[:kubectl
+     "ctx"
      "--namespace=apps"
-     "--update-now"]],
-   :precondition nil,
+     "annotate"
+     "stagesets.stages.metio.wtf"
+     "site"
+     "reconcile.fluxcd.io/requestedAt=<instant>"
+     "stages.metio.wtf/update-now=<instant>"
+     "--overwrite"]],
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
    :announce "Reconcile StageSet apps/site",
    :checks
-   [{:description "StageSet apps/site is Ready",
-     :timeout 120,
-     :interval 10,
+   [{:description
+     "StageSet apps/site handled the reconcile request and rolled the held update",
+     :timeout 300,
+     :interval 5,
      :holds false}]},
   :unanswered-pick
   {:result false,

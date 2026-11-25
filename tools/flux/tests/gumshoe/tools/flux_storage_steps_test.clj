@@ -197,7 +197,14 @@
 (defn- revision [status version]
   (str/join "\t" ["apps" "podinfo" status (str version) "" "" "2026-11-24T08:00:00Z"]))
 
-(def ^:private ready {:conditions [{:type "Ready" :status "True"}]})
+(def ^:private ready
+  "Ready on the reconcile the step requested at the token \"T\"."
+  {:lastHandledReconcileAt "T" :conditions [{:type "Ready" :status "True"}]})
+
+(def ^:private ready-before
+  "Ready on a reconcile from before the step's request: the condition an
+   object keeps while suspended."
+  (assoc ready :lastHandledReconcileAt "2026-11-20T08:00:00Z"))
 
 (defn- checks
   "Whether each post-check of every step holds, for one observation."
@@ -219,7 +226,12 @@
           "the storage is empty, the owner resumed and Ready; no revision 1 yet"))
     (with-redefs [shell/execute (cluster {helmrelease {"podinfo" (assoc release :status ready)}}
                                          (revision "deployed" 1) #{})]
-      (is (true? (first (nth (checks full) 6))) "Ready on revision 1, deployed")))
+      (is (true? (first (nth (checks full) 6))) "Ready on revision 1, deployed"))
+    (with-redefs [shell/execute (cluster {kustomization {"apps" {:spec {:suspend false} :status ready-before}}
+                                          helmrelease {"podinfo" (assoc release :status ready-before)}}
+                                         (revision "deployed" 1) #{})]
+      (is (= [false false] [(first (nth (checks full) 6)) (first (nth (checks full) 7))])
+          "the Ready condition kept while suspended resumes neither the HelmRelease nor the owner")))
   (testing "nothing done"
     (with-redefs [shell/execute (cluster {kustomization {"apps" {:spec {}}}
                                           helmrelease {"podinfo" (assoc-in release [:spec :suspend] true)}}

@@ -17,16 +17,12 @@
   (:require [cheshire.core :as json]
             [clojure.string :as str]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.pick :as pick]))
+            [gumshoe.pick :as pick]
+            [gumshoe.velero.phases :as phases]))
 
 (def schedule-name-label "velero.io/schedule-name")
 (def backup-name-label "velero.io/backup-name")
 (def backup-uid-label "velero.io/backup-uid")
-
-(def running-phases
-  "Backup phases in which Velero still works on the backup."
-  #{"New" "Queued" "ReadyToStart" "InProgress" "WaitingForPluginOperations"
-    "WaitingForPluginOperationsPartiallyFailed" "Finalizing" "FinalizingPartiallyFailed"})
 
 (def parse-pick
   "\"<namespace>/<name>\" as {:namespace :name}, or nil."
@@ -150,7 +146,7 @@
     (cond
       (nil? backup) "the Backup no longer exists"
       (= "Deleting" phase) "it is being deleted already"
-      (or (nil? phase) (running-phases phase)) (format "it is still running (%s) - wait for it to finish" (or phase "New"))
+      (phases/running? phase) (format "it is still running (%s) - wait for it to finish" (phases/label phase))
       (nil? location) (format "BackupStorageLocation %s does not exist, so Velero cannot remove the backup's data" (location-label nil name))
       (= "ReadOnly" (-> location :spec :accessMode))
       (format "BackupStorageLocation %s is read-only" (kubectl/name-of location))

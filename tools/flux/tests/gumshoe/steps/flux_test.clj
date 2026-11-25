@@ -64,11 +64,32 @@
     (with-redefs [shell/execute (serving {:spec {:suspend true}})]
       (is (true? (boolean ((:check suspended)))))
       (is (false? (boolean ((:check resumed))))))
-    (with-redefs [shell/execute (serving {:spec {} :status {:conditions [{:type "Ready" :status "True"}]}})]
+    (with-redefs [shell/execute (serving {:spec {} :status {:lastHandledReconcileAt "T"
+                                                            :conditions [{:type "Ready" :status "True"}]}})]
       (is (false? (boolean ((:check suspended)))))
       (is (true? (boolean ((:check resumed))))))
-    (with-redefs [shell/execute (serving {:spec {} :status {:conditions [{:type "Ready" :status "False"}]}})]
+    (with-redefs [shell/execute (serving {:spec {} :status {:lastHandledReconcileAt "T"
+                                                            :conditions [{:type "Ready" :status "False"}]}})]
       (is (false? (boolean ((:check resumed)))) "resumed but not Ready"))))
+
+(deftest a-resume-waits-for-its-own-request-to-be-handled
+  (doseq [object [kustomization resourceset]]
+    (let [[resumed] ((:verify resume) (assoc (ctx object) :wait 90))]
+      (testing (:kind object)
+        (with-redefs [shell/execute (serving {:spec {} :status {:lastHandledReconcileAt "2026-11-20T08:00:00Z"
+                                                                :conditions [{:type "Ready" :status "True"}]}})]
+          (is (false? (boolean ((:check resumed))))
+              "the Ready condition kept while suspended is not a resume"))
+        (with-redefs [shell/execute (serving {:spec {} :status {:lastHandledReconcileAt "T"
+                                                                :conditions [{:type "Ready" :status "True"}]}})]
+          (is (true? (boolean ((:check resumed))))))))))
+
+(deftest resumed-needs-the-switch-the-token-and-ready
+  (let [live {:spec {} :status {:lastHandledReconcileAt "T" :conditions [{:type "Ready" :status "True"}]}}]
+    (is (true? (boolean (flux-steps/resumed? "Kustomization" live "T"))))
+    (is (false? (boolean (flux-steps/resumed? "Kustomization" (assoc-in live [:spec :suspend] true) "T"))))
+    (is (false? (boolean (flux-steps/resumed? "Kustomization" live "U"))))
+    (is (false? (boolean (flux-steps/resumed? "Kustomization" nil "T"))))))
 
 (deftest a-step-can-wait-for-more-under-its-own-description
   (let [seen (atom nil)

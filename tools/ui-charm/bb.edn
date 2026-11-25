@@ -1,0 +1,14 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The charm UI backend's own tests. They need charm.clj on the classpath,
+;; which the monorepo's `bb test` does not carry, so they run from here:
+;;   cd tools/ui-charm && bb test
+{:deps {io.github.metio/gumshoe-ui-charm {:local/root "."}}
+ :tasks
+ {test {:doc "Runs the charm UI backend's unit tests"
+        :extra-paths ["tests"]
+        :requires ([clojure.test :as test]
+                   [gumshoe.ui.charm-test])
+        :task (let [{:keys [fail error]} (test/run-tests 'gumshoe.ui.charm-test)]
+                (System/exit (if (zero? (+ fail error)) 0 1)))}}}
