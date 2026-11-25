@@ -9,8 +9,14 @@
    declares the prerequisites and options it needs, so whatever runs it derives
    its own from the steps. The book that runs a step names its :description,
    where the catalog reads it without loading the book. The bespoke parts - candidates, effect, checks - are
-   small named functions, tested without a cluster."
-  (:require [gumshoe.effect :as effect]
+   small named functions, tested without a cluster.
+
+   The recovery functions say what a failed maintenance run leaves on a
+   node. The steps themselves carry none, so the runbooks print what they
+   always printed; a playbook attaches them, see
+   playbooks/kubernetes/node_maintenance.clj."
+  (:require [clojure.string :as str]
+            [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]))
 
 (def ^:private node-prerequisites
@@ -109,3 +115,68 @@
    :announce (fn [{:keys [target]}] (format "Uncordon node %s" target))
    :effect (fn [{:keys [context target]}] (effect/plan (effect/kubectl context "uncordon" target)))
    :verify (fn [{:keys [context target]}] [(schedulable-check context target)])})
+
+;; --- recovery ------------------------------------------------------------------------
+
+(defn node-state
+  "The node's state at a failure, read without strict reads so an unanswered
+   read is reported rather than thrown: {:unschedulable? .. :evictable
+   [\"ns/name\" ..]}, :evictable nil when the pods could not be read, or
+   {:unread \"why\"} when the node could not be read."
+  [context node]
+  (binding [kubectl/*strict-reads* false]
+    (let [{node-ok? :ok? node-doc :doc} (kubectl/get-json-result context "nodes" node)]
+      (if-not node-ok?
+        {:unread (format "the read of node %s did not answer" node)}
+        (let [{:keys [ok? doc]} (kubectl/get-json-result context "pods" "--all-namespaces"
+                                                         (str "--field-selector=spec.nodeName=" node))]
+          {:unschedulable? (true? (-> node-doc :spec :unschedulable))
+           :evictable (when ok? (mapv kubectl/namespace-name-of (kubectl/drainable-pods doc)))})))))
+
+(defn maintenance-recovery-text
+  "What a failed maintenance run leaves on `node`, from `state` as node-state
+   reads it: whether it stays cordoned, the pods a drain still evicts from
+   it, and the command that brings it back into service."
+  [context node {:keys [unread unschedulable? evictable]}]
+  (cond
+    unread
+    (str "The cluster did not answer (" unread "), so whether node " node " is still cordoned is unknown."
+         " Read it before leaving it - a cordoned node takes no new pods: kubectl --context=" context " get node " node)
+
+    (not unschedulable?)
+    (str "Node " node " is schedulable: nothing this run did keeps it out of service.")
+
+    :else
+    (str/join "\n"
+              [(str "Node " node " stays cordoned: nothing new is scheduled on it.")
+               (cond
+                 (nil? evictable) "Whether pods a drain evicts still run on it is unknown: the pod read did not answer."
+                 (empty? evictable) "No pod a drain evicts runs on it any more."
+                 :else (str "It still runs " (count evictable) " pod(s) a drain evicts: " (str/join ", " evictable)))
+               (str "Bring it back into service once it is fit to run pods: kubectl --context=" context " uncordon " node)])))
+
+(defn maintenance-recovery
+  "The standing :recovery of a playbook that takes a node out of service: it
+   reads the node again at the failure."
+  [{:keys [context target]}]
+  (maintenance-recovery-text context target (node-state context target)))
+
+(defn cordon-recovery
+  [{:keys [target]}]
+  (format "Cordoning node %s did not complete or did not hold; no pod was evicted from it." target))
+
+(defn drain-recovery
+  [{:keys [target]}]
+  (str "The drain stopped before every evictable pod left node " target ". The pods it evicted are gone"
+       " from the node: their controllers recreate them on other nodes, a pod without a controller is"
+       " not recreated, and the emptyDir data of an evicted pod is deleted. A PodDisruptionBudget that"
+       " allows no disruption blocks a drain; the disruption check above names those. Remove the blocker"
+       " and run the playbook again, or bring the node back as below."))
+
+(defn uncordon-recovery
+  [{:keys [target]}]
+  (format "Uncordoning node %s after the maintenance did not complete or did not hold." target))
+
+(defn verification-recovery
+  [{:keys [target]}]
+  (format "The detectives found issues after node %s came back; the findings above name them. Read them before taking another node out of service." target))

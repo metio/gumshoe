@@ -90,9 +90,10 @@
   []
   (some-> *record* deref))
 
-(defn- render
+(defn render
   "The text of `guidance`, a string or a function of `ctx`, as {:text ..},
-   {:error <why it could not be rendered>}, or nil when there is none."
+   {:error <why it could not be rendered>}, or nil when there is none. A
+   function runs now, so a read in it observes the current state."
   [guidance ctx]
   (try
     (let [text (if (fn? guidance) (guidance ctx) guidance)]
@@ -121,6 +122,21 @@
   (when (and *record* guidance (not (contains? @*record* :fallback)))
     (when-let [rendered (render guidance (assoc ctx :applied (:applied @*record*)))]
       (record! assoc :fallback rendered))))
+
+(defn recorded-recovery
+  "The recovery guidance and the fallback recorded so far in the current run,
+   as rendered: {:recovery .. :fallback ..}, each absent when not recorded."
+  []
+  (some-> *record* deref (select-keys [:recovery :fallback])))
+
+(defn settle-recovery!
+  "Replaces the run's recovery guidance with `rendered`, already rendered as
+   `render` returns it, or leaves it as it is when `rendered` is nil. An
+   engine that composes the guidance of a step with its own - a playbook
+   around the change that stopped it - records the composition this way,
+   after the step recorded its part."
+  [rendered]
+  (when rendered (record! assoc :recovery rendered)))
 
 (defn recovery-lines
   "The lines printed under a banner of `tone` for `record`: the recorded

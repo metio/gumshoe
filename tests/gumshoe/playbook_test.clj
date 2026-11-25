@@ -331,10 +331,11 @@
     (testing "after a change, a step without guidance falls back to the playbook's"
       (is (str/includes? (:err (printed-outcome (assoc pb :steps [(change "cordon" ran) (failing-change "drain")])))
                          "the node may still be cordoned")))
-    (testing "a step's own guidance wins"
+    (testing "a step's own guidance comes first and the playbook's standing guidance follows it"
       (let [{:keys [err]} (printed-outcome (assoc pb :steps [(change "cordon" ran) (failing-change "drain" :recovery "mine")]))]
         (is (str/includes? err "mine"))
-        (is (not (str/includes? err "the node may still be cordoned")))))
+        (is (str/includes? err "the node may still be cordoned"))
+        (is (< (str/index-of err "mine") (str/index-of err "the node may still be cordoned")))))
     (testing "a leading check that fails before any change prints no fallback"
       (is (not (str/includes? (:err (printed-outcome (assoc pb :steps [(check "look" ran false) (change "cordon" ran)])))
                               "Recovery"))))))
@@ -444,13 +445,124 @@
   [action & {:as extra}]
   (merge (failing-change action) {:effect (fn [_] [[:cmd "true"] [:cmd missing-binary]])} extra))
 
-(deftest the-playbook-recovery-wins-over-the-engine-fallback
+(deftest the-engine-fallback-of-a-step-comes-before-the-playbook-recovery
   (let [pb {:select {:mode :one} :confirm {:action "maintain"} :recovery "the node may still be cordoned"}]
-    (testing "a step without guidance that applied an effect falls back to the playbook's"
+    (testing "a step without guidance that applied an effect names it, then the playbook's guidance follows"
       (let [{:keys [err]} (printed-outcome (assoc pb :steps [(applying-then-failing "drain")]))]
         (is (str/includes? err "the node may still be cordoned") err)
-        (is (not (str/includes? err "declares no recovery guidance")) err)))
+        (is (str/includes? err "This change declares no recovery guidance") err)
+        (is (< (str/index-of err "This change declares no recovery guidance")
+               (str/index-of err "the node may still be cordoned")))))
     (testing "without playbook guidance the engine says what the step left applied"
       (let [{:keys [err]} (printed-outcome (assoc pb :recovery nil :steps [(applying-then-failing "drain")]))]
         (is (str/includes? err "This change declares no recovery guidance") err)
         (is (str/includes? err "    true") "names the effect that stayed applied")))))
+
+;; --- recovery composition -----------------------------------------------------------
+
+(def ^:private cordoned {:text "w-1 stays cordoned - uncordon it"})
+
+(deftest recovery-composes-from-the-state-of-the-run
+  (doseq [[why state expected]
+          [["nothing at all" {} nil]
+           ["a run that changed nothing prints the step's guidance alone"
+            {:step {:text "mine"} :changed? false :standing cordoned} {:text "mine"}]
+           ["a run that changed nothing prints no standing guidance"
+            {:changed? false :standing cordoned} nil]
+           ["a run that changed something and whose step has none prints the standing guidance"
+            {:changed? true :standing cordoned} cordoned]
+           ["the step's guidance comes first, the standing guidance follows"
+            {:step {:text "mine"} :changed? true :standing cordoned}
+            {:text "mine\nw-1 stays cordoned - uncordon it"}]
+           ["a standing text equal to the step's prints once"
+            {:step cordoned :changed? true :standing cordoned} cordoned]
+           ["a single part that could not be rendered keeps its form"
+            {:step {:error "no cluster"} :changed? false} {:error "no cluster"}]
+           ["a part that could not be rendered says so in its place"
+            {:step {:error "no cluster"} :changed? true :standing cordoned}
+            {:text "The guidance for the step the run stopped at could not be rendered - no cluster\nw-1 stays cordoned - uncordon it"}]
+           ["standing guidance that could not be rendered says so after the step's"
+            {:step {:text "mine"} :changed? true :standing {:error "boom"}}
+            {:text "mine\nThe guidance for the playbook could not be rendered - boom"}]
+           ["without standing guidance, the earlier steps' effects are named"
+            {:step {:text "mine"} :changed? true
+             :left-behind [{:title "1/3 cordon" :effects ["kubectl cordon w-1"]}]}
+            {:text (str "mine\n"
+                        "This playbook declares no recovery guidance. What the steps before this one left behind - nothing was rolled back:\n"
+                        "  1/3 cordon:\n"
+                        "    kubectl cordon w-1")}]
+           ["without any guidance, the earlier steps' effects alone are named"
+            {:changed? true
+             :left-behind [{:title "1/3 cordon" :effects ["kubectl cordon w-1"]}
+                           {:title "2/3 label" :effects ["kubectl label node w-1 a=b" "kubectl label node w-1 c=d"]}]}
+            {:text (str "This playbook declares no recovery guidance. What the steps before this one left behind - nothing was rolled back:\n"
+                        "  1/3 cordon:\n"
+                        "    kubectl cordon w-1\n"
+                        "  2/3 label:\n"
+                        "    kubectl label node w-1 a=b\n"
+                        "    kubectl label node w-1 c=d")}]
+           ["a standing text equal to the step's prints once and lists no effects"
+            {:step cordoned :changed? true :standing cordoned
+             :left-behind [{:title "1/3 cordon" :effects ["kubectl cordon w-1"]}]}
+            cordoned]
+           ["standing guidance replaces the list of effects"
+            {:changed? true :standing cordoned
+             :left-behind [{:title "1/3 cordon" :effects ["kubectl cordon w-1"]}]}
+            cordoned]
+           ["a list of effects needs a run that changed something"
+            {:changed? false :left-behind [{:title "1/3 cordon" :effects ["kubectl cordon w-1"]}]}
+            nil]]]
+    (testing why
+      (is (= expected (playbook/compose-recovery state))))))
+
+(deftest a-step-applied-the-first-effects-of-its-plan-without-its-notes
+  (doseq [[why plan applied expected]
+          [["none applied" [[:kubectl "ctx" "cordon" "w-1"]] 0 []]
+           ["all applied" [[:kubectl "ctx" "cordon" "w-1"] [:note "done"]] 2 ["kubectl cordon w-1"]]
+           ["a prefix" [[:kubectl "ctx" "cordon" "w-1"] [:kubectl "ctx" "drain" "w-1"]] 1 ["kubectl cordon w-1"]]
+           ["one effect is a plan of one" [:kubectl "ctx" "cordon" "w-1"] 1 ["kubectl cordon w-1"]]
+           ["no plan" nil 3 []]]]
+    (testing why
+      (is (= expected (playbook/applied-effects plan applied))))))
+
+(defn- cmd-change
+  "A change whose effect is a command, so it applies something a recovery
+   must name."
+  [action & {:as extra}]
+  (merge {:select {:mode :one :label "Node"}
+          :title action
+          :confirm {:action action}
+          :effect (fn [{:keys [target]}] [[:cmd "kubectl" action target]])}
+         extra))
+
+(deftest a-playbook-without-recovery-names-what-the-earlier-steps-applied
+  (with-redefs [gumshoe.shell/run-with-output (fn [& argv] (if (some #{"drain"} argv) 1 0))]
+    (let [{:keys [ok? err]} (printed-outcome {:select {:mode :one} :confirm {:action "maintain"}
+                                              :steps [(cmd-change "cordon") (cmd-change "drain")]})]
+      (is (false? ok?))
+      (is (str/includes? err "What the steps before this one left behind - nothing was rolled back:") err)
+      (is (str/includes? err "1/2 cordon:") err)
+      (is (str/includes? err "kubectl cordon w-1") err))))
+
+(deftest a-step-added-at-a-position-keeps-the-playbooks-standing-guidance
+  (let [ran (atom [])
+        base [[nil (change "suspend" ran)] [:after-suspend (change "delete" ran)] [nil (change "resume" ran)]]
+        extra {:after-suspend [(failing-change "delete the database" :recovery "the database may be half gone")]}
+        {:keys [err]} (printed-outcome {:select {:mode :one} :confirm {:action "reset"}
+                                        :recovery (fn [{:keys [target]}] (str target " stays suspended - resume it"))
+                                        :steps (playbook/with-extra base extra)})]
+    (is (str/includes? err "the database may be half gone") err)
+    (is (str/includes? err "w-1 stays suspended - resume it") err)
+    (is (< (str/index-of err "the database may be half gone") (str/index-of err "w-1 stays suspended - resume it")))))
+
+(deftest a-pause-that-cannot-wait-records-no-recovery
+  (let [record (outcome/fresh)]
+    (quietly
+     (with-redefs [interact/confirm! (constantly true)]
+       (binding [outcome/*record* record]
+         (playbook/run-on! {:select {:mode :one} :confirm {:action "x"}
+                            :recovery "never"
+                            :steps [(change "cordon" (atom [])) {:pause "act"}]}
+                           "w-1" {} nil))))
+    (is (some? (:paused @record)))
+    (is (not (contains? @record :recovery)))))

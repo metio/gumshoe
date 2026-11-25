@@ -153,6 +153,7 @@
                    [gumshoe.mutation-test]
                    [gumshoe.toggle-test]
                    [gumshoe.playbook-test]
+                   [gumshoe.steps-nodes-test]
                    [gumshoe.playbook-books-test]
                    [gumshoe.dispatch-test]
                    [gumshoe.prerequisites-test]
@@ -324,6 +325,7 @@
                                                          'gumshoe.mutation-test
                                                          'gumshoe.toggle-test
                                                          'gumshoe.playbook-test
+                                                         'gumshoe.steps-nodes-test
                                                          'gumshoe.playbook-books-test
                                                          'gumshoe.dispatch-test
                                                          'gumshoe.prerequisites-test

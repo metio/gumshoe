@@ -232,8 +232,12 @@ and current list.
    effect prints generic guidance there instead, starting `This change
    declares no recovery guidance`: which effects stayed applied, where it
    stopped or that its post-check did not hold, and where to look (those
-   messages, the changelog entry, the object on its cluster). Read them to
-   the human before anything else is run.
+   messages, the changelog entry, the object on its cluster). In a
+   playbook the stopped step's guidance is followed by the playbook's own,
+   which names what the run still leaves parked (a HelmRelease suspended, a
+   node cordoned), or, when the playbook declares none, by the effects its
+   earlier steps applied. Read them to the human before anything else is
+   run.
 
 A book whose change cannot be expressed as a plan says under `--dry-run` that
 it does not support a dry run, and runs nothing. Interactive sessions
@@ -381,14 +385,22 @@ mostly data:
   A function receives the step's context with `:applied`, runs at the
   failure, and can read the cluster to say what is still suspended and give
   the commands that undo it; one that throws leaves the banner intact and
-  says the guidance could not be rendered. The playbook's own `:recovery`
-  covers its steps without one once the run changed something, which reaches
-  a caller's steps added at positions; a mutation book carries `:recovery`
-  the same way. A mutation without `:recovery` that fails after applying an
-  effect still prints the engine's generic guidance (`mutation/fallback-guidance`:
-  the effects that stayed applied and where to look), which a step's or the
-  playbook's own `:recovery` replaces, and a dry run prints none. `gumshoe.tools.flux-storage/recovery` is the example: it
-  names which of the HelmRelease and its owner stay suspended. A rollback
+  says the guidance could not be rendered. A mutation book carries
+  `:recovery` the same way. A mutation without `:recovery` that fails after
+  applying an effect prints the engine's generic guidance
+  (`mutation/fallback-guidance`: the effects that stayed applied and where to
+  look) in its place, and a dry run prints none. Once a playbook run changed
+  something, the playbook's own `:recovery` - its standing guidance for the
+  state the steps leave, read at the failure - follows the stopped step's,
+  so a caller's step added at a position keeps telling the operator what
+  stays suspended; a playbook without one names the effects its earlier
+  steps applied instead (`playbook/compose-recovery`, a pure function of the
+  run's state). Give a playbook whose steps park something a standing
+  `:recovery` that reads that state, and keep each step's own to what its
+  failure means. `gumshoe.tools.flux-storage/recovery` (which of the
+  HelmRelease and its owner stay suspended) and
+  `gumshoe.steps.nodes/maintenance-recovery` (whether the node stays
+  cordoned and the pods a drain still evicts) are the examples. A rollback
   step at the end never runs, because the run stops at the first failure;
 - a firebook is `(firebook/book {:description … :drill "crash-loop" :fire
   "a crash-looping deployment" :manifests […] :expect {:detectives
