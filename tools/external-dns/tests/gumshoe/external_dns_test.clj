@@ -2,9 +2,13 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.external-dns-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [cheshire.core :as json]
+            [clojure.test :refer [deftest is testing]]
+            [gumshoe.detective :as detective]
             [gumshoe.detectives.external-dns :as external-dns-detectives]
-            [gumshoe.external-dns :as external-dns]))
+            [gumshoe.dns :as dns]
+            [gumshoe.external-dns :as external-dns]
+            [gumshoe.shell :as shell]))
 
 (defn- summaries
   [findings]
@@ -51,3 +55,52 @@
                                                          {:dnsName "app.example.org" :recordType "A"}
                                                          {:dnsName "www.example.org" :recordType "CNAME"}
                                                          {:dnsName "plain.example.org"}]}}]}})))))
+
+(def ^:private ingress-list
+  {:items [{:spec {:rules [{:host "moodle.example.org"}]}}]})
+
+(defn- collect
+  "The evidence collected against a cluster that answers each kubectl get
+   with (answer type), every DNS query answering one address."
+  [answer]
+  (with-redefs [shell/execute (fn [& argv]
+                                (let [type (second (drop-while #(not= "get" %) argv))]
+                                  (answer type)))
+                dns/query (fn [& _] ["192.0.2.1"])]
+    (binding [*err* (java.io.StringWriter.)]
+      (external-dns/collect-evidence! "ctx" "dns.example.org"))))
+
+(def ^:private unanswered
+  {:exit 1 :out "" :err "Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"})
+
+(defn- not-served
+  [type]
+  {:exit 1 :out "" :err (format "error: the server doesn't have a resource type \"%s\"" type)})
+
+(defn- unread?
+  [evidence]
+  (detective/unread? (first external-dns-detectives/detectives) evidence))
+
+(deftest answered-sources-test
+  (is (nil? (external-dns/answered-sources {:ingresses ingress-list :routes nil :gateways {:items []} :endpoints {:items []}})))
+  (is (= {"moodle.example.org" #{"Ingress"}}
+         (external-dns/answered-sources {:ingresses ingress-list :routes {:items []}
+                                         :gateways {:items []} :endpoints {:items []}}))))
+
+(deftest the-check-is-unread-when-every-cluster-read-failed-test
+  (let [evidence (collect (constantly unanswered))]
+    (is (nil? (get evidence "sources")))
+    (is (unread? evidence))))
+
+(deftest the-check-is-unread-when-one-cluster-read-failed-test
+  (let [evidence (collect #(if (= "ingresses" %) unanswered {:exit 0 :out "{\"items\":[]}" :err ""}))]
+    (is (nil? (get evidence "sources")) "the ingresses' hostnames would drop out unseen")
+    (is (unread? evidence))))
+
+(deftest a-kind-the-cluster-does-not-serve-is-read-as-empty-test
+  (let [evidence (collect #(if (= "ingresses" %)
+                             {:exit 0 :out (json/generate-string ingress-list) :err ""}
+                             (not-served %)))]
+    (is (= {"moodle.example.org" #{"Ingress"}} (get evidence "sources")))
+    (is (not (unread? evidence)))
+    (is (empty? (external-dns-detectives/detect-unresolved-hostnames evidence)))))
