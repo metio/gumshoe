@@ -43,6 +43,7 @@
                    [gumshoe.certificate-requests-test]
                    [gumshoe.gitops-coverage-test]
                    [gumshoe.upgrade-readiness-test]
+                   [gumshoe.webhook-backends-test]
                    [gumshoe.cause-folding-test]
                    [gumshoe.released-volumes-test]
                    [gumshoe.node-lifecycle-test]
@@ -237,6 +238,7 @@
                                                          'gumshoe.certificate-requests-test
                                                          'gumshoe.gitops-coverage-test
                                                          'gumshoe.upgrade-readiness-test
+                                                         'gumshoe.webhook-backends-test
                                                          'gumshoe.cause-folding-test
                                                          'gumshoe.released-volumes-test
                                                          'gumshoe.node-lifecycle-test

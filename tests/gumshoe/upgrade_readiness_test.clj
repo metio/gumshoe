@@ -76,7 +76,13 @@
   (is (= ["MutatingWebhookConfiguration webhook m calls Service policy/kyverno, which has no ready endpoint"]
          (map :summary (upgrade/detect-webhook-backends
                         (merge (configuration "mutatingwebhookconfigurations" (webhook "m" "kyverno"))
-                               {"services" {:items [(service "policy" "kyverno")]} "endpointslices" {:items []}}))))))
+                               {"validatingwebhookconfigurations" {:items []}
+                                "services" {:items [(service "policy" "kyverno")]}
+                                "endpointslices" {:items []}})))))
+  (testing "an unanswered ValidatingWebhookConfiguration read judges no mutating webhook either"
+    (is (empty? (upgrade/detect-webhook-backends
+                 (merge (configuration "mutatingwebhookconfigurations" (webhook "m" "kyverno"))
+                        {"services" {:items [(service "policy" "kyverno")]} "endpointslices" {:items []}}))))))
 
 ;; --- kubelet against the API server -------------------------------------------------
 

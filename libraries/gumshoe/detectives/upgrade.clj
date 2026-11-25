@@ -19,12 +19,20 @@
   [slices]
   (endpointslices/ready-backends slices))
 
+(def webhook-backend-reads
+  "The four reads the webhook check joins: a webhook names its Service, and
+   the Service's EndpointSlices say whether anything behind it is ready."
+  ["validatingwebhookconfigurations" "mutatingwebhookconfigurations" "services" "endpointslices"])
+
 (defn detect-webhook-backends
   "Webhooks whose Service exists but has no ready endpoint. A missing Service
    is webhook-references' finding, and an ExternalName Service has no
-   endpoints to judge."
+   endpoints to judge. The check judges nothing when any of its four reads
+   did not answer: a missing Service or EndpointSlice read would read as no
+   ready endpoint, and a missing configuration read would pass every webhook
+   of that kind unseen."
   [{:strs [validatingwebhookconfigurations mutatingwebhookconfigurations services endpointslices]}]
-  (when (and services endpointslices)
+  (when (and validatingwebhookconfigurations mutatingwebhookconfigurations services endpointslices)
     (let [by-key (into {} (map (juxt kubectl/namespace-name-of identity)) (kubectl/items-of services))
           ready (ready-backends endpointslices)]
       (for [[kind list] [["ValidatingWebhookConfiguration" validatingwebhookconfigurations]
@@ -87,7 +95,9 @@
 (def detectives
   [{:name "webhook-backends"
     :description "Admission webhooks whose Service has no ready endpoint"
-    :requires ["validatingwebhookconfigurations" "mutatingwebhookconfigurations" "services" "endpointslices"]
+    :requires webhook-backend-reads
+    :joins webhook-backend-reads
+    :judges ["validatingwebhookconfigurations" "mutatingwebhookconfigurations"]
     :detect detect-webhook-backends}
    {:name "kubelet-apiserver-skew"
     :description "Kubelets the version skew policy forbids, or that the next control-plane minor would leave behind"
