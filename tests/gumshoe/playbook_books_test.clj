@@ -392,15 +392,35 @@
     ["secrets" (revision 1 "superseded" parked-at)]
     ["secrets" (revision 2 "pending-upgrade" parked-at)]]))
 
+(def ^:private requested-at "reconcile.fluxcd.io/requestedAt=")
+
+(defn- handles-requests
+  "Flux controllers acting on a reconcile request: an annotate stamping
+   requestedAt on an object that is not suspended writes the token to its
+   status.lastHandledReconcileAt."
+  [objects argv]
+  (let [[verb type name] (positional argv)
+        token (some #(when (and (string? %) (str/starts-with? % requested-at)) (subs % (count requested-at))) argv)]
+    (if (and (= "annotate" verb) token)
+      (update-object objects type (namespace-of-argv argv) name
+                     (fn [o] (if (or (true? (-> o :spec :suspend))
+                                     (= "disabled" (get-in o [:metadata :annotations :fluxcd.controlplane.io/reconcile])))
+                               o
+                               (assoc-in o [:status :lastHandledReconcileAt] token))))
+      objects)))
+
 (defn- helm-controller
   "Installs apps/podinfo afresh once its HelmRelease is resumed: revision 1,
-   deployed, and Ready."
+   deployed, and Ready. Every Flux controller handles the reconcile requests
+   stamped on its objects."
   [objects argv]
-  (if (and (some #{"patch"} argv) (some #{helmrelease-type} argv)
-           (some #(and (string? %) (str/includes? % "\"suspend\":false")) argv))
-    (-> (update-object objects helmrelease-type "apps" "podinfo" #(assoc % :status (condition "True" "InstallSucceeded")))
-        (conj ["secrets" (revision 1 "deployed" now-seconds)]))
-    objects))
+  (handles-requests
+   (if (and (some #{"patch"} argv) (some #{helmrelease-type} argv)
+            (some #(and (string? %) (str/includes? % "\"suspend\":false")) argv))
+     (-> (update-object objects helmrelease-type "apps" "podinfo" #(update % :status merge (condition "True" "InstallSucceeded")))
+         (conj ["secrets" (revision 1 "deployed" now-seconds)]))
+     objects)
+   argv))
 
 (def ^:private storage-scenarios
   {:cleared {:objects (release-cluster) :argv ["--namespace" "apps" "--name" "podinfo"] :react helm-controller}

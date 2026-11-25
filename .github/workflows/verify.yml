@@ -21,6 +21,9 @@ jobs:
           registries: github:metio/toolchains
       - name: Run the book test suite
         run: bb test
+      - name: Run the charm UI backend's tests
+        working-directory: tools/ui-charm
+        run: bb test
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 15

@@ -8,7 +8,8 @@
    judged by its newest backup; older failures are history."
   (:require [clojure.string :as str]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.onset :as onset]))
+            [gumshoe.onset :as onset]
+            [gumshoe.velero.phases :as phases]))
 
 (def backup-type "backups.velero.io")
 (def schedule-type "schedules.velero.io")
@@ -27,10 +28,6 @@
   "How long a backup may stay in a running phase before it counts as stuck.
    Plugin operations (CSI snapshots, data movers) run long, so this is generous."
   12)
-
-(def ^:private running-phases
-  #{"InProgress" "WaitingForPluginOperations" "WaitingForPluginOperationsPartiallyFailed"
-    "Finalizing" "FinalizingPartiallyFailed"})
 
 (defn- hours-since
   [value now]
@@ -92,7 +89,7 @@
    scheduled, that did not complete."
   [evidence]
   (let [now (:now evidence)
-        backups (remove #(contains? running-phases (-> % :status :phase))
+        backups (remove #(phases/running? (-> % :status :phase))
                         (kubectl/items-of (get evidence backup-type)))
         {scheduled true manual false} (group-by #(some? (get-in % [:metadata :labels schedule-label])) backups)]
     (concat
@@ -107,11 +104,11 @@
     (for [backup (kubectl/items-of (get evidence backup-type))
           :let [phase (-> backup :status :phase)
                 hours (hours-since (started-at backup) now)]
-          :when (and (contains? running-phases phase) hours (>= hours stuck-hours))]
+          :when (and (phases/running? phase) hours (>= hours stuck-hours))]
       (onset/since
        {:severity :warning
         :component (kubectl/namespace-name-of backup)
-        :summary (format "Backup has been %s for %d hours" phase (long hours))
+        :summary (format "Backup has been %s for %d hours" (phases/label phase) (long hours))
         :hint "the velero pod or a plugin's data mover stopped making progress - check the velero and node-agent logs"}
        (started-at backup)))))
 

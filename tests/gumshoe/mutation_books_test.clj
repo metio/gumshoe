@@ -772,7 +772,7 @@
    "tools/stageset/runbooks/stageset/reconcile.clj"
    (standard {:target "apps/site" :invalid "site" :opts {:update-now true}
               :permitted [[stageset-type (stageset "True")]]
-              :refused [[stageset-type (stageset "False")]]})})
+              :refused [[stageset-type (assoc-in (stageset "True") [:spec :suspend] true)]]})})
 
 (def ^:private book-redefs
   "Vars a book defines that the harness fixes, by the book's path: the

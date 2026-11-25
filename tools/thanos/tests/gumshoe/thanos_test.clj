@@ -3,7 +3,9 @@
 
 (ns gumshoe.thanos-test
   (:require [clojure.test :refer [deftest is testing]]
-            [gumshoe.detectives.thanos :as thanos]))
+            [gumshoe.detective :as detective]
+            [gumshoe.detectives.thanos :as thanos]
+            [gumshoe.thanos :as collect]))
 
 (defn- summaries [findings] (set (map :summary findings)))
 
@@ -59,5 +61,31 @@
   (is (= ["the rules endpoint returned an unexpected response"]
          (map :summary (thanos/detect-rules {"url" "https://thanos.example.org"
                                              "rules" {:reachable true :status 200 :body "<html>"}}))))
-  (is (empty? (thanos/detect-rules {"url" "u" "rules" {:reachable false}}))
-      "an unreachable query layer is the readiness detective's finding"))
+  (is (empty? (thanos/detect-rules {"url" "u" "rules" nil}))
+      "a rules read that did not answer is unread, not judged"))
+
+(defn- unread-names [evidence]
+  (set (map :name (filter :unread (detective/mark-unread thanos/detectives evidence)))))
+
+(deftest an-endpoint-that-did-not-answer-is-nil-in-the-evidence
+  (is (nil? (collect/answered {:reachable false :error "body did not arrive in time"})))
+  (is (= {:reachable true :status 502} (collect/answered {:reachable true :status 502}))
+      "an endpoint that answered with an error is a read")
+  (let [down {:reachable false :error "refused"}
+        evidence (collect/evidence "http://localhost:19090" down down down)]
+    (is (= down (get evidence "ready")) "readiness keeps the response it judges")
+    (is (nil? (get evidence "stores")))
+    (is (nil? (get evidence "rules")))))
+
+(deftest stores-and-rules-are-unread-when-their-endpoint-did-not-answer-though-ready-did
+  (let [evidence (collect/evidence "http://localhost:19090"
+                                   {:reachable true :status 200}
+                                   {:reachable false :error "body did not arrive in time"}
+                                   {:reachable false :error "connection reset"})]
+    (is (= #{"thanos-stores" "thanos-rules"} (unread-names evidence)))
+    (is (empty? (thanos/detect-stores evidence)))
+    (is (empty? (thanos/detect-rules evidence))))
+  (testing "endpoints that answered are judged"
+    (is (empty? (unread-names (collect/evidence "u" {:reachable true :status 200}
+                                                {:reachable true :status 502}
+                                                {:reachable true :status 502}))))))

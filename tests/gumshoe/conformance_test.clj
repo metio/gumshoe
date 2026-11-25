@@ -159,9 +159,12 @@
 
 (def ^:private run-list
   "The namespaces bb.edn's `test` task passes to run-tests (the quoted `-test`
-   symbols), which is what actually decides whether a test runs."
-  (into #{} (map (comp symbol second))
-        (re-seq #"'([a-zA-Z0-9._-]+-test)" (slurp "bb.edn"))))
+   symbols), which is what actually decides whether a test runs. A tool
+   package whose tests need a library the monorepo classpath lacks
+   (ui-charm) runs them from its own bb.edn, which CI runs too."
+  (into #{} (comp (mapcat #(re-seq #"'([a-zA-Z0-9._-]+-test)" (slurp (str %))))
+                  (map (comp symbol second)))
+        (cons "bb.edn" (fs/glob "tools" "*/bb.edn"))))
 
 (defn- ns-name-of
   "The namespace a file declares, read straight from its (ns …) form. A regex,

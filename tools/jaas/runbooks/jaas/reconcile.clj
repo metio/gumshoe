@@ -9,9 +9,8 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
             [gumshoe.select :as select]
+            [gumshoe.steps.flux :as flux-steps]
             [gumshoe.tools.jaas :as jaas]))
-
-(def reconcile-annotation "reconcile.fluxcd.io/requestedAt")
 
 (defn snippets
   [context]
@@ -26,9 +25,9 @@
   {:description (format "JsonnetSnippet %s handled the reconcile request" target)
    :timeout 120 :interval 5
    :check (fn []
-            (= token (-> (kubectl/get-namespaced-resource context namespace
-                                                          jaas/jsonnetsnippet-type name)
-                         :status :lastHandledReconcileAt)))})
+            (flux-steps/handled? (kubectl/get-namespaced-resource context namespace
+                                                                  jaas/jsonnetsnippet-type name)
+                                 token))})
 
 (def selection
   {:mode :namespaced :label "JsonnetSnippet" :namespace-flag :namespace :name-flag :name
@@ -52,7 +51,7 @@
               (effect/plan
                (effect/kubectl context (str "--namespace=" namespace)
                                "annotate" jaas/jsonnetsnippet-type name
-                               (str reconcile-annotation "=" token)
+                               (str flux-steps/requested-at "=" token)
                                "--overwrite"))))
   :verify (fn [{:keys [context target token]}]
             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]

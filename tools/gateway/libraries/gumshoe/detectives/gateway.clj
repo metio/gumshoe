@@ -83,15 +83,18 @@
   "The read the ListenerSet check joins beside the ListenerSets themselves: a
    ListenerSet names its parent Gateway, and without the Gateway list every
    parent would read as missing. The two ListenerSet types are alternatives,
-   one of them unserved, so neither is joined."
+   one of them unserved, so neither is joined; they are consulted instead,
+   and the check judges nothing when neither answered."
   [gateway-type])
 
 (defn detect-listenerset-problems
   "ListenerSets the Gateway refused, with a listener that failed, or whose
    parent Gateway does not exist. Nothing is judged when the Gateway read did
-   not answer."
+   not answer, or when neither ListenerSet read did."
   [evidence]
-  (let [sets (when (evidence/joined? evidence listenerset-joins) (listenersets evidence))
+  (let [sets (when (and (evidence/joined? evidence listenerset-joins)
+                        (evidence/consulted? evidence listenerset-types))
+               (listenersets evidence))
         gateways (gateway-index evidence)]
     (concat
      ;; A ListenerSet the Gateway refused reports Accepted=False (reason
@@ -160,6 +163,7 @@
     :description "ListenerSets the Gateway refused or that point at a missing Gateway"
     :requires (into listenerset-joins listenerset-types)
     :joins listenerset-joins
+    :consults listenerset-types
     :detect detect-listenerset-problems}
    {:name "httproutes"
     :description "HTTPRoutes that no Gateway or ListenerSet accepts"
