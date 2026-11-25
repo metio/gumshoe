@@ -10,6 +10,7 @@
   (:require [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [gumshoe.change :as change]
             [gumshoe.shell :as shell]
             [gumshoe.tools.flux :as flux]
             [gumshoe.tools.flux-storage :as storage]))
@@ -48,13 +49,14 @@
     (cond-> {}
       (:items step) (assoc :items (vec ((:items step) c)))
       (:effect step) (assoc :plan (vec ((:effect step) c)))
-      (:pin step) (assoc :pin ((:pin step) c))
+      (change/pin step) (assoc :pin ((change/pin step) c))
       (:verify step) (assoc :verify (mapv #(select-keys % [:description :timeout :interval])
                                           ((:verify step) c))))))
 
 (defn- shape [step]
   {:title (:title step)
    :keys (set (keys step))
+   :values (vec (keys (change/values step)))
    :prerequisites (:prerequisites step)
    :confirm (:confirm step)})
 
@@ -64,37 +66,45 @@
 (def ^:private expected-shapes
   [{:title "🔬 Read the HelmRelease, its owner and its storage"
     :keys #{:title :prerequisites :check}
+    :values []
     :prerequisites {:installed-tools ["kubectl" "fzf"]
                     :cluster-capabilities [:flux]
                     :kubectl-can-get [helmrelease kustomization "persistentvolumeclaims"
                                       "deployments" "statefulsets" "daemonsets" "jobs" "cronjobs"]}
     :confirm nil}
    {:title "⏸  Suspend the owner (Kustomization or ResourceSet) that renders the HelmRelease"
-    :keys #{:title :prerequisites :confirm :derive :recovery :precondition :items :effect :verify}
+    :keys #{:title :prerequisites :confirm :values :recovery :refusal :items :effect :verify}
+    :values [:observed]
     :prerequisites {:kubectl-can-patch [kustomization]}
     :confirm {:action "suspend the owner that renders the HelmRelease" :destructive? false}}
    {:title "⏸  Suspend the HelmRelease and wait for a running action to finish"
-    :keys #{:title :prerequisites :confirm :derive :recovery :pin :precondition :items :effect :verify}
+    :keys #{:title :prerequisites :confirm :values :recovery :subjects :refusal :items :effect :verify}
+    :values [:observed]
     :prerequisites {:kubectl-can-patch [helmrelease]}
     :confirm {:action "suspend the HelmRelease" :destructive? false}}
    {:title "🗑  Delete the release's workloads"
-    :keys #{:title :prerequisites :confirm :derive :recovery :precondition :items :effect :verify}
+    :keys #{:title :prerequisites :confirm :values :recovery :refusal :items :effect :verify}
+    :values [:observed]
     :prerequisites {:kubectl-can-delete ["deployments" "statefulsets" "daemonsets" "jobs" "cronjobs"]}
     :confirm {:action "delete the release's workloads" :destructive? true}}
    {:title "🗑  Delete the release's volumes"
-    :keys #{:title :prerequisites :confirm :derive :recovery :precondition :items :effect :verify}
+    :keys #{:title :prerequisites :confirm :values :recovery :refusal :items :effect :verify}
+    :values [:observed]
     :prerequisites {:kubectl-can-delete ["persistentvolumeclaims"]}
     :confirm {:action "delete the release's volumes - their data is lost" :destructive? true :separately? true}}
    {:title "🗑  Delete the Helm storage and confirm it is empty"
-    :keys #{:title :prerequisites :confirm :derive :recovery :precondition :items :effect :verify}
+    :keys #{:title :prerequisites :confirm :values :recovery :refusal :items :effect :verify}
+    :values [:observed]
     :prerequisites {:kubectl-can-delete ["secrets"]}
     :confirm {:action "delete the release's Helm storage" :destructive? true}}
    {:title "▶  Resume the HelmRelease, which installs"
-    :keys #{:title :prerequisites :confirm :derive :recovery :precondition :items :effect :verify}
+    :keys #{:title :prerequisites :confirm :values :recovery :refusal :items :effect :verify}
+    :values [:observed :timestamp]
     :prerequisites {:kubectl-can-patch [helmrelease]}
     :confirm {:action "resume the HelmRelease" :destructive? false}}
    {:title "▶  Resume the owner (Kustomization or ResourceSet)"
-    :keys #{:title :prerequisites :confirm :derive :recovery :precondition :items :effect :verify}
+    :keys #{:title :prerequisites :confirm :values :recovery :refusal :items :effect :verify}
+    :values [:observed :timestamp]
     :prerequisites {:kubectl-can-patch [kustomization]}
     :confirm {:action "resume the owner that renders the HelmRelease" :destructive? false}}])
 

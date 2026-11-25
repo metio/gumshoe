@@ -16,6 +16,10 @@
    :subjects function, :pin, :precondition, :derive, :recheck, a top-level
    :empty-message and :announce? are aliases normalize keeps indefinitely, and a spec naming
    one thing two ways is refused when the book loads (see gumshoe.change).
+   A spec built from parts - a step library's fragment and the book's own
+   keys - is combined with gumshoe.change/compose, which merges the parts
+   key by key and never drops a part's refusal or post-check as merge
+   would.
 
    Spec:
      {:description   \"...\"

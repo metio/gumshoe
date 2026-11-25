@@ -578,15 +578,35 @@ mostly data:
   names its description beside it, `(mutation/book (merge nodes/cordon
   {:description "…"}))`, so `./run --list` reads it without loading the book;
 - the step libraries build the acting half of common steps - `:items`,
-  `:effect`, `:verify` - which a step merges with its own title,
-  confirmation, `:derive`, `:precondition` and `:recovery`:
+  `:effect`, `:verify`, and the `:values` they need - which a step combines
+  with its own title, confirmation, reads, values, `:refusal` and
+  `:recovery` through `(gumshoe.change/compose own-keys (builder …))`:
   `(gumshoe.steps.objects/delete {:objects (fn [ctx] …) :none "…" :timeout
   …})` deletes `{:type :namespace :name}` objects without waiting and proves
   each gone with a read that answered; `gumshoe.steps.flux/suspend`,
   `resume` and `reconcile` take `{:object (fn [ctx] {:kind :type :namespace
   :name}) …}` for any kind in `flux/suspendable` or a ResourceSet, and
   `reconcile` waits for `status.lastHandledReconcileAt` to equal the token
-  it stamped;
+  it stamped. `resume` and `reconcile` declare the token as the value
+  `:timestamp`, bound to the shared `steps.flux/timestamp`; a step with its
+  own token passes `:token :its-value-name` and the builder declares none;
+- `gumshoe.change/compose` combines specs key by key, so a builder's
+  fragment and a step's own keys never overwrite each other as `merge`
+  does: `:reads`/`:values` merge by name (a name bound to two different
+  functions is refused, the same function is one entry), every part's
+  `:refusal` is judged in part order and the first reason refuses,
+  `:verify` and `:items` concatenate, `:done` holds only when every
+  part's does (a part without one is neutral), `:target` subjects
+  concatenate and a ref two parts compute is refused, `:confirm`'s `:destructive?` and `:separately?` are OR-ed,
+  `:prerequisites` and `:options` join, `:no-verify`/`:no-guard` reasons
+  join and are refused beside a `:verify` or a guard, and every other key
+  (`:effect`, `:select`, `:title`, `:recovery`, …) is single-valued, two
+  different values refused. It accepts the aliases, skips nil parts, is
+  associative, and leaves the whole-change checks (`:done true` without
+  `:verify`, …) to `normalize` when the spec runs or its book loads. A
+  plain `merge` keeps one side's `:values`, `:refusal` or `:verify` and
+  drops the other's without a word, so a step built from a builder is
+  composed, never merged;
 - a bespoke book calls `runbook/execute!` with its own `:action`. One whose
   work before the confirmation goes beyond a select - a second pick, a plan
   it validates and refuses before asking - builds a mutation spec from what

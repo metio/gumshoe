@@ -4,6 +4,7 @@
 (ns gumshoe.steps.flux-test
   (:require [cheshire.core :as json]
             [clojure.test :refer [deftest is testing]]
+            [gumshoe.change :as change]
             [gumshoe.effect :as effect]
             [gumshoe.shell :as shell]
             [gumshoe.steps.flux :as flux-steps]
@@ -83,7 +84,7 @@
 
 (deftest a-reconcile-waits-for-its-own-request-to-be-handled
   (let [step (flux-steps/reconcile {:object :object :none "nothing to reconcile" :timeout 120 :interval 5})
-        token (:timestamp ((:derive step) {}))
+        token ((get-in step [:values :timestamp]) {})
         c (assoc (ctx kustomization) :timestamp token)
         [handled] ((:verify step) c)]
     (is (string? token))
@@ -100,3 +101,39 @@
                                                      :conditions [{:type "Ready" :status "True"}]}})]
         (is (false? ((:check handled))))))
     (is (= [[:note "nothing to reconcile"]] (effect/collect ((:effect step) (ctx nil)))))))
+
+(deftest a-resume-or-reconcile-declares-its-token-and-a-suspend-none
+  (is (nil? (:values suspend)))
+  (doseq [[label step] {"resume" resume
+                        "reconcile" (flux-steps/reconcile {:object :object :none "none" :timeout 1 :interval 1})}]
+    (testing label
+      (is (= {:timestamp flux-steps/timestamp} (:values step))
+          "one shared function, so two builders of one composed step bind the same entry"))))
+
+(deftest a-caller-names-its-own-token
+  (doseq [[label build] {"resume" flux-steps/resume "reconcile" flux-steps/reconcile}]
+    (testing label
+      (let [step (build {:object :object :none "none" :timeout 1 :interval 1 :token :stamp})
+            c (assoc (ctx kustomization) :stamp "S")]
+        (is (nil? (:values step)) "the builder declares no value of its own")
+        (is (some #{(str "reconcile.fluxcd.io/requestedAt=S")} (flatten (effect/collect ((:effect step) c)))))))))
+
+(deftest a-composed-reconcile-step-shares-its-token-and-keeps-every-part
+  (let [refusal (fn [{:keys [object]}] (when-not object "nothing to reconcile"))
+        step (change/compose
+              {:title "Reconcile" :confirm {:action "reconcile" :destructive? false}
+               :refusal refusal
+               :values {:timestamp flux-steps/timestamp}}
+              (flux-steps/reconcile {:object :object :none "none" :timeout 120 :interval 5}))]
+    (is (= [:timestamp] (keys (:values step))) "the same function under one name is one value")
+    (is (identical? refusal (:refusal step)))
+    (is (= {:action "reconcile" :destructive? false} (:confirm step)))
+    (is (= step (change/normalize step)) "the composed step is a canonical change map")
+    (testing "a caller binding :timestamp to its own function is refused, and names its token instead"
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"bind the :values entry :timestamp to different functions"
+                            (change/compose {:values {:timestamp (fn [_] "mine")}}
+                                            (flux-steps/reconcile {:object :object :none "none" :timeout 1 :interval 1}))))
+      (let [own (fn [_] "mine")
+            step (change/compose {:values {:stamp own}}
+                                 (flux-steps/reconcile {:object :object :none "none" :timeout 1 :interval 1 :token :stamp}))]
+        (is (= {:stamp own} (:values step)))))))

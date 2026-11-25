@@ -5,6 +5,7 @@
   (:require [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [gumshoe.change :as change]
             [gumshoe.shell :as shell]
             [gumshoe.tools.flux :as flux]
             [gumshoe.tools.flux-storage :as storage]))
@@ -148,7 +149,7 @@
     (testing "a step that deletes refuses while an action is in flight"
       (doseq [step changes
               :when (deletes? (plan-of step))]
-        (is (fn? (:precondition step)) (:title step))))))
+        (is (fn? (:refusal step)) (:title step))))))
 
 (deftest every-wait-comes-from-live-values
   (let [w (storage/waits observed)]
@@ -190,8 +191,21 @@
 (defn- step-titled [steps re]
   (first (filter #(re-find re (str (:title %))) steps)))
 
-(defn- derive-in [step]
-  ((:derive step) {:context "ctx" :target "apps/podinfo"}))
+(defn- derive-in
+  "The values a step computes once per run, as its :derive phase binds them."
+  [step]
+  (let [base {:context "ctx" :target "apps/podinfo"}]
+    (into {} (for [[name value] (change/values step)] [name (value base)]))))
+
+(defn- precondition-of
+  "A step's refusal as the precondition it was written as: true when it lets
+   the step run, false when it refuses in the generic words."
+  [step]
+  (fn [ctx]
+    (let [why ((:refusal step) ctx)]
+      (cond (nil? why) true
+            (= change/unmet why) false
+            :else why))))
 
 (def ^:private template-sts
   (object "StatefulSet" "db" :release "podinfo" :spec {:volumeClaimTemplates [{:metadata {:name "data"}}]}))
@@ -231,11 +245,11 @@
     (with-redefs [shell/execute (fake-cluster state)]
       (is (false? (quietly #((:check (first steps)) {:context "ctx" :target "apps/podinfo"})))
           "the report refuses to go on")
-      (is (false? (quietly #((:precondition suspend) (step-ctx suspend))))
+      (is (false? (quietly #((precondition-of suspend) (step-ctx suspend))))
           "suspending the owner refuses, where it would have planned a note")
       (doseq [step (filter :effect steps)
               :when (re-find #"Delete" (:title step))]
-        (is (false? (quietly #((:precondition step) (step-ctx step)))) (:title step))))))
+        (is (false? (quietly #((precondition-of step) (step-ctx step)))) (:title step))))))
 
 (deftest a-missing-resourceset-crd-means-no-resourceset-owner
   (let [state (atom (assoc (cluster-state)
@@ -246,7 +260,7 @@
     (with-redefs [shell/execute (fake-cluster state)]
       (let [ctx (step-ctx suspend)]
         (is (= "apps" (-> ctx :observed :owner :name)))
-        (is (true? ((:precondition suspend) ctx)))))))
+        (is (true? ((precondition-of suspend) ctx)))))))
 
 (deftest the-owner-the-run-suspended-is-resumed-when-the-owner-read-fails-later
   (let [state (atom (assoc (cluster-state)
@@ -262,7 +276,7 @@
             plan (str/join " " (flatten ((:effect resume) ctx)))]
         (is (str/includes? plan "flux-system") plan)
         (is (str/includes? plan "\"suspend\":false") plan)
-        (is (true? (if-let [precondition (:precondition resume)] (precondition ctx) true)))))))
+        (is (true? ((precondition-of resume) ctx)))))))
 
 (deftest an-unanswered-workload-or-claim-read-is-not-read-as-none
   (doseq [type ["statefulsets" "deployments" "persistentvolumeclaims"]]
@@ -277,7 +291,7 @@
             (str "the report refuses when " type " cannot be listed"))
         (doseq [step (filter :effect steps)
                 :when (re-find #"Delete" (:title step))]
-          (is (false? (quietly #((:precondition step) (step-ctx step))))
+          (is (false? (quietly #((precondition-of step) (step-ctx step))))
               (str (:title step) " refuses when " type " cannot be listed")))))))
 
 ;; --- caller-supplied steps --------------------------------------------------------
@@ -452,7 +466,7 @@
           "the report reads one deployed revision and goes on")
       (let [report-reads @reads]
         (reset! reads [])
-        (is (true? (quietly #((:precondition storage-step) (step-ctx storage-step))))
+        (is (true? (quietly #((precondition-of storage-step) (step-ctx storage-step))))
             "the storage step's precondition finds no action running")
         (doseq [[where recorded] [["the report" report-reads] ["the storage precondition" @reads]]]
           (testing where
@@ -468,7 +482,7 @@
           "the report refuses when the storage cannot be read")
       (doseq [step (filter :effect steps)
               :when (re-find #"Delete" (:title step))]
-        (is (false? (quietly #((:precondition step) (step-ctx step))))
+        (is (false? (quietly #((precondition-of step) (step-ctx step))))
             (str (:title step) " refuses when the storage cannot be read"))))))
 
 (deftest another-releases-revisions-in-the-storage-namespace-are-not-this-ones
@@ -478,7 +492,7 @@
                                                (str (quot (System/currentTimeMillis) 1000)) "" ""])
                                 deployed-revision])]
     (with-redefs [shell/execute (recording-cluster (atom (storage-state)) (atom []) listing)]
-      (is (true? (quietly #((:precondition storage-step) (step-ctx storage-step))))
+      (is (true? (quietly #((precondition-of storage-step) (step-ctx storage-step))))
           "a running action on another release in the same namespace does not block this one"))))
 
 (deftest the-prerequisites-ask-no-cluster-wide-secret-read
