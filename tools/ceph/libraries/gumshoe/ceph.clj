@@ -135,6 +135,36 @@
   [connection]
   (-> (ceph-json connection "status") :health :status))
 
+(defn health-of
+  "Pure: {:ok? <ceph status answered with a health status> :status <it>} of a
+   ceph-json-result of `ceph status`. A command that did not answer, or a
+   document without a health status, is not :ok?, so a check never reads an
+   unread status as \"not HEALTH_ERR\"."
+  [{:keys [ok? doc]}]
+  (let [status (-> doc :health :status)]
+    {:ok? (boolean (and ok? (string? status) (not (str/blank? status))))
+     :status status}))
+
+(defn health-result
+  "The cluster's health status read over SSH, as health-of returns it."
+  [connection]
+  (health-of (ceph-json-result connection "status")))
+
+(defn healthy-enough?
+  "Pure: whether a health-result answered HEALTH_OK or HEALTH_WARN. An
+   unread status and any other answer are not, so a post-check on it fails
+   closed."
+  [{:keys [ok? status]}]
+  (boolean (and ok? (#{"HEALTH_OK" "HEALTH_WARN"} status))))
+
+(defn upgrade-refusal
+  "Pure: why an upgrade must not start on a health-result, or nil. An
+   upgrade needs a health status that was read and is not HEALTH_ERR."
+  [{:keys [ok? status]}]
+  (cond
+    (not ok?) "could not read the cluster's health - refusing to upgrade a cluster whose health is unknown"
+    (= "HEALTH_ERR" status) "cluster is HEALTH_ERR - resolve that before upgrading"))
+
 (defn daemons
   [connection]
   (ceph-json connection "orch" "ps"))
@@ -197,12 +227,21 @@
   [versions-json]
   (vec (map name (keys (:overall versions-json)))))
 
+(defn version-number
+  "Pure: the version number of a ceph version string - 17.2.9 of
+   \"ceph version 17.2.9 (abc) quincy (stable)\" - or nil when it names none."
+  [version-string]
+  (second (re-find #"^\s*ceph version (\S+)" (str version-string))))
+
 (defn all-on-version?
-  "True when every daemon reports exactly the one target version."
+  "True when every daemon reports exactly the one target version. The version
+   number is compared whole, so 17.2.1 does not match a cluster on 17.2.10 and
+   a short target such as 17.2 matches no release."
   [versions-json target]
   (let [running (version-strings versions-json)]
     (and (= 1 (count running))
-         (str/includes? (first running) (str target)))))
+         (some? (version-number (first running)))
+         (= (version-number (first running)) (str/trim (str target))))))
 
 (defn upgrade-in-progress?
   [upgrade-status-json]
