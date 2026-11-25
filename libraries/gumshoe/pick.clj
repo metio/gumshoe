@@ -11,18 +11,28 @@
      \"<Kind> <namespace>/<name>\"   (kinded kind->type)
      \"<type> <namespace>/<name>\"   (typed types)
 
+   Only a string is a pick: anything else parses to nil, so a keyword, a
+   symbol or a collection whose printed form happens to fit a shape never
+   names an object.
+
    A mutation spec's :subject takes one of them as its :parse.")
+
+(defn- matches
+  "The groups of regex in pick, or nil when pick is not a string or does
+   not fit it."
+  [regex pick]
+  (when (string? pick) (re-matches regex pick)))
 
 (defn namespaced
   "\"<namespace>/<name>\" as {:namespace :name}, or nil."
   [pick]
-  (when-let [[_ namespace name] (re-matches #"\s*([^/\s]+)/([^/\s]+)\s*" (str pick))]
+  (when-let [[_ namespace name] (matches #"\s*([^/\s]+)/([^/\s]+)\s*" pick)]
     {:namespace namespace :name name}))
 
 (defn cluster-scoped
   "\"<name>\" as {:name}, or nil."
   [pick]
-  (when-let [[_ name] (re-matches #"\s*([^/\s]+)\s*" (str pick))]
+  (when-let [[_ name] (matches #"\s*([^/\s]+)\s*" pick)]
     {:name name}))
 
 (defn kinded
@@ -31,7 +41,7 @@
    kind parses to nil."
   [kind->type]
   (fn [pick]
-    (when-let [[_ kind namespace name] (re-matches #"\s*(\w+)\s+([^/\s]+)/(\S+)\s*" (str pick))]
+    (when-let [[_ kind namespace name] (matches #"\s*(\w+)\s+([^/\s]+)/(\S+)\s*" pick)]
       (when-let [type (kind->type kind)]
         {:kind kind :type type :namespace namespace :name name}))))
 
@@ -41,6 +51,6 @@
   [types]
   (let [known (set types)]
     (fn [pick]
-      (when-let [[_ type namespace name] (re-matches #"\s*(\S+)\s+([^/\s]+)/(\S+)\s*" (str pick))]
+      (when-let [[_ type namespace name] (matches #"\s*(\S+)\s+([^/\s]+)/(\S+)\s*" pick)]
         (when (known type)
           {:type type :namespace namespace :name name})))))

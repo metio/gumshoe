@@ -85,7 +85,7 @@
       (is (false? result))
       (is (= "refusing: the pick \"nightly\" does not name a CronJob\n" out))
       (is (empty? reads) "nothing is read for a pick that names nothing")
-      (is (some? config) "the confirmation is still shown, as for any other refusal")))
+      (is (nil? config) "no confirmation is shown for a pick that names nothing")))
   (testing ":invalid replaces it"
     (is (= "refusing: the pick is not \"<namespace>/<name>\"\n"
            (:out (run {:subject {:type "cronjobs" :invalid "the pick is not \"<namespace>/<name>\""}}

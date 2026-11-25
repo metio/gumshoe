@@ -309,9 +309,13 @@ mostly data:
   printer of its own, and keeps `:precondition` for any other check
   (`tools/argocd/runbooks/refresh.clj` is the short example). The
   confirmation items, the plan and the post-checks are built before the
-  refusal runs, so they also run for a pick that does not parse, with
-  `:ref` and `:object` nil: make the plan a note in that case instead of
-  reading through the nil ref (`runbooks/kubernetes/workloads/restart.clj`).
+  refusal runs, but never for a pick that does not parse: `mutation/parse-pick`
+  judges every pick first, in `run!`, `run-on!` and each playbook step, and
+  refuses one that does not parse before anything is read or confirmed. With
+  a `:subject` it is refused with `:invalid`; without one a `:namespaced`
+  pick must be `<namespace>/<name>`, a `:many` pick a non-empty collection of
+  non-blank strings and any other pick a non-blank string, so a book that
+  reads `:target` itself never sees nil or blank text.
   A change whose subject is no single object, such as a Helm release kept
   as many Secrets, uses `:refusal` alone (`runbooks/kubernetes/helm/rollback.clj`);
 - a change that acts on several objects at once - an adoption stamping a

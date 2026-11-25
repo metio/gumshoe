@@ -210,13 +210,13 @@
 (defn pick-transcript
   "What the book does when it picks its own subject from opts through
    mutation/run!, with the fuzzy finder answering as an operator who picks
-   nothing and flow/change! captured: the result, what it printed, and the
-   confirmation and plan of the change it reached."
-  [spec {:keys [objects opts answering? ssh] :or {answering? true}}]
+   nothing, or answering `chosen`, and flow/change! captured: the result,
+   what it printed, and the confirmation and plan of the change it reached."
+  [spec {:keys [objects opts answering? ssh chosen] :or {answering? true}}]
   (let [seen (atom nil)]
     (with-redefs [shell/execute (fn [& argv] (answer {:objects objects :answering? answering? :ssh ssh} (vec argv)))
-                  fuzzy/select-single (constantly nil)
-                  fuzzy/select-multi (constantly nil)
+                  fuzzy/select-single (constantly chosen)
+                  fuzzy/select-multi (constantly chosen)
                   kubectl/current-context (constantly "ctx")
                   kubectl/current-cluster (constantly "cluster")
                   announce/announce! (fn [_ _ message] message)
@@ -718,13 +718,21 @@
    :empty {:objects [] :opts picked}
    :unanswered-pick {:objects objects :opts picked :answering? false}})
 
+(defn- with-unparsable-pick
+  "scenarios and one more: no flags, with the fuzzy finder answering `chosen`,
+   a line that does not parse as the book's pick."
+  [scenarios chosen]
+  (assoc scenarios :unparsable-pick {:objects (get-in scenarios [:picked :objects]) :opts {} :chosen chosen}))
+
 (def ^:private picks
   "Books that also pick their subject through mutation/run!, by path."
   {"runbooks/kubernetes/certificates/renew.clj"
    (pick-scenarios [[certificate-type (certificate "True")]] {:certificates ["shop/web-tls"]} {:certificates ["shop/nope"]})
 
    "runbooks/kubernetes/cronjobs/start.clj"
-   (pick-scenarios [["cronjobs" (cronjob false)]] {:namespace "batch" :job "nightly"} {:namespace "batch" :job "nope"})
+   (with-unparsable-pick
+    (pick-scenarios [["cronjobs" (cronjob false)]] {:namespace "batch" :job "nightly"} {:namespace "batch" :job "nope"})
+    "nightly")
 
    "runbooks/kubernetes/namespaces/remove_finalizers.clj"
    (pick-scenarios [["namespaces" (namespace-object "Terminating")]] {:namespace "stuck"} {:namespace "nope"})
@@ -749,22 +757,34 @@
    (pick-scenarios [["persistentvolumes" (volume "Released")]] {:volumes ["pv-1"]} {:volumes ["pv-2"]})
 
    "runbooks/kubernetes/volumes/delete_unused.clj"
-   (pick-scenarios [["persistentvolumeclaims" claim]] {:namespace "shop" :pvc "data"} {:namespace "shop" :pvc "nope"})
+   (with-unparsable-pick
+    (pick-scenarios [["persistentvolumeclaims" claim]] {:namespace "shop" :pvc "data"} {:namespace "shop" :pvc "nope"})
+    "data")
 
    "tools/jaas/runbooks/jaas/reconcile.clj"
-   (pick-scenarios [[snippet-type (snippet false "Succeeded")]] {:namespace "apps" :name "site"} {:namespace "apps" :name "nope"})
+   (with-unparsable-pick
+    (pick-scenarios [[snippet-type (snippet false "Succeeded")]] {:namespace "apps" :name "site"} {:namespace "apps" :name "nope"})
+    "site")
 
    "tools/jaas/runbooks/jaas/suspend.clj"
-   (pick-scenarios [[snippet-type (snippet false "Succeeded")]] {:namespace "apps" :name "site"} {:namespace "apps" :name "nope"})
+   (with-unparsable-pick
+    (pick-scenarios [[snippet-type (snippet false "Succeeded")]] {:namespace "apps" :name "site"} {:namespace "apps" :name "nope"})
+    "site")
 
    "tools/jaas/runbooks/jaas/resume.clj"
-   (pick-scenarios [[snippet-type (snippet true "Suspended")]] {:namespace "apps" :name "site"} {:namespace "apps" :name "nope"})
+   (with-unparsable-pick
+    (pick-scenarios [[snippet-type (snippet true "Suspended")]] {:namespace "apps" :name "site"} {:namespace "apps" :name "nope"})
+    "site")
 
    "tools/stageset/runbooks/stageset/promote.clj"
-   (pick-scenarios [[stageset-type (stageset "True")]] {:namespace "apps" :name "site" :stage "prod"} {:namespace "apps" :name "nope" :stage "prod"})
+   (with-unparsable-pick
+    (pick-scenarios [[stageset-type (stageset "True")]] {:namespace "apps" :name "site" :stage "prod"} {:namespace "apps" :name "nope" :stage "prod"})
+    "site")
 
    "tools/stageset/runbooks/stageset/reconcile.clj"
-   (pick-scenarios [[stageset-type (stageset "True")]] {:namespace "apps" :name "site"} {:namespace "apps" :name "nope"})})
+   (with-unparsable-pick
+    (pick-scenarios [[stageset-type (stageset "True")]] {:namespace "apps" :name "site"} {:namespace "apps" :name "nope"})
+    "site")})
 
 (defn- placed
   "[type object] moved to namespace/name, uid and all."
@@ -905,9 +925,47 @@
         (is (= (get-in golden [path scenario]) transcript))))))
 
 (deftest restart-refuses-a-pick-that-does-not-parse
-  (let [{:keys [stopped precondition plan]}
-        (transcript (load-spec "runbooks/kubernetes/workloads/restart.clj")
-                    {:objects [["deployments" (deployment)]] :target "Deployment web"})]
-    (is (nil? stopped) "the book shows its confirmation instead of throwing")
-    (is (= {:result false :out "refusing: the pick is not \"<Kind> <namespace>/<name>\""} precondition))
-    (is (not-any? #(= :kubectl (first %)) plan) "the plan restarts nothing")))
+  (is (= {:stopped "refusing: the pick is not \"<Kind> <namespace>/<name>\""}
+         (transcript (load-spec "runbooks/kubernetes/workloads/restart.clj")
+                     {:objects [["deployments" (deployment)]] :target "Deployment web"}))
+      "the book refuses before it shows a confirmation or computes a plan"))
+
+(defn- unparsable-targets
+  "Picks no book of the select's mode accepts: nothing, blank text and, with
+   `invalid`, the book's own unparsable pick."
+  [{:keys [mode]} invalid]
+  (cond-> (if (= :many mode) [nil [] [nil] [""] ["  "]] [nil "" "  "])
+    invalid (conj invalid)))
+
+(def ^:private judged-by-the-book
+  "Books whose :invalid pick has the shape of a pick and is refused by the
+   book's own :refusal, after the confirmation: helm/rollback reads its
+   free-form :one pick itself, and workloads/scale parses a DaemonSet it then
+   refuses to scale."
+  #{"runbooks/kubernetes/helm/rollback.clj" "runbooks/kubernetes/workloads/scale.clj"})
+
+(deftest every-book-refuses-a-pick-that-does-not-parse-before-its-confirmation
+  (binding [ssh/*user-config* nil]
+    (doseq [[path scenarios] books
+            :let [spec (load-spec path)
+                  {:keys [objects opts]} (:permitted scenarios)
+                  invalid (when-not (judged-by-the-book path) (get-in scenarios [:invalid :target]))]
+            target (unparsable-targets (:select spec) invalid)]
+      (testing (str path " run-on! " (pr-str target))
+        (let [{:keys [stopped] :as t} (with-book-redefs path #(transcript spec {:objects objects :target target :opts opts}))]
+          (is (and stopped (str/starts-with? stopped "refusing: the pick")) (pr-str t)))))
+    (doseq [path judged-by-the-book
+            :let [scenario (get-in books [path :invalid])]]
+      (testing (str path " judges its own pick")
+        (is (false? (get-in (transcript (load-spec path) scenario) [:precondition :result])))))))
+
+(deftest every-book-refuses-an-unparsable-pick-through-its-own-selection
+  (binding [ssh/*user-config* nil]
+    (doseq [[path scenarios] picks
+            :let [spec (load-spec path)]
+            :when (:unparsable-pick scenarios)]
+      (testing path
+        (let [{:keys [result out action]} (with-book-redefs path #(pick-transcript spec (:unparsable-pick scenarios)))]
+          (is (false? result))
+          (is (nil? action) "no confirmation is shown")
+          (is (re-find #"refusing: the pick \"\w+\" does not name a [\w ]+$" out) out))))))

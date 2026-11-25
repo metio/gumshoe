@@ -29,3 +29,13 @@
     (is (= {:type "pods" :namespace "shop" :name "web-1"} (parse "pods shop/web-1")))
     (doseq [bad [nil "secrets shop/web" "pods web-1" "pods"]]
       (is (nil? (parse bad)) (pr-str bad)))))
+
+(deftest only-a-string-is-a-pick
+  (let [kinded (pick/kinded {"Deployment" "deployments"})
+        typed (pick/typed #{"pods"})]
+    (doseq [[parse values] [[pick/namespaced [:shop/web 'shop/web ["shop/web"] '("shop/web") {:shop "web"}]]
+                            [pick/cluster-scoped [:web 'web ["web"] #{"web"} 42]]
+                            [kinded [["Deployment shop/web"] (symbol "Deployment shop/web")]]
+                            [typed [["pods shop/web-1"] (symbol "pods shop/web-1")]]]
+            value values]
+      (is (nil? (parse value)) (pr-str value)))))

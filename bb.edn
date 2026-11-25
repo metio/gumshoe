@@ -58,6 +58,7 @@
                    [gumshoe.pick-books-test]
                    [gumshoe.mutation-connect-test]
                    [gumshoe.mutation-subject-test]
+                   [gumshoe.mutation-pick-test]
                    [gumshoe.mutation-subjects-test]
                    [gumshoe.mutation-recheck-test]
                    [gumshoe.pick-test]
@@ -228,6 +229,7 @@
                                                          'gumshoe.pick-books-test
                                                          'gumshoe.mutation-connect-test
                                                          'gumshoe.mutation-subject-test
+                                                         'gumshoe.mutation-pick-test
                                                          'gumshoe.mutation-subjects-test
                                                          'gumshoe.mutation-recheck-test
                                                          'gumshoe.pick-test

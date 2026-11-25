@@ -76,10 +76,17 @@
    callback the ref as :ref and the object as :object, read strictly before
    :derive runs; pins the ref, with :facts, unless the spec names its own
    :pin; and reads the object again right before :refusal and :precondition,
-   so both judge the object as it is when the change is about to run. A pick
-   that does not parse is refused with :invalid, read nothing, and leaves
-   :ref and :object nil for the callbacks that run before the refusal.
+   so both judge the object as it is when the change is about to run.
    read-subject reads the object again, for a post-check.
+
+   Every pick is judged by parse-pick before anything else runs - before
+   :connect, the reads, :derive and the confirmation - by run!, run-on! and
+   every playbook step alike. With a :subject a pick that does not parse is
+   refused with :invalid. Without one, a :namespaced pick must be
+   \"<namespace>/<name>\", a :many pick a non-empty collection of non-blank
+   strings and any other pick a non-blank string; anything else is refused
+   as \"the pick <pick> does not name a <label>\". A refused pick prints
+   \"refusing: <why>\" and the change returns false.
 
    :subjects declares the several objects one change acts on, for a change
    whose confirmation rests on a set (the volume, the database and the routes
@@ -368,19 +375,49 @@
 
 (defn- invalid-pick
   [{:keys [invalid]} select target]
-  (or invalid (format "the pick %s does not name a %s" (pr-str target) (:label select))))
+  (or invalid (format "the pick %s does not name a %s" (pr-str target) (or (:label select) "subject"))))
+
+(defn- named?
+  "Whether x is text naming something: a string that is not blank."
+  [x]
+  (and (string? x) (not (str/blank? x))))
+
+(defn- accepted?
+  "Whether a spec without a :subject accepts target as its select's pick: a
+   :many select a non-empty collection of names, a :namespaced select
+   \"<namespace>/<name>\", any other a name. A :one pick and a pick of a
+   step without a select stay free-form text the book reads itself."
+  [{:keys [mode]} target]
+  (case mode
+    :many (and (coll? target) (not (map? target)) (seq target) (every? named? target))
+    :namespaced (some? (pick/namespaced target))
+    (named? target)))
+
+(defn parse-pick
+  "{:ref <ref>} for a pick the spec accepts, or {:refusal <why>} for one it
+   refuses. With a :subject the ref is what subject-ref makes of target,
+   which must be a non-blank string, and a target it cannot parse is refused
+   with the subject's :invalid; without one the ref is nil and target must
+   be what the select picks (accepted?), or it is refused in the default
+   words. Pure, so run!, run-on! and every playbook step judge a pick the
+   same way before anything is read."
+  [{:keys [subject select]} target]
+  (let [refused {:refusal (invalid-pick subject select target)}]
+    (if subject
+      (let [ref (subject-ref subject select target)]
+        (if (and ref (named? target)) {:ref ref} refused))
+      (if (accepted? select target) {:ref nil} refused))))
 
 (defn- subject-derive
   "derive preceded by the subject and subjects reads, as one function of
-   the base context: {:ref :object} and {:refs :objects} merged with what
-   derive returns for the context holding them. nil when the spec has none
-   of them."
-  [{:keys [subject subjects select derive] :as spec}]
+   the base context, which holds the subject's :ref parse-pick made: {:ref
+   :object} and {:refs :objects} merged with what derive returns for the
+   context holding them. nil when the spec has none of them."
+  [{:keys [subject subjects derive] :as spec}]
   (if (or subject subjects)
-    (fn [{:keys [target context] :as base}]
+    (fn [{:keys [ref context] :as base}]
       (let [values (when subject
-                     (let [ref (subject-ref subject select target)]
-                       {:ref ref :object (read-subject (assoc base :ref ref))}))
+                     {:ref ref :object (read-subject base)})
             values (if subjects
                      (let [refs (subjects-of spec (merge base values))]
                        (assoc values :refs refs :objects (read-subjects context refs)))
@@ -402,23 +439,20 @@
 
 (defn- judged-precondition
   "The :refusal and :precondition of a spec as one thunk over ctx, or nil
-   when the spec has neither and no :subject. With a :subject, a pick that
-   does not parse is refused before anything is read; otherwise both judge
-   ctx as rechecked makes it."
-  [{:keys [subject select refusal precondition recheck] :as spec} {:keys [ref target] :as ctx}]
+   when the spec has neither. Both judge ctx as rechecked makes it; a pick
+   that does not parse never reaches here, parse-pick refused it."
+  [{:keys [refusal precondition recheck] :as spec} ctx]
   (when (and recheck (not (or refusal precondition)))
     (throw (ex-info "a :recheck is judged by :refusal or :precondition, and the spec has neither"
                     {:recheck recheck})))
-  (when (or subject refusal precondition)
+  (when (or refusal precondition)
     (fn []
-      (if (and subject (nil? ref))
-        (refuse! (invalid-pick subject select target))
-        (let [ctx (if (or refusal precondition) (rechecked spec ctx) ctx)
-              why (when refusal (refusal ctx))]
-          (cond
-            why (refuse! why)
-            precondition (boolean (precondition ctx))
-            :else true))))))
+      (let [ctx (rechecked spec ctx)
+            why (when refusal (refusal ctx))]
+        (cond
+          why (refuse! why)
+          precondition (boolean (precondition ctx))
+          :else true)))))
 
 (defn- pin-of
   "The ref the change pins and its fingerprint at the confirmation: the
@@ -494,10 +528,12 @@
                           :cluster cluster}))))
 
 (defn- run-connected!
+  "Runs spec against target, whose ref parse-pick made, on the connection."
   [{:keys [select confirm announce effect verify] :as spec}
-   {:keys [context cluster announce-as]} target opts announcement-data]
-  (let [base {:context context :cluster cluster :target target
-              :opts opts :announcement-data announcement-data}
+   {:keys [context cluster announce-as]} target ref opts announcement-data]
+  (let [base (cond-> {:context context :cluster cluster :target target
+                      :opts opts :announcement-data announcement-data}
+               (:subject spec) (assoc :ref ref))
         {:keys [values unread]} (derived (subject-derive spec) base)]
     (if unread
       (do (stdout/error (format "could not read what the change rests on - %s" unread))
@@ -539,24 +575,27 @@
 (defn run-on!
   "Runs a mutation spec against an ALREADY-CHOSEN `target`, skipping the spec's own
    selection, through derive -> confirm -> [precondition] -> announce -> execute
-   -> verify. Returns true/false, false without asking for a confirmation when a
-   read in :derive did not answer. This is what a playbook calls per step after picking its
+   -> verify. Returns true/false, false without asking for a confirmation when
+   parse-pick refuses `target` or a read in :derive did not answer. This is what a playbook calls per step after picking its
    subject once (e.g. via gumshoe.select/pick), so the operator is not re-prompted
    for every step. `run!` is this plus selection.
 
    `opts` is the parsed CLI flags; `announcement-data` is the value the runbook
    action receives in its ctx (nil when the book does not announce)."
   [spec target opts announcement-data]
-  (if-let [connection (connect spec opts)]
-    (run-connected! spec connection target opts announcement-data)
-    false))
+  (let [{:keys [ref refusal]} (parse-pick spec target)]
+    (if refusal
+      (refuse! refusal)
+      (if-let [connection (connect spec opts)]
+        (run-connected! spec connection target ref opts announcement-data)
+        false))))
 
 (defn run!
   "Selects the spec's subject (interactive, honouring the CLI flags) and runs it
    through run-on!. Returns true when there is nothing to select (its
    :empty-message is shown), false when what :connect names could not be
-   reached, the candidates could not be read or the operator picks nothing,
-   otherwise the
+   reached, the candidates could not be read, the operator picks nothing or
+   parse-pick refuses the pick, otherwise the
    change's result. Use run! for a single confirmed step; use run-on! to compose
    several steps against one already-picked subject."
   [{:keys [select empty-message] :as spec} opts announcement-data]
@@ -572,7 +611,10 @@
         (do (stdout/error (format "no %s selected" (:label select))) false)
 
         :else
-        (run-connected! spec connection target opts announcement-data)))
+        (let [{:keys [ref refusal]} (parse-pick spec target)]
+          (if refusal
+            (refuse! refusal)
+            (run-connected! spec connection target ref opts announcement-data)))))
     false))
 
 (defn picks
