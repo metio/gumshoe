@@ -304,19 +304,31 @@
   ([books opts]
    (vec (load-findings (load-books books opts)))))
 
+(defn- option-order-message
+  [sizes]
+  (str (if (= 1 (count sizes))
+         (format "lists its %d options out of order in --help" (first sizes))
+         (format "lists the options of %d of its option maps (%s options) out of order in --help"
+                 (count sizes) (str/join " and " [(str/join ", " (butlast sizes)) (last sizes)])))
+       ": a map literal or a merge of more than eight loses their order; build them with flags/ordered and join them with flags/merge-ordered"))
+
 (defn option-order-findings
-  "A book whose option map has lost the order its options were written in
-   (see flags/order-lost?), so --help lists them in hash order: a map
-   literal of more than eight options, or a plain merge past eight. An EDN
-   book is left out: plain EDN has no way to write an ordered map."
+  "One finding per book file with an option map that has lost the order its
+   options were written in (see flags/order-lost?), so --help lists them in
+   hash order: a map literal of more than eight options, or a plain merge
+   past eight. A book that declares several such maps, its own and those of
+   the specs or steps it merges, is still one finding, naming the size of
+   each distinct map, so a count of these findings is a count of books. An
+   EDN book is left out: plain EDN has no way to write an ordered map."
   [loaded]
-  (for [{:keys [file option-maps]} loaded
-        :when (not (edn-book? file))
-        options option-maps
-        :when (flags/order-lost? options)]
-    (finding file :option-order
-             (format "lists its %d options out of order in --help: a map literal or a merge of more than eight loses their order; build them with flags/ordered and join them with flags/merge-ordered"
-                     (count options)))))
+  (let [lost (for [{:keys [file option-maps]} loaded
+                   :when (not (edn-book? file))
+                   options option-maps
+                   :when (flags/order-lost? options)]
+               [file options])]
+    (for [file (distinct (map first lost))
+          :let [maps (distinct (keep (fn [[f options]] (when (= f file) options)) lost))]]
+      (finding file :option-order (option-order-message (mapv count maps))))))
 
 ;; REUSE-IgnoreStart -- the tag every file must carry, not a declaration of this one.
 (defn missing-license
@@ -845,7 +857,8 @@
   "Prints every finding below the roots (see files-in) and throws an ex-info
    carrying :babashka/exit 1 when there is any, so a bb task running it fails
    with the offending files named. Returns the number of files checked
-   otherwise. Advisories are printed first, as notes, and never fail it. opts
+   otherwise. Advisories are printed first, as notes, then one line per check
+   counting its advisories and the files they name; they never fail it. opts
    are those of report:
 
      {:books [\"runbooks\"] :libraries [\"libraries\"] :license \"0BSD\"}
@@ -859,6 +872,10 @@
         {found :findings advised :advisories} (report (merge (with-library-classpath opts) files))]
     (binding [*out* *err*]
       (doseq [f advised] (println (str "note: " (format-finding f))))
+      (doseq [[check notes] (group-by :check advised)]
+        (println (format "note: %d %s advisor%s in %d file(s), not gating"
+                         (count notes) (name check) (if (= 1 (count notes)) "y" "ies")
+                         (count (distinct (map :file notes))))))
       (doseq [f found] (println (format-finding f))))
     (when (seq found)
       (throw (ex-info (format "%d conformance finding(s) in %d file(s)"
