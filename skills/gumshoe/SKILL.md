@@ -493,6 +493,20 @@ mostly data:
   `:reads`/`:values`, a name both maps bind or one the engine binds) is
   refused when the book loads, and
   the conformance gate reports it as `is refused: …`;
+- a change to one object can be written as plain EDN and compiled with
+  `(gumshoe.dsl/compile data)` into that canonical map (README "Changes
+  written as data"; `runbooks/kubernetes/cronjobs/suspend.edn` is a whole
+  one). Declare the target with its `:type` (or a registered `:parse`), the
+  `:state` the change brings about, `:refuse` entries, `:confirm` and
+  `[:kubectl :patch|:scale|:annotate|:delete …]` effects; `compile` derives
+  the pin, the fail-closed post-check, the skip as done and, for a delete,
+  the typed confirmation, and requires `:recovery` for a destructive change.
+  Opting out of any of these takes `:opt-out {<safeguard> "why"}`; strict
+  reads have no opt-out. Logic beyond the vocabulary is a library function
+  registered with `gumshoe.dsl.registry/register!` under a keyword and its
+  kind, and called as `[:call :ns/name arg …]`, never inline code. An
+  unknown key, word, name or argument count is refused when it compiles,
+  with a message naming its path; read that path rather than guessing;
 - a pair of books that set one boolean state and set it back - suspend and
   resume, pause and resume - is one `(toggle/pair {…})` declaration from
   `gumshoe.toggle`, returning `{:on <spec> :off <spec>}`: the shared spec

@@ -8,23 +8,10 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
             [gumshoe.select :as select]
-            [gumshoe.shell :as shell]
             [clojure.string :as str]))
 
-(defn- dry-run
-  "A server-side dry run: admission webhooks and policies judge it and nothing
-   changes, so its refusal is the real delete's refusal."
-  [context pick]
-  (deletion/dry-run-result (apply shell/execute "kubectl" (str "--context=" context) (deletion/dry-run-args pick))))
-
-(defn- evidence
-  [context {:keys [namespace]}]
-  (into {} (for [type ["pods" "jobs" "ingresses" "deployments" "statefulsets" "daemonsets" "cronjobs"]]
-             [type (kubectl/get-namespaced context namespace type)])))
-
 (def selection
-  {:mode :one :label "Object" :flag :pick
-   :candidates (fn [context] (deletion/picks (into {} (for [type deletion/types] [type (kubectl/get-all context type)]))))})
+  {:mode :one :label "Object" :flag :pick :candidates deletion/candidates})
 
 (mutation/book
  {:description "Deletes one namespaced object after a server-side dry run accepted it"
@@ -40,8 +27,8 @@
             :invalid (str "the pick is not \"<type> <namespace>/<name>\" of " (str/join ", " deletion/types))}
   :derive (fn [{:keys [context ref]}]
             (when ref
-              {:dry-run (dry-run context ref)
-               :dependents (deletion/dependents ref (evidence context ref))}))
+              {:dry-run (deletion/dry-run context ref)
+               :dependents (deletion/read-dependents context ref)}))
   :items (fn [{:keys [target dry-run dependents]}]
            (if dry-run (deletion/deletion-items target dry-run dependents) [(str "delete " target)]))
   :refusal (fn [{:keys [object dry-run]}]

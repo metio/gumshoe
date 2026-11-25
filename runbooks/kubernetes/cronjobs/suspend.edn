@@ -1,0 +1,23 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; suspend.clj written in the gumshoe.dsl vocabulary; gumshoe.dsl/compile
+;; makes a change of it that runs as the book does.
+{:gumshoe/dsl 0
+ :description "Suspends a CronJob so no new Job starts"
+ :target {:pick :namespaced :label "CronJob" :type "cronjobs"
+          :namespace-flag :namespace :name-flag :job
+          :candidates {:unless :state :order :listed}
+          :empty "every CronJob is suspended already"}
+ :prerequisites {:installed-tools ["kubectl" "fzf"]
+                 :cluster-capabilities []
+                 :kubectl-can-get ["cronjobs"]
+                 :kubectl-can-patch ["cronjobs"]}
+ :state {:holds [:field [:spec :suspend] := true]
+         :says "CronJob {target} is suspended"
+         :timeout 30 :interval 3}
+ :refuse [{:when [:state] :says "it is suspended already"}]
+ :confirm {:action "suspend a CronJob" :destructive? false}
+ :items [:call :gumshoe.workloads/suspend-items [:object] true]
+ :announce "Suspend CronJob {target}"
+ :effect [[:kubectl :patch {:resource "cronjob" :merge {:spec {:suspend true}}}]]}

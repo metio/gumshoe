@@ -4,7 +4,9 @@
 (ns gumshoe.workloads
   "The decisions behind the remediation runbooks for workload controllers,
    pure over the objects so every refusal and every completion test is
-   testable. A pick names one workload as \"<Kind> <namespace>/<name>\"."
+   testable. A pick names one workload as \"<Kind> <namespace>/<name>\".
+   The few reads that fetch those objects (scalable-picks) are marked as
+   reads where they stand."
   (:require [clojure.string :as str]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.pick :as pick]))
@@ -93,6 +95,13 @@
                        (= kind (-> % :spec :scaleTargetRef :kind))
                        (= (kubectl/name-of workload) (-> % :spec :scaleTargetRef :name)))
                  (kubectl/items-of hpas))))
+
+(defn scalable-picks
+  "A read: every Deployment and StatefulSet of context, as picks."
+  [context]
+  (picks (for [[type kind] types :when (scalable-kinds kind)]
+           [kind (kubectl/get-all context type)])
+         (constantly true)))
 
 (defn scale-refusal
   "Why scaling the workload to replicas would be wrong or pointless, or nil."

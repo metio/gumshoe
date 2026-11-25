@@ -1,0 +1,23 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; resume.clj written in the gumshoe.dsl vocabulary; gumshoe.dsl/compile
+;; makes a change of it that runs as the book does.
+{:gumshoe/dsl 0
+ :description "Resumes a suspended CronJob on its schedule"
+ :target {:pick :namespaced :label "CronJob" :type "cronjobs"
+          :namespace-flag :namespace :name-flag :job
+          :candidates {:unless :state :order :listed}
+          :empty "no CronJob is suspended"}
+ :prerequisites {:installed-tools ["kubectl" "fzf"]
+                 :cluster-capabilities []
+                 :kubectl-can-get ["cronjobs"]
+                 :kubectl-can-patch ["cronjobs"]}
+ :state {:holds [:not [:field [:spec :suspend] := true]]
+         :says "CronJob {target} is resumed"
+         :timeout 30 :interval 3}
+ :refuse [{:when [:state] :says "it is not suspended"}]
+ :confirm {:action "resume a CronJob" :destructive? false}
+ :items [:call :gumshoe.workloads/suspend-items [:object] false]
+ :announce "Resume CronJob {target}"
+ :effect [[:kubectl :patch {:resource "cronjob" :merge {:spec {:suspend false}}}]]}

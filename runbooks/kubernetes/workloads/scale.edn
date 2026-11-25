@@ -1,0 +1,30 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; scale.clj written in the gumshoe.dsl vocabulary; gumshoe.dsl/compile
+;; makes a change of it that runs as the book does.
+{:gumshoe/dsl 0
+ :description "Scales a Deployment or StatefulSet to a replica count"
+ :target {:pick :one :label "Workload" :flag :pick
+          :parse :gumshoe.workloads/parse-pick
+          :invalid "the pick is not \"<Kind> <namespace>/<name>\" of a Deployment or StatefulSet"
+          :candidates [:call :gumshoe.workloads/scalable-picks [:context]]
+          :empty "no Deployment or StatefulSet to scale"
+          :gone "the workload no longer exists"}
+ :options {:pick {:desc "\"<Kind> <namespace>/<name>\" - interactive selection when omitted"}
+           :replicas {:desc "The replica count to scale to" :alias :r :coerce :long}}
+ :prerequisites {:installed-tools ["kubectl" "fzf"]
+                 :cluster-capabilities []
+                 :kubectl-can-get ["deployments" "statefulsets" "horizontalpodautoscalers"]
+                 :kubectl-can-patch ["deployments" "statefulsets"]}
+ :reads {:hpas [:list "horizontalpodautoscalers" {:namespace [:ref :namespace]}]}
+ :values {:replicas [:opt :replicas]}
+ :state {:holds [:call :gumshoe.workloads/scaled? [:object] [:value :replicas]]
+         :says "{target} runs {value.replicas} ready replica(s)"
+         :timeout 600 :interval 10}
+ :refuse [{:reason [:call :gumshoe.workloads/scale-refusal-given
+                    [:ref :kind] [:object] [:read :hpas] [:value :replicas]]}]
+ :confirm {:action "scale a workload" :destructive? false}
+ :items [:call :gumshoe.workloads/scale-items [:ref :kind] [:object] [:value :replicas]]
+ :announce "Scale {target} to {value.replicas} replica(s)"
+ :effect [[:kubectl :scale {:replicas [:value :replicas]}]]}

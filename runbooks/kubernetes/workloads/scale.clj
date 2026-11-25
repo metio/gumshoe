@@ -13,14 +13,8 @@
   [context {:keys [namespace]}]
   (kubectl/get-namespaced-result context namespace "horizontalpodautoscalers"))
 
-(defn- candidates
-  [context]
-  (workloads/picks (for [[type kind] workloads/types :when (workloads/scalable-kinds kind)]
-                     [kind (kubectl/get-all context type)])
-                   (constantly true)))
-
 (def selection
-  {:mode :one :label "Workload" :flag :pick :candidates candidates})
+  {:mode :one :label "Workload" :flag :pick :candidates workloads/scalable-picks})
 
 (mutation/book
  {:description "Scales a Deployment or StatefulSet to a replica count"

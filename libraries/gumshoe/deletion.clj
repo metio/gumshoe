@@ -4,10 +4,13 @@
 (ns gumshoe.deletion
   "The decisions behind the delete runbook, pure over what it fetched: which
    objects can be picked, what depends on the one picked, and what the
-   confirmation says. A pick names one object as \"<type> <namespace>/<name>\"."
+   confirmation says. A pick names one object as \"<type> <namespace>/<name>\".
+   The reads that fetch it (candidates, read-dependents, dry-run) sit apart
+   at the end, so the book and its gumshoe.dsl form read the same way."
   (:require [clojure.string :as str]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.pick :as pick]))
+            [gumshoe.pick :as pick]
+            [gumshoe.shell :as shell]))
 
 (def types
   "The namespaced types the runbook deletes."
@@ -121,3 +124,25 @@
   "Whether the object is gone, or on its way out."
   [object]
   (or (nil? object) (some? (-> object :metadata :deletionTimestamp))))
+
+;; --- the reads ------------------------------------------------------------------
+
+(defn candidates
+  "The picks over every listed type in every namespace of context."
+  [context]
+  (picks (into {} (for [type types] [type (kubectl/get-all context type)]))))
+
+(def ^:private evidence-types ["pods" "jobs" "ingresses" "deployments" "statefulsets" "daemonsets" "cronjobs"])
+
+(defn read-dependents
+  "dependents of the object a ref names, over what its namespace holds now."
+  [context {:keys [namespace] :as ref}]
+  (dependents ref (into {} (for [type evidence-types]
+                             [type (kubectl/get-namespaced context namespace type)]))))
+
+(defn dry-run
+  "A server-side dry run of deleting the object a ref names: admission
+   webhooks and policies judge it and nothing changes, so its refusal is the
+   real delete's refusal."
+  [context ref]
+  (dry-run-result (apply shell/execute "kubectl" (str "--context=" context) (dry-run-args ref))))

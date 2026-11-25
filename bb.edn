@@ -62,6 +62,8 @@
                    [gumshoe.mutation-subject-test]
                    [gumshoe.change-test]
                    [gumshoe.change-compose-test]
+                   [gumshoe.dsl-test]
+                   [gumshoe.dsl-books-test]
                    [gumshoe.mutation-pick-test]
                    [gumshoe.mutation-subjects-test]
                    [gumshoe.mutation-recheck-test]
@@ -247,6 +249,8 @@
                                                          'gumshoe.mutation-subject-test
                                                          'gumshoe.change-test
                                                          'gumshoe.change-compose-test
+                                                         'gumshoe.dsl-test
+                                                         'gumshoe.dsl-books-test
                                                          'gumshoe.mutation-pick-test
                                                          'gumshoe.mutation-subjects-test
                                                          'gumshoe.mutation-recheck-test
