@@ -274,13 +274,18 @@
 
 (def ^:private named-pool (vec (for [i (range 3)] (fn [_] i))))
 
+(def ^:private effect-pool
+  "The effects a part may carry: plain ones, and one marked destructive, so
+   a part's :destructive? false meets it in every grouping."
+  (conj named-pool (change/destructive "test/delete" (fn [_] :deleted))))
+
 (def ^:private gen-part
   "A part over every rule: guards and post-checks, named reads and values
    that may clash, a single-valued effect and title, subjects and reasons."
   (gen/let [guard gen-guard-part
             reads (gen/map (gen/elements [:a :b]) (gen/elements named-pool) {:max-elements 2})
             values (gen/map (gen/elements [:c :d :a]) (gen/elements named-pool) {:max-elements 2})
-            effect (gen/one-of [(gen/return nil) (gen/elements named-pool)])
+            effect (gen/one-of [(gen/return nil) (gen/elements effect-pool)])
             title (gen/elements [nil "t" "u"])
             refs (gen/one-of [(gen/return nil)
                               (gen/elements (vec (for [n ["x" "y" "z"]] (fn [_] [{:type "pods" :name n}]))))])
@@ -332,3 +337,19 @@
                        (= (behaviour #(change/compose base)) (behaviour #(change/compose base base)))
                        (= (behaviour #(change/compose base overlay))
                           (behaviour #(change/compose base overlay overlay)))))))))
+
+(deftest a-destructive-effect-is-never-confirmed-with-a-keypress-however-the-parts-group
+  (let [contradictions (atom 0)]
+    (check! 300
+            (prop/for-all [parts (gen/vector gen-part 1 4)]
+              (let [marked? (some #(change/destructive-effect? (:effect %)) parts)
+                    says-false? (some #(false? (get-in % [:confirm :destructive?])) parts)
+                    composed (try (apply change/compose parts)
+                                  (catch clojure.lang.ExceptionInfo e
+                                    (when (re-find #"destroys what it acts on" (ex-message e))
+                                      (swap! contradictions inc))
+                                    :refused))]
+                (or (= :refused composed)
+                    (not marked?)
+                    (and (not says-false?) (true? (get-in composed [:confirm :destructive?])))))))
+    (is (pos? @contradictions) "the generator composes a false beside a destructive effect")))

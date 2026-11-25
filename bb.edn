@@ -63,6 +63,7 @@
                    [gumshoe.mutation-subject-test]
                    [gumshoe.change-test]
                    [gumshoe.change-compose-test]
+                   [gumshoe.change-destructive-test]
                    [gumshoe.dsl-test]
                    [gumshoe.dsl-books-test]
                    [gumshoe.edn-book-test]
@@ -252,6 +253,7 @@
                                                          'gumshoe.mutation-subject-test
                                                          'gumshoe.change-test
                                                          'gumshoe.change-compose-test
+                                                         'gumshoe.change-destructive-test
                                                          'gumshoe.dsl-test
                                                          'gumshoe.dsl-books-test
                                                          'gumshoe.edn-book-test

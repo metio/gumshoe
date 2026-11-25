@@ -13,8 +13,9 @@
 
    A builder whose effect destroys what it acts on marks the effect with
    gumshoe.change/destructive instead of returning a :confirm, so the step
-   is confirmed with a typed yes whatever the caller's :confirm says, and a
-   caller that merges its own :confirm with the fragment keeps its action."
+   is confirmed with a typed yes, and a caller that merges its own :confirm
+   with the fragment keeps its action. A caller saying :destructive? false
+   beside such a step is refused when the step is normalized or composed."
   (:require [gumshoe.change :as change]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]))
@@ -48,7 +49,7 @@
   "The :items, :effect and :verify of a step that deletes the objects
    `(objects ctx)` returns and proves each one gone. The effect is marked
    destructive (gumshoe.change/destructive), so the step always asks for a
-   typed yes.
+   typed yes, and a :confirm :destructive? false beside it is refused.
 
      :objects  (fn [ctx] -> [{:type :namespace :name} ..])
      :none     what there is when there are no objects, as in
@@ -64,6 +65,7 @@
               (or (seq (map (comp item line) (objects ctx)))
                   [(str none " to delete")]))
      :effect (change/destructive
+              "gumshoe.steps.objects/delete"
               (fn [{:keys [context] :as ctx}]
                 (delete-effect context (objects ctx) none)))
      :verify (fn [{:keys [context] :as ctx}]

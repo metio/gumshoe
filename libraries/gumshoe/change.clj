@@ -122,7 +122,9 @@
    :many select, :connect with any subject, :derive beside :values or
    :recheck beside :reads, either alias beside a named entry, a :reads or
    :values that is not a map of keyword to function, a name the engine
-   binds itself or both maps bind, and a reserved name in the wrong map. mutation/book normalizes
+   binds itself or both maps bind, a reserved name in the wrong map, and an
+   :effect marked destructive beside :confirm :destructive? false (see
+   destructive). mutation/book normalizes
    when the book loads, so such a book fails the conformance gate.
 
    compose combines several specs - a builder's fragment and the caller's
@@ -148,7 +150,10 @@
                         and a ref two of them return is refused when they are
                         computed; a :pick or :reads entry is single-valued
      :confirm           merged key by key: :destructive? and :separately?
-                        are OR-ed, every other key is single-valued
+                        are OR-ed, every other key is single-valued; a
+                        part saying :destructive? false is refused beside
+                        a part whose :effect is marked destructive, in
+                        every grouping of the parts
      :prerequisites     joined as gumshoe.prerequisites/union joins them
      :options           joined by name; an option two parts declare with a
                         different :coerce, :alias or :default is refused
@@ -222,24 +227,39 @@
    :reads or :values entry may hide."
   #{:context :cluster :target :opts :announcement-data :ref :object :refs :objects})
 
+(def ^:private unnamed-effect "marked by gumshoe.change/destructive")
+
 (defn destructive
-  "f, an :effect function, marked as one that destroys what it acts on. A
-   spec whose :effect is marked is destructive whatever its :confirm says:
-   normalize and compose set its :confirm :destructive? to true, and
+  "f, an :effect function, marked as one that destroys what it acts on, and
+   named `effect` (a string, such as \"gumshoe.steps.objects/delete\") for
+   the refusal below. A spec whose :effect is marked is destructive:
+   normalize and compose set an absent :confirm :destructive? to true, and
    destructive? reads the mark on a spec neither has seen. A builder marks
    the effect rather than returning a :confirm of its own, so a caller that
    merges its own :confirm with the builder's fragment, in either order,
    keeps its action and cannot turn the confirmation into a bare keypress.
-   A caller that replaces the :effect replaces the mark with it."
-  [f]
-  (if (true? (::destructive (meta f)))
-    f
-    (vary-meta f assoc ::destructive true)))
+   A caller that says :destructive? false beside the mark is refused
+   (destructive-contradiction), since a run would otherwise ask for a typed
+   yes the author said it would not. A caller that replaces the :effect
+   replaces the mark with it."
+  ([f] (destructive nil f))
+  ([effect f]
+   (let [m (meta f)]
+     (if (and (true? (::destructive m)) (or (nil? effect) (= effect (::effect m))))
+       f
+       (vary-meta f assoc ::destructive true ::effect (or effect (::effect m)))))))
 
 (defn destructive-effect?
   "Whether f is an :effect function marked by destructive."
   [f]
   (and (fn? f) (true? (::destructive (meta f)))))
+
+(defn destructive-effect
+  "The name of f as a refusal names a destructive effect, or nil when f is
+   not marked by destructive."
+  [f]
+  (when (destructive-effect? f)
+    (or (::effect (meta f)) unnamed-effect)))
 
 (defn destructive?
   "Whether a spec, canonical or not, is destructive: its :confirm says so,
@@ -247,6 +267,19 @@
   [spec]
   (or (true? (get-in spec [:confirm :destructive?]))
       (destructive-effect? (:effect spec))))
+
+(defn destructive-contradiction
+  "Why a change is refused whose effect `effect` (its name, nil when no
+   effect of the change destroys anything) destroys what it acts on while
+   its :confirm says :destructive? `stated`, or nil when the two agree. An
+   absent or true :destructive? agrees with every effect, and only an
+   explicit false beside a destructive effect contradicts it. normalize,
+   compose and gumshoe.dsl/compile all refuse through this check, so a
+   change is refused in the same words whichever way it was written."
+  [effect stated]
+  (when (and (some? effect) (false? stated))
+    (format "the :effect %s destroys what it acts on, and the :confirm says :destructive? false, which would confirm it with a bare keypress - drop :destructive? false"
+            effect)))
 
 (defn- invalid!
   [message data]
@@ -256,6 +289,22 @@
   "Whether e is normalize refusing a spec."
   [e]
   (boolean (::invalid (ex-data e))))
+
+(defn- stated-destructive
+  "What a :confirm says of :destructive?: false when it, or a part compose
+   OR-ed into it, said false, else its value. compose keeps a part's false
+   on the :confirm it OR-s to true, so a destructive effect composed in
+   later is refused in every grouping of the parts."
+  [confirm]
+  (if (::stated-false (meta confirm)) false (:destructive? confirm)))
+
+(defn- check-destructive!
+  "Refuses spec when its :effect is marked destructive and its :confirm
+   says :destructive? false."
+  [{:keys [effect confirm]}]
+  (let [named (destructive-effect effect)]
+    (when-let [why (destructive-contradiction named (stated-destructive confirm))]
+      (invalid! why {:effect named :confirm confirm}))))
 
 (defn- canonical-subjects?
   [x]
@@ -438,6 +487,7 @@
         reads (named-of spec :reads :recheck recheck-entry)
         values (named-of spec :values :derive derive-entry)
         done (done-of spec)
+        _ (check-destructive! spec)
         canonical (cond-> (dissoc spec :subject :subjects :pin :precondition :refusal
                                   :empty-message :announce? :announce :select
                                   :derive :recheck :reads :values :done :satisfied?)
@@ -597,14 +647,18 @@
 
 (defn- combine-confirm
   [a b]
-  (not-empty
-   (into {}
-         (keep (fn [k]
-                 (let [v (if (#{:destructive? :separately?} k)
-                           (either-true (get a k) (get b k))
-                           (single [:confirm k] (get a k) (get b k)))]
-                   (when (some? v) [k v]))))
-         (distinct (concat (keys a) (keys b))))))
+  (let [combined (not-empty
+                  (into {}
+                        (keep (fn [k]
+                                (let [v (if (#{:destructive? :separately?} k)
+                                          (either-true (get a k) (get b k))
+                                          (single [:confirm k] (get a k) (get b k)))]
+                                  (when (some? v) [k v]))))
+                        (distinct (concat (keys a) (keys b)))))]
+    (cond-> combined
+      (and (true? (:destructive? combined))
+           (some #(false? (stated-destructive %)) [a b]))
+      (vary-meta assoc ::stated-false true))))
 
 (def ^:private option-identity [:coerce :alias :default])
 
@@ -718,4 +772,5 @@
   [& parts]
   (doto (reduce combine (map canonical (remove nil? parts)))
     (check-entries-apart!)
-    (check-reasons!)))
+    (check-reasons!)
+    (check-destructive!)))
