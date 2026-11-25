@@ -355,6 +355,34 @@
       (is (str/includes? (first (problems (fn [_] (throw (ex-info "boom" {}))) one)) "throws"))
       (is (= ["declares a :pin that is not a function"] (problems {:type "x"} one))))))
 
+(deftest an-alias-and-its-canonical-key-get-the-same-findings
+  (let [one {:mode :one :label "Namespace" :flag :namespace}
+        stray (fn [_] {:type "databases" :namespace "default" :name "moodle"})
+        judged #(conformance/spec-problems {:spec % :select one})]
+    (doseq [[label alias canonical]
+            [["a pin that ignores the picked namespace"
+              (assoc complete-spec :pin stray)
+              (assoc complete-spec :subjects [{:from :reads :ref stray}])]
+             ["a pin that is no function"
+              (assoc complete-spec :pin {:type "x"})
+              (assoc complete-spec :subjects [{:from :reads :ref {:type "x"}}])]
+             ["a pin on the subject's ref"
+              (assoc complete-spec :subject {:type "cronjobs"} :pin (fn [{:keys [ref]}] ref))
+              (assoc complete-spec :subjects [{:from :pick :type "cronjobs"} {:from :reads :ref (fn [{:keys [ref]}] ref)}])]
+             ["a precondition and a missing post-check"
+              (-> complete-spec (dissoc :verify) (assoc :precondition (constantly true)))
+              (-> complete-spec (dissoc :verify) (assoc :refusal (constantly nil)))]]]
+      (testing label
+        (is (= (judged alias) (judged canonical)))))
+    (is (seq (judged (assoc complete-spec :pin stray))) "the pin is judged at all")))
+
+(deftest a-spec-normalize-refuses-is-one-finding
+  (is (= ["is refused: the spec has two empty messages, \"a\" at the top and \"b\" in :select - keep the one in :select"]
+         (conformance/spec-problems {:spec (assoc complete-spec :empty-message "a" :select {:mode :one :empty-message "b"})
+                                     :select nil})))
+  (is (= ["is refused: a :subject, :subjects or :pin reads its objects with kubectl, so a spec with :connect takes neither"]
+         (conformance/spec-problems {:spec (assoc complete-spec :connect identity :subject {:type "x"}) :select nil}))))
+
 (def ^:private contract-library
   (str header
        "(ns casebook.contract.steps\n"
