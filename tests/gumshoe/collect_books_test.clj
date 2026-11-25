@@ -10,7 +10,8 @@
    The golden file pins what each book reports for a fixed collection: its exit
    value, its stdout and stderr, the collector calls it made and the evidence
    its detectives were handed. Set GUMSHOE_RECORD_GOLDEN=1 to rewrite it."
-  (:require [clojure.edn :as edn]
+  (:require [cheshire.core :as json]
+            [clojure.edn :as edn]
             [clojure.pprint :as pprint]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
@@ -198,7 +199,7 @@
                         "no password" {:stubs {#'secrets/password (recording :password nil)}}}}
    "thanos" {:path "tools/thanos/runbooks/scan.clj"
              :opts {:selector "app.kubernetes.io/name=thanos-query" :port-name "http" :port 19090}
-             :stubs (fn [evidence] {#'kubectl/get-selected (recording :get-selected {:items []})
+             :stubs (fn [evidence] {#'kubectl/get-selected (recording :get-selected {:items [{:metadata {:namespace "monitoring" :name "thanos-query"}}]})
                                     #'interact/choose-namespaced (recording :choose "monitoring/thanos-query")
                                     #'kubectl/find-item (constantly {})
                                     #'kubectl/service-port-or-first (constantly 9090)
