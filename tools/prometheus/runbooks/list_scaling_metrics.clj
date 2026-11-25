@@ -14,11 +14,14 @@
 
 (defn- list-scaling-metrics
   [_opts _ctx]
-  (let [metrics (kubectl/hpa-scaling-metrics (kubectl/get-all (kubectl/current-context) "horizontalpodautoscalers"))]
-    (if (empty? metrics)
-      (stdout/ok "no HorizontalPodAutoscaler uses any metrics")
-      (run! println metrics))
-    true))
+  (let [{:keys [doc unread]} (kubectl/read-all (kubectl/current-context) "horizontalpodautoscalers")]
+    (if unread
+      (do (stdout/error (str "could not read the horizontalpodautoscalers of the cluster - " unread)) false)
+      (let [metrics (kubectl/hpa-scaling-metrics doc)]
+        (if (empty? metrics)
+          (stdout/ok "no HorizontalPodAutoscaler uses any metrics")
+          (run! println metrics))
+        true))))
 
 (runbook/execute!
  {:description "Lists every metric used by HorizontalPodAutoscalers for scaling decisions"

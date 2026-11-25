@@ -495,6 +495,23 @@
   [context type]
   (get-json context type "--all-namespaces"))
 
+(defn read-all
+  "{:doc <the parsed list>} of every object of type in every namespace, or
+   {:unread <why>} when the read did not answer or the server has no such
+   resource type. A book that reports on what the list holds reads through
+   here, so a failed read is never taken for an empty cluster."
+  [context type]
+  (try
+    (let [{:keys [ok? doc]} (binding [*strict-reads* true]
+                              (get-json-result context type "--all-namespaces"))]
+      (if ok?
+        {:doc doc}
+        {:unread (format "the server has no %s resource" type)}))
+    (catch clojure.lang.ExceptionInfo e
+      (if (::unread (ex-data e))
+        {:unread (ex-message e)}
+        (throw e)))))
+
 (defn label-selector-matches?
   "Whether a metav1.LabelSelector selects labels. An empty selector selects
    everything and a nil one nothing, as the API defines them."

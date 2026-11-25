@@ -14,12 +14,15 @@
 
 (defn- list-image-pull-back-off
   [_opts _ctx]
-  (let [pods (kubectl/pods-with-image-pull-back-off (kubectl/get-all (kubectl/current-context) "pods"))]
-    (if (empty? pods)
-      (stdout/ok "no pod is in ImagePullBackOff")
-      (doseq [pod pods]
-        (println pod)))
-    true))
+  (let [{:keys [doc unread]} (kubectl/read-all (kubectl/current-context) "pods")]
+    (if unread
+      (do (stdout/error (str "could not read the pods of the cluster - " unread)) false)
+      (let [pods (kubectl/pods-with-image-pull-back-off doc)]
+        (if (empty? pods)
+          (stdout/ok "no pod is in ImagePullBackOff")
+          (doseq [pod pods]
+            (println pod)))
+        true))))
 
 (runbook/execute!
  {:description "Lists every pod that cannot pull its container image"
