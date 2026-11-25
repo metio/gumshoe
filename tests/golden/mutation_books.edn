@@ -1136,7 +1136,21 @@
    :step "cordon (mark unschedulable) a node",
    :plan [[:kubectl "ctx" "cordon" "n1"]],
    :precondition
-   {:result false, :out "refusing: it changed after the confirmation"},
+   {:result false,
+    :out "refusing: its spec changed after the confirmation"},
+   :announce "Cordon node n1",
+   :checks
+   [{:description "node n1 is unschedulable",
+     :timeout nil,
+     :interval nil,
+     :holds false}]},
+  :status-updated
+  {:action "cordon (mark unschedulable) a node",
+   :destructive? false,
+   :items ["n1"],
+   :step "cordon (mark unschedulable) a node",
+   :plan [[:kubectl "ctx" "cordon" "n1"]],
+   :precondition {:result true, :out ""},
    :announce "Cordon node n1",
    :checks
    [{:description "node n1 is unschedulable",
@@ -1177,6 +1191,21 @@
     "  kubectl get: nodes"
     "  kubectl patch: nodes"],
    :candidates {:permitted ["n1"], :refused []}},
+  :tainted
+  {:action "cordon (mark unschedulable) a node",
+   :destructive? false,
+   :items ["n1"],
+   :step "cordon (mark unschedulable) a node",
+   :plan [[:kubectl "ctx" "cordon" "n1"]],
+   :precondition
+   {:result false,
+    :out "refusing: its spec changed after the confirmation: taints"},
+   :announce "Cordon node n1",
+   :checks
+   [{:description "node n1 is unschedulable",
+     :timeout nil,
+     :interval nil,
+     :holds false}]},
   :unanswered
   {:action "cordon (mark unschedulable) a node",
    :destructive? false,
@@ -1326,7 +1355,34 @@
      "--delete-emptydir-data"
      "--grace-period=-1"]],
    :precondition
-   {:result false, :out "refusing: it changed after the confirmation"},
+   {:result false,
+    :out "refusing: its spec changed after the confirmation"},
+   :announce "Drain node n1",
+   :checks
+   [{:description "node n1 is unschedulable",
+     :timeout nil,
+     :interval nil,
+     :holds true}
+    {:description "no evictable pods remain on node n1",
+     :timeout 120,
+     :interval 10,
+     :holds false}]},
+  :status-updated
+  {:action
+   "drain a node - every pod on it is evicted and emptyDir data is deleted",
+   :destructive? true,
+   :items ["n1"],
+   :step
+   "drain a node - every pod on it is evicted and emptyDir data is deleted",
+   :plan
+   [[:kubectl
+     "ctx"
+     "drain"
+     "n1"
+     "--ignore-daemonsets"
+     "--delete-emptydir-data"
+     "--grace-period=-1"]],
+   :precondition {:result true, :out ""},
    :announce "Drain node n1",
    :checks
    [{:description "node n1 is unschedulable",
@@ -1378,6 +1434,34 @@
     "  kubectl patch: nodes"
     "  kubectl delete: pods"],
    :candidates {:permitted ["n1"], :refused ["n1"]}},
+  :tainted
+  {:action
+   "drain a node - every pod on it is evicted and emptyDir data is deleted",
+   :destructive? true,
+   :items ["n1"],
+   :step
+   "drain a node - every pod on it is evicted and emptyDir data is deleted",
+   :plan
+   [[:kubectl
+     "ctx"
+     "drain"
+     "n1"
+     "--ignore-daemonsets"
+     "--delete-emptydir-data"
+     "--grace-period=-1"]],
+   :precondition
+   {:result false,
+    :out "refusing: its spec changed after the confirmation: taints"},
+   :announce "Drain node n1",
+   :checks
+   [{:description "node n1 is unschedulable",
+     :timeout nil,
+     :interval nil,
+     :holds true}
+    {:description "no evictable pods remain on node n1",
+     :timeout 120,
+     :interval 10,
+     :holds false}]},
   :unanswered
   {:action
    "drain a node - every pod on it is evicted and emptyDir data is deleted",
@@ -1584,7 +1668,43 @@
    :precondition
    {:result false,
     :out
-    "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n────────────────────────────────────────────────────────────────────────────────\nnode       : cp-1\ncontainer  : abc123\nstarted-at : <instant>\nrefusing: it changed after the confirmation"},
+    "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n────────────────────────────────────────────────────────────────────────────────\nnode       : cp-1\ncontainer  : abc123\nstarted-at : <instant>\nrefusing: its spec changed after the confirmation"},
+   :announce "Restart kube-apiserver on cp-1",
+   :checks
+   [{:description
+     "kube-apiserver was replaced and answers /readyz (was abc123)",
+     :timeout 180,
+     :interval 5,
+     :holds false}]},
+  :status-updated
+  {:action
+   "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
+   :destructive? true,
+   :items ["cp-1"],
+   :step
+   "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
+   :plan
+   [[:ssh
+     {:host "cp-1", :user nil, :needs-sudo? true}
+     "sudo"
+     "crictl"
+     "config"
+     "--set"
+     "runtime-endpoint=unix:///run/containerd/containerd.sock"
+     "--set"
+     "image-endpoint=unix:///run/containerd/containerd.sock"
+     "--set"
+     "timeout=10"]
+    [:ssh
+     {:host "cp-1", :user nil, :needs-sudo? true}
+     "sudo"
+     "crictl"
+     "stop"
+     "abc123"]],
+   :precondition
+   {:result true,
+    :out
+    "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n────────────────────────────────────────────────────────────────────────────────\nnode       : cp-1\ncontainer  : abc123\nstarted-at : <instant>"},
    :announce "Restart kube-apiserver on cp-1",
    :checks
    [{:description
@@ -1631,6 +1751,42 @@
     "  tools: kubectl, fzf, ssh"
     "  kubectl get: nodes"],
    :candidates {:permitted ["cp-1"], :refused ["cp-1"]}},
+  :tainted
+  {:action
+   "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
+   :destructive? true,
+   :items ["cp-1"],
+   :step
+   "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
+   :plan
+   [[:ssh
+     {:host "cp-1", :user nil, :needs-sudo? true}
+     "sudo"
+     "crictl"
+     "config"
+     "--set"
+     "runtime-endpoint=unix:///run/containerd/containerd.sock"
+     "--set"
+     "image-endpoint=unix:///run/containerd/containerd.sock"
+     "--set"
+     "timeout=10"]
+    [:ssh
+     {:host "cp-1", :user nil, :needs-sudo? true}
+     "sudo"
+     "crictl"
+     "stop"
+     "abc123"]],
+   :precondition
+   {:result false,
+    :out
+    "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n────────────────────────────────────────────────────────────────────────────────\nnode       : cp-1\ncontainer  : abc123\nstarted-at : <instant>\nrefusing: its spec changed after the confirmation: taints"},
+   :announce "Restart kube-apiserver on cp-1",
+   :checks
+   [{:description
+     "kube-apiserver was replaced and answers /readyz (was abc123)",
+     :timeout 180,
+     :interval 5,
+     :holds false}]},
   :unanswered
   {:action
    "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
@@ -1728,7 +1884,21 @@
    :step "uncordon (mark schedulable) a node",
    :plan [[:kubectl "ctx" "uncordon" "n1"]],
    :precondition
-   {:result false, :out "refusing: it changed after the confirmation"},
+   {:result false,
+    :out "refusing: its spec changed after the confirmation"},
+   :announce "Uncordon node n1",
+   :checks
+   [{:description "node n1 is schedulable",
+     :timeout nil,
+     :interval nil,
+     :holds false}]},
+  :status-updated
+  {:action "uncordon (mark schedulable) a node",
+   :destructive? false,
+   :items ["n1"],
+   :step "uncordon (mark schedulable) a node",
+   :plan [[:kubectl "ctx" "uncordon" "n1"]],
+   :precondition {:result true, :out ""},
    :announce "Uncordon node n1",
    :checks
    [{:description "node n1 is schedulable",
@@ -1765,6 +1935,21 @@
     "  kubectl get: nodes"
     "  kubectl patch: nodes"],
    :candidates {:permitted ["n1"], :refused []}},
+  :tainted
+  {:action "uncordon (mark schedulable) a node",
+   :destructive? false,
+   :items ["n1"],
+   :step "uncordon (mark schedulable) a node",
+   :plan [[:kubectl "ctx" "uncordon" "n1"]],
+   :precondition
+   {:result false,
+    :out "refusing: its spec changed after the confirmation: taints"},
+   :announce "Uncordon node n1",
+   :checks
+   [{:description "node n1 is schedulable",
+     :timeout nil,
+     :interval nil,
+     :holds false}]},
   :unanswered
   {:action "uncordon (mark schedulable) a node",
    :destructive? false,

@@ -12,7 +12,7 @@
      {:title .. :description .. :options {..} :prerequisites {..}
       :connect  (fn [opts] -> {:context :cluster :announce-as} or nil)
       :select   {:mode .. :label .. :candidates .. :empty-message \"...\" ..}
-      :subjects [{:from :pick   :type .. :parse .. :invalid .. :facts ..}
+      :subjects [{:from :pick   :type .. :parse .. :invalid .. :facts .. :compare ..}
                  {:from :target :refs (fn [ctx] -> refs)}
                  {:from :reads  :ref  (fn [ctx] -> ref or nil)}]
       :reads    {name (fn [ctx] -> value)}
@@ -117,7 +117,7 @@
    normalize refuses, with an ex-info carrying ::invalid, a spec that names
    one thing two ways or that the engine could not run as written: a
    canonical :subjects beside :subject or :pin, an unknown or repeated
-   :from, two different empty messages, a changelog message beside
+   :from, a :compare no pin understands, two different empty messages, a changelog message beside
    :announce? false, a :recheck with nothing to judge it, a :subject on a
    :many select, :connect with any subject, :derive beside :values or
    :recheck beside :reads, either alias beside a named entry, a :reads or
@@ -176,6 +176,36 @@
   ::unmet)
 
 (def ^:private sources #{:pick :target :reads})
+
+(def comparisons
+  "What a pin may compare on an object that carries no metadata.generation,
+   named by :compare on a :pick subject or on a ref a :target or :reads
+   entry returns:
+     :resource-version  every write to the object, status included; the
+                        default, so a type nothing is declared for fails
+                        closed
+     :spec              the object's spec and uid, for a type whose API
+                        server never sets a generation although the type
+                        splits what a user asks for (spec) from what a
+                        controller reports (status). A Node is one: the
+                        kubelet writes its status every few seconds, and
+                        its spec holds what a change to its scheduling
+                        rests on (unschedulable, taints, podCIDR,
+                        providerID). A drift refusal names the spec keys
+                        that moved.
+   An object that carries a generation is compared by it whatever :compare
+   says, since the API server raises it on every spec change. Metadata
+   (labels, annotations) is outside :spec; a change resting on it names it
+   with :facts, or judges it in its :refusal over the object read again."
+  #{:resource-version :spec})
+
+(defn compare-problem
+  "Why compare is not a :compare a pin understands, or nil for one of
+   comparisons and for nil."
+  [compare]
+  (when-not (or (nil? compare) (contains? comparisons compare))
+    (format "a pin compares %s - write :compare %s"
+            (pr-str compare) (str/join " or " (map pr-str (sort comparisons))))))
 
 (def derive-entry
   "The name of the :values entry a :derive alias becomes: a value whose map
@@ -252,8 +282,14 @@
           (invalid! (format "the spec names its subjects in :subjects and again as %s - write one or the other" alias)
                     {:alias alias}))
         (check-entries! subjects)
+        (doseq [entry subjects
+                :let [why (compare-problem (:compare entry))]
+                :when why]
+          (invalid! why {:entry entry}))
         (vec subjects))
     (let [{:keys [subject pin]} spec]
+      (when-let [why (and (map? subject) (compare-problem (:compare subject)))]
+        (invalid! why {:subject subject}))
       (cond-> []
         (some? subject) (conj (assoc subject :from :pick))
         (some? subjects) (conj {:from :target :refs subjects})

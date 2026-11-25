@@ -56,6 +56,8 @@
       :type \"cronjobs\"            ; the resource type of the picked object, or
       :parse :ns/parser           ; a registered :parse function making the ref
       :invalid \"...\"              ; why a pick that does not parse is refused
+      :compare :spec              ; what the pin compares on an object without
+                                  ; metadata.generation, see below
       :flag :node                 ; :one
       :namespace-flag :namespace :name-flag :job   ; :namespaced
       :preview \"kubectl describe node {}\"          ; :one, optional
@@ -64,6 +66,11 @@
       :empty \"...\"                ; when nothing can be picked
       :gone \"...\"}                ; the refusal of an object that no longer
                                   ; exists, \"the <label> no longer exists\"
+   :compare names what the subject pin compares on an object the API server
+   gives no generation (gumshoe.change/comparisons): resourceVersion when
+   absent, so every write refuses the change, or :spec for a type that
+   splits spec from status, such as \"nodes\", whose status the kubelet
+   writes every few seconds.
    {:unless :state} lists every object of :type and offers those not in
    the target state yet, in the order the API lists them or sorted.
 
@@ -432,8 +439,8 @@
 ;; --- the target ----------------------------------------------------------------------
 
 (def ^:private target-keys
-  {:one #{:pick :label :type :parse :invalid :flag :preview :candidates :empty :gone}
-   :namespaced #{:pick :label :type :parse :invalid :namespace-flag :name-flag :candidates :empty :gone}})
+  {:one #{:pick :label :type :parse :invalid :compare :flag :preview :candidates :empty :gone}
+   :namespaced #{:pick :label :type :parse :invalid :compare :namespace-flag :name-flag :candidates :empty :gone}})
 
 (defn- check-target!
   [{:keys [pick label type parse flag namespace-flag name-flag] :as target}]
@@ -447,6 +454,10 @@
       (invalid! path (str "the target names neither the :type of the picked object nor a :parse making a ref of the pick,"
                           " so the change could not pin it, read it again after the confirmation and refuse it when it moved")))
     (when (some? type) (non-blank! (conj path :type) type "the target's :type"))
+    (when (contains? target :compare)
+      (when-let [why (or (when (nil? (:compare target)) "a pin compares nil - drop :compare, or write :compare :spec")
+                         (change/compare-problem (:compare target)))]
+        (invalid! (conj path :compare) why)))
     (doseq [k [:invalid :preview :empty :gone] :when (contains? target k)]
       (non-blank! (conj path k) (get target k) (str "the target's " k)))
     (case pick
@@ -818,7 +829,8 @@
     (let [subject (cond-> {:from :pick}
                     (:type target) (assoc :type (:type target))
                     parse (assoc :parse parse)
-                    (:invalid target) (assoc :invalid (:invalid target)))
+                    (:invalid target) (assoc :invalid (:invalid target))
+                    (:compare target) (assoc :compare (:compare target)))
           says (when state (template [:state :says] (:says state) pure))
           spec (cond-> {:description description
                         :options options
