@@ -594,7 +594,13 @@
       :url "https://whisker.example.org",
       :window 600}]]}},
  "loki"
- {"clean edn"
+ {"candidates unanswered"
+  {:result false,
+   :stdout "",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings.\n❌ no Loki namespace - set [:loki :namespace] in env.edn, pass --namespace, or check --selector\n",
+   :calls []},
+  "clean edn"
   {:result true,
    :stdout
    {:findings [],
@@ -724,6 +730,12 @@
       "rings" {},
       "url" "http://localhost:13100",
       "workloads" []}]]},
+  "no candidates"
+  {:result false,
+   :stdout "",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings.\n❌ no Loki namespace - set [:loki :namespace] in env.edn, pass --namespace, or check --selector\n",
+   :calls []},
   "no distributor"
   {:result true,
    :stdout
@@ -1371,7 +1383,13 @@
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when you need to trust the backups - that each restic repository is readable, actually populated, and has a recent enough snapshot.\n❌ --warn-days must be smaller than --critical-days\n",
    :calls [[:password "restic/pw"]]}},
  "thanos"
- {"clean edn"
+ {"candidates unanswered"
+  {:result false,
+   :stdout "",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when long-range queries or recording rules misbehave - Thanos query readiness, its store endpoints, and rule health.\n❌ no Thanos Query service selected - check --selector\n",
+   :calls []},
+  "clean edn"
   {:result true,
    :stdout
    {:findings [],
@@ -1491,6 +1509,12 @@
       "rules" [],
       "stores" [],
       "url" "http://localhost:19090"}]]},
+  "no candidates"
+  {:result false,
+   :stdout "",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when long-range queries or recording rules misbehave - Thanos query readiness, its store endpoints, and rule health.\n❌ no Thanos Query service selected - check --selector\n",
+   :calls []},
   "no service"
   {:result false,
    :stdout "",
@@ -1503,7 +1527,13 @@
      "app.kubernetes.io/name=thanos-query"]
     [:choose "Thanos Query" [] nil nil]]}},
  "upload"
- {"clean edn"
+ {"candidates unanswered"
+  {:result false,
+   :stdout "",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a Moodle/Nextcloud upload fails at a size limit - the nginx client_max_body_size and php-fpm post/upload limits along the whole chain.\n❌ no namespace selected\n",
+   :calls []},
+  "clean edn"
   {:result true,
    :stdout
    {:findings [],
@@ -1608,6 +1638,12 @@
       :found-nginx? true,
       :found-php? false,
       :nginx-body-size 1048576}]]},
+  "no candidates"
+  {:result false,
+   :stdout "",
+   :stderr
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a Moodle/Nextcloud upload fails at a size limit - the nginx client_max_body_size and php-fpm post/upload limits along the whole chain.\n❌ no namespace selected\n",
+   :calls []},
   "no containers"
   {:result false,
    :stdout "",
