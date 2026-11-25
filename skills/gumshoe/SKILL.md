@@ -532,6 +532,9 @@ mostly data:
   `[:kubectl :patch|:scale|:annotate|:delete …]` effects; `compile` derives
   the pin, the fail-closed post-check, the skip as done and, for a delete,
   the typed confirmation, and requires `:recovery` for a destructive change.
+  A delete beside `:confirm {:destructive? false}` is refused in the words
+  `normalize` uses, unless the change opts out with `:destructive`; a
+  compiled delete carries the destructive mark, an opted-out one none.
   Opting out of any of these takes `:opt-out {<safeguard> "why"}`; strict
   reads have no opt-out. Logic beyond the vocabulary is a library function
   registered with `gumshoe.dsl.registry/register!` under a keyword and its
@@ -640,11 +643,18 @@ mostly data:
   `(gumshoe.steps.objects/delete {:objects (fn [ctx] …) :none "…" :timeout
   …})` deletes `{:type :namespace :name}` objects without waiting and proves
   each gone with a read that answered. Its effect is marked with
-  `gumshoe.change/destructive`, so the step asks for a typed yes whatever
-  the caller's `:confirm` says, whether the caller composes or merges it;
-  a builder whose effect destroys what it acts on marks its effect the same
-  way instead of returning a `:confirm` of its own, which a caller's
-  `merge` would overwrite with its action; `gumshoe.steps.flux/suspend`,
+  `gumshoe.change/destructive`, so the step asks for a typed yes whether
+  the caller composes or merges it and leaves `:destructive?` out or says
+  true. A caller saying `:destructive? false` beside a marked effect is
+  refused when the spec is normalized or composed, in any order or
+  grouping of the parts, with `the :effect gumshoe.steps.objects/delete
+  destroys what it acts on, and the :confirm says :destructive? false, …`;
+  drop the `false`. A mutation book is refused as it loads, a playbook
+  before its confirmation, and conformance reports it as `is refused: …`.
+  A builder whose effect destroys what it acts on marks its effect the same
+  way, `(change/destructive "my.ns/builder" (fn [ctx] …))`, naming itself
+  for that refusal, instead of returning a `:confirm` of its own, which a
+  caller's `merge` would overwrite with its action; `gumshoe.steps.flux/suspend`,
   `resume` and `reconcile` take `{:object (fn [ctx] {:kind :type :namespace
   :name}) …}` for any kind in `flux/suspendable` or a ResourceSet, and
   `reconcile` waits for `status.lastHandledReconcileAt` to equal the token
@@ -658,7 +668,7 @@ mostly data:
   `:refusal` is judged in part order and the first reason refuses,
   `:verify` and `:items` concatenate, `:done` holds only when every
   part's does (a part without one is neutral), `:target` subjects
-  concatenate and a ref two parts compute is refused, `:confirm`'s `:destructive?` and `:separately?` are OR-ed,
+  concatenate and a ref two parts compute is refused, `:confirm`'s `:destructive?` and `:separately?` are OR-ed (a part's `:destructive? false` beside a marked effect is refused, even when another part's `true` absorbed it),
   `:prerequisites` and `:options` join, `:no-verify`/`:no-guard` reasons
   join and are refused beside a `:verify` or a guard, and every other key
   (`:effect`, `:select`, `:title`, `:recovery`, …) is single-valued, two

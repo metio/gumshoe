@@ -128,8 +128,13 @@
      post-check       from :state, fail-closed; opt out with :verify
      skip when done   from :state; opt out with :done
      destructive confirmation  a :delete effect makes the confirmation ask
-                      for \"yes\"; :destructive? false beside one needs
-                      :destructive
+                      for \"yes\" and marks the compiled :effect
+                      destructive (gumshoe.change/destructive);
+                      :destructive? false beside one is refused in the
+                      words normalize uses
+                      (gumshoe.change/destructive-contradiction) unless
+                      the change opts out with :destructive, and an
+                      opted-out delete carries no mark
      recovery         a destructive change says what it leaves behind and
                       how to undo it; opt out with :recovery
    An opt-out that opts out of nothing is refused, so a stale one cannot
@@ -802,7 +807,11 @@
         compiled-values (into {} (for [[k form] values]
                                    (let [f (expr [:values k] form value-place)]
                                      [k (fn [ctx] (f {:ctx ctx :object (:object ctx)}))])))
-        destructive-effect? (boolean (some #(destructive-verbs (second %)) (filter vector? effect)))
+        destroying (first (keep-indexed (fn [i form]
+                                          (when (and (vector? form) (destructive-verbs (second form)))
+                                            (format "%s at %s" (pr-str form) (pr-str [:effect i]))))
+                                        effect))
+        destructive-effect? (some? destroying)
         effects (vec (map-indexed (fn [i form] (effect-of [:effect i] form pure)) effect))
         destructive? (if (contains? confirm :destructive?) (:destructive? confirm) destructive-effect?)
         used (cond-> #{}
@@ -813,9 +822,9 @@
     (when (and (nil? state) (not (contains? opt-out :verify)))
       (invalid! [:state] (str "the change declares no target :state, so it can neither verify itself nor skip a run that is already done"
                               " - declare :state, or :opt-out {:verify \"why\"}")))
-    (when (and destructive-effect? (false? destructive?) (not (contains? opt-out :destructive)))
-      (invalid! [:confirm :destructive?] (str "the change deletes, and says it is not destructive, so it would be confirmed with a bare keypress"
-                                              " - drop :destructive? false, or :opt-out {:destructive \"why\"}")))
+    (when-not (contains? opt-out :destructive)
+      (when-let [why (change/destructive-contradiction destroying (:destructive? confirm))]
+        (invalid! [:confirm :destructive?] (str why ", or :opt-out {:destructive \"why\"}"))))
     (when (and destructive? (nil? recovery) (not (contains? opt-out :recovery)))
       (invalid! [:recovery] (str "the change is destructive and says nothing of what a failure leaves behind"
                                  " - write :recovery \"what is left and how to undo it\", or :opt-out {:recovery \"why\"}")))
@@ -840,8 +849,12 @@
                         :refusal (refusal-of refuse target scope (state-judged state state-pred))
                         :confirm (cond-> {:action (:action confirm) :destructive? destructive?}
                                    (contains? confirm :separately?) (assoc :separately? (:separately? confirm)))
-                        :effect (fn [ctx] (let [env {:ctx ctx :object (:object ctx)}]
-                                            (apply effect/plan (map #(% env) effects))))}
+                        :effect (cond->> (fn [ctx] (let [env {:ctx ctx :object (:object ctx)}]
+                                                     (apply effect/plan (map #(% env) effects))))
+                                  ;; the mark keeps the change destructive however it is
+                                  ;; composed later; an opted-out delete carries none,
+                                  ;; so normalize accepts its :destructive? false
+                                  (and destructive-effect? destructive?) (change/destructive destroying))}
                  title (assoc :title title)
                  (seq compiled-reads) (assoc :reads compiled-reads)
                  (seq compiled-values) (assoc :values compiled-values)

@@ -77,13 +77,17 @@
     (is (= {:action "delete the leftovers" :destructive? true} (confirm-of merged)))
     (is (true? (playbook/destructive? merged)))))
 
-(deftest a-caller-cannot-drop-the-destructive-confirmation-by-merging-over-the-delete
-  (doseq [spec [(merge step (assoc-in own [:confirm :destructive?] false))
-                (merge (assoc-in own [:confirm :destructive?] false) step)
-                (change/compose step (assoc-in own [:confirm :destructive?] false))]]
-    (is (true? (:destructive? (confirm-of spec))))
-    (is (true? (change/destructive? spec)))
-    (is (true? (playbook/destructive? spec)))))
+(deftest a-caller-saying-the-delete-is-not-destructive-is-refused
+  (let [says-false (assoc-in own [:confirm :destructive?] false)]
+    (doseq [build [#(confirm-of (merge step says-false))
+                   #(confirm-of (merge says-false step))
+                   #(change/compose step says-false)
+                   #(change/compose says-false step)]]
+      (let [e (try (build) nil (catch clojure.lang.ExceptionInfo e e))]
+        (is (change/invalid? e))
+        (is (re-find #"^the :effect gumshoe\.steps\.objects/delete destroys what it acts on" (str (ex-message e))))))
+    (is (true? (playbook/destructive? (merge says-false step)))
+        "a reader of the raw spec still calls it destructive")))
 
 (deftest normalize-keeps-a-destructive-delete-destructive-on-every-pass
   (let [once (change/normalize (merge own step))]
@@ -91,7 +95,7 @@
     (is (true? (change/destructive-effect? (:effect once))))))
 
 (deftest a-playbook-of-merged-delete-steps-asks-for-a-typed-yes
-  (let [steps [(merge (assoc-in own [:confirm :destructive?] false) step)]
+  (let [steps [(merge own step)]
         playbook {:confirm {:action "clean up" :destructive? false} :select {:mode :one}}]
     (is (true? (:destructive? (playbook/confirmation playbook steps {:cluster "c" :target "t"}))))
     (is (some #(re-find #"\(destructive - type yes\)" %)
@@ -100,7 +104,7 @@
 (deftest a-merged-delete-run-alone-is-confirmed-as-destructive
   (let [seen (atom nil)
         spec (merge {:select {:mode :one :label "Release"}}
-                    (assoc-in own [:confirm :destructive?] false)
+                    own
                     (objects/delete {:objects (constantly targets) :none "nothing" :timeout 1}))]
     (with-redefs [flow/change! (fn [config] (reset! seen config) true)]
       (binding [*out* (java.io.StringWriter.)]
@@ -125,8 +129,8 @@
     (is (true? (change/destructive-effect? f)))
     (is (= f (change/destructive f)) "marking twice returns the same function")))
 
-(deftest every-way-of-combining-the-delete-with-a-confirmation-stays-destructive
-  (doseq [stated [::absent false true]
+(deftest every-way-of-combining-the-delete-with-an-absent-or-true-destructive-keeps-the-action
+  (doseq [stated [::absent true]
           :let [own (cond-> own (not= ::absent stated) (assoc-in [:confirm :destructive?] stated))]
           [how spec] {"merge, own first" (merge own step)
                       "merge, fragment first" (merge step own)

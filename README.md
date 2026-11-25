@@ -388,7 +388,8 @@ stops at that step. The playbook's own `:recovery` covers its steps without
 one once something changed, and a mutation book takes `:recovery` as well.
 
 Steps that recur across playbooks come from step libraries: `gumshoe.steps.objects/delete`
-deletes a list of objects and proves each one gone, and `gumshoe.steps.flux/suspend`,
+deletes a list of objects and proves each one gone, always behind a typed yes (a
+step saying `:destructive? false` beside it is refused), and `gumshoe.steps.flux/suspend`,
 `resume` and `reconcile` act on one Flux object of any kind. A library playbook
 whose steps run in a fixed order offers named positions where a casebook adds its
 own steps, through `playbook/with-extra`; `gumshoe.tools.flux-storage` composes
@@ -764,7 +765,9 @@ From this, `compile` derives:
 - **The candidates.** `{:unless :state}` offers every object of the type
   not in the target state yet.
 - **The confirmation.** A `[:kubectl :delete]` makes it destructive, so it
-  asks for "yes"; a destructive change declares `:recovery`.
+  asks for "yes"; a destructive change declares `:recovery`. A delete beside
+  `:confirm {:destructive? false}` is refused, as `gumshoe.change/normalize`
+  refuses any effect marked destructive beside it.
 
 Strict reads have no opt-out. The others do: `:opt-out {:verify "why"}`
 drops the post-check (the change then has no `:state`), `{:done "why"}`
