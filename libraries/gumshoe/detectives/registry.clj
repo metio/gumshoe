@@ -9,6 +9,7 @@
    plugin detectives join the scan with no change to the core."
   (:require [cheshire.core :as cheshire]
             [gumshoe.apiversions :as apiversions]
+            [gumshoe.capabilities :as capabilities]
             [gumshoe.detectives.apiversions :as apiversions-detectives]
             [gumshoe.detectives.autoscaler :as autoscaler]
             [gumshoe.detectives.capacity :as capacity]
@@ -68,9 +69,13 @@
   "Scopes a whole-cluster scan leaves out. Posture findings describe choices
    that may be deliberate, and :exec holds checks that run a command inside a
    pod, which needs create on pods/exec - a write-level grant a reader of the
-   resource API does not hold and should not be asked for. Both run only when a
-   book asks for them by name."
-  #{:posture :exec})
+   resource API does not hold and should not be asked for. :mail and :fabric
+   judge evidence their own books collect with dig, openssl and ssh; a
+   cluster scan has no collector for it and would read each key as a resource
+   type, so a CRD that happens to resolve as \"domain\" or \"probes\" would
+   become the mail domain. All of them run only when a book asks for them by
+   name."
+  #{:posture :exec :mail :fabric})
 
 (defn for-scope
   "The detectives in a scope; :all spans every scope but the opt-in ones.
@@ -119,6 +124,16 @@
 
 ;; --- the built-in scopes ---------------------------------------------------
 
+(defn capability-answers
+  "The capability detectors' answers for the scan's context, or nil when the
+   scan inspects another one: the detectors take no context and probe the
+   current kubectl context, so their answers say nothing about any other."
+  [context current-context]
+  (when (= context current-context)
+    (capabilities/detect-answers)))
+
+(register-collector! "capabilities"
+                     (fn [context _key] (capability-answers context (kubectl/current-context))))
 (register! :platform (concat controlplane/detectives nodes/detectives csi/detectives expectations/detectives
                              ipfamily/detectives apiversions-detectives/detectives
                              namespaces/detectives references/platform-detectives custom-resources/detectives))

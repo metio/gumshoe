@@ -14,9 +14,61 @@
   [name]
   (str/starts-with? (str name) "system:"))
 
-(defn- system-subject?
+(def public-identities
+  "The identities that stand for everyone: every request without credentials,
+   and every request with any. A binding that hands one of them admin power or
+   cluster-wide secret read gives it to the whole network or to every holder
+   of any token, so it is always reported as critical, whatever the binding is
+   called and whatever :rbac :expected-cluster-admins vets."
+  #{["User" "system:anonymous"] ["Group" "system:unauthenticated"] ["Group" "system:authenticated"]})
+
+(def control-plane-users
+  "The Users the control plane's own components authenticate as, which the
+   default bindings grant what those components need."
+  #{"system:kube-controller-manager" "system:kube-scheduler" "system:kube-proxy" "system:apiserver"})
+
+(def control-plane-groups
+  "The Groups of the control plane: the break-glass group the API server
+   grants every permission, the kubelets and the metrics endpoint readers."
+  #{"system:masters" "system:nodes" "system:monitoring"})
+
+(defn public-subject?
+  "Whether a subject stands for everyone (see public-identities)."
   [subject]
-  (system-name? (:name subject)))
+  (contains? public-identities [(:kind subject) (:name subject)]))
+
+(defn- service-account-user
+  "A User subject named system:serviceaccount:<namespace>:<name> is that
+   ServiceAccount's identity, written the way the API server authenticates it;
+   it is read as the ServiceAccount, so it is judged and vetted like one."
+  [subject]
+  (if-let [[_ namespace name] (and (= "User" (:kind subject))
+                                   (re-matches #"system:serviceaccount:([^:]+):([^:]+)" (str (:name subject))))]
+    {:kind "ServiceAccount" :namespace namespace :name name}
+    subject))
+
+(defn control-plane-subject?
+  "Whether a subject is one of the control plane's own identities: a
+   component User, a kubelet's system:node:<name>, or one of the control
+   plane Groups. Every other system: name is judged like any other subject,
+   so an identity the cluster defines for everyone, every ServiceAccount
+   (Group system:serviceaccounts) or a namespace's ServiceAccounts is still
+   reported."
+  [subject]
+  (case (:kind subject)
+    "User" (let [name (str (:name subject))]
+             (or (contains? control-plane-users name)
+                 (str/starts-with? name "system:node:")))
+    "Group" (contains? control-plane-groups (:name subject))
+    false))
+
+(defn- judged-subjects
+  "The binding's subjects a check reports on, each read as the identity it
+   authenticates as, with control-plane identities left out."
+  [binding]
+  (for [subject (:subjects binding)
+        :when (not (control-plane-subject? subject))]
+    (service-account-user subject)))
 
 (defn- subject->str
   [subject]
@@ -75,6 +127,9 @@
                     (str/starts-with? id (subs (str pattern) 0 (dec (count (str pattern)))))))
              expected))))
 
+(def ^:private public-hint
+  "this identity stands for everyone who can reach the API server (or everyone holding any token) - remove the subject from the binding now")
+
 (def admin-binding-joins
   "The ClusterRoles name the wildcard equivalents of cluster-admin, so
    without them only bindings to cluster-admin itself would be judged."
@@ -87,26 +142,29 @@
    human with god mode - and stays critical. A ServiceAccount is almost always
    an operator and is a warning you can silence by vetting it into env.edn's
    :rbac :expected-cluster-admins. Once the known operators are listed, what is
-   left is exactly the surprising access worth looking at. Nothing is judged
-   when a joined read did not answer."
+   left is exactly the surprising access worth looking at. An identity that
+   stands for everyone is critical and cannot be vetted, and the control
+   plane's own identities are left out. Nothing is judged when a joined read
+   did not answer."
   [evidence]
   (let [admin-roles (conj (full-wildcard-roles (get evidence "clusterroles")) "cluster-admin")
         expected (set (get-in evidence ["config" :rbac :expected-cluster-admins]))]
     (for [binding (when (evidence/joined? evidence admin-binding-joins)
                     (kubectl/items-of (get evidence "clusterrolebindings")))
           :when (contains? admin-roles (-> binding :roleRef :name))
-          subject (:subjects binding)
-          :when (not (system-subject? subject))
-          :let [id (subject->str subject)]
-          :when (not (expected-admin? expected id))
+          subject (judged-subjects binding)
+          :let [id (subject->str subject)
+                public? (public-subject? subject)]
+          :when (or public? (not (expected-admin? expected id)))
           :let [human? (contains? #{"User" "Group"} (:kind subject))]]
       {:severity (if human? :critical :warning)
        :component (kubectl/name-of binding)
        :summary (format "%s holds cluster-admin power (via ClusterRole %s)"
                         id (-> binding :roleRef :name))
-       :hint (if human?
-               "a user or group with cluster-admin is a standing audit risk - confirm this person still needs it"
-               "usually an operator's ServiceAccount - if it is expected, add it to :rbac :expected-cluster-admins in env.edn to silence this")})))
+       :hint (cond
+               public? public-hint
+               human? "a user or group with cluster-admin is a standing audit risk - confirm this person still needs it"
+               :else "usually an operator's ServiceAccount - if it is expected, add it to :rbac :expected-cluster-admins in env.edn to silence this")})))
 
 (def ^:private escalation-verbs #{"escalate" "bind" "impersonate"})
 
@@ -158,8 +216,9 @@
   ["clusterroles" "clusterrolebindings"])
 
 (defn detect-secret-readers
-  "Subjects bound cluster-wide to a role that reads Secrets. Nothing is
-   judged when a joined read did not answer."
+  "Subjects bound cluster-wide to a role that reads Secrets; an identity
+   that stands for everyone is critical. Nothing is judged when a joined read
+   did not answer."
   [evidence]
   (let [clusterroles (get evidence "clusterroles")
         admin-roles (conj (full-wildcard-roles clusterroles) "cluster-admin")
@@ -172,14 +231,17 @@
           :when (contains? secret-roles role)
           ;; admin bindings are already reported as critical
           :when (not (contains? admin-roles role))
-          :when (not (system-name? (kubectl/name-of binding)))
-          subject (:subjects binding)
-          :when (not (system-subject? subject))]
-      {:severity :info
+          subject (judged-subjects binding)
+          :let [public? (public-subject? subject)]
+          ;; the bootstrap bindings the API server creates are named system:
+          :when (or public? (not (system-name? (kubectl/name-of binding))))]
+      {:severity (if public? :critical :info)
        :component (kubectl/name-of binding)
        :summary (format "%s can read secrets cluster-wide (via ClusterRole %s)"
                         (subject->str subject) role)
-       :hint "review - cluster-wide secret read equals owning every credential in the cluster"})))
+       :hint (if public?
+               public-hint
+               "review - cluster-wide secret read equals owning every credential in the cluster")})))
 
 (def ^:private powerful-clusterroles #{"cluster-admin" "admin" "edit"})
 
@@ -190,8 +252,8 @@
 
 (defn detect-powerful-rolebindings
   "RoleBindings that hand out admin/edit/cluster-admin (or wildcard
-   equivalents) inside a namespace. Nothing is judged when a joined read did
-   not answer."
+   equivalents) inside a namespace; an identity that stands for everyone is
+   critical. Nothing is judged when a joined read did not answer."
   [evidence]
   (let [powerful (into powerful-clusterroles (full-wildcard-roles (get evidence "clusterroles")))]
     (for [binding (when (evidence/joined? evidence namespace-grant-joins)
@@ -199,13 +261,15 @@
           :let [ref (:roleRef binding)]
           :when (= "ClusterRole" (:kind ref))
           :when (contains? powerful (:name ref))
-          :when (not (system-name? (kubectl/name-of binding)))
-          subject (:subjects binding)
-          :when (not (system-subject? subject))]
-      {:severity (if (= "kube-system" (kubectl/namespace-of binding)) :critical :warning)
+          subject (judged-subjects binding)
+          :let [public? (public-subject? subject)]
+          :when (or public? (not (system-name? (kubectl/name-of binding))))]
+      {:severity (if (or public? (= "kube-system" (kubectl/namespace-of binding))) :critical :warning)
        :component (kubectl/namespace-name-of binding)
        :summary (format "%s holds %s in this namespace" (subject->str subject) (:name ref))
-       :hint "namespace admin/edit reads all its secrets and modifies workloads - verify it is intended"})))
+       :hint (if public?
+               public-hint
+               "namespace admin/edit reads all its secrets and modifies workloads - verify it is intended")})))
 
 (defn- default-sa-automount-off?
   [serviceaccounts namespace]

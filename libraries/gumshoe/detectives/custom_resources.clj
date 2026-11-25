@@ -76,9 +76,21 @@
        (:lastTransitionTime failing)))))
 
 (defn detect-custom-resource-conditions
+  "The condition findings of every custom resource read, and one warning per
+   custom resource type whose read did not answer: its objects were never
+   judged, and a conversion webhook that is down breaks both the read and the
+   objects."
   [evidence]
-  (let [now (:now evidence)]
-    (keep #(condition-finding % now) (kubectl/items-of (get evidence "custom-resources")))))
+  (let [now (:now evidence)
+        resources (get evidence "custom-resources")]
+    (concat
+     (keep #(condition-finding % now) (kubectl/items-of resources))
+     (for [type (when (map? resources) (sort (:unread resources)))]
+       {:severity :warning
+        :component type
+        :summary "custom resources of this type could not be read"
+        :hint (str "their conditions were not judged - check that you may list " type
+                   " and, when the CRD names a conversion webhook, that its Service answers")}))))
 
 (def detectives
   [{:name "api-services"

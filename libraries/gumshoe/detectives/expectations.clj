@@ -15,10 +15,14 @@
    casebook's own verify task reports - not an outage worth paging on. Opt-in by
    nature: a cluster that declares no capabilities is not checked.
 
-   Unlike the workload detectives, this one runs the capability detectors live
-   rather than reading the shared evidence, because capability presence is a probe
-   by definition; `missing-capabilities` keeps the decision pure and testable."
-  (:require [gumshoe.capabilities :as capabilities]))
+   The detectors probe the current kubectl context, so the \"capabilities\"
+   evidence is collected only when the scan inspects that context, and it
+   counts only next to an answered read of the CRDs: an unreachable API
+   server, a timed-out read or a user who may not read CRDs would make every
+   detector answer \"absent\", and the check is unread then. A detector that
+   throws is reported once as unanswered, never as an outage.
+   `missing-capabilities` keeps the decision pure and testable."
+  (:require [gumshoe.evidence :as evidence]))
 
 (defn missing-capabilities
   "The declared capabilities that have a detector but are not present - the
@@ -33,19 +37,34 @@
                 :when (not (contains? present capability))]
             capability))))
 
+(def capability-joins
+  "The detectors' answers, and the CRD read that shows the API server
+   answered the scan's context and lets it read what most detectors probe."
+  ["capabilities" "customresourcedefinitions"])
+
 (defn detect-missing-capabilities
+  "One critical per declared capability its detector answered is absent, and
+   one warning per declared capability whose detector did not answer.
+   Nothing is judged when a joined read did not answer."
   [evidence]
-  (let [declared (get-in evidence ["config" :capabilities])]
-    (for [capability (missing-capabilities declared
-                                           (capabilities/registered)
-                                           (capabilities/detect-present))]
-      {:severity :critical
-       :component (name capability)
-       :summary "declared cluster capability is not present"
-       :hint "env.edn :capabilities lists this cluster service, but its detector does not find it - it may be down, uninstalled, or mid-migration"})))
+  (when (evidence/joined? evidence capability-joins)
+    (let [declared (set (get-in evidence ["config" :capabilities]))
+          {:keys [absent unanswered]} (get evidence "capabilities")]
+      (concat
+       (for [capability (sort (filter declared absent))]
+         {:severity :critical
+          :component (name capability)
+          :summary "declared cluster capability is not present"
+          :hint "env.edn :capabilities lists this cluster service, but its detector does not find it - it may be down, uninstalled, or mid-migration"})
+       (for [capability (sort (filter declared unanswered))]
+         {:severity :warning
+          :component (name capability)
+          :summary "could not tell whether the declared cluster capability is present"
+          :hint "its detector failed instead of answering - check that the API server answers and that you may read what the detector probes"})))))
 
 (def detectives
   [{:name "expected-capabilities"
     :description "Cluster services env.edn declares that no detector can find running"
-    :requires []
+    :requires capability-joins
+    :joins capability-joins
     :detect detect-missing-capabilities}])

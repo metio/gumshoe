@@ -8,6 +8,7 @@
    namespaces have detectives of their own."
   (:require [clojure.string :as str]
             [gumshoe.catalog :as catalog]
+            [gumshoe.evidence :as evidence]
             [gumshoe.finalizers :as finalizers]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]
@@ -52,11 +53,19 @@
                        "; only if it is gone for good: " (catalog/run-command "runbooks/kubernetes/finalizers/remove.clj") " --pick '"
                        type " " (object-name object) " " (first removable) "'")])))))
 
+(def subject-reads
+  "The reads holding the objects judged. The pods only name who mounts a
+   claim in its hint, so they judge nothing on their own."
+  (mapv first types))
+
 (defn detect-stuck-terminating
+  "Objects whose deletion has waited on finalizers for over ten minutes, each
+   type judged when its read answered. Nothing is judged when no subject read
+   answered."
   [evidence]
   (let [now ^java.time.Instant (:now evidence)
         pods (kubectl/items-of (get evidence "pods"))]
-    (for [[type kind] types
+    (for [[type kind] (when (evidence/consulted? evidence subject-reads) types)
           object (kubectl/items-of (get evidence type))
           :let [deletion (some-> object :metadata :deletionTimestamp java.time.Instant/parse)
                 waiting (-> object :metadata :finalizers)
@@ -74,5 +83,6 @@
 (def detectives
   [{:name "stuck-terminating"
     :description "Workloads, Services, Ingresses, ConfigMaps and volumes whose deletion hangs on finalizers"
-    :requires (conj (mapv first types) "pods")
+    :requires (conj subject-reads "pods")
+    :consults subject-reads
     :detect detect-stuck-terminating}])

@@ -178,9 +178,25 @@
   [nodes]
   (remove #(true? (-> % :spec :unschedulable)) (kubectl/items-of nodes)))
 
+(def replicas-on-one-node-joins
+  "Placement is read from the ready pods against the schedulable nodes, so
+   without either every workload would read as spread, or as on a cluster of
+   one node."
+  ["pods" "nodes"])
+
+(def replicas-on-one-node-consults
+  "The replicated workloads whose pods are judged, each kind judged only when
+   its read answered."
+  ["deployments" "statefulsets"])
+
 (defn detect-replicas-on-one-node
+  "Replicated workloads whose ready pods all run on one node of several.
+   Nothing is judged when a joined read did not answer or no workload read
+   did."
   [evidence]
-  (when (< 1 (count (schedulable-nodes (get evidence "nodes"))))
+  (when (and (evidence/joined? evidence replicas-on-one-node-joins)
+             (evidence/consulted? evidence replicas-on-one-node-consults)
+             (< 1 (count (schedulable-nodes (get evidence "nodes")))))
     (let [wanted (set (for [{:keys [kind workload]} (templates evidence replicated-types)
                             :when (< 1 (replicas workload))]
                         [(kubectl/namespace-of workload) (str kind "/" (kubectl/name-of workload))]))]
@@ -429,7 +445,9 @@
     :detect detect-rollouts-without-capacity}
    {:name "replicas-on-one-node"
     :description "Replicated workloads whose ready pods all run on one node of several"
-    :requires ["deployments" "statefulsets" "pods" "nodes"]
+    :requires (into replicas-on-one-node-consults replicas-on-one-node-joins)
+    :joins replicas-on-one-node-joins
+    :consults replicas-on-one-node-consults
     :detect detect-replicas-on-one-node}
    {:name "missing-resources"
     :description "Containers without CPU or memory requests or a memory limit"

@@ -43,17 +43,29 @@
      (:lastTransitionTime progressing))))
 
 (defn detect-daemonset-problems
+  "DaemonSets with pods down, missing or misplaced. Unavailable pods are a
+   warning while some pod is available and critical when none is, as zero
+   ready replicas are for a Deployment: a CNI, CSI or proxy DaemonSet with no
+   available pod is an outage on every node it targets. The API server omits
+   numberAvailable when it is zero."
   [evidence]
   (for [daemonset (kubectl/items-of (get evidence "daemonsets"))
-        :let [{:keys [numberUnavailable numberMisscheduled desiredNumberScheduled currentNumberScheduled]
-               :or {numberUnavailable 0 numberMisscheduled 0}} (:status daemonset)
+        :let [{:keys [numberUnavailable numberMisscheduled desiredNumberScheduled currentNumberScheduled numberAvailable]
+               :or {numberUnavailable 0 numberMisscheduled 0 numberAvailable 0}} (:status daemonset)
               unscheduled (if (and desiredNumberScheduled currentNumberScheduled)
                             (- desiredNumberScheduled currentNumberScheduled) 0)
+              none-available? (and (pos? (or desiredNumberScheduled 0)) (zero? numberAvailable))
               component (kubectl/namespace-name-of daemonset)]
         finding [(when (pos? numberUnavailable)
-                   {:severity :warning
-                    :component component
-                    :summary (format "DaemonSet has %d unavailable pods" numberUnavailable)})
+                   (if none-available?
+                     {:severity :critical
+                      :component component
+                      :summary (format "DaemonSet has no available pod: %d of %d unavailable"
+                                       numberUnavailable desiredNumberScheduled)
+                      :hint "every node it targets runs without it - the pods, pod-creation and pod-startup detectives say why"}
+                     {:severity :warning
+                      :component component
+                      :summary (format "DaemonSet has %d unavailable pods" numberUnavailable)}))
                  (when (pos? unscheduled)
                    {:severity :warning
                     :component component

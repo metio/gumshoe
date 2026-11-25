@@ -19,9 +19,21 @@
           (kubectl/items-of (get evidence "pods"))))
 
 (defn- all-containers
+  "Every container of the pod: regular, init and ephemeral. An ephemeral
+   container added by `kubectl debug` stays in the pod spec for the pod's
+   lifetime and runs on the node with whatever its securityContext grants."
   [pod]
   (concat (-> pod :spec :containers)
-          (-> pod :spec :initContainers)))
+          (-> pod :spec :initContainers)
+          (-> pod :spec :ephemeralContainers)))
+
+(defn- container-label
+  "How a finding names a container; an ephemeral one says so, since it is
+   not in the workload's template and will not come back with a new pod."
+  [pod container]
+  (if (some #(= (:name container) (:name %)) (-> pod :spec :ephemeralContainers))
+    (format "ephemeral container %s" (:name container))
+    (format "container %s" (:name container))))
 
 (defn detect-privileged-containers
   [evidence]
@@ -30,7 +42,7 @@
         :when (true? (-> container :securityContext :privileged))]
     {:severity :critical
      :component (kubectl/namespace-name-of pod)
-     :summary (format "container %s runs privileged" (:name container))
+     :summary (format "%s runs privileged" (container-label pod container))
      :hint "a privileged container owns its node - outside CNI/CSI this is almost never right"}))
 
 (defn detect-host-namespaces
@@ -93,11 +105,11 @@
       ;; because the literal "ALL" is not in the dangerous set.
       {:severity :critical
        :component (kubectl/namespace-name-of pod)
-       :summary (format "container %s adds ALL capabilities" (:name container))
+       :summary (format "%s adds ALL capabilities" (container-label pod container))
        :hint "adding ALL is equivalent to a privileged container - a node-takeover primitive"}
       {:severity :warning
        :component (kubectl/namespace-name-of pod)
-       :summary (format "container %s adds capabilities: %s" (:name container) (str/join ", " found))
+       :summary (format "%s adds capabilities: %s" (container-label pod container) (str/join ", " found))
        :hint "these capabilities are node-takeover primitives - drop them if the workload survives without"})))
 
 (def detectives

@@ -7,6 +7,7 @@
    that decide whether mail lands in the inbox) and the live services
    (reachable ports, STARTTLS on cleartext ports, valid TLS certificates)."
   (:require [clojure.string :as str]
+            [gumshoe.evidence :as evidence]
             [gumshoe.mail :as mail]))
 
 (def ^:private certificate-warning-days 14)
@@ -15,14 +16,21 @@
 ;; deliverability
 
 (defn detect-mx-problems
+  "Nothing is judged when the MX query did not answer: dig's nil is a server
+   that did not reply, and its [] a server that answered with no records."
   [evidence]
   (let [domain (get evidence "domain")
         records (keep mail/parse-mx (get evidence "mx"))]
-    (if (empty? records)
+    (cond
+      (not (evidence/joined? evidence ["mx"])) []
+
+      (empty? records)
       [{:severity :critical
         :component domain
         :summary "domain has no MX records"
         :hint "no mail server can receive mail for this domain"}]
+
+      :else
       (concat
        (when (= 1 (count records))
          [{:severity :info
@@ -35,10 +43,13 @@
           :summary (format "MX with preference %s has no hostname" preference)})))))
 
 (defn detect-spf-problems
+  "Nothing is judged when the TXT query did not answer."
   [evidence]
   (let [domain (get evidence "domain")
         records (mail/spf-records (get evidence "spf"))]
     (cond
+      (not (evidence/joined? evidence ["spf"])) []
+
       (empty? records)
       [{:severity :critical
         :component domain
@@ -75,10 +86,13 @@
           :else [])))))
 
 (defn detect-dmarc-problems
+  "Nothing is judged when the TXT query did not answer."
   [evidence]
   (let [domain (get evidence "domain")
         policy (mail/dmarc-policy (get evidence "dmarc"))]
     (cond
+      (not (evidence/joined? evidence ["dmarc"])) []
+
       (nil? policy)
       [{:severity :warning
         :component domain
@@ -94,21 +108,38 @@
       :else [])))
 
 (defn detect-dkim-problems
+  "A selector whose query answered without a key is a missing key; one whose
+   query did not answer is reported as unanswered, never as missing."
   [evidence]
-  (for [[selector txt] (get evidence "dkim")
-        :let [records (filter #(str/includes? % "v=DKIM1") (map mail/txt-record-value txt))]
+  (for [[selector txt] (sort-by key (get evidence "dkim"))
+        :let [records (filter #(str/includes? % "v=DKIM1") (map mail/txt-record-value txt))
+              component (format "%s._domainkey.%s" selector (get evidence "domain"))]
         :when (empty? records)]
-    {:severity :warning
-     :component (format "%s._domainkey.%s" selector (get evidence "domain"))
-     :summary "DKIM selector has no key published"
-     :hint "mail signed with this selector fails DKIM - publish the key or stop signing with it"}))
+    (if (nil? txt)
+      {:severity :info
+       :component component
+       :summary "DKIM selector could not be queried - the DNS server did not answer"
+       :hint "run the check again; a server that keeps failing to answer is a DNS problem of its own"}
+      {:severity :warning
+       :component component
+       :summary "DKIM selector has no key published"
+       :hint "mail signed with this selector fails DKIM - publish the key or stop signing with it"})))
 
 (defn detect-reverse-dns
+  "Each address of the host against its PTR name. An address whose PTR query
+   did not answer (nil) is reported as unanswered; one answered without a
+   record (\"\") has no PTR."
   [evidence]
   (let [host (get evidence "host")]
     (for [[address ptr] (get evidence "ptr")
           :let [ptr-host (some-> ptr str str/trim (str/replace #"\.$" ""))]
           finding [(cond
+                     (nil? ptr)
+                     {:severity :info
+                      :component host
+                      :summary (format "PTR record of %s could not be queried - the DNS server did not answer" address)
+                      :hint "run the check again; a server that keeps failing to answer is a DNS problem of its own"}
+
                      (str/blank? (str ptr))
                      {:severity :critical
                       :component host
@@ -172,35 +203,40 @@
                      :else []))))))))
 
 (defn- about
-  "Runs a detective only when the evidence names its subject. The mail
-   evidence comes from the mail book; a scan of the whole registry collects
-   none, and judging the records of no domain would report every record as
-   missing."
+  "Runs a detective only when the evidence names its subject as a string. The
+   mail evidence comes from the mail book; any other scan collects none, and
+   judging the records of no domain would report every record as missing. A
+   resource list read under the same key is no domain either."
   [subject detect]
   (fn [evidence]
-    (when (get evidence subject)
+    (when (string? (get evidence subject))
       (detect evidence))))
 
 (def detectives
   [{:name "mail-mx"
     :description "MX records: mail can be received at all"
     :requires ["mx" "domain"]
+    :joins ["mx"]
     :detect (about "domain" detect-mx-problems)}
    {:name "mail-spf"
     :description "SPF record present, unique, and not dangerously permissive"
     :requires ["spf" "domain"]
+    :joins ["spf"]
     :detect (about "domain" detect-spf-problems)}
    {:name "mail-dmarc"
     :description "DMARC policy published and enforcing"
     :requires ["dmarc" "domain"]
+    :joins ["dmarc"]
     :detect (about "domain" detect-dmarc-problems)}
    {:name "mail-dkim"
     :description "DKIM keys published for the configured selectors"
     :requires ["dkim" "domain"]
+    :joins ["dkim"]
     :detect (about "domain" detect-dkim-problems)}
    {:name "mail-rdns"
     :description "Forward-confirmed reverse DNS for the mail host"
     :requires ["ptr" "host"]
+    :joins ["ptr"]
     :detect (about "host" detect-reverse-dns)}
    {:name "mail-services"
     :description "SMTP/POP3/IMAP ports reachable, STARTTLS offered, certificates valid"
