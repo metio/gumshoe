@@ -2,7 +2,8 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.verify-test
-  (:require [clojure.string]
+  (:require [cheshire.core]
+            [clojure.string]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.shell :as shell]
@@ -143,3 +144,65 @@
                      {:description "b" :timeout 0 :check (constantly true)}]))
     (is (not (verify/all [{:description "a" :timeout 0 :check (constantly true)}
                           {:description "b" :timeout 0 :check (constantly false)}])))))
+
+;; --- failing closed ------------------------------------------------------------------
+
+(deftest object-holds-only-for-an-object-a-read-found
+  (is (true? (verify/object-holds? {:spec {}} map?)))
+  (is (false? (verify/object-holds? {:spec {}} (constantly nil))))
+  (is (false? (verify/object-holds? nil (constantly true))) "nil is no object, whatever the predicate says")
+  (is (false? (verify/object-holds? nil nil?))))
+
+(deftest attempt-judges-a-check-as-eventually-does
+  (with-redefs [shell/execute (fn [& _] {:exit 1 :out "" :err "Unable to connect to the server"})]
+    (is (= "kubectl get did not answer: Unable to connect to the server"
+           (verify/attempt #(nil? (kubectl/get-cluster-resource "ctx" "nodes" "n1"))))
+        "a strict read that did not answer is named, not counted as nil"))
+  (is (true? (verify/attempt (constantly :truthy))))
+  (is (false? (verify/attempt (constantly nil))))
+  (is (false? (verify/attempt #(throw (Exception. "boom"))))))
+
+(defn- node-check
+  [description holds? & {:as extra}]
+  (merge {:description description
+          :check #(holds? (kubectl/get-cluster-resource "ctx" "nodes" "n1"))}
+         extra))
+
+(deftest fail-closed-findings-names-each-check-that-holds-where-it-must-not
+  (testing "a check that holds on nil holds on NotFound, and on a lax read that did not answer"
+    (is (= [{:description "n1 is schedulable" :answer :absent}]
+           (verify/fail-closed-findings [(node-check "n1 is schedulable" #(not (-> % :spec :unschedulable)))]))
+        "under strict reads an unanswered read throws, so only NotFound shows it"))
+  (testing "a check judged through object-holds? fails closed"
+    (is (= [] (verify/fail-closed-findings
+               [(node-check "n1 is schedulable" #(verify/object-holds? % (fn [n] (not (-> n :spec :unschedulable)))))]))))
+  (testing ":verifies-absence? permits holding on NotFound, never on no answer"
+    (is (= [] (verify/fail-closed-findings [(node-check "n1 is gone" nil? :verifies-absence? true)])))
+    (is (= [{:description "anything" :answer :unanswered}]
+           (verify/fail-closed-findings [{:description "anything" :verifies-absence? true :check (constantly true)}]))))
+  (testing "a check that ignores its reads holds under both answers"
+    (is (= [{:description "always" :answer :unanswered} {:description "always" :answer :absent}]
+           (verify/fail-closed-findings [{:description "always" :check (constantly true)}]))))
+  (testing "a check that reads around strict reads is caught when nothing answers"
+    (is (= [{:description "lax" :answer :unanswered}]
+           (verify/fail-closed-findings
+            [{:description "lax" :verifies-absence? true
+              :check #(clojure.string/blank? (shell/stdout-of "kubectl" "get" "nodes" "n1" "--output=json"))}])))))
+
+(deftest a-cluster-holding-nothing-answers-as-the-api-server-does
+  (let [answers (atom [])
+        record (fn [check] (with-redefs [verify/attempt (fn [c] (c) false)] (verify/fail-closed-findings [check])))]
+    (record {:description "reads"
+             :check #(swap! answers conj
+                            (mapv (fn [argv] (apply shell/execute argv))
+                                  [["kubectl" "--context=ctx" "get" "nodes" "n1" "--output=json"]
+                                   ["kubectl" "--context=ctx" "get" "pods" "--all-namespaces" "--output=json"]
+                                   ["kubectl" "--context=ctx" "get" "nodes" "n1" "--ignore-not-found" "--output=name"]
+                                   ["kubectl" "--context=ctx" "--namespace=x" "get" "secrets" "--output=jsonpath={.items}"]
+                                   ["kubectl" "--context=ctx" "delete" "nodes" "n1"]
+                                   ["ssh" "host" "--" "ceph" "osd" "dump"]]))})
+    (let [[unanswered absent] @answers]
+      (is (every? #(= 1 (:exit %)) unanswered) "nothing answers")
+      (is (= [1 0 0 0 1 1] (map :exit absent)))
+      (is (re-find #"\(NotFound\)" (:err (first absent))))
+      (is (= [] (:items (cheshire.core/parse-string (:out (second absent)) true))) "a listing answers empty"))))

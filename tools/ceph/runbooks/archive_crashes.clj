@@ -39,8 +39,9 @@
                                                         (format "Archive %d ceph crash report(s)" (count crashes)))
             :effect (effect/plan (ceph/effect connection "crash" "archive-all"))
             :post-checks [{:description "no unarchived crashes remain"
-                           :timeout 30
-                           :check (fn [] (empty? (ceph/ceph-json connection "crash" "ls-new")))}]}))))))
+                           :timeout 30 :verifies-absence? true
+                           :check (fn [] (let [{:keys [ok? doc]} (ceph/ceph-json-result connection "crash" "ls-new")]
+                                           (and ok? (empty? doc))))}]}))))))
 
 (runbook/execute!
  {:description "Archives ceph daemon crash reports, clearing the RECENT_CRASH warning"

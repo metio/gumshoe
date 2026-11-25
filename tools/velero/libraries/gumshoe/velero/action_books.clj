@@ -8,7 +8,6 @@
   (:require [gumshoe.detectives.velero :as velero]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.mutation :as mutation]
             [gumshoe.toggle :as toggle]
             [gumshoe.velero.actions :as actions]))
 
@@ -120,8 +119,9 @@
                (effect/plan (effect/kubectl-stdin context (actions/to-json (actions/delete-request-manifest object))
                                                   "create" "-f" "-"))
                (effect/plan (effect/note "nothing to delete - the precondition says why"))))
-   :verify (fn [{:keys [context ref target uid] :as ctx}]
+   :verify (fn [{:keys [context ref target uid]}]
              [{:description (format "Backup %s and its data are deleted" target)
-               :timeout 1800 :interval 10
+               :timeout 1800 :interval 10 :verifies-absence? true
                :abort #(first (actions/delete-signals (kubectl/get-namespaced context (:namespace ref) request-type) uid))
-               :check #(boolean (and ref (nil? (mutation/read-subject ctx))))}])})
+               ;; gone needs a read that answered NotFound, whatever reads it
+               :check #(boolean (and ref (kubectl/confirmed-gone? context (:namespace ref) (:type ref) (:name ref))))}])})

@@ -7,7 +7,8 @@
   (:require [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
-            [gumshoe.tools.jaas :as jaas]))
+            [gumshoe.tools.jaas :as jaas]
+            [gumshoe.verify :as verify]))
 
 (defn suspended-snippets
   "Only the suspended ones - resuming a snippet that is already running is a
@@ -21,7 +22,7 @@
   [context namespace name target]
   {:description (format "JsonnetSnippet %s is no longer suspended" target)
    :timeout 60 :interval 5
-   :check (fn [] (not= "Suspended" (jaas/ready-reason context namespace name)))})
+   :check (fn [] (verify/object-holds? (jaas/snippet context namespace name) jaas/resumed?))})
 
 (mutation/book
  {:description "Resumes a suspended JsonnetSnippet"

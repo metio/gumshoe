@@ -28,8 +28,8 @@
   (is (empty? ((:verify step) {:context "ctx" :targets []}))))
 
 (deftest every-object-gets-a-post-check-with-the-steps-timeout
-  (is (= [{:description "deployments apps/web is gone" :timeout 60 :interval 5}
-          {:description "persistentvolumeclaims apps/data is gone" :timeout 60 :interval 5}]
+  (is (= [{:description "deployments apps/web is gone" :timeout 60 :interval 5 :verifies-absence? true}
+          {:description "persistentvolumeclaims apps/data is gone" :timeout 60 :interval 5 :verifies-absence? true}]
          (map #(dissoc % :check) ((:verify step) {:context "ctx" :targets targets :wait 60}))))
   (testing "a fixed timeout, interval and wording per object"
     (let [step (objects/delete {:objects :targets :none "none" :timeout 30 :interval 2

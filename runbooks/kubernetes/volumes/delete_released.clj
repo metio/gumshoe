@@ -32,7 +32,7 @@
   [context volumes]
   (for [volume volumes]
     {:description (format "PersistentVolume %s is gone" volume)
-     :timeout 120 :interval 10
+     :timeout 120 :interval 10 :verifies-absence? true
      :check (fn [] (kubectl/confirmed-gone? context nil "persistentvolumes" volume))}))
 
 (mutation/book

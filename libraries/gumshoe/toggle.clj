@@ -33,6 +33,8 @@
    or \"<verb> <pick>\" when there is none, :refusal judges the object read
    again right before the change, :announce and :effect make the change, and
    one post-check waits until :applied? holds for the subject read again.
+   :applied? judges an object that exists: a subject the read does not find
+   verifies neither side, since an object that is gone is not resumed either.
 
    :candidates defaults to the objects of the subject's type in every
    namespace that :refusal lets through, sorted, as \"<namespace>/<name>\".
@@ -41,7 +43,8 @@
    parse, which the refusal stops before the plan runs."
   (:require [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.mutation :as mutation]))
+            [gumshoe.mutation :as mutation]
+            [gumshoe.verify :as verify]))
 
 (defn unrefused-picks
   "The objects of type in every namespace for which (refusal object wanted)
@@ -80,7 +83,7 @@
             :verify (fn [{:keys [target] :as ctx}]
                       [(merge verify (:verify words)
                               {:description (format verified target)
-                               :check (fn [] (applied? (mutation/read-subject ctx) wanted))})])})))
+                               :check (fn [] (verify/object-holds? (mutation/read-subject ctx) #(applied? % wanted)))})])})))
 
 (defn pair
   "{:on <spec> :off <spec>}, the mutation specs a pair declaration makes

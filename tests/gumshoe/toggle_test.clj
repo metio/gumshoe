@@ -6,7 +6,8 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.shell :as shell]
-            [gumshoe.toggle :as toggle]))
+            [gumshoe.toggle :as toggle]
+            [gumshoe.verify :as verify]))
 
 (def ^:private widget-type "widgets.example.io")
 
@@ -102,3 +103,13 @@
     (is (= ::derive (:derive on)))
     (is (= {:type widget-type} (:subject on)))
     (is (str/includes? (-> on :options :widget :desc) "namespace"))))
+
+(deftest neither-side-verifies-a-subject-that-is-gone
+  (let [{:keys [on off]} (toggle/pair declaration)
+        ctx {:context "ctx" :target "alpha/gone" :ref {:type widget-type :namespace "alpha" :name "gone"}}]
+    (doseq [spec [on off]
+            :let [checks ((:verify spec) ctx)]]
+      (testing (:description (first checks))
+        (with-redefs [shell/execute (cluster objects)]
+          (is (false? ((:check (first checks)))) "released is a state of a Widget that exists"))
+        (is (= [] (verify/fail-closed-findings checks)))))))
