@@ -17,3 +17,10 @@ path = ".claude-plugin/*.json"
 precedence = "override"
 SPDX-FileCopyrightText = "The gumshoe Authors"
 SPDX-License-Identifier = "0BSD"
+
+# JSON can not carry a comment header. Golden JSON reports of detective tests.
+[[annotations]]
+path = "tools/*/tests/gumshoe/*_golden.json"
+precedence = "override"
+SPDX-FileCopyrightText = "The gumshoe Authors"
+SPDX-License-Identifier = "0BSD"

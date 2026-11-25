@@ -105,9 +105,16 @@
    A detective that judges a chosen set of subjects - the hosts a scope
    selected, the instances a filter kept - names the evidence keys holding
    them as :judges. When every one of them is nil or empty, it had nothing to
-   judge, and its silence is no more a pass than a refused read."
-  [{:keys [requires judges]} evidence]
+   judge, and its silence is no more a pass than a refused read.
+
+   A detective that joins several reads - a Pooler to its Service, the
+   Service to its EndpointSlices - names the evidence keys it joins as
+   :joins. When any one of them is nil, the join cannot be made: a missing
+   side would read as no endpoints, or no Service, where nobody looked. Such
+   a check is unread even though the other keys answered."
+  [{:keys [requires judges joins]} evidence]
   (boolean (or (and (seq requires) (every? #(nil? (get evidence %)) requires))
+               (and (seq joins) (some #(nil? (get evidence %)) joins))
                (and (seq judges) (every? #(empty-subjects? (get evidence %)) judges)))))
 
 (defn mark-unread

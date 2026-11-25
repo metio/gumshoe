@@ -152,6 +152,32 @@
   (is (detective/unread? {:requires [:load-balancers] :judges [:hosts]} scoped-evidence)
       "the load balancers were read, but there was no host to check against them"))
 
+;; --- reads a detective joins ------------------------------------------------------
+
+(def ^:private joined-evidence
+  {"poolers" {:items [{:metadata {:name "p"}}]}
+   "services" {:items []}
+   "endpointslices" nil})
+
+(deftest a-join-missing-one-side-read-nothing
+  (is (detective/unread? {:requires ["poolers" "services" "endpointslices"]
+                          :joins ["poolers" "services" "endpointslices"]}
+                         joined-evidence)
+      "the slices did not answer, so no Service can be judged against them")
+  (is (not (detective/unread? {:requires ["poolers" "services" "endpointslices"]} joined-evidence))
+      "without :joins one answered key is enough, as before")
+  (is (detective/unread? {:joins ["poolers" "never-collected"]} joined-evidence) "a key never collected"))
+
+(deftest a-join-whose-every-side-answered-read-something
+  (is (not (detective/unread? {:joins ["poolers" "services"]} joined-evidence))
+      "an empty list is an answer")
+  (is (not (detective/unread? {:joins []} joined-evidence)) "declaring no join judges nothing extra"))
+
+(deftest joins-and-judges-apply-together
+  (is (detective/unread? {:joins ["services"] :judges ["services"]} joined-evidence)
+      "the join answered, but it held no subject")
+  (is (not (detective/unread? {:joins ["poolers" "services"] :judges ["poolers"]} joined-evidence))))
+
 (deftest marking-applies-the-subject-rule
   (is (= [{:name "records" :judges [:hosts] :unread true}
           {:name "routes" :judges [:routes]}]
