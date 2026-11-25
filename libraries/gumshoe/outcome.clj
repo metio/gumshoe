@@ -53,6 +53,14 @@
   [how]
   (record! assoc :paused how))
 
+(defn skipped!
+  "A change found already done was skipped: nothing was asked, applied or
+   checked for it. `step` names it. A skipped step is reached and judged,
+   and is told apart from a step the run never reached, which records
+   nothing."
+  [step]
+  (record! update :skipped (fnil conj []) step))
+
 (defn applied!
   "One effect of a plan ran cleanly."
   []
@@ -167,6 +175,11 @@
   [n]
   (if (= 1 n) "1 effect" (str n " effects")))
 
+(defn- skipped-suffix
+  [skipped]
+  (when (seq skipped)
+    (str "; skipped as already done: " (str/join ", " skipped))))
+
 (defn banner
   "The final banner for a run, as {:tone :ok|:neutral|:error :text}.
 
@@ -176,9 +189,11 @@
    :findings? a read-only book captured findings for its report
    record     the facts recorded during the run (see the recording functions)
 
+   A successful run names the changes it skipped as already done.
+
    Only a run whose post-checks all ran and held may claim verification."
   [{:keys [dry-run? changes? outcome findings?]} record]
-  (let [{:keys [aborted applied paused stopped thunk verified unmet]} record]
+  (let [{:keys [aborted applied paused stopped thunk verified unmet skipped]} record]
     (cond
       ;; a rehearsal that threw never showed the plans after the throw
       (and dry-run? changes? (= :error outcome))
@@ -251,13 +266,16 @@
                     "; nothing was changed"))}
 
       (and (true? verified) (changed? record))
-      {:tone :ok :text "DONE - applied and verified"}
+      {:tone :ok :text (str "DONE - applied and verified" (skipped-suffix skipped))}
 
       (changed? record)
-      {:tone :ok :text "DONE - applied; this book has no post-checks"}
+      {:tone :ok :text (str "DONE - applied; this book has no post-checks" (skipped-suffix skipped))}
 
       (true? verified)
-      {:tone :ok :text "DONE - verified, nothing needed changing"}
+      {:tone :ok :text (str "DONE - verified, nothing needed changing" (skipped-suffix skipped))}
+
+      (seq skipped)
+      {:tone :ok :text (str "DONE - already done, nothing was changed - skipped: " (str/join ", " skipped))}
 
       :else
       {:tone :ok :text "DONE - nothing was changed"})))

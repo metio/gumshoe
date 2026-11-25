@@ -189,9 +189,9 @@
             "  picks one Node (--node, or interactively), then:"
             "  1/3 look - reads and reports"
             "  - asks once to confirm every step below (destructive - type yes)"
-            "  2/3 Cordon - cordon (mark unschedulable) a node, verified"
+            "  2/3 Cordon - cordon (mark unschedulable) a node, verified, skipped when already done"
             "  ⏸  do the work - waits for ENTER; --from-segment 2 continues here"
-            "  3/3 Drain - drain a node - every pod on it is evicted and emptyDir data is deleted (destructive), verified"
+            "  3/3 Drain - drain a node - every pod on it is evicted and emptyDir data is deleted (destructive), verified, skipped when already done"
             ""
             "Needs:"]
            (subvec lines 0 9)))

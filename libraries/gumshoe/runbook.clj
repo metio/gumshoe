@@ -375,6 +375,7 @@
                                                    :description description
                                                    :opts opts
                                                    :outcome outcome
+                                                   :skipped (:skipped @record)
                                                    :meta (:announcement-data ctx)})]
               ;; the final banner leaves no doubt about the outcome, even at 3am
               (print-outcome! (outcome/banner {:dry-run? (boolean (:dry-run opts))

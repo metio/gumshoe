@@ -49,6 +49,9 @@
                                                   ; anything else is refused naming
                                                   ; the step (:title, else the action)
       :verify   (fn [ctx] -> seq of post-check maps)   ; optional
+      :done     true or (fn [ctx] -> bool)  ; optional, already satisfied:
+                                    ; the run skips the change, see below
+      :satisfied? ..                ; optional, alias of :done
       :reads    {name (fn [ctx] -> value)}   ; optional, live reads, read before the
                                     ; confirmation and again after it for :refusal;
                                     ; strict, see below
@@ -79,6 +82,26 @@
       :ref .. :object ..     ; with a :subject
       :refs .. :objects ..   ; with :subjects
       <name> ..}             ; each of :reads and :values
+
+   :done declares when the change is already satisfied, so a run that finds
+   it so skips it instead of confirming and applying it again: an
+   interrupted playbook run again resumes past the steps that took effect.
+   It is judged once its :derive phase read the evidence, before the
+   judgement before the confirmation and before anything is asked, in that
+   phase with its read cache and strict reads (done-verdict). `true` judges
+   the post-checks :verify returns, each attempted once as
+   gumshoe.verify/attempt runs them; a function judges the derived context
+   and, beside a :verify, is joined by those post-checks, so a change is
+   never skipped on evidence its post-check would not accept. A read that
+   did not answer is never done: the change then goes on as one that is not
+   done, saying it could not tell. A skipped change prints what held and
+   \"skipped, already done: <step>\", records itself with
+   gumshoe.outcome/skipped!, asks nothing, runs no effect and no
+   post-check, and returns true. A rehearsal judges it too. :refusal is
+   judged only for a change that is not done, so a change whose refusal
+   says \"it is suspended already\" is skipped as done before it would be
+   refused. A playbook judges its steps' :done before its confirmation as
+   far as their evidence exists (see gumshoe.playbook).
 
    :reads and :values split what a change derives by when it is true. A
    read is live state the change rests on (which locations are available,
@@ -271,7 +294,8 @@
             [gumshoe.outcome :as outcome]
             [gumshoe.pick :as pick]
             [gumshoe.runbook :as runbook]
-            [gumshoe.stdout :as stdout]))
+            [gumshoe.stdout :as stdout]
+            [gumshoe.verify :as verify]))
 
 ;; --- the confirmed object --------------------------------------------------------
 
@@ -693,6 +717,103 @@
               (throw e)))))
       (gone-before-confirmation pinned (:refs ctx) (:objects ctx))))
 
+;; --- already done ---------------------------------------------------------------------
+
+(defn- unread-message
+  "The message of e when it is a strict read that did not answer, else nil."
+  [e]
+  (when (::kubectl/unread (ex-data e)) (ex-message e)))
+
+(defn judge-done
+  "Whether a change is already done, decided from the judgements it is
+   handed and nothing else: `done` is true, or a thunk calling the spec's
+   :done function with the context; `checks` are the post-checks its
+   :verify returned for that context, or nil without a :verify; `attempt`
+   runs one check as gumshoe.verify/attempt does: true when it held, the
+   message of a read that did not answer, else false.
+
+   Returns {:done? true :held [<description> ..]}, {:done? false} or
+   {:unread <why>}. The function runs first; a false verdict ends the
+   judgement, and so does the first post-check that does not hold. With
+   :done true and no post-check there is nothing to judge, so it is not
+   done. A read the function makes that did not answer is {:unread}, and
+   so is a check whose read did not answer: a change is never done on a
+   read that did not answer."
+  [done checks attempt]
+  (if-not done
+    {:done? false}
+    (let [by-fn (when (fn? done)
+                  (try (if (done) :held :not-done)
+                       (catch clojure.lang.ExceptionInfo e
+                         (if-let [why (unread-message e)] {:unread why} (throw e)))))]
+      (cond
+        (map? by-fn) by-fn
+        (= :not-done by-fn) {:done? false}
+        (and (true? done) (empty? checks)) {:done? false}
+        :else (loop [[check & more] checks held []]
+                (if-not check
+                  {:done? true :held held}
+                  (let [result (attempt (:check check))]
+                    (cond
+                      (true? result) (recur more (conj held (:description check)))
+                      (string? result) {:unread result}
+                      :else {:done? false}))))))))
+
+(defn done-verdict
+  "judge-done for spec over ctx: its :done, with ctx, and the post-checks
+   its :verify returns for ctx, attempted with strict reads. The caller
+   binds the phase and the read cache; strict reads are bound here. A
+   :verify whose read did not answer while it built its checks is
+   {:unread}, as a check's would be."
+  [spec ctx]
+  (let [done (change/done spec)
+        verify-fn (:verify spec)]
+    (if-not done
+      {:done? false}
+      (try
+        (binding [kubectl/*strict-reads* true]
+          (judge-done (if (fn? done) #(done ctx) done)
+                      (when verify-fn (vec (verify-fn ctx)))
+                      verify/attempt))
+        (catch clojure.lang.ExceptionInfo e
+          (if-let [why (unread-message e)] {:unread why} (throw e)))))))
+
+(defn step-name
+  "What a skip, a refusal and an error name a change by: its :title, else
+   the action it confirms."
+  [spec]
+  (or (:title spec) (get-in spec [:confirm :action])))
+
+(defn skipped!
+  "Prints a change skipped as done - each post-check that held, then that it
+   was skipped - and records it with gumshoe.outcome/skipped!. Returns true,
+   the result of a skipped change."
+  [spec {:keys [held]}]
+  (doseq [description held]
+    (stdout/ok (str "already holds: " description)))
+  (stdout/ok (str "skipped, already done: " (step-name spec)))
+  (outcome/skipped! (step-name spec))
+  true)
+
+(defn undecided!
+  "Prints that whether the change is done could not be told, why, and that
+   it is judged as a change that is not done."
+  [why]
+  (stdout/warn (str "could not tell whether this change is already done - " why
+                    " - judging it as a change that is not done")))
+
+(defn- judged-done
+  "done-verdict of spec over ctx in the :derive *phase* with cache: the
+   verdict when the change is done, else nil, having said so when a read
+   did not answer."
+  [spec ctx cache]
+  (when (change/done spec)
+    (let [{:keys [done? unread] :as verdict} ((in-phase :derive cache #(done-verdict spec ctx)))]
+      (cond
+        done? verdict
+        unread (do (undecided! unread) nil)
+        :else nil))))
+
 (defn- recording-writer
   "A Writer appending what is written to it to chunks as [stream text]."
   [chunks stream]
@@ -832,57 +953,67 @@
   (stdout/error (format "could not read what the change rests on - %s" why))
   false)
 
+(defn- run-prepared!
+  "Runs spec over ctx, the context its :derive phase made with
+   derive-cache: the judgement before the confirmation, then the change
+   through gumshoe.flow."
+  [{:keys [select confirm announce effect verify] :as spec}
+   {:keys [context cluster announce-as]} target announcement-data derive-cache ctx]
+  (let [applied-before (outcome/applied-count)
+        plan (volatile! nil)
+        failed! #(when-not flow/*dry-run*
+                   (if (:recovery spec)
+                     (outcome/recovery! (:recovery spec) ctx)
+                     (when-let [guidance (left-behind spec ctx (effect/as-plan @plan) applied-before)]
+                       (outcome/fallback! guidance ctx))))
+        result (try
+                 (let [{:keys [ref before] :as pinned} ((in-phase :derive derive-cache #(pin-of spec ctx)))
+                       refused (when (prejudges? spec) (prejudged-reason spec ctx pinned derive-cache))
+                       refs (:refs ctx)
+                       subjects-before (subjects-fingerprints refs (:objects ctx))
+                       items-fn (:items spec)]
+                   (if refused
+                     (do (refuse! refused) ::refused)
+                     (flow/change!
+                      {:confirmation {:action (:action confirm)
+                                      :target cluster
+                                      :items (if items-fn (items-fn ctx) (select/items (:mode select) target))
+                                      :destructive? (:destructive? confirm)}
+                       :precondition (let [guard (strict-precondition
+                                                  (subjects-precondition
+                                                   (pinned-precondition (judged-precondition spec ctx)
+                                                                        ref before #(fetch-pinned context %))
+                                                   refs subjects-before #(read-subjects context %)))]
+                                       (in-phase :judge (prefetching context (judged-refs spec ctx ref) guard)))
+                       :confirmed? (:confirmed? spec)
+                       :announce! (when announce
+                                    #(announce/announce! announce-as announcement-data (announce ctx)))
+                       :effect (vreset! plan (effect ctx))
+                       :step (step-name spec)
+                       :post-checks (when verify (verify ctx))})))
+                 (catch Throwable e (failed!) (throw e)))]
+    (cond
+      (= ::refused result) false
+      result true
+      :else (do (failed!) false))))
+
 (defn- run-connected!
   "Runs spec against target, whose ref parse-pick made, on the connection.
    cache is the :derive phase's read cache, a fresh one when nil; derived,
    when given, is the context that phase already made, which the change
    then runs on instead of deriving it again, so its :values are computed
-   once."
-  [{:keys [select confirm announce effect verify] :as spec}
-   {:keys [context cluster announce-as] :as connection} target ref opts announcement-data cache derived]
+   once. A change whose :derive phase prejudge already made was judged not
+   done there, so only a change derived here judges its :done."
+  [spec connection target ref opts announcement-data cache derived on-skip]
   (let [derive-cache (or cache (kubectl/read-cache))
         {:keys [ctx unread]} (if derived
                                {:ctx derived}
-                               (prepared spec connection target ref opts announcement-data derive-cache))]
-    (if unread
-      (unread! unread)
-      (let [applied-before (outcome/applied-count)
-            plan (volatile! nil)
-            failed! #(when-not flow/*dry-run*
-                       (if (:recovery spec)
-                         (outcome/recovery! (:recovery spec) ctx)
-                         (when-let [guidance (left-behind spec ctx (effect/as-plan @plan) applied-before)]
-                           (outcome/fallback! guidance ctx))))
-            result (try
-                     (let [{:keys [ref before] :as pinned} ((in-phase :derive derive-cache #(pin-of spec ctx)))
-                           refused (when (prejudges? spec) (prejudged-reason spec ctx pinned derive-cache))
-                           refs (:refs ctx)
-                           subjects-before (subjects-fingerprints refs (:objects ctx))
-                           items-fn (:items spec)]
-                       (if refused
-                         (do (refuse! refused) ::refused)
-                         (flow/change!
-                          {:confirmation {:action (:action confirm)
-                                          :target cluster
-                                          :items (if items-fn (items-fn ctx) (select/items (:mode select) target))
-                                          :destructive? (:destructive? confirm)}
-                           :precondition (let [guard (strict-precondition
-                                                      (subjects-precondition
-                                                       (pinned-precondition (judged-precondition spec ctx)
-                                                                            ref before #(fetch-pinned context %))
-                                                       refs subjects-before #(read-subjects context %)))]
-                                           (in-phase :judge (prefetching context (judged-refs spec ctx ref) guard)))
-                           :confirmed? (:confirmed? spec)
-                           :announce! (when announce
-                                        #(announce/announce! announce-as announcement-data (announce ctx)))
-                           :effect (vreset! plan (effect ctx))
-                           :step (or (:title spec) (:action confirm))
-                           :post-checks (when verify (verify ctx))})))
-                     (catch Throwable e (failed!) (throw e)))]
-        (cond
-          (= ::refused result) false
-          result true
-          :else (do (failed!) false))))))
+                               (prepared spec connection target ref opts announcement-data derive-cache))
+        done (when-not (or unread derived) (judged-done spec ctx derive-cache))]
+    (cond
+      unread (unread! unread)
+      done (do (when on-skip (on-skip)) (skipped! spec done))
+      :else (run-prepared! spec connection target announcement-data derive-cache ctx))))
 
 (defn prejudge
   "What a playbook needs to judge a change step before its own confirmation
@@ -890,11 +1021,15 @@
    pick or prejudgement refuses the change, with :printed, the output the
    refusing judgement held back (see held), {:unread <why>} when a read of
    its :derive phase did not answer, nil when what :connect names could
-   not be reached (connect said why), else {:cache <the :derive phase's
-   read cache> :derived <the context it made>}. Handing both to run-on!
-   makes the step's :derive phase the one judged here, so the step reads
-   nothing twice and computes its :values once. Prints
-   nothing; prejudge-printed prints what it returned."
+   not be reached (connect said why), {:done <done-verdict>} when the change
+   is already done, which is judged first, else {:cache <the :derive
+   phase's read cache> :derived <the context it made>}, with :undecided
+   <why> when a read its :done judged did not answer. Handing the cache and
+   the context to run-on! makes the step's :derive phase the one judged
+   here, so the step reads nothing twice and computes its :values once; a
+   step whose :done is undecided is better derived again when reached, so
+   its evidence is read afresh then. Prints nothing; prejudge-printed
+   prints what it returned."
   [spec target opts announcement-data]
   (let [spec (change/normalize spec)
         {:keys [ref refusal]} (parse-pick spec target)]
@@ -902,14 +1037,18 @@
       {:refusal refusal}
       (when-let [connection (connect spec opts)]
         (let [cache (kubectl/read-cache)
-              {:keys [ctx unread]} (prepared spec connection target ref opts announcement-data cache)]
-          (if unread
-            {:unread unread}
-            (let [pinned ((in-phase :derive cache #(pin-of spec ctx)))
-                  [why chunks] (held #(prejudgement spec ctx pinned cache))]
-              (if why
-                {:refusal why :printed chunks}
-                {:cache cache :derived ctx}))))))))
+              {:keys [ctx unread]} (prepared spec connection target ref opts announcement-data cache)
+              verdict (when (and (not unread) (change/done spec))
+                        ((in-phase :derive cache #(done-verdict spec ctx))))]
+          (cond
+            unread {:unread unread}
+            (:done? verdict) {:done verdict}
+            :else (let [pinned ((in-phase :derive cache #(pin-of spec ctx)))
+                        [why chunks] (held #(prejudgement spec ctx pinned cache))]
+                    (if why
+                      {:refusal why :printed chunks}
+                      (cond-> {:cache cache :derived ctx}
+                        (:unread verdict) (assoc :undecided (:unread verdict)))))))))))
 
 (defn prejudge-printed
   "Prints what prejudge returned the way a standalone run prints it - what
@@ -934,16 +1073,17 @@
    action receives in its ctx (nil when the book does not announce).
    `:derive-cache` and `:derived`, in the last argument, are the read cache
    prejudge filled for this change and the context it derived, which the
-   change then runs on without deriving it again."
+   change then runs on without deriving it again; `:on-skip`, a function of
+   no arguments, is called when the change is skipped as already done."
   ([spec target opts announcement-data]
    (run-on! spec target opts announcement-data nil))
-  ([spec target opts announcement-data {:keys [derive-cache derived]}]
+  ([spec target opts announcement-data {:keys [derive-cache derived on-skip]}]
    (let [spec (change/normalize spec)
          {:keys [ref refusal]} (parse-pick spec target)]
      (if refusal
        (refuse! refusal)
        (if-let [connection (connect spec opts)]
-         (run-connected! spec connection target ref opts announcement-data derive-cache derived)
+         (run-connected! spec connection target ref opts announcement-data derive-cache derived on-skip)
          false)))))
 
 (defn run!
@@ -971,7 +1111,7 @@
           (let [{:keys [ref refusal]} (parse-pick spec target)]
             (if refusal
               (refuse! refusal)
-              (run-connected! spec connection target ref opts announcement-data nil nil)))))
+              (run-connected! spec connection target ref opts announcement-data nil nil nil)))))
       false)))
 
 (defn picks
@@ -993,11 +1133,17 @@
   "What --help says a mutation book does, generated from its spec."
   [spec]
   (let [{:keys [select confirm refusal subjects announce verify prerequisites] :as spec} (change/normalize spec)
-        recheck (change/recheck-alias spec)]
+        recheck (change/recheck-alias spec)
+        done (change/done spec)]
     (concat
      ["What it does:"
-      (str "  picks " (picks select))
-      (str "  asks to confirm: " (:action confirm)
+      (str "  picks " (picks select))]
+     (when done [(str "  skips it, asking nothing, when "
+                      (cond
+                        (true? done) "its post-checks already hold"
+                        verify "it is already done and its post-checks already hold"
+                        :else "it is already done"))])
+     [(str "  asks to confirm: " (:action confirm)
            (when (:destructive? confirm) " (destructive - type yes)"))]
      (when (or refusal recheck (seq subjects))
        ["  checks again right before acting that what was confirmed still holds"])

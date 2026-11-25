@@ -34,6 +34,7 @@
             [clojure.pprint :as pprint]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [gumshoe.change :as change]
             [gumshoe.announce :as announce]
             [gumshoe.flow :as flow]
             [gumshoe.fuzzy-finder :as fuzzy]
@@ -148,8 +149,8 @@
    with flow/change! captured and the recorded cluster still stubbed: what
    the run printed, the config it handed flow/change! (nil when it stopped
    before) and the cluster's state atom."
-  [spec {:keys [objects target opts dry-run ssh]} f]
-  (let [state (atom {:objects objects :answering? true :dry-run dry-run :ssh ssh :commands []})
+  [spec {:keys [objects target opts dry-run ssh answering?] :or {answering? true}} f]
+  (let [state (atom {:objects objects :answering? answering? :dry-run dry-run :ssh ssh :commands []})
         seen (atom nil)]
     (with-redefs [shell/execute (fn [& argv]
                                   (swap! state update :commands conj (vec argv))
@@ -509,9 +510,12 @@
               :refused [["deployments" (deployment :paused true)]]})
 
    "runbooks/kubernetes/workloads/scale.clj"
-   (standard {:target "Deployment shop/web" :invalid "DaemonSet shop/web" :opts {:replicas 3}
-              :permitted [["deployments" (deployment)]]
-              :refused [["deployments" (deployment)] ["horizontalpodautoscalers" hpa]]})
+   (assoc (standard {:target "Deployment shop/web" :invalid "DaemonSet shop/web" :opts {:replicas 3}
+                     :permitted [["deployments" (deployment)]]
+                     :refused [["deployments" (deployment)] ["horizontalpodautoscalers" hpa]]})
+          ;; three ready replicas already: done, even with an autoscaler the refusal would name
+          :done {:objects [["deployments" (deployment :replicas 3)] ["horizontalpodautoscalers" hpa]]
+                 :target "Deployment shop/web" :opts {:replicas 3}})
 
    "runbooks/kubernetes/workloads/rollback.clj"
    (standard {:target "Deployment shop/web" :invalid "Deployment web"
@@ -579,9 +583,10 @@
               :refused [[pg-type (pg-cluster :fenced "[\"pg-2\"]")]]})
 
    "tools/cnpg/runbooks/unfence.clj"
-   (standard {:target "db/pg pg-2" :invalid "db/pg"
-              :permitted [[pg-type (pg-cluster :fenced "[\"pg-2\"]")]]
-              :refused [[pg-type (pg-cluster :fenced "[\"*\"]")]]})
+   (assoc (standard {:target "db/pg pg-2" :invalid "db/pg"
+                     :permitted [[pg-type (pg-cluster :fenced "[\"pg-2\"]")]]
+                     :refused [[pg-type (pg-cluster :fenced "[\"*\"]")]]})
+          :done {:objects [[pg-type (pg-cluster :fenced "[]")]] :target "db/pg pg-2"})
 
    "tools/cnpg/runbooks/switchover.clj"
    (standard {:target "db/pg 2" :invalid "pg 2"
@@ -655,10 +660,14 @@
               :refused [["nodes" (node "n1" :unschedulable true)]]})
 
    "runbooks/kubernetes/nodes/drain.clj"
-   (standard {:target "n1" :opts {:grace-period -1}
-              :permitted [["nodes" (node "n1" :unschedulable true)] ["pods" (pod-on "n1" "agent" "DaemonSet")]
-                          ["pods" (pod-on "n2" "web" "ReplicaSet")]]
-              :refused [["nodes" (node "n1")] ["pods" (pod-on "n1" "web" "ReplicaSet")]]})
+   (assoc (standard {:target "n1" :opts {:grace-period -1}
+                     :permitted [["nodes" (node "n1" :unschedulable true)] ["pods" (pod-on "n1" "agent" "DaemonSet")]
+                                 ["pods" (pod-on "n1" "api" "ReplicaSet")] ["pods" (pod-on "n2" "web" "ReplicaSet")]]
+                     :refused [["nodes" (node "n1")] ["pods" (pod-on "n1" "web" "ReplicaSet")]]})
+          ;; cordoned, with nothing a drain evicts left on it: already done
+          :done {:objects [["nodes" (node "n1" :unschedulable true)] ["pods" (pod-on "n1" "agent" "DaemonSet")]
+                           ["pods" (pod-on "n2" "web" "ReplicaSet")]]
+                 :target "n1" :opts {:grace-period -1}})
 
    "runbooks/kubernetes/nodes/uncordon.clj"
    (standard {:target "n1"
@@ -1130,7 +1139,8 @@
 (deftest node-steps-refuse-a-node-that-no-longer-exists-or-was-replaced
   (doseq [[path start] [["runbooks/kubernetes/nodes/cordon.clj" [["nodes" (node "n1")]]]
                         ["runbooks/kubernetes/nodes/uncordon.clj" [["nodes" (node "n1" :unschedulable true)]]]
-                        ["runbooks/kubernetes/nodes/drain.clj" [["nodes" (node "n1" :unschedulable true)]]]]
+                        ["runbooks/kubernetes/nodes/drain.clj" [["nodes" (node "n1" :unschedulable true)]
+                                                                ["pods" (pod-on "n1" "api" "ReplicaSet")]]]]
           :let [scenario {:objects start :target "n1" :opts {:grace-period -1}}]]
     (testing path
       (is (true? (:result (judged path scenario))))
@@ -1169,3 +1179,60 @@
       (testing path
         (let [{:keys [precondition stopped] :as t} (with-book-redefs path #(transcript spec (:absent scenarios)))]
           (is (or (some? stopped) (false? (:result precondition))) (pr-str t)))))))
+
+;; --- already done ---------------------------------------------------------------
+
+(def ^:private skipping
+  "The scenario in which each book that declares :done finds it done; in
+   every other scenario it is judged not done."
+  {"runbooks/kubernetes/cronjobs/suspend.clj" :refused
+   "runbooks/kubernetes/cronjobs/resume.clj" :refused
+   "runbooks/kubernetes/workloads/pause.clj" :refused
+   "runbooks/kubernetes/workloads/resume.clj" :refused
+   "runbooks/kubernetes/workloads/scale.clj" :done
+   "runbooks/kubernetes/nodes/cordon.clj" :refused
+   "runbooks/kubernetes/nodes/drain.clj" :done
+   "runbooks/kubernetes/nodes/uncordon.clj" :refused
+   "tools/flux/runbooks/flux/suspend.clj" :refused
+   "tools/flux/runbooks/flux/resume.clj" :refused
+   "tools/cnpg/runbooks/suspend_scheduled_backup.clj" :refused
+   "tools/cnpg/runbooks/resume_scheduled_backup.clj" :refused
+   "tools/cnpg/runbooks/fence.clj" :refused
+   "tools/cnpg/runbooks/unfence.clj" :done
+   "tools/velero/runbooks/pause_schedule.clj" :refused
+   "tools/velero/runbooks/resume_schedule.clj" :refused})
+
+(defn- done-book?
+  [path]
+  (some? (change/done (change/normalize (load-spec path)))))
+
+(deftest the-books-that-declare-done-are-the-ones-listed
+  (is (= (set (keys skipping)) (set (filter done-book? (keys books))))))
+
+(deftest a-done-book-skips-exactly-where-its-post-checks-already-hold
+  (binding [ssh/*user-config* nil]
+    (doseq [[path skips-in] skipping
+            :let [spec (load-spec path)
+                  scenarios (get books path)
+                  checks (with-book-redefs path #(post-checks-of spec scenarios))]
+            [k scenario] scenarios]
+      (testing (str path " " k)
+        (let [{:keys [stopped]} (with-book-redefs path #(transcript spec scenario))
+              skipped? (boolean (some-> stopped (str/includes? "skipped, already done")))]
+          (is (= (= k skips-in) skipped?) (str stopped))
+          (when skipped?
+            (is (= (concat (map #(str "✅ already holds: " (:description %)) checks)
+                           [(str "✅ skipped, already done: " (get-in spec [:confirm :action]))])
+                   (map stdout/strip-colors (str/split-lines stopped)))
+                "every post-check of the permitted scenario held, and the skip names the step")))))))
+
+(deftest a-done-book-never-skips-on-a-cluster-that-does-not-answer
+  (binding [ssh/*user-config* nil]
+    (doseq [[path skips-in] skipping
+            :let [spec (load-spec path)
+                  scenario (assoc (get-in books [path skips-in]) :answering? false)]]
+      (testing path
+        (let [{:keys [result out asked?]} (judged path scenario)]
+          (is (false? result))
+          (is (false? asked?))
+          (is (not (str/includes? out "skipped")) out))))))

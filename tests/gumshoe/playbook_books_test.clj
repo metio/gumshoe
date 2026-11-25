@@ -296,6 +296,15 @@
    ["pods" (pod "n2" "web-2" "ReplicaSet" :labels {:app "web"})]
    ["poddisruptionbudgets" budget]])
 
+(def ^:private drained-cluster
+  "node-cluster once n1 is cordoned and drained: web-1 runs on n2 now, and
+   only the DaemonSet's pod, which a drain leaves, is on n1."
+  [["nodes" (node "n1" :unschedulable true)] ["nodes" (node "n2")]
+   ["pods" (pod "n1" "agent-1" "DaemonSet")]
+   ["pods" (pod "n2" "web-2" "ReplicaSet" :labels {:app "web"})]
+   ["pods" (pod "n2" "web-1" "ReplicaSet" :labels {:app "web"})]
+   ["poddisruptionbudgets" budget]])
+
 (defn- writes-matching
   [re]
   (fn [argv] (boolean (re-find re (str/join " " argv)))))
@@ -315,7 +324,15 @@
    :failing-drain {:objects node-cluster :argv ["--node" "n1"] :attended? true :fail (writes-matching #"drain n1")}
    :frozen {:objects node-cluster :argv ["--node" "n1"] :attended? true :frozen? true}
    :unhealthy-after {:objects (update-object node-cluster "nodes" nil "n2" #(assoc-in % [:status :conditions 0 :status] "False"))
-                     :argv ["--node" "n1"] :attended? true}})
+                     :argv ["--node" "n1"] :attended? true}
+   ;; a run stopped after the cordon, started again from the top
+   :resumed-after-cordon {:objects (update-object node-cluster "nodes" nil "n1" #(assoc-in % [:spec :unschedulable] true))
+                          :argv ["--node" "n1"] :attended? true}
+   ;; a run stopped at the pause, started again from the top: cordon and
+   ;; drain are done, the pause waits, and the uncordon runs
+   :resumed-after-drain {:objects drained-cluster :argv ["--node" "n1"] :attended? true}
+   :resumed-after-drain-unattended {:objects drained-cluster :argv ["--node" "n1"]}
+   :resumed-after-drain-dry-run {:objects drained-cluster :argv ["--node" "n1"] :dry-run? true}})
 
 ;; --- clear-helm-storage ---------------------------------------------------------------
 

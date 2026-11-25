@@ -54,7 +54,16 @@
    steps it covers as far as their evidence exists (prejudge!): the pick of
    every change, and the refusal of the first change unless a pause that
    waits comes before it (prejudgeable), so the operator is not asked to
-   approve a playbook whose first change will be refused. A change after
+   approve a playbook whose first change will be refused. A change that
+   declares :done (see gumshoe.mutation) is first judged for whether it is
+   already done; one that is alters nothing, so the change after it is
+   judged as the first would be, and an interrupted run started again
+   walks past every step that took effect. The confirmation marks those
+   \"(already done)\"; it still covers them, and each is judged again when
+   reached, over fresh reads, so it is skipped only if it is still done
+   and runs, as confirmed, if it is not. When every change is done and no
+   pause waits, nothing is asked: each change reports that it was
+   skipped, the checks run, and nothing else does. A change after
    another change, or after a pause that waits, judges state the run is
    about to alter, so it is judged only when reached, after the
    confirmation, where judging it earlier would refuse it falsely. Every
@@ -232,6 +241,7 @@
                          (case (kind step)
                            :pause (::title step)
                            (str (::number step) " " (label step)
+                                (when (::done step) " (already done)")
                                 (when (separately? step) " (asks again)"))))
                        steps))
    :destructive? (boolean (or (:destructive? confirm)
@@ -273,50 +283,76 @@
 
 (defn- run-change!
   "Runs a change step through gumshoe.mutation, keeping the plan its :effect
-   built in `plan`, so the run can name what the step applied. A step judged
-   before the confirmation carries the read cache and the context of that
-   judgement, so its :derive phase is the one judged, reads nothing again
-   and computes its :values once."
-  [step {:keys [target opts announcement-data]} plan]
-  (mutation/run-on! (-> (dissoc step ::derive-cache ::derived)
+   built in `plan`, so the run can name what the step applied, and setting
+   `skipped` when it was skipped as already done. A step judged before the
+   confirmation carries the read cache and the context of that judgement,
+   so its :derive phase is the one judged, reads nothing again and computes
+   its :values once."
+  [step {:keys [target opts announcement-data]} plan skipped]
+  (mutation/run-on! (-> (dissoc step ::derive-cache ::derived ::done ::skip)
                         (assoc :confirmed? (not (separately? step)))
                         (update :effect (fn [effect] (fn [ctx] (vreset! plan (effect ctx))))))
                     target opts announcement-data
-                    {:derive-cache (::derive-cache step) :derived (::derived step)}))
+                    {:derive-cache (::derive-cache step) :derived (::derived step)
+                     :on-skip #(vreset! skipped true)}))
 
 ;; --- judging before the confirmation ----------------------------------------------
 
 (defn prejudgeable
   "The indices of the change steps among `steps` - the steps one
-   confirmation covers - whose refusal is judged before that confirmation:
-   the first change, unless a pause that waits comes before it.
+   confirmation covers - judged before that confirmation: every change
+   `done` holds the index of, as the walk meets it, and the first change
+   that is not done, unless a pause that waits comes before it. `done` is
+   the set of indices already judged done, empty when absent.
 
    A change after another change judges state the earlier one is about to
    alter (a drain after the cordon it needs), and a change after a waiting
    pause judges state the operator is about to alter, so the evidence of
    either exists only once the run reaches it; such a step is judged when
    reached, after the confirmation, and never before it, where it would be
-   refused for a state the run itself is about to change. Checks read and
-   change nothing, so they do not end the judgeable prefix. `waits-first?`
-   says whether a pause opening `steps` waits; one that does not - the pause
-   opening a resumed segment, whose manual step is done - does not end it
-   either. Pure."
+   refused for a state the run itself is about to change. A change judged
+   done alters nothing, so the change after it is judged as the first one
+   would be. Checks read and change nothing, so they do not end the
+   judgeable prefix. `waits-first?` says whether a pause opening `steps`
+   waits; one that does not - the pause opening a resumed segment, whose
+   manual step is done - does not end it either. Pure."
+  ([steps waits-first?] (prejudgeable steps waits-first? #{}))
+  ([steps waits-first? done]
+   (loop [[step & more] steps i 0 judged []]
+     (if-not step
+       (not-empty judged)
+       (case (kind step)
+         :check (recur more (inc i) judged)
+         :pause (if (or (pos? i) waits-first?) (not-empty judged) (recur more (inc i) judged))
+         :change (if (contains? done i)
+                   (recur more (inc i) (conj judged i))
+                   (not-empty (conj judged i))))))))
+
+(defn- waiting-pause?
+  [step i waits-first?]
+  (and (= :pause (kind step)) (or (pos? i) waits-first?)))
+
+(defn nothing-to-do?
+  "Whether `steps`, as prejudge! returned them, need no confirmation: they
+   hold a change, every change was judged done before the confirmation
+   (::done), and no pause waits among them. Such a run reports each change
+   skipped, runs its checks and asks nothing. Pure."
   [steps waits-first?]
-  (loop [[step & more] steps i 0]
-    (when step
-      (case (kind step)
-        :check (recur more (inc i))
-        :pause (when-not (or (pos? i) waits-first?) (recur more (inc i)))
-        :change [i]))))
+  (let [changes (filter #(= :change (kind %)) steps)]
+    (boolean (and (seq changes)
+                  (every? ::done changes)
+                  (not-any? true? (map-indexed (fn [i step] (waiting-pause? step i waits-first?)) steps))))))
 
 (defn prejudge!
   "Judges `steps`, before the one confirmation covering them, as far as
    their evidence exists: the pick of every change, which parse-pick judges
-   alone, and the refusal of each prejudgeable change, over what its
-   :derive phase reads now (gumshoe.mutation/prejudge). Prints the first
-   refusal under its step's title and returns nil; otherwise returns the
-   steps, each judged change carrying the read cache its judgement filled
-   and the context it derived.
+   alone, and each prejudgeable change, over what its :derive phase reads
+   now (gumshoe.mutation/prejudge) - whether it is already done, and when
+   it is not, its refusal. Prints the first refusal under its step's title
+   and returns nil; otherwise returns the steps, each change judged done
+   carrying its verdict as ::done, and the judged change that is not done
+   carrying the read cache its judgement filled and the context it derived
+   (unless it asks :separately? or its :done was undecided).
    A rehearsal asks for no confirmation and judges every step as it
    reaches it, so it returns the steps as they are. `ctx` is the run's
    context and `waits-first?` as prejudgeable takes it. A driver that
@@ -324,33 +360,50 @@
   [steps {:keys [target opts announcement-data]} waits-first?]
   (if flow/*dry-run*
     steps
-    (let [steps (vec steps)
-          judged (set (prejudgeable steps waits-first?))
-          refused! (fn [step verdict]
+    (let [refused! (fn [step verdict]
                      (stdout/print-section (::title step))
                      (mutation/prejudge-printed verdict)
-                     nil)]
-      (reduce (fn [steps i]
-                (let [step (nth steps i)]
-                  (if-not (= :change (kind step))
-                    steps
-                    (let [{:keys [refusal]} (mutation/parse-pick step target)]
-                      (cond
-                        refusal (reduced (refused! step {:refusal refusal}))
-                        (not (judged i)) steps
-                        :else (let [{:keys [cache derived] :as verdict} (mutation/prejudge step target opts announcement-data)]
-                                (if cache
-                                  (cond-> steps
-                                    (not (separately? step)) (update i assoc ::derive-cache cache ::derived derived))
-                                  (reduced (refused! step verdict)))))))))
+                     nil)
+          pick-refusal (fn [steps from to]
+                         (some (fn [i]
+                                 (let [step (nth steps i)]
+                                   (when (= :change (kind step))
+                                     (when-let [refusal (:refusal (mutation/parse-pick step target))]
+                                       [step refusal]))))
+                               (range from to)))]
+      (loop [steps (vec steps) done #{} from 0]
+        (let [next (first (remove done (prejudgeable steps waits-first? done)))
+              to (if next (inc next) (count steps))]
+          (if-let [[step refusal] (pick-refusal steps from to)]
+            (refused! step {:refusal refusal})
+            (if-not next
               steps
-              (range (count steps))))))
+              (let [step (nth steps next)
+                    {:keys [cache derived undecided] :as verdict} (mutation/prejudge step target opts announcement-data)]
+                (cond
+                  (:done verdict)
+                  (recur (update steps next assoc ::done (:done verdict)) (conj done next) to)
+
+                  cache
+                  (let [steps (cond-> steps
+                                (not (or (separately? step) undecided))
+                                (update next assoc ::derive-cache cache ::derived derived))]
+                    (if-let [[step refusal] (pick-refusal steps to (count steps))]
+                      (refused! step {:refusal refusal})
+                      steps))
+
+                  :else (refused! step verdict))))))))))
 
 (defn- run-step!
-  [step ctx wait? plan]
+  "Runs one step. A change marked ::skip was judged done before a
+   confirmation that was never asked, because nothing was left to do: it
+   reports that verdict and runs nothing, since nothing covers running it."
+  [step ctx wait? plan skipped]
   (stdout/print-section (::title step))
   (case (kind step)
-    :change (run-change! step ctx plan)
+    :change (if (::skip step)
+              (do (vreset! skipped true) (mutation/skipped! step (::done step)))
+              (run-change! step ctx plan skipped))
     :check (boolean ((:check step) ctx))
     :pause (pause! step ctx wait?)))
 
@@ -433,15 +486,28 @@
    whether a pause that opens the run waits for the operator; `playbook`
    gives the standing :recovery composed with a step's own. The steps that
    applied effects are kept as the run goes, so a playbook without :recovery
-   still names them when a later step fails."
+   still names them when a later step fails.
+
+   A rehearsal applies no change and waits at no pause, so once it has
+   rehearsed a change it did not skip, or a pause that would wait, the
+   state the later changes find is not the one a real run would give them:
+   it judges none of them done, and rehearses each, as a real run reaching
+   them after that change or pause would judge them over what it left."
   [steps ctx wait? playbook]
-  (let [left-behind (volatile! [])]
+  (let [left-behind (volatile! [])
+        rehearsed-ahead? (volatile! false)]
     (reduce (fn [_ [i step]]
               (let [plan (volatile! nil)
+                    skipped (volatile! false)
                     before (outcome/applied-count)
+                    wait? (or wait? (pos? i))
                     stop! #(stopped-at! step ctx {:recovery (:recovery playbook) :left-behind @left-behind})
-                    ok? (try (run-step! step ctx (or wait? (pos? i)) plan)
+                    step (if @rehearsed-ahead? (dissoc step :done :satisfied?) step)
+                    ok? (try (run-step! step ctx wait? plan skipped)
                              (catch Throwable e (stop!) (throw e)))]
+                (when (and flow/*dry-run*
+                           (case (kind step) :change (not @skipped) :pause wait? :check false))
+                  (vreset! rehearsed-ahead? true))
                 (if ok?
                   (let [effects (applied-effects @plan (- (outcome/applied-count) before))]
                     (when (seq effects)
@@ -500,8 +566,12 @@
             waits-first? (or (= 1 from) (boolean (seq leading)))]
         (and (run-steps! leading ctx false playbook)
              (if-let [later (prejudge! later ctx waits-first?)]
-               (and (confirmed! playbook later ctx)
-                    (run-steps! later ctx waits-first? playbook))
+               (if (nothing-to-do? later waits-first?)
+                 (do (stdout/ok "every change of this playbook is already done - nothing to confirm")
+                     (run-steps! (mapv #(cond-> % (= :change (kind %)) (assoc ::skip true)) later)
+                                 ctx waits-first? playbook))
+                 (and (confirmed! playbook later ctx)
+                      (run-steps! later ctx waits-first? playbook)))
                false))))))
 
 (defn run!
@@ -535,6 +605,7 @@
                  (when (:title step) (str " - " (label step)))
                  (when (get-in step [:confirm :destructive?]) " (destructive)")
                  (when (:verify step) ", verified")
+                 (when (or (:done step) (:satisfied? step)) ", skipped when already done")
                  (when (separately? step) ", asks again"))))
 
 (defn details

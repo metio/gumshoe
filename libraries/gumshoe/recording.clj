@@ -42,8 +42,9 @@
 
 (defn save!
   "Writes the recording directory for one run and returns its path. Never
-   throws - a failed recording must not fail the book."
-  [{:keys [book-file description opts outcome meta]}]
+   throws - a failed recording must not fail the book. meta.edn names the
+   changes the run skipped as already done under :skipped."
+  [{:keys [book-file description opts outcome meta skipped]}]
   (try
     (let [dir (fs/path base-directory (book-slug book-file) (timestamp))]
       (fs/create-dirs dir)
@@ -51,6 +52,7 @@
             (with-out-str (pprint/pprint (merge {:book (book-slug book-file)
                                                  :description description
                                                  :outcome outcome}
+                                                (when (seq skipped) {:skipped (vec skipped)})
                                                 meta))))
       (spit (str (fs/path dir "input.edn"))
             (with-out-str (pprint/pprint (redact opts))))
