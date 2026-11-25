@@ -44,7 +44,7 @@
                                       :steps [nodes/cordon nodes/drain {:pause "x"} nodes/uncordon]}))))
 
 (deftest a-playbook-reads-every-option-its-steps-read
-  (is (= #{:node :grace-period}
+  (is (= #{:node :grace-period :drain-timeout}
          (set (keys (playbook/all-options {:steps [nodes/cordon nodes/drain nodes/uncordon]})))))
   (testing "the playbook's own declaration wins"
     (is (= "mine" (get-in (playbook/all-options {:options {:node {:desc "mine" :alias :n :coerce :string}}

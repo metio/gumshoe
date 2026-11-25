@@ -3,8 +3,7 @@
 
 (ns runbooks.prometheus.delete-metric
   "Deletes every series of a metric from a Prometheus TSDB."
-  (:require [babashka.http-client :as http]
-            [cheshire.core :as json]
+  (:require [gumshoe.http :as http]
             [gumshoe.watch :as watch]
             [gumshoe.flow :as flow]
             [gumshoe.kubectl :as kubectl]
@@ -39,35 +38,50 @@
                    :port {:desc "The local port used for the port-forward"
                           :alias :p
                           :default 46372
-                          :coerce :long}}))
+                          :coerce :long}
+                   :delete-timeout {:desc "Seconds the delete_series call may take - a large TSDB can need minutes"
+                                    :default 600
+                                    :coerce :long}}))
 
 (def prerequisites
   {:installed-tools ["kubectl" "fzf"]
    :cluster-capabilities []
    :kubectl-can-get ["services"]})
 
-(defn- delete-series!
-  [local-port metric]
-  (try
-    (let [response (http/post (format "http://localhost:%s/api/v1/admin/tsdb/delete_series" local-port)
-                              {:query-params {"match[]" metric}
-                               :throw false})]
-      (if (contains? #{200 204} (:status response))
-        (do (stdout/ok (format "metric %s deleted" metric)) true)
-        (do (stdout/error "metric not deleted, status:" (:status response) (:body response)) false)))
-    (catch Exception e
-      (stdout/error "could not reach Prometheus through the port-forward:" (ex-message e))
-      false)))
+(def series-probe-timeouts
+  "How long one /api/v1/series probe of the post-check may take. The check
+   runs inside verify/eventually, which judges its timeout only between
+   attempts, so an attempt must end on its own."
+  {:timeout-ms 10000 :deadline-ms 15000})
 
-(defn- series-gone?
+(defn delete-series!
+  "Asks Prometheus on local-port to delete every series of metric, giving the
+   call timeout-seconds before it counts as failed."
+  [local-port metric timeout-seconds]
+  (let [ms (* 1000 timeout-seconds)
+        response (http/request :post (format "http://127.0.0.1:%s/api/v1/admin/tsdb/delete_series" local-port)
+                               {:query-params {"match[]" metric}
+                                :timeout-ms ms
+                                :deadline-ms (+ ms 10000)})]
+    (cond
+      (not (:reachable response))
+      (do (stdout/error "could not reach Prometheus through the port-forward:" (:error response)) false)
+
+      (contains? #{200 204} (:status response))
+      (do (stdout/ok (format "metric %s deleted" metric)) true)
+
+      :else
+      (do (stdout/error "metric not deleted, status:" (:status response) (:body response)) false))))
+
+(defn series-gone?
+  "True only when Prometheus on local-port answered that no series of metric
+   remains."
   [local-port metric]
-  (try
-    (let [response (http/get (format "http://localhost:%s/api/v1/series" local-port)
-                             {:query-params {"match[]" metric}
-                              :throw false})]
-      (and (= 200 (:status response))
-           (empty? (:data (json/parse-string (:body response) true)))))
-    (catch Exception _ false)))
+  (let [response (http/request :get (format "http://127.0.0.1:%s/api/v1/series" local-port)
+                               (assoc series-probe-timeouts :query-params {"match[]" metric}))]
+    (boolean (and (http/ok? response)
+                  (= "success" (get-in response [:json :status]))
+                  (empty? (get-in response [:json :data]))))))
 
 (defn- delete-metric
   [opts {:keys [announcement-data]}]
@@ -101,7 +115,7 @@
                                                    :local-port (:port opts)
                                                    :remote-port remote-port}
                          (fn []
-                           (and (delete-series! (:port opts) metric)
+                           (and (delete-series! (:port opts) metric (:delete-timeout opts))
                                 (do (stdout/print-section "🔎 Post-check")
                                     ;; best-effort: /api/v1/series can lag behind the delete until
                                     ;; tombstone cleanup, and the delete already returned success.

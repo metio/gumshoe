@@ -338,8 +338,13 @@
                                               "apply" "--filename" "-"))}
      :extinguish {:put-out "delete the fire-drill namespace"
                   :items (fn [_] [(str "namespace " drill-namespace " and everything in it")])
+                  ;; --wait=false: kubectl's default waits as long as the
+                  ;; namespace stays Terminating, which a finalizer can make
+                  ;; forever; namespace-gone-check is the bounded wait, and
+                  ;; its failure prints kubernetes-recovery
                   :effect (fn [{:keys [context]}]
-                            (effect/kubectl context "delete" "namespace" drill-namespace "--ignore-not-found"))
+                            (effect/kubectl context "delete" "namespace" drill-namespace
+                                            "--ignore-not-found" "--wait=false"))
                   :checks (fn [ctx] [(namespace-gone-check ctx)])
                   :recovery kubernetes-recovery}
      :expect (assoc expect

@@ -749,14 +749,18 @@
 
     :else
     (let [forward (try
-                    ;; inherit stdout/stderr: kubectl port-forward logs a line per
-                    ;; connection, and with the default captured pipes (that
-                    ;; nothing reads) a busy tunnel fills the buffer and blocks,
-                    ;; silently stalling the forward.
-                    (process/process {:out :inherit :err :inherit}
-                                     ["kubectl" (str "--context=" context) (str "--namespace=" namespace)
-                                      "port-forward" (str "service/" service)
-                                      (str local-port ":" remote-port)])
+                    ;; kubectl port-forward logs a line per connection on its
+                    ;; stdout. Our stdout carries the book's result (--output
+                    ;; json), so that chatter is copied to stderr instead; it
+                    ;; is still drained continuously, since an unread pipe
+                    ;; fills up and blocks the forward.
+                    ;; babashka.process takes the options first and the
+                    ;; command as separate strings; a vector after the
+                    ;; options would be run as one program named "[kubectl".
+                    (apply process/process {:out System/err :err :inherit}
+                           ["kubectl" (str "--context=" context) (str "--namespace=" namespace)
+                            "port-forward" (str "service/" service)
+                            (str local-port ":" remote-port)])
                     (catch Exception e
                       (stdout/error (format "could not start kubectl port-forward: %s" (ex-message e)))
                       nil))]
@@ -766,6 +770,9 @@
           (loop [attempt 0]
             (cond
               (port-open? local-port) (f)
+              (not (process/alive? forward))
+              (do (stdout/error (format "kubectl port-forward to service/%s exited before the port opened" service))
+                  false)
               (>= attempt 30) (do (stdout/error (format "port-forward to service/%s did not come up within 30 seconds" service))
                                   false)
               :else (do (Thread/sleep 1000)

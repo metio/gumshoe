@@ -96,11 +96,22 @@
   {:description (format "node %s is schedulable" node)
    :check (fn [] (node-holds? context node (complement cordoned?)))})
 
+(def default-drain-timeout
+  "Seconds a drain waits for its evictions. kubectl's own default (0) waits
+   forever, retrying an eviction a PodDisruptionBudget refuses every few
+   seconds, so the step would never fail and never print its recovery."
+  300)
+
 (defn drain-effect
-  [context node grace-period]
-  (effect/plan (effect/kubectl context "drain" node
-                               "--ignore-daemonsets" "--delete-emptydir-data"
-                               (str "--grace-period=" grace-period))))
+  "Drains node, giving each pod grace-period seconds and the whole drain
+   timeout seconds (default-drain-timeout when nil) before kubectl gives up
+   with a non-zero exit."
+  ([context node grace-period] (drain-effect context node grace-period nil))
+  ([context node grace-period timeout]
+   (effect/plan (effect/kubectl context "drain" node
+                                "--ignore-daemonsets" "--delete-emptydir-data"
+                                (str "--grace-period=" grace-period)
+                                (str "--timeout=" (or timeout default-drain-timeout) "s")))))
 
 (defn drain-checks
   [context node]
@@ -131,7 +142,10 @@
                    {:grace-period {:desc "Seconds each pod is given to terminate - the pod's own value when omitted"
                                    :alias :g
                                    :default -1
-                                   :coerce :long}})
+                                   :coerce :long}
+                    :drain-timeout {:desc "Seconds the drain waits for its evictions before it gives up and fails - 0 waits forever"
+                                    :default default-drain-timeout
+                                    :coerce :long}})
    :prerequisites (merge node-prerequisites
                          {:kubectl-can-get ["nodes" "pods"]
                           :kubectl-can-delete ["pods"]})
@@ -143,7 +157,7 @@
    :done true
    :announce (fn [{:keys [target]}] (format "Drain node %s" target))
    ;; -1 lets each pod keep its own terminationGracePeriodSeconds
-   :effect (fn [{:keys [context target opts]}] (drain-effect context target (:grace-period opts)))
+   :effect (fn [{:keys [context target opts]}] (drain-effect context target (:grace-period opts) (:drain-timeout opts)))
    :verify (fn [{:keys [context target]}] (drain-checks context target))})
 
 (def uncordon

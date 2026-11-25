@@ -136,8 +136,8 @@
     (testing "the ignite applies the namespace and the manifests as one list"
       (is (= [:kubectl-stdin "ctx" ["apply" "--filename" "-"]] [op context (vec args)]))
       (is (= ["Namespace" "Deployment"] (map :kind (:items (json/parse-string stdin true))))))
-    (testing "the extinguish deletes the drill namespace"
-      (is (= [[:kubectl "ctx" "delete" "namespace" "fire-drill" "--ignore-not-found"]]
+    (testing "the extinguish deletes the drill namespace without waiting, so a namespace stuck Terminating fails the bounded gone check instead of hanging kubectl"
+      (is (= [[:kubectl "ctx" "delete" "namespace" "fire-drill" "--ignore-not-found" "--wait=false"]]
              (effect/collect (effect/as-plan ((:effect extinguish) ctx))))))))
 
 (deftest a-kubernetes-drill-derives-what-it-needs

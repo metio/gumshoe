@@ -1243,7 +1243,7 @@
     "────────────────────────────────────────────────────────────────────────────────"
     "This will drain a node - every pod on it is evicted and emptyDir data is deleted on 'cluster':"
     "  - n1"
-    "  would run: kubectl drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1"],
+    "  would run: kubectl drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1 --timeout=300s"],
    :banner "DONE - nothing was changed",
    :recovery []},
   :empty {:result true, :out "✅ nothing to do"},
@@ -1260,7 +1260,7 @@
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
-    "      kubectl drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=30"
+    "      kubectl drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=30 --timeout=300s"
     "    its post-check did not hold"
     "  Look at:"
     "    the post-check messages above"
@@ -1271,7 +1271,7 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"],
    :banner
-   "FAILED at the first effect: kubectl drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1 - nothing was changed",
+   "FAILED at the first effect: kubectl drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1 --timeout=300s - nothing was changed",
    :recovery []},
   :permitted
   {:action
@@ -1287,7 +1287,8 @@
      "n1"
      "--ignore-daemonsets"
      "--delete-emptydir-data"
-     "--grace-period=-1"]],
+     "--grace-period=-1"
+     "--timeout=300s"]],
    :precondition {:result true, :out ""},
    :announce "Drain node n1",
    :checks
@@ -1312,7 +1313,8 @@
      "n1"
      "--ignore-daemonsets"
      "--delete-emptydir-data"
-     "--grace-period=-1"]]},
+     "--grace-period=-1"
+     "--timeout=300s"]]},
   :refused
   {:action
    "drain a node - every pod on it is evicted and emptyDir data is deleted",
@@ -1327,7 +1329,8 @@
      "n1"
      "--ignore-daemonsets"
      "--delete-emptydir-data"
-     "--grace-period=-1"]],
+     "--grace-period=-1"
+     "--timeout=300s"]],
    :precondition {:result true, :out ""},
    :announce "Drain node n1",
    :checks
@@ -1353,7 +1356,8 @@
      "n1"
      "--ignore-daemonsets"
      "--delete-emptydir-data"
-     "--grace-period=-1"]],
+     "--grace-period=-1"
+     "--timeout=300s"]],
    :precondition
    {:result false,
     :out "refusing: its spec changed after the confirmation"},
@@ -1381,7 +1385,8 @@
      "n1"
      "--ignore-daemonsets"
      "--delete-emptydir-data"
-     "--grace-period=-1"]],
+     "--grace-period=-1"
+     "--timeout=300s"]],
    :precondition {:result true, :out ""},
    :announce "Drain node n1",
    :checks
@@ -1406,6 +1411,11 @@
      "Seconds each pod is given to terminate - the pod's own value when omitted",
      :alias :g,
      :default -1,
+     :coerce :long},
+    :drain-timeout
+    {:desc
+     "Seconds the drain waits for its evictions before it gives up and fails - 0 waits forever",
+     :default 300,
      :coerce :long}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
@@ -1448,7 +1458,8 @@
      "n1"
      "--ignore-daemonsets"
      "--delete-emptydir-data"
-     "--grace-period=-1"]],
+     "--grace-period=-1"
+     "--timeout=300s"]],
    :precondition
    {:result false,
     :out "refusing: its spec changed after the confirmation: taints"},
@@ -1476,7 +1487,8 @@
      "n1"
      "--ignore-daemonsets"
      "--delete-emptydir-data"
-     "--grace-period=-1"]],
+     "--grace-period=-1"
+     "--timeout=300s"]],
    :precondition
    {:result false,
     :out
@@ -2121,7 +2133,7 @@
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
-    "      kubectl --namespace=shop delete orders.acme.cert-manager.io web-1"
+    "      kubectl --namespace=shop delete orders.acme.cert-manager.io web-1 --wait=false"
     "    its post-check did not hold"
     "  Look at:"
     "    the post-check messages above"
@@ -2138,7 +2150,8 @@
      "--namespace=shop"
      "delete"
      "orders.acme.cert-manager.io"
-     "web-1"]],
+     "web-1"
+     "--wait=false"]],
    :precondition {:result true, :out ""},
    :announce "Recreate invalid orders [shop/web-1]",
    :checks
@@ -2157,7 +2170,8 @@
      "--namespace=shop"
      "delete"
      "orders.acme.cert-manager.io"
-     "web-1"]]},
+     "web-1"
+     "--wait=false"]]},
   :refused
   {:stopped
    "refusing: Order shop/web-1 is valid now; it no longer needs to be recreated"},
@@ -2172,7 +2186,8 @@
      "--namespace=shop"
      "delete"
      "orders.acme.cert-manager.io"
-     "web-1"]],
+     "web-1"
+     "--wait=false"]],
    :precondition
    {:result false,
     :out
@@ -2226,7 +2241,8 @@
      "--namespace=shop"
      "delete"
      "orders.acme.cert-manager.io"
-     "web-1"]],
+     "web-1"
+     "--wait=false"]],
    :precondition
    {:result false,
     :out
@@ -2420,7 +2436,7 @@
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
-    "      kubectl --namespace=shop delete persistentvolumeclaim data"
+    "      kubectl --namespace=shop delete persistentvolumeclaim data --wait=false"
     "    its post-check did not hold"
     "  Look at:"
     "    the post-check messages above"
@@ -2442,7 +2458,8 @@
      "--namespace=shop"
      "delete"
      "persistentvolumeclaim"
-     "data"]],
+     "data"
+     "--wait=false"]],
    :precondition {:result true, :out ""},
    :announce "Delete unused PersistentVolumeClaim shop/data",
    :checks
@@ -2462,7 +2479,8 @@
      "--namespace=shop"
      "delete"
      "persistentvolumeclaim"
-     "data"]]},
+     "data"
+     "--wait=false"]]},
   :refused
   {:stopped
    "refusing: PersistentVolumeClaim shop/data is used by pod(s) web-0"},
@@ -2479,7 +2497,8 @@
      "--namespace=shop"
      "delete"
      "persistentvolumeclaim"
-     "data"]],
+     "data"
+     "--wait=false"]],
    :precondition
    {:result false,
     :out
@@ -2544,7 +2563,8 @@
      "--namespace=shop"
      "delete"
      "persistentvolumeclaim"
-     "data"]],
+     "data"
+     "--wait=false"]],
    :precondition
    {:result false,
     :out

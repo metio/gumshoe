@@ -61,7 +61,12 @@
     (is (= ["sudo" "crictl" "stop" "abc"] (apiserver/stop-command "abc")))
     (is (= "abc" (last (apiserver/started-at-command "abc")))))
   (testing "readyz is asked of this node rather than the load balancer"
-    (is (some #(= "https://localhost:6443/readyz" %) (apiserver/readyz-command)))))
+    (is (some #(= "https://localhost:6443/readyz" %) (apiserver/readyz-command))))
+  (testing "readyz gives up instead of waiting on an apiserver that accepts and never answers"
+    (is (= ["--max-time" (str apiserver/default-readyz-max-time)]
+           (->> (apiserver/readyz-command) (drop-while #(not= "--max-time" %)) (take 2))))
+    (is (= ["--max-time" "3"]
+           (->> (apiserver/readyz-command 3) (drop-while #(not= "--max-time" %)) (take 2))))))
 
 (deftest a-restart-is-refused-on-a-node-the-cluster-does-not-list-as-control-plane
   (let [cp (node "cp-1" {(keyword apiserver/control-plane-label) ""})]

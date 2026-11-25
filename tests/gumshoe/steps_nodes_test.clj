@@ -80,3 +80,17 @@
       (is (nil? ((:refusal step) {:target "n1" :object {:metadata {:name "n1"}}})))
       (is (nil? ((:refusal step) {:target "n1" :object {:metadata {:name "n1"} :spec {:unschedulable true}}}))
           "a node already in the state the step brings about is not refused"))))
+
+(deftest a-drain-gives-up-after-its-timeout
+  (testing "the default bounds the drain, so a PodDisruptionBudget fails the step instead of hanging it"
+    (is (= [[:kubectl "ctx" "drain" "n1" "--ignore-daemonsets" "--delete-emptydir-data"
+             "--grace-period=-1" (str "--timeout=" nodes/default-drain-timeout "s")]]
+           (nodes/drain-effect "ctx" "n1" -1)))
+    (is (pos? nodes/default-drain-timeout)))
+  (testing "an operator may choose the timeout"
+    (is (some #{"--timeout=900s"} (first (nodes/drain-effect "ctx" "n1" 30 900)))))
+  (testing "the drain step passes its --drain-timeout option, defaulting to the bound"
+    (is (= nodes/default-drain-timeout (get-in nodes/drain [:options :drain-timeout :default])))
+    (is (some #{"--timeout=60s"}
+              (first ((:effect nodes/drain) {:context "ctx" :target "n1"
+                                             :opts {:grace-period -1 :drain-timeout 60}}))))))

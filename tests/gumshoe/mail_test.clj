@@ -188,6 +188,28 @@
       (let [probe (mail/probe-service "mail.example.org" (first (filter #(= "smtp" (:name %)) mail/services)))]
         (is (false? (:reachable probe)))))))
 
+(deftest probes-are-bounded-by-their-own-deadline
+  (let [smtp (first (filter #(= "smtp" (:name %)) mail/services))
+        seen (atom [])]
+    (with-redefs [shell/execute-with-stdin
+                  (fn [_ & args]
+                    (when (= "s_client" (second args)) (swap! seen conj shell/*timeout-ms*))
+                    {:exit 124 :out "" :err ""})]
+      (testing "a probe binds the short default, not the generic shell bound"
+        (mail/probe-service "mail.example.org" smtp)
+        (is (= [mail/default-probe-timeout-ms] @seen))
+        (is (< mail/default-probe-timeout-ms shell/*timeout-ms*)))
+      (testing "a caller may choose the deadline"
+        (reset! seen [])
+        (mail/probe-service "mail.example.org" smtp 2500)
+        (is (= [2500] @seen)))
+      (testing "collect-evidence! passes :probe-timeout-ms to every probe"
+        (reset! seen [])
+        (with-redefs [gumshoe.dns/query (fn [& _] [])]
+          (mail/collect-evidence! {:domain "example.org" :host "mail.example.org"
+                                   :dkim-selectors [] :probe-timeout-ms 1234}))
+        (is (= (repeat (count mail/services) 1234) @seen))))))
+
 (deftest service-catalogue-test
   (testing "every cleartext port declares a STARTTLS protocol and a greeting"
     (doseq [service mail/services]
