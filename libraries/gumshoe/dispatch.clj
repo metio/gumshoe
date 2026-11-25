@@ -25,6 +25,7 @@
    checks and its one confirmation."
   (:refer-clojure :exclude [run!])
   (:require [clojure.string :as str]
+            [gumshoe.flags :as flags]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
             [gumshoe.playbook :as playbook]
@@ -47,12 +48,13 @@
 (defn all-options
   "Every route's options without their defaults, and the dispatcher's own."
   [{:keys [routes options]}]
-  (merge (playbook/all-options
-          {:steps (vec (for [route (vals routes)]
-                         {:check identity
-                          :options (update-vals (playbook/all-options (playbook-of route))
-                                                #(dissoc % :default))}))})
-         options))
+  (flags/merge-ordered
+   (playbook/all-options
+    {:steps (vec (for [route (vals routes)]
+                   {:check identity
+                    :options (update-vals (playbook/all-options (playbook-of route))
+                                          #(dissoc % :default))}))})
+   options))
 
 (defn all-prerequisites
   "Everything any route needs, and the dispatcher's own."
@@ -132,7 +134,7 @@
   [{:keys [description] :as dispatcher}]
   (runbook/execute!
    {:description description
-    :options (merge (all-options dispatcher) segment-option)
+    :options (flags/merge-ordered (all-options dispatcher) segment-option)
     :prerequisites (all-prerequisites dispatcher)
     :details (details dispatcher)
     :action (fn [opts {:keys [announcement-data]}]

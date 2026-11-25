@@ -9,38 +9,40 @@
             [clojure.string :as str]
             [gumshoe.detective :as detective]
             [gumshoe.detectives.hosts :as host-detectives]
+            [gumshoe.flags :as flags]
             [gumshoe.hosts :as hosts]
             [gumshoe.inputs :as inputs]
             [gumshoe.promql :as promql]
             [gumshoe.stdout :as stdout]))
 
 (def options
-  (merge {:url {:desc "The query API base URL (e.g. https://prometheus.example.org); defaults to env.edn :prometheus :url"
-                :default (inputs/env-default [:prometheus :url])
-                :coerce :string}
-          :flavor {:desc "prometheus, thanos (deduplicates, refuses partial answers) or mimir (/prometheus prefix, tenant header)"
-                   :default "prometheus"
-                   :coerce :string}
-          :tenant {:desc "The Mimir tenant, sent as X-Scope-OrgID"
-                   :coerce :string}
-          :username {:desc "Basic auth username - resolved from the secret store when omitted"
-                     :alias :u
-                     :coerce :string}
-          :password {:desc "Basic auth password - resolved from the secret store when omitted"
-                     :alias :w
-                     :coerce :string}
-          :host-label {:desc "The label naming a host: instance (port stripped), node, hostname or nodename"
-                       :default "instance"
-                       :coerce :string}
-          :selector {:desc "A label selector body narrowing every metric, e.g. cluster=\"staging\""
-                     :alias :l
-                     :coerce :string}
-          :job {:desc "A regular expression naming the node_exporter scrape jobs, for the up check"
-                :default "node|.*node-exporter.*"
-                :coerce :string}
-          :declared {:desc "A file of declared host names, one per line; # starts a comment"
-                     :coerce :string}}
-         detective/output-option))
+  (flags/merge-ordered
+   (flags/ordered :url {:desc "The query API base URL (e.g. https://prometheus.example.org); defaults to env.edn :prometheus :url"
+                        :default (inputs/env-default [:prometheus :url])
+                        :coerce :string}
+                  :flavor {:desc "prometheus, thanos (deduplicates, refuses partial answers) or mimir (/prometheus prefix, tenant header)"
+                           :default "prometheus"
+                           :coerce :string}
+                  :tenant {:desc "The Mimir tenant, sent as X-Scope-OrgID"
+                           :coerce :string}
+                  :username {:desc "Basic auth username - resolved from the secret store when omitted"
+                             :alias :u
+                             :coerce :string}
+                  :password {:desc "Basic auth password - resolved from the secret store when omitted"
+                             :alias :w
+                             :coerce :string}
+                  :host-label {:desc "The label naming a host: instance (port stripped), node, hostname or nodename"
+                               :default "instance"
+                               :coerce :string}
+                  :selector {:desc "A label selector body narrowing every metric, e.g. cluster=\"staging\""
+                             :alias :l
+                             :coerce :string}
+                  :job {:desc "A regular expression naming the node_exporter scrape jobs, for the up check"
+                        :default "node|.*node-exporter.*"
+                        :coerce :string}
+                  :declared {:desc "A file of declared host names, one per line; # starts a comment"
+                             :coerce :string})
+   detective/output-option))
 
 (def prerequisites {})
 

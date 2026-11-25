@@ -173,6 +173,7 @@
    subject), because a fragment may be completed by a later compose;
    normalize makes them when the composed spec runs or its book loads."
   (:require [clojure.string :as str]
+            [gumshoe.flags :as flags]
             [gumshoe.prerequisites :as prerequisites]))
 
 (def unmet
@@ -671,7 +672,7 @@
                    (invalid! (format "two parts of the change declare --%s differently: %s and %s"
                                      (name k) (pr-str seen) (pr-str v))
                              {:option k :declarations [seen v]}))
-                 (assoc acc k v)))
+                 (flags/merge-ordered acc {k v})))
              (or a {})
              (or b {})))
 

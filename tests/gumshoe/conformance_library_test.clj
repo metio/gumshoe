@@ -582,3 +582,44 @@
         (is (not-any? #(str/includes? % ":pick") messages)
             "the derived option is complete and not read statically"))
       (finally (fs/delete file)))))
+
+(defn- options-book
+  "A detective book whose options are written by `options-form`."
+  [ns-name options-form]
+  (str header
+       "(ns " ns-name " \"Reads many flags.\"\n"
+       "  (:require [gumshoe.detective :as detective] [gumshoe.flags :as flags]))\n"
+       "(detective/book\n"
+       " {:description \"Many flags\"\n"
+       "  :options " options-form "\n"
+       "  :detectives [{:name \"ok\" :detect (fn [_] [])}]})\n"))
+
+(def ^:private nine-options
+  (str/join " " (for [i (range 1 10)] (format ":o%d {:desc \"Option %d\"}" i i))))
+
+(deftest a-book-whose-options-lost-their-order-is-a-note
+  (let [root (str (fs/create-temp-dir))
+        books (str (fs/path root "runbooks"))]
+    (try
+      (fs/create-dirs books)
+      (spit (str (fs/path books "literal.clj")) (options-book "casebook.order.literal" (str "{" nine-options "}")))
+      (spit (str (fs/path books "ordered.clj")) (options-book "casebook.order.ordered" (str "(flags/ordered " nine-options ")")))
+      (spit (str (fs/path books "eight.clj"))
+            (options-book "casebook.order.eight" (str "{" (str/join " " (for [i (range 1 9)] (format ":o%d {:desc \"Option %d\"}" i i))) "}")))
+      (let [{:keys [findings advisories]} (conformance/report {:books (:books (conformance/files-in {:books [books]}))
+                                                               :libraries [] :license "Apache-2.0"})]
+        (is (empty? findings) (pr-str findings))
+        (is (= [[(str (fs/path books "literal.clj")) :option-order]]
+               (vec (for [{:keys [file check]} advisories :when (= :option-order check)] [file check]))))
+        (is (some #(str/includes? (:message %) "flags/ordered") advisories)))
+      (finally (fs/delete-tree root)))))
+
+(deftest the-options-of-flags-ordered-are-checked
+  (let [file (str (fs/create-temp-file {:suffix ".clj"}))]
+    (try
+      (spit file (options-book "casebook.order.checked"
+                               "(flags/merge-ordered (flags/ordered :a {:alias :x} :b {:desc \"b\" :alias :x}) detective/output-option)"))
+      (let [messages (map :message (conformance/option-problems [(conformance/parse file)]))]
+        (is (some #(str/includes? % "option :a has no :desc") messages))
+        (is (some #(str/includes? % "colliding option aliases") messages)))
+      (finally (fs/delete file)))))

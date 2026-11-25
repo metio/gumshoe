@@ -46,9 +46,10 @@
   "The babashka.cli spec a book with these options parses its arguments
    with: the options and the standard flags, unknown flags refused, and the
    deprecated aliases the options still take (gumshoe.flags), each named in
-   its option's description."
+   its option's description. The spec lists the options in their order and
+   the standard flags after them, so --help lists them so too."
   [options]
-  {:spec (merge (flags/documented options) standard-options)
+  {:spec (flags/merge-ordered (flags/documented options) standard-options)
    :alias (flags/deprecated-aliases options)
    :restrict true})
 

@@ -69,10 +69,12 @@
             [clojure.string :as str]
             [edamame.core :as edamame]
             [gumshoe.change :as change]
+            [gumshoe.detective :as detective]
             [gumshoe.dispatch :as dispatch]
             [gumshoe.edn-book :as edn-book]
             [gumshoe.edn-reader :as edn-reader]
             [gumshoe.firebook :as firebook]
+            [gumshoe.flags :as flags]
             [gumshoe.mutation :as mutation]
             [gumshoe.playbook :as playbook]
             [gumshoe.runbook :as runbook]))
@@ -178,8 +180,11 @@
   [options-form]
   (cond
     (map? options-form) [options-form]
-    (and (seq? options-form) (= 'merge (first options-form)))
+    (and (seq? options-form) (#{'merge 'flags/merge-ordered} (first options-form)))
     (mapcat option-maps (rest options-form))
+    ;; (flags/ordered :k {..} ..): flag and option pairs
+    (and (seq? options-form) (= 'flags/ordered (first options-form)) (even? (count (rest options-form))))
+    [(into {} (map vec (partition 2 (rest options-form))))]
     ;; (select/options select {..}): the select's own options are derived
     ;; complete, so only the book's explicit map is read here
     (and (seq? options-form) (= 'select/options (first options-form)))
@@ -229,20 +234,29 @@
 (defn- load-book
   "Loads a book with runbook/*loading* bound, so the harness hands back the
    book's config instead of running it. Returns {:file :error} for a book
-   that does not load, else {:file :ns :specs}, where :specs are the
+   that does not load, else {:file :specs :option-maps}, where :specs are the
    specs the book handed to mutation/book, playbook/book, dispatch/book and
    firebook/book, each as [builder spec], captured as the builders received them, so a
    spec built with merge, toggle/pair or a library function is seen as it
-   runs."
+   runs. :option-maps are the option maps the book declared, as a builder
+   or runbook/execute! received them, before a builder joins them with
+   options of its own."
   [file]
   (let [captured (atom [])
+        declared (atom [])
+        configs (atom [])
         capture (fn [builder original]
                   (fn [spec] (swap! captured conj [builder spec]) (original spec)))
+        declare (fn [original]
+                  (fn [spec] (swap! declared conj spec) (original spec)))
+        execute! runbook/execute!
         error (try
-                (with-redefs [mutation/book (capture :mutation mutation/book)
-                              playbook/book (capture :playbook playbook/book)
-                              dispatch/book (capture :dispatch dispatch/book)
-                              firebook/book (capture :firebook firebook/book)]
+                (with-redefs [mutation/book (declare (capture :mutation mutation/book))
+                              playbook/book (declare (capture :playbook playbook/book))
+                              dispatch/book (declare (capture :dispatch dispatch/book))
+                              firebook/book (declare (capture :firebook firebook/book))
+                              detective/book (declare detective/book)
+                              runbook/execute! (fn [config] (swap! configs conj config) (execute! config))]
                   (binding [runbook/*loading* true]
                     (if (edn-book? file)
                       (edn-book/book file)
@@ -254,7 +268,12 @@
                     (load-error e))))]
     (if error
       {:file file :error error}
-      {:file file :specs @captured})))
+      {:file file
+       :specs @captured
+       ;; a builder's spec holds what the book declared; runbook/execute!
+       ;; receives it already joined by the builder
+       :option-maps (vec (keep :options (concat (or (seq @declared) @configs)
+                                                (mapcat :steps @declared))))})))
 
 (defn- add-classpath!
   [classpath]
@@ -284,6 +303,20 @@
   ([books] (unloadable books {}))
   ([books opts]
    (vec (load-findings (load-books books opts)))))
+
+(defn option-order-findings
+  "A book whose option map has lost the order its options were written in
+   (see flags/order-lost?), so --help lists them in hash order: a map
+   literal of more than eight options, or a plain merge past eight. An EDN
+   book is left out: plain EDN has no way to write an ordered map."
+  [loaded]
+  (for [{:keys [file option-maps]} loaded
+        :when (not (edn-book? file))
+        options option-maps
+        :when (flags/order-lost? options)]
+    (finding file :option-order
+             (format "lists its %d options out of order in --help: a map literal or a merge of more than eight loses their order; build them with flags/ordered and join them with flags/merge-ordered"
+                     (count options)))))
 
 ;; REUSE-IgnoreStart -- the tag every file must carry, not a declaration of this one.
 (defn missing-license
@@ -743,8 +776,9 @@
    release before it has fixed or annotated its specs. The :guard findings
    (see guard-problems) are advisories unless `guards` is :require, so a
    casebook sees a destructive spec without a guard as a note until it opts
-   into failing on it. :advisories holds them and every advisory of
-   `advisories`."
+   into failing on it. :advisories holds them, every advisory of
+   `advisories`, and the :option-order findings of option-order-findings,
+   which only change how --help reads."
   [{:keys [books libraries license load? spec-contract guards] :as opts}]
   (let [edn-books (filter edn-book? books)
         parsed-books (mapv parse (remove edn-book? books))
@@ -769,7 +803,9 @@
                             (option-problems parsed-books)
                             (load-findings loaded)
                             (remove noted? contract)))
-     :advisories (vec (concat (without-recovery (filter :forms parsed-books)) advised))}))
+     :advisories (vec (concat (without-recovery (filter :forms parsed-books))
+                              (option-order-findings loaded)
+                              advised))}))
 
 (defn findings
   "Every finding for the book and library files (see report, which takes the

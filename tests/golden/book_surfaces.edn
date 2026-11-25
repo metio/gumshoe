@@ -381,23 +381,23 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "      --guest-mac-prefixes  Comma-separated MAC prefixes of guests - env.edn's"
-   "                            :evpn :guest-mac-prefixes when omitted; without"
-   "                            either, every MAC counts as a guest"
    "  -H, --hosts               Comma-separated fabric hosts - env.edn's :evpn"
    "                            :hosts when omitted"
+   "  -n, --vni                 Comma-separated VNIs - env.edn's :evpn :vnis when"
+   "                            omitted"
    "      --gateway-vteps       Comma-separated gateway VTEPs, the routers' own -"
    "                            env.edn's :evpn :gateway-vteps when omitted; without"
    "                            either, evpn-gateway-only-mac cannot judge"
+   "      --guest-mac-prefixes  Comma-separated MAC prefixes of guests - env.edn's"
+   "                            :evpn :guest-mac-prefixes when omitted; without"
+   "                            either, every MAC counts as a guest"
+   "  -u, --user                The SSH user - your ssh config decides when omitted"
    "  -o, --output              Report format: text, json, edn, or a"
    "                            plugin-registered format (default: text)"
+   "      --dry-run             Show what would change without changing anything"
    "      --no-color            Disable colored output (also honors the NO_COLOR env"
    "                            var)"
-   "  -n, --vni                 Comma-separated VNIs - env.edn's :evpn :vnis when"
-   "                            omitted"
-   "      --dry-run             Show what would change without changing anything"
-   "  -h, --help                Show this help message"
-   "  -u, --user                The SSH user - your ssh config decides when omitted"]},
+   "  -h, --help                Show this help message"]},
  "runbooks/detectives/mail.clj"
  {:options
   {:dkim-selectors
@@ -1958,21 +1958,21 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "      --watch-timeout        Seconds to watch the upgrade before handing back"
-   "                             (re-run --status later) (default: 7200)"
+   "  -s, --host                 A ceph mgr or admin host to run ceph on (required)"
+   "  -u, --user                 The SSH user - your ssh config decides when omitted"
+   "      --cephadm-shell        Wrap ceph in 'sudo cephadm shell' - for hosts that"
+   "                             only have the cephadm binary"
+   "  -t, --target-version       The ceph version to upgrade to, e.g. 17.2.9"
    "      --require-osd-release  After the upgrade, ratchet require-osd-release"
    "                             (e.g. quincy)"
-   "      --no-color             Disable colored output (also honors the NO_COLOR"
-   "                             env var)"
-   "  -t, --target-version       The ceph version to upgrade to, e.g. 17.2.9"
-   "  -s, --host                 A ceph mgr or admin host to run ceph on (required)"
+   "      --watch-timeout        Seconds to watch the upgrade before handing back"
+   "                             (re-run --status later) (default: 7200)"
    "      --status               Only show the current upgrade status, change"
    "                             nothing"
    "      --dry-run              Show what would change without changing anything"
-   "      --cephadm-shell        Wrap ceph in 'sudo cephadm shell' - for hosts that"
-   "                             only have the cephadm binary"
-   "  -h, --help                 Show this help message"
-   "  -u, --user                 The SSH user - your ssh config decides when omitted"]},
+   "      --no-color             Disable colored output (also honors the NO_COLOR"
+   "                             env var)"
+   "  -h, --help                 Show this help message"]},
  "tools/ceph/runbooks/archive_crashes.clj"
  {:options
   {:cephadm-shell
@@ -3517,30 +3517,30 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "      --tenant      The Mimir tenant, sent as X-Scope-OrgID"
-   "  -l, --selector    A label selector body narrowing every metric, e.g."
-   "                    cluster=\"staging\""
-   "      --flavor      prometheus, thanos (deduplicates, refuses partial answers)"
-   "                    or mimir (/prometheus prefix, tenant header) (default:"
-   "                    prometheus)"
-   "  -w, --password    Basic auth password - resolved from the secret store when"
-   "                    omitted"
-   "  -u, --username    Basic auth username - resolved from the secret store when"
-   "                    omitted"
-   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
-   "                    format (default: text)"
-   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
-   "      --host-label  The label naming a host: instance (port stripped), node,"
-   "                    hostname or nodename (default: instance)"
-   "      --declared    A file of declared host names, one per line; # starts a"
-   "                    comment"
    "      --url         The query API base URL (e.g."
    "                    https://prometheus.example.org); defaults to env.edn"
    "                    :prometheus :url"
-   "      --dry-run     Show what would change without changing anything"
-   "  -h, --help        Show this help message"
+   "      --flavor      prometheus, thanos (deduplicates, refuses partial answers)"
+   "                    or mimir (/prometheus prefix, tenant header) (default:"
+   "                    prometheus)"
+   "      --tenant      The Mimir tenant, sent as X-Scope-OrgID"
+   "  -u, --username    Basic auth username - resolved from the secret store when"
+   "                    omitted"
+   "  -w, --password    Basic auth password - resolved from the secret store when"
+   "                    omitted"
+   "      --host-label  The label naming a host: instance (port stripped), node,"
+   "                    hostname or nodename (default: instance)"
+   "  -l, --selector    A label selector body narrowing every metric, e.g."
+   "                    cluster=\"staging\""
    "      --job         A regular expression naming the node_exporter scrape jobs,"
-   "                    for the up check (default: node|.*node-exporter.*)"]},
+   "                    for the up check (default: node|.*node-exporter.*)"
+   "      --declared    A file of declared host names, one per line; # starts a"
+   "                    comment"
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "  -h, --help        Show this help message"]},
  "tools/opennebula/runbooks/scan.clj"
  {:options
   {:frontend
@@ -3611,25 +3611,25 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -s, --service    The name of the Prometheus service - interactive selection"
-   "                   when omitted"
-   "  -l, --selector   Label selector used to find Prometheus services (default:"
-   "                   operated-prometheus=true)"
-   "  -p, --port       The local port used for the port-forward (default: 46372)"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "      --port-name  The service port serving the Prometheus API (default: web)"
-   "      --dry-run    Show what would change without changing anything"
-   "  -h, --help       Show this help message"
    "  -n, --namespace  The namespace of the Prometheus service - interactive"
    "                   selection when omitted"
-   "  -m, --metric     The metric to delete (required)"],
+   "  -s, --service    The name of the Prometheus service - interactive selection"
+   "                   when omitted"
+   "  -m, --metric     The metric to delete (required)"
+   "  -l, --selector   Label selector used to find Prometheus services (default:"
+   "                   operated-prometheus=true)"
+   "      --port-name  The service port serving the Prometheus API (default: web)"
+   "  -p, --port       The local port used for the port-forward (default: 46372)"
+   "      --dry-run    Show what would change without changing anything"
+   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
+   "  -h, --help       Show this help message"],
   :parsed
   {"--service query" "threw: Required option: --metric",
    "-m query"
    {:opts
     {:selector "operated-prometheus=true",
-     :port 46372,
      :port-name "web",
+     :port 46372,
      :metric "query"},
     :notes []},
    "-s query" "threw: Required option: --metric"}},
@@ -3732,24 +3732,24 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -w, --prometheus-password  The Prometheus basic auth password - resolved via"
-   "                             gopass when omitted"
    "  -d, --directory            Directory with Prometheus rule files; defaults to"
    "                             env.edn :prometheus :rules-directory"
-   "  -u, --prometheus-username  The Prometheus basic auth username - resolved via"
-   "                             gopass when omitted"
-   "      --no-color             Disable colored output (also honors the NO_COLOR"
-   "                             env var)"
+   "  -g, --grafana              The Grafana base URL (e.g."
+   "                             https://grafana.example.org); defaults to env.edn"
+   "                             :grafana :url"
    "  -t, --token                The Grafana service account token - resolved via"
    "                             gopass when omitted"
    "  -p, --prometheus           The Prometheus base URL (e.g."
    "                             https://prometheus.example.org); defaults to"
    "                             env.edn :prometheus :url"
+   "  -u, --prometheus-username  The Prometheus basic auth username - resolved via"
+   "                             gopass when omitted"
+   "  -w, --prometheus-password  The Prometheus basic auth password - resolved via"
+   "                             gopass when omitted"
    "      --dry-run              Show what would change without changing anything"
-   "  -h, --help                 Show this help message"
-   "  -g, --grafana              The Grafana base URL (e.g."
-   "                             https://grafana.example.org); defaults to env.edn"
-   "                             :grafana :url"]},
+   "      --no-color             Disable colored output (also honors the NO_COLOR"
+   "                             env var)"
+   "  -h, --help                 Show this help message"]},
  "tools/prometheus/runbooks/right_size.clj"
  {:options
   {:all
@@ -3783,21 +3783,21 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -w, --prometheus-password  The Prometheus basic auth password - resolved from"
-   "                             the secret store when omitted"
-   "  -u, --prometheus-username  The Prometheus basic auth username - resolved from"
-   "                             the secret store when omitted"
-   "      --all                  Also list containers whose requests fit"
-   "      --window               How far back usage is read, as a PromQL duration"
-   "                             (default: 7d)"
-   "      --no-color             Disable colored output (also honors the NO_COLOR"
-   "                             env var)"
    "  -p, --prometheus           The Prometheus base URL (e.g."
    "                             https://prometheus.example.org); defaults to"
    "                             env.edn :prometheus :url"
+   "  -u, --prometheus-username  The Prometheus basic auth username - resolved from"
+   "                             the secret store when omitted"
+   "  -w, --prometheus-password  The Prometheus basic auth password - resolved from"
+   "                             the secret store when omitted"
+   "  -n, --namespace            Only this namespace"
+   "      --window               How far back usage is read, as a PromQL duration"
+   "                             (default: 7d)"
+   "      --all                  Also list containers whose requests fit"
    "      --dry-run              Show what would change without changing anything"
-   "  -h, --help                 Show this help message"
-   "  -n, --namespace            Only this namespace"]},
+   "      --no-color             Disable colored output (also honors the NO_COLOR"
+   "                             env var)"
+   "  -h, --help                 Show this help message"]},
  "tools/prometheus/runbooks/scan.clj"
  {:options
   {:output
@@ -4082,42 +4082,42 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
+   "  -n, --namespace  The namespace of the Thanos Query service - interactive"
+   "                   selection when omitted"
    "  -s, --service    The Thanos Query service - interactive selection when omitted"
    "                   (deprecated alias: -m)"
    "  -l, --selector   Label selector used to find Thanos Query services (default:"
    "                   app.kubernetes.io/name=thanos-query)"
+   "      --port-name  The service port to forward (default: http)"
+   "  -p, --port       The local port used for the port-forward (default: 19090)"
    "  -o, --output     Report format: text, json, edn, or a plugin-registered format"
    "                   (default: text)"
-   "  -p, --port       The local port used for the port-forward (default: 19090)"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "      --port-name  The service port to forward (default: http)"
    "      --dry-run    Show what would change without changing anything"
-   "  -h, --help       Show this help message"
-   "  -n, --namespace  The namespace of the Thanos Query service - interactive"
-   "                   selection when omitted"],
+   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
+   "  -h, --help       Show this help message"],
   :parsed
   {"--service query"
    {:opts
     {:selector "app.kubernetes.io/name=thanos-query",
-     :output "text",
-     :port 19090,
      :port-name "http",
+     :port 19090,
+     :output "text",
      :service "query"},
     :notes []},
    "-m query"
    {:opts
     {:selector "app.kubernetes.io/name=thanos-query",
-     :output "text",
-     :port 19090,
      :port-name "http",
+     :port 19090,
+     :output "text",
      :service "query"},
     :notes ["-m is a deprecated alias of --service; use -s"]},
    "-s query"
    {:opts
     {:selector "app.kubernetes.io/name=thanos-query",
-     :output "text",
-     :port 19090,
      :port-name "http",
+     :port 19090,
+     :output "text",
      :service "query"},
     :notes []}}},
  "tools/traefik/runbooks/scan.clj"

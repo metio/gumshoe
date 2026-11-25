@@ -134,12 +134,14 @@
 (defn options
   "The select's derived options with `explicit` merged over them, key by key
    within each option, so a book can reword a flag's :desc and keep its
-   alias, or add options of its own. Throws when two options end up with
+   alias, or add options of its own. The derived options come first, in the
+   order the select reads them, then the book's own in theirs; an option the
+   book rewords keeps its derived position. Throws when two options end up with
    one alias, because babashka.cli would silently give the letter to one of
    them."
   ([select] (options select {}))
   ([select explicit]
-   (let [merged (merge-with merge (derived-options select) explicit)
+   (let [merged (flags/merge-ordered-with merge (derived-options select) explicit)
          shared (for [[letter holders] (group-by (comp :alias val) merged)
                       :when (and letter (< 1 (count holders)))]
                   [letter (sort (map key holders))])]
