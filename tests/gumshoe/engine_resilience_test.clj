@@ -277,16 +277,19 @@
       (is (= {:config c :warnings []} (config/normalize c)))))
   (testing "a string :select is dropped from its environment"
     (let [{c :config w :warnings} (config/normalize {:environments {:p {:select "kube.example.org" :x 1}}})]
-      (is (= {:environments {:p {:x 1}}} c))
+      (is (= {:environments {:p {:x 1}}} (dissoc c :gumshoe.config/unread-clusters)))
+      (is (= w (:gumshoe.config/unread-clusters c)) "the dropped :select may have named a cluster")
       (is (= 1 (count w)))
       (is (str/includes? (first w) ":select"))))
   (testing "a vector :environments is dropped"
     (let [{c :config w :warnings} (config/normalize {:environments [{:select {}}] :vpn 1})]
-      (is (= {:vpn 1} c))
+      (is (= {:vpn 1} (dissoc c :gumshoe.config/unread-clusters)))
+      (is (seq (:gumshoe.config/unread-clusters c)))
       (is (= 1 (count w)))))
   (testing "a non-map environment and a non-map :defaults are dropped"
     (let [{c :config w :warnings} (config/normalize {:environments {:a "x" :b {:y 1}} :defaults [1]})]
-      (is (= {:environments {:b {:y 1}}} c))
+      (is (= {:environments {:b {:y 1}}} (dissoc c :gumshoe.config/unread-clusters)))
+      (is (= 1 (count (:gumshoe.config/unread-clusters c))) "only the dropped environment can have named a cluster")
       (is (= 2 (count w))))))
 
 (deftest a-malformed-env-file-degrades-instead-of-crashing-every-reader
@@ -303,16 +306,21 @@
           (is (str/includes? err "warning"))
           (with-redefs [config/all (constantly loaded)]
             (is (= "d" (config/env-value {:kubernetes-cluster "kube.example.org"} [:dns :server])))
-            (is (seq? (config/known-clusters)))
+            (is (sequential? (config/known-clusters)))
             (is (map? (config/active-config {:kubernetes-cluster "k"})))))))))
 
 (deftest the-pure-readers-tolerate-a-raw-malformed-config
   (is (nil? (config/select-environment [{:select {}}] {:kubernetes-cluster "k"})))
   (is (nil? (config/select-environment {:p {:select "k"}} {:kubernetes-cluster "k"})))
   (is (nil? (config/select-environment {:p "x"} {:kubernetes-cluster "k"})))
-  (is (= [] (vec (config/known-clusters {:environments [{:select {:kubernetes-cluster "k"}}]}))))
-  (is (= ["a"] (vec (config/known-clusters {:environments {:p "x"} :clusters ["a"]}))))
-  (is (= [] (vec (config/known-clusters {:clusters 5}))))
+  (let [names #(vec (filter string? %))
+        unread? #(some config/unread-allow-list? %)]
+    (is (= [] (names (config/known-clusters {:environments [{:select {:kubernetes-cluster "k"}}]}))))
+    (is (unread? (config/known-clusters {:environments [{:select {:kubernetes-cluster "k"}}]})))
+    (is (= ["a"] (names (config/known-clusters {:environments {:p "x"} :clusters ["a"]}))))
+    (is (unread? (config/known-clusters {:environments {:p "x"} :clusters ["a"]})))
+    (is (= [] (names (config/known-clusters {:clusters 5}))))
+    (is (unread? (config/known-clusters {:clusters 5}))))
   (is (= {:x 1} (config/active-config {:x 1 :defaults [1] :environments [2]} :p))))
 
 (deftest env-config-problems-reports-instead-of-throwing-on-any-environments-shape

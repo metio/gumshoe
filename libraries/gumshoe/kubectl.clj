@@ -336,20 +336,45 @@
 
 (defonce ^:private resource-kinds-cache (atom nil))
 
-(defn resource-kinds
-  "A map from resource name to Kind, discovered from `kubectl api-resources`
-   and cached for the run once a discovery answered. Empty when the API is
-   unreachable, so a caller falls back to the raw resource name instead of
-   guessing a Kind; a failed discovery is not cached, so the next call asks
-   again once the API recovers."
+(def ^:private incomplete-discovery-ttl-ms
+  "How long a discovery that did not fully answer stands for the run before
+   the next call asks again. Long enough that building one prerequisite list
+   asks once, short enough that a recovered API is asked again later."
+  60000)
+
+(defn- now-ms [] (System/currentTimeMillis))
+
+(defn- kinds-discovery
+  "One `kubectl api-resources` call, as {:kinds .. :complete? .. :at ..}.
+   kubectl exits non-zero while still printing every group it did read when
+   one aggregated API is unavailable, so the output is parsed whatever the
+   exit; only an exit 0 with kinds counts as a complete answer."
   []
-  (or @resource-kinds-cache
-      (let [{:keys [exit out]} (shell/execute "kubectl" "api-resources" "--no-headers"
-                                              "--request-timeout=5s")
-            kinds (when (zero? exit) (parse-api-resources out))]
-        (if (seq kinds)
-          (reset! resource-kinds-cache kinds)
-          {}))))
+  (let [{:keys [exit out]} (shell/execute "kubectl" "api-resources" "--no-headers"
+                                          "--request-timeout=5s")
+        kinds (parse-api-resources out)]
+    {:kinds kinds
+     :complete? (and (= 0 exit) (boolean (seq kinds)))
+     :at (now-ms)}))
+
+(defn- fresh-discovery?
+  [{:keys [complete? at]}]
+  (or complete? (< (- (now-ms) at) incomplete-discovery-ttl-ms)))
+
+(defn resource-kinds
+  "A map from resource name to Kind, discovered from `kubectl api-resources`.
+   For labels only: a caller falls back to the raw resource name for a
+   resource the map lacks instead of guessing a Kind. A complete discovery is
+   cached for the run. A discovery that failed or answered only in part keeps
+   what it read for incomplete-discovery-ttl-ms, so the labels of one
+   prerequisite list trigger at most one call against an unreachable or
+   partly unavailable API, and a later call asks again once that time has
+   passed."
+  []
+  (let [cached @resource-kinds-cache]
+    (:kinds (if (and cached (fresh-discovery? cached))
+              cached
+              (reset! resource-kinds-cache (kinds-discovery))))))
 
 (defn resource-kind
   "The Kind the cluster reports for a resource name - \"pods\" -> \"Pod\",
@@ -792,10 +817,14 @@
                     ;; babashka.process takes the options first and the
                     ;; command as separate strings; a vector after the
                     ;; options would be run as one program named "[kubectl".
-                    (apply process/process {:out System/err :err :inherit}
-                           ["kubectl" (str "--context=" context) (str "--namespace=" namespace)
-                            "port-forward" (str "service/" service)
-                            (str local-port ":" remote-port)])
+                    ;; Tracked, so a SIGTERM that halts the JVM before the
+                    ;; finally below runs still takes the forward down
+                    ;; instead of leaving it holding local-port.
+                    (shell/track-child!
+                     (apply process/process {:out System/err :err :inherit}
+                            ["kubectl" (str "--context=" context) (str "--namespace=" namespace)
+                             "port-forward" (str "service/" service)
+                             (str local-port ":" remote-port)]))
                     (catch Exception e
                       (stdout/error (format "could not start kubectl port-forward: %s" (ex-message e)))
                       nil))]
@@ -813,7 +842,8 @@
               :else (do (Thread/sleep 1000)
                         (recur (inc attempt)))))
           (finally
-            (process/destroy-tree forward)))))))
+            (process/destroy-tree forward)
+            (shell/untrack-child! forward)))))))
 
 (defn unused-pvc-candidates
   "Namespace/name of every PersistentVolumeClaim no pod refers to, for a book

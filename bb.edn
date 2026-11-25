@@ -26,6 +26,8 @@
                    [gumshoe.capabilities-test]
                    [gumshoe.command-test]
                    [gumshoe.config-test]
+                   [gumshoe.config-guards-test]
+                   [gumshoe.cancellation-test]
                    [gumshoe.summary-test]
                    [gumshoe.theme-test]
                    [gumshoe.spec-test]
@@ -233,6 +235,8 @@
                                                          'gumshoe.capabilities-test
                                                          'gumshoe.command-test
                                                          'gumshoe.config-test
+                                                         'gumshoe.config-guards-test
+                                                         'gumshoe.cancellation-test
                                                          'gumshoe.summary-test
                                                          'gumshoe.theme-test
                                                          'gumshoe.spec-test

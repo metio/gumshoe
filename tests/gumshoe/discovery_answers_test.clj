@@ -3,8 +3,8 @@
 
 (ns gumshoe.discovery-answers-test
   "Reads of the API's discovery and extensions that did not answer stay
-   apart from answers: `kubectl api-resources` that failed is nil and never
-   cached, a custom resource type whose list failed is named as unread, and
+   apart from answers: `kubectl api-resources` that failed is nil and kept
+   only for a short window, a custom resource type whose list failed is named as unread, and
    the capability detectors count only for the context they probe and next
    to an answered CRD read."
   (:require [cheshire.core :as cheshire]
@@ -75,26 +75,69 @@
     (reset! cache nil)
     (try (f) (finally (reset! cache before)))))
 
-(deftest a-failed-discovery-is-not-cached-for-the-run
+(defn- answering
+  "A shell/execute that counts its calls and answers each from results in
+   turn, the last one again once they run out."
+  [calls results]
+  (let [left (atom results)]
+    (fn [& _]
+      (swap! calls inc)
+      (let [r (first @left)]
+        (when (next @left) (swap! left rest))
+        r))))
+
+(deftest a-failed-discovery-stands-for-a-while-then-is-asked-again
   (with-empty-kind-cache
     (fn []
       (let [calls (atom 0)
-            results (atom [{:exit 1 :out "" :err "timeout"}
-                           {:exit 0 :out discovery}])]
-        (with-redefs [shell/execute (fn [& _] (swap! calls inc) (let [r (first @results)] (swap! results rest) (or r {:exit 0 :out discovery})))]
-          (is (nil? (kubectl/resource-kind "pods")) "the failed discovery names no Kind")
-          (is (= "Pod" (kubectl/resource-kind "pods")) "the next call asks again and gets the answer")
-          (is (= "Widget" (kubectl/resource-kind "widgets.example.org")))
-          (is (= 2 @calls) "an answered discovery is cached"))))))
+            clock (atom 0)]
+        (with-redefs-fn {#'shell/execute (answering calls [{:exit 1 :out "" :err "timeout"}
+                                                           {:exit 0 :out discovery}])
+                         #'kubectl/now-ms (fn [] @clock)}
+          (fn []
+            (is (nil? (kubectl/resource-kind "pods")) "the failed discovery names no Kind")
+            (is (nil? (kubectl/resource-kind "nodes")))
+            (is (nil? (kubectl/resource-kind "widgets.example.org")))
+            (is (= 1 @calls) "labels built together trigger one call against an unreachable API")
+            (swap! clock + 60001)
+            (is (= "Pod" (kubectl/resource-kind "pods")) "a later call asks again and gets the answer")
+            (is (= "Widget" (kubectl/resource-kind "widgets.example.org")))
+            (swap! clock + 600000)
+            (is (= "Pod" (kubectl/resource-kind "pods")))
+            (is (= 2 @calls) "a complete discovery is cached for the run")))))))
 
-(deftest a-discovery-that-exits-0-with-nothing-is-not-cached
+(deftest a-discovery-that-exits-0-with-nothing-is-asked-again-after-a-while
   (with-empty-kind-cache
     (fn []
-      (let [calls (atom 0)]
-        (with-redefs [shell/execute (fn [& _] (swap! calls inc) {:exit 0 :out ""})]
-          (is (= {} (kubectl/resource-kinds)))
-          (is (= {} (kubectl/resource-kinds)))
-          (is (= 2 @calls)))))))
+      (let [calls (atom 0)
+            clock (atom 0)]
+        (with-redefs-fn {#'shell/execute (answering calls [{:exit 0 :out ""}])
+                         #'kubectl/now-ms (fn [] @clock)}
+          (fn []
+            (is (= {} (kubectl/resource-kinds)))
+            (is (= {} (kubectl/resource-kinds)))
+            (is (= 1 @calls))
+            (swap! clock + 60001)
+            (is (= {} (kubectl/resource-kinds)))
+            (is (= 2 @calls))))))))
+
+(deftest a-partial-discovery-names-the-kinds-it-read
+  (with-empty-kind-cache
+    (fn []
+      (let [calls (atom 0)
+            clock (atom 0)
+            half {:exit 1 :out discovery
+                     :err "error: unable to retrieve the complete list of server APIs: metrics.k8s.io/v1beta1: the server is currently unable to handle the request"}]
+        (with-redefs-fn {#'shell/execute (answering calls [half])
+                         #'kubectl/now-ms (fn [] @clock)}
+          (fn []
+            (is (= "Pod" (kubectl/resource-kind "pods")) "one unavailable aggregated API does not hide the rest")
+            (is (= "Widget" (kubectl/resource-kind "widgets.example.org")))
+            (is (nil? (kubectl/resource-kind "nodes.metrics.k8s.io")))
+            (is (= 1 @calls) "every label of one prerequisite list shares the call")
+            (swap! clock + 60001)
+            (kubectl/resource-kind "pods")
+            (is (= 2 @calls) "an incomplete answer is not kept for the whole run")))))))
 
 ;; --- custom resources -------------------------------------------------------------
 

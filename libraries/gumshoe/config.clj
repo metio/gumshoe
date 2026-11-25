@@ -53,6 +53,22 @@
            (some-> (System/getenv "XDG_CONFIG_HOME") (str "/gumshoe/env.edn"))
            (some-> (System/getProperty "user.home") (str "/.config/gumshoe/env.edn"))]))
 
+(defn clusters-problem
+  "Pure: why the top-level :clusters allow-list of config can not be read as
+   cluster names, or nil when it is absent or readable. A readable :clusters
+   is one non-blank string or a list or set of them. An unquoted hostname
+   reads as a symbol in EDN, and a symbol, keyword, number or map names no
+   cluster this check could compare by string."
+  [config]
+  (let [clusters (:clusters config)
+        name? #(and (string? %) (not (str/blank? %)))]
+    (when-not (or (nil? clusters)
+                  (name? clusters)
+                  (and (or (sequential? clusters) (set? clusters))
+                       (every? name? clusters)))
+      (format ":clusters is a cluster name string or a list of them, such as [\"kube.example.org\"], not %s"
+              (pr-str clusters)))))
+
 (defn normalize
   "Pure: a config map with every part of the wrong shape dropped, as
    {:config .. :warnings [..]}. Every reader below destructures :environments
@@ -61,34 +77,48 @@
    each of them. So a non-map :environments or :defaults is dropped, an
    environment that is not a map is dropped, and a :select that is not a map
    is dropped from its environment, which then is only usable through
-   GUMSHOE_ENVIRONMENT. Each drop is named in a warning."
+   GUMSHOE_ENVIRONMENT. Each drop is named in a warning.
+
+   A dropped :environments, environment or :select may have named a cluster
+   of the allow-list known-clusters builds, and a malformed :clusters names
+   none that can be read. Either is kept under ::unread-clusters, so the
+   allow-list matches no cluster instead of losing those names and letting
+   any cluster pass."
   [config]
   (let [warnings (transient [])
+        unread (transient [])
         warn! (fn [fmt & args] (conj! warnings (apply format fmt args)))
+        unread! (fn [fmt & args]
+                  (let [message (apply format fmt args)]
+                    (conj! warnings message)
+                    (conj! unread message)))
         envs (:environments config)
         envs (cond
                (nil? envs) nil
-               (not (map? envs)) (do (warn! ":environments is a map of name to environment, not %s - ignored" (pr-str envs))
+               (not (map? envs)) (do (unread! ":environments is a map of name to environment, not %s - ignored" (pr-str envs))
                                      nil)
                :else (into {}
                            (keep (fn [[nm env]]
                                    (cond
                                      (not (map? env))
-                                     (do (warn! ":environments -> %s is a map, not %s - ignored" (pr-str nm) (pr-str env))
+                                     (do (unread! ":environments -> %s is a map, not %s - ignored" (pr-str nm) (pr-str env))
                                          nil)
                                      (and (contains? env :select) (not (map? (:select env))))
-                                     (do (warn! ":environments -> %s -> :select is a map of signal to value, such as {:kubernetes-cluster \"kube.example.org\"}, not %s - ignored"
+                                     (do (unread! ":environments -> %s -> :select is a map of signal to value, such as {:kubernetes-cluster \"kube.example.org\"}, not %s - ignored"
                                                 (pr-str nm) (pr-str (:select env)))
                                          [nm (dissoc env :select)])
                                      :else [nm env])))
                            envs))
+        _ (when-let [problem (clusters-problem config)] (unread! "%s" problem))
         defaults (:defaults config)
         config (cond-> config
                  (contains? config :environments) (dissoc :environments)
                  (some? envs) (assoc :environments envs)
                  (and (some? defaults) (not (map? defaults)))
                  (as-> c (do (warn! ":defaults is a map, not %s - ignored" (pr-str defaults))
-                             (dissoc c :defaults))))]
+                             (dissoc c :defaults))))
+        unread (persistent! unread)
+        config (cond-> config (seq unread) (assoc ::unread-clusters unread))]
     {:config config :warnings (persistent! warnings)}))
 
 (defn load-file-safely
@@ -106,6 +136,22 @@
                 (println (format "warning: %s: %s" path warning))))
             config)))
       (catch Exception _ nil))))
+
+(defn file-problems
+  "Why the env.edn at path can not be rewritten from what load-file-safely
+   reads, or nil when it is missing or reads whole. load-file-safely drops a
+   file that is not EDN or not a map, and every part normalize warns about,
+   so writing its result back would erase those parts from disk."
+  [path]
+  (when (and path (fs/exists? path))
+    (try
+      (let [data (edn/read-string (slurp (str path)))]
+        (cond
+          (nil? data) nil
+          (not (map? data)) [(format "the file holds %s, not a map" (pr-str data))]
+          :else (seq (:warnings (normalize data)))))
+      (catch Exception e
+        [(str "the file is not readable EDN: " (or (ex-message e) (str e)))]))))
 
 (def ^:private loaded
   (delay (or (some load-file-safely (search-paths)) {})))
@@ -127,12 +173,41 @@
   []
   (get (all) :environments {}))
 
+(defn- environments-problems
+  "Pure: the parts of a raw :environments that could name a cluster but are
+   not of a shape known-clusters reads."
+  [config]
+  (let [envs (:environments config)]
+    (cond
+      (nil? envs) nil
+      (not (map? envs)) [":environments is not a map of name to environment"]
+      :else (for [[nm env] envs
+                  :when (or (not (map? env))
+                            (and (contains? env :select) (not (map? (:select env)))))]
+              (format ":environments -> %s is not an environment with a :select map" (pr-str nm))))))
+
+(defrecord UnreadAllowList [reason]
+  Object
+  (toString [_] (str "(none that can be read: " reason ")")))
+
+(defn unread-allow-list?
+  "Whether x is the UnreadAllowList entry known-clusters adds."
+  [x]
+  (instance? UnreadAllowList x))
+
 (defn known-clusters
   "The Kubernetes cluster names the operator has configured: each environment's
    :select :kubernetes-cluster, plus an optional top-level :clusters allow-list.
    A book that requires being on a known cluster checks the current context
    against this set. Empty when nothing is configured - any current cluster then
-   passes, since there is no allow-list to enforce."
+   passes, since there is no allow-list to enforce.
+
+   A part of the configuration that should name clusters but can not be read -
+   a malformed :clusters, or an environment normalize dropped - adds an
+   UnreadAllowList entry, which equals no cluster name. The allow-list is then
+   never empty, so the gate stays closed for every cluster the readable part
+   does not name instead of opening for all of them, and the entry prints the
+   reason where the gate names the configured clusters."
   ([] (known-clusters (all)))
   ([config]
    ;; :clusters may be written as a single string; concat would then splice it
@@ -141,15 +216,19 @@
    ;; aliases (see matches-signals?); splice its members in rather than letting
    ;; the whole set count as one entry.
    (let [clusters (:clusters config)
-         clusters (cond (string? clusters) [clusters]
-                        (coll? clusters) (remove coll? (if (map? clusters) [] clusters)))
+         readable (cond (string? clusters) [clusters]
+                        (or (sequential? clusters) (set? clusters)) (filter string? clusters))
+         problems (distinct (concat (::unread-clusters config)
+                                    (keep identity [(clusters-problem config)])
+                                    (environments-problems config)))
          select-clusters (mapcat (fn [env]
                                    (let [c (get-in env [:select :kubernetes-cluster])]
                                      (cond (set? c) c
                                            (some? c) [c])))
                                  (let [envs (:environments config)]
                                    (when (map? envs) (filter map? (vals envs)))))]
-     (distinct (concat select-clusters clusters)))))
+     (cond-> (vec (distinct (concat select-clusters readable)))
+       (seq problems) (conj (->UnreadAllowList (str/join "; " problems)))))))
 
 (defn- signal-matches?
   "Whether one :select value matches the live signal. A scalar matches on
@@ -223,7 +302,7 @@
   ([signals] (active-config (all) (active-environment signals)))
   ([config active]
    (let [layer #(when (map? %) %)]
-     (merge (dissoc config :environments :defaults)
+     (merge (dissoc config :environments :defaults ::unread-clusters)
             (layer (:defaults config))
             (layer (when (map? (:environments config)) (get (:environments config) active)))))))
 
@@ -270,7 +349,7 @@
   (str ";; SPDX-FileCopyrightText: The gumshoe Authors\n"
        ";; SPDX-License-Identifier: 0BSD\n\n"
        ";; Written by runbooks/setup/init.clj - edit freely.\n"
-       (with-out-str (pprint/pprint config))))
+       (with-out-str (pprint/pprint (dissoc config ::unread-clusters)))))
 ;; REUSE-IgnoreEnd
 
 (defn write!

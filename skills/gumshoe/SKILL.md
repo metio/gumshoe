@@ -312,7 +312,14 @@ hosts, VPN interfaces, the secrets provider (`:gopass`, `:pass`, `:passage`,
 broken file means no configuration and never an error. A part of the wrong
 shape (`:environments` or `:defaults` that is not a map, a `:select` that is
 not a map, `:plugins` that is neither a namespace nor a list of them) is ignored with a warning on
-stderr naming it, and the rest of the file still applies. Secrets come from the
+stderr naming it, and the rest of the file still applies. A part that could
+name a cluster fails closed: a `:clusters` that is not a cluster name string
+or a list of them, or a dropped `:environments`, environment or `:select`,
+makes the "suitable Kubernetes cluster" prerequisite refuse every cluster the
+readable part does not name. An `:announce` that is neither a list of
+announcer maps with a keyword `:type` nor a single such map refuses a change
+before anything runs. The setup wizard refuses to rewrite an `env.edn` that
+does not read whole, names the sections to fix, and writes nothing. Secrets come from the
 password manager at runtime and never appear in process arguments.
 
 ## Extending gumshoe

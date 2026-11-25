@@ -4,7 +4,7 @@
 (ns gumshoe.shell
   "Thin wrappers around babashka.process for the common execution styles.
 
-   These never throw. babashka.process throws when the binary does not exist
+   These never throw, except on a cancelled thread (see capture). babashka.process throws when the binary does not exist
    or can not be launched (a missing tool, a permission error) - even with
    :continue true, which only suppresses non-zero exits. A book must be able
    to survive that: a failed launch becomes a result map with a non-zero exit
@@ -79,23 +79,85 @@
   [args]
   (swap! recorded conj (str/join " " (map quote-token (flatten args)))))
 
+(defonce ^:private live-children (atom #{}))
+
+(defn- destroy-quietly
+  [proc]
+  (try (process/destroy-tree proc) (catch Throwable _ nil)))
+
+(defonce ^:private reaper
+  ;; SIGTERM and SIGHUP run shutdown hooks and then halt the JVM without
+  ;; unwinding any thread, so a finally that tears a child down never runs.
+  ;; One hook destroys every child still tracked at that moment.
+  (delay (.addShutdownHook (Runtime/getRuntime)
+                           (Thread. ^Runnable (fn [] (run! destroy-quietly @live-children))))))
+
+(defn track-child!
+  "Registers a child process to be destroyed, with its descendants, when the
+   JVM shuts down on a signal before the code that started it could tear it
+   down. Returns proc. Pair it with untrack-child! where the child is torn
+   down normally."
+  [proc]
+  @reaper
+  (swap! live-children conj proc)
+  proc)
+
+(defn untrack-child!
+  "Forgets a child registered with track-child!, once it is torn down."
+  [proc]
+  (swap! live-children disj proc)
+  nil)
+
+(defn live-children-count
+  "How many children are tracked right now."
+  []
+  (count @live-children))
+
+(defn- refuse-when-interrupted!
+  "Throws when the current thread was interrupted, keeping its interrupt flag,
+   so a cancelled collector or post-check starts no further command."
+  [args]
+  (when (.isInterrupted (Thread/currentThread))
+    (throw (InterruptedException.
+            (format "not running '%s': the thread was cancelled"
+                    (str/join " " (map str (flatten args))))))))
+
 (defn- capture
   "Runs a command capturing its output, bounded by *timeout-ms*. On expiry the
    whole process tree is destroyed and a timeout result is returned, so a
-   caller waiting on data always gets an answer. A nil bound runs unbounded."
+   caller waiting on data always gets an answer. A nil bound runs unbounded.
+
+   A thread interrupted while it waits - a collector or a post-check whose
+   deadline cancelled it - destroys the process tree and rethrows the
+   InterruptedException with the interrupt flag set, so the cancelled work
+   stops instead of reading the interrupt as a failed launch and running its
+   next command."
   [opts args]
   (record! args)
-  (try
-    (let [proc (apply process/process opts args)]
-      (if-let [ms *timeout-ms*]
-        (let [result (deref (future @proc) ms ::timeout)]
-          (if (= ::timeout result)
-            (do (process/destroy-tree proc)
-                (timeout-failure args ms))
-            result))
-        @proc))
-    (catch Exception e
-      (launch-failure args e))))
+  (refuse-when-interrupted! args)
+  (let [proc (try (apply process/process opts args)
+                  (catch Exception e e))]
+    (if (instance? Exception proc)
+      (launch-failure args proc)
+      (do
+        (track-child! proc)
+        (try
+          (if-let [ms *timeout-ms*]
+            (let [result (deref (future @proc) ms ::timeout)]
+              (if (= ::timeout result)
+                (do (process/destroy-tree proc)
+                    (timeout-failure args ms))
+                result))
+            @proc)
+          (catch InterruptedException e
+            (destroy-quietly proc)
+            (.interrupt (Thread/currentThread))
+            (throw e))
+          (catch Exception e
+            (destroy-quietly proc)
+            (launch-failure args e))
+          (finally
+            (untrack-child! proc)))))))
 
 (defn execute
   "Runs a command capturing stdout/stderr. Returns the full process map."
@@ -189,4 +251,7 @@
       (if (= ::timeout result)
         (do (process/destroy-tree proc) 1)
         (:exit result)))
+    (catch InterruptedException _
+      (.interrupt (Thread/currentThread))
+      1)
     (catch Exception _ 1)))

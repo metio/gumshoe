@@ -111,8 +111,17 @@
                              (str/join ", " (map name unanswered)))))
       found)))
 
-(defn- init
-  [_opts _ctx]
+(defn- refuse-to-rewrite
+  "Prints why the wizard leaves the env.edn at path alone and returns false."
+  [path problems]
+  (stdout/print-section "📝 env.edn")
+  (stdout/error (format "%s has parts the wizard can not read, and rewriting it would erase them:" path))
+  (doseq [problem problems] (stdout/warn problem))
+  (stdout/err-println (format "  fix those sections of %s by hand, or move the file aside, then run the wizard again - nothing was written" path))
+  false)
+
+(defn- ask-and-write
+  []
   (let [cluster (detect-cluster)
         environment (ask-environment cluster)
         capabilities (detect-capabilities cluster)
@@ -139,12 +148,25 @@
         (when-let [issues (spec/env-config-problems merged)]
           (stdout/print-section "🔶 Heads up")
           (doseq [issue issues] (stdout/warn issue)))
-        (if (interact/confirm! {:action (if existing "update this env.edn" "write this env.edn")
-                                :target "this machine"
-                                :items [config/primary-path]})
+        (cond
+          (not (interact/confirm! {:action (if existing "update this env.edn" "write this env.edn")
+                                   :target "this machine"
+                                   :items [config/primary-path]}))
+          false
+
+          ;; the file may have been edited while the questions were open
+          (config/file-problems config/primary-path)
+          (refuse-to-rewrite config/primary-path (config/file-problems config/primary-path))
+
+          :else
           (do (stdout/ok (format "wrote %s" (config/write! merged)))
-              true)
-          false)))))
+              true))))))
+
+(defn- init
+  [_opts _ctx]
+  (if-let [problems (config/file-problems config/primary-path)]
+    (refuse-to-rewrite config/primary-path problems)
+    (ask-and-write)))
 
 (runbook/execute!
  {:description "Creates env.edn interactively - every question is optional"
