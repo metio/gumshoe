@@ -314,10 +314,12 @@ mostly data:
   side of the join. An unread check still runs, so its `:detect` returns
   nothing unless `(gumshoe.evidence/joined? evidence reads)` holds; name the
   reads once in a var and use it for `:joins`, `:requires` and that guard.
-  Join every read whose absence would turn an object into a missing one, and
-  leave out a read that only adds to a hint or that a cluster may not
-  serve. `(detective/check-step {:title … :detectives … :blocking? false})`
-  is the playbook step for the same;
+  Join every read whose absence would turn an object into a missing one or
+  leave part of what the check covers unjudged (a kind of binding, a kind
+  of owner), and leave out a read judged only when it answered, one that
+  only adds to a hint, or one that a cluster may not serve.
+  `(detective/check-step {:title … :detectives … :blocking? false})` is the
+  playbook step for the same;
 - a book derives the options its select reads instead of writing them:
   `(def selection {:mode … :label … :flag …})` and `:options
   (select/options selection {…})`, where the map adds the book's own

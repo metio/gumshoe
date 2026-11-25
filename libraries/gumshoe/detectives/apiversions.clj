@@ -9,6 +9,7 @@
    healthy and server-side apply succeeds. Evidence comes from
    gumshoe.apiversions/collect-evidence!; these fns are pure over it."
   (:require [clojure.string :as str]
+            [gumshoe.evidence :as evidence]
             [gumshoe.kubectl :as kubectl]))
 
 (defn served-version-names
@@ -18,11 +19,18 @@
   (into #{} (comp (filter :served) (map :name))
         (-> crd :spec :versions)))
 
+(def version-drift-joins
+  "The CRDs say which versions are served, and discovery which one it
+   advertises; either alone compares nothing."
+  ["customresourcedefinitions" "api-resources"])
+
 (defn detect-version-drift
-  "One critical per resource whose advertised version the CRD does not serve."
+  "One critical per resource whose advertised version the CRD does not serve.
+   Nothing is judged when a joined read did not answer."
   [evidence]
   (let [advertised (get evidence "api-resources")]
-    (for [crd (kubectl/items-of (get evidence "customresourcedefinitions"))
+    (for [crd (when (evidence/joined? evidence version-drift-joins)
+                (kubectl/items-of (get evidence "customresourcedefinitions")))
           :let [group (-> crd :spec :group)
                 plural (-> crd :spec :names :plural)
                 served (served-version-names crd)
@@ -47,5 +55,6 @@
     ;; evidence source (registry/register-evidence-source!) backed by
     ;; `kubectl api-resources`. Listing both lets this detective compose into the
     ;; platform scan on the standard collector.
-    :requires ["customresourcedefinitions" "api-resources"]
+    :requires version-drift-joins
+    :joins version-drift-joins
     :detect detect-version-drift}])

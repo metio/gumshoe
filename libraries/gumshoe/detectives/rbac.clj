@@ -75,6 +75,11 @@
                     (str/starts-with? id (subs (str pattern) 0 (dec (count (str pattern)))))))
              expected))))
 
+(def admin-binding-joins
+  "The ClusterRoles name the wildcard equivalents of cluster-admin, so
+   without them only bindings to cluster-admin itself would be judged."
+  ["clusterroles" "clusterrolebindings"])
+
 (defn detect-admin-bindings
   "cluster-admin (or a wildcard equivalent) is a fact of life on a real cluster:
    every operator's ServiceAccount holds it. So this separates the audit signal
@@ -82,11 +87,13 @@
    human with god mode - and stays critical. A ServiceAccount is almost always
    an operator and is a warning you can silence by vetting it into env.edn's
    :rbac :expected-cluster-admins. Once the known operators are listed, what is
-   left is exactly the surprising access worth looking at."
+   left is exactly the surprising access worth looking at. Nothing is judged
+   when a joined read did not answer."
   [evidence]
   (let [admin-roles (conj (full-wildcard-roles (get evidence "clusterroles")) "cluster-admin")
         expected (set (get-in evidence ["config" :rbac :expected-cluster-admins]))]
-    (for [binding (kubectl/items-of (get evidence "clusterrolebindings"))
+    (for [binding (when (evidence/joined? evidence admin-binding-joins)
+                    (kubectl/items-of (get evidence "clusterrolebindings")))
           :when (contains? admin-roles (-> binding :roleRef :name))
           subject (:subjects binding)
           :when (not (system-subject? subject))
@@ -145,14 +152,22 @@
                 (some #{"secrets" "*"} (:resources rule))
                 (some #{"get" "list" "watch" "*"} (:verbs rule)))))
 
+(def secret-reader-joins
+  "The ClusterRoles say which roles read Secrets, and the bindings who holds
+   them."
+  ["clusterroles" "clusterrolebindings"])
+
 (defn detect-secret-readers
+  "Subjects bound cluster-wide to a role that reads Secrets. Nothing is
+   judged when a joined read did not answer."
   [evidence]
   (let [clusterroles (get evidence "clusterroles")
         admin-roles (conj (full-wildcard-roles clusterroles) "cluster-admin")
         secret-roles (set (for [role (kubectl/items-of clusterroles)
                                 :when (some reads-secrets? (:rules role))]
                             (kubectl/name-of role)))]
-    (for [binding (kubectl/items-of (get evidence "clusterrolebindings"))
+    (for [binding (when (evidence/joined? evidence secret-reader-joins)
+                    (kubectl/items-of (get evidence "clusterrolebindings")))
           :let [role (-> binding :roleRef :name)]
           :when (contains? secret-roles role)
           ;; admin bindings are already reported as critical
@@ -168,12 +183,19 @@
 
 (def ^:private powerful-clusterroles #{"cluster-admin" "admin" "edit"})
 
+(def namespace-grant-joins
+  "The ClusterRoles name the wildcard equivalents of admin and edit, so
+   without them only bindings to the built-in roles would be judged."
+  ["clusterroles" "rolebindings"])
+
 (defn detect-powerful-rolebindings
   "RoleBindings that hand out admin/edit/cluster-admin (or wildcard
-   equivalents) inside a namespace."
+   equivalents) inside a namespace. Nothing is judged when a joined read did
+   not answer."
   [evidence]
   (let [powerful (into powerful-clusterroles (full-wildcard-roles (get evidence "clusterroles")))]
-    (for [binding (kubectl/items-of (get evidence "rolebindings"))
+    (for [binding (when (evidence/joined? evidence namespace-grant-joins)
+                    (kubectl/items-of (get evidence "rolebindings")))
           :let [ref (:roleRef binding)]
           :when (= "ClusterRole" (:kind ref))
           :when (contains? powerful (:name ref))
@@ -218,7 +240,8 @@
 (def detectives
   [{:name "rbac-admins"
     :description "Cluster-admin held by a human (critical) or an un-vetted ServiceAccount (warning)"
-    :requires ["clusterroles" "clusterrolebindings"]
+    :requires admin-binding-joins
+    :joins admin-binding-joins
     :detect detect-admin-bindings}
    {:name "rbac-wildcards"
     :description "ClusterRoles granting * on * in every api group"
@@ -230,11 +253,13 @@
     :detect detect-escalation-verbs}
    {:name "rbac-secret-readers"
     :description "Bindings that allow reading every secret in the cluster"
-    :requires ["clusterroles" "clusterrolebindings"]
+    :requires secret-reader-joins
+    :joins secret-reader-joins
     :detect detect-secret-readers}
    {:name "rbac-namespace-grants"
     :description "RoleBindings handing out admin/edit power inside namespaces"
-    :requires ["clusterroles" "rolebindings"]
+    :requires namespace-grant-joins
+    :joins namespace-grant-joins
     :detect detect-powerful-rolebindings}
    {:name "rbac-default-tokens"
     :description "Pods running with the default ServiceAccount token mounted"

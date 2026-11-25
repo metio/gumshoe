@@ -18,6 +18,7 @@
    quantity written differently, and requests the API server copies from
    limits."
   (:require [clojure.string :as str]
+            [gumshoe.evidence :as evidence]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.quantity :as quantity]
             [gumshoe.subject :as subject]))
@@ -178,7 +179,14 @@
 
 (def ^:private shown 4)
 
+(def template-drift-joins
+  "The pods and every owner they are compared through: without an owner's
+   read its pods would have no template to differ from, and the check would
+   read as passed."
+  ["pods" "replicasets" "statefulsets" "daemonsets" "jobs" "controllerrevisions"])
+
 (defn detect-template-drift
+  "Workloads whose pods differ from the template they came from. Nothing is judged when a joined read did not answer."
   [evidence]
   (let [items #(kubectl/items-of (get evidence %))
         context {:replicasets (index-by-name (items "replicasets"))
@@ -186,7 +194,7 @@
                  :daemonsets (index-by-name (items "daemonsets"))
                  :jobs (index-by-name (items "jobs"))
                  :ds-hashes (newest-revision-hashes (items "controllerrevisions"))}
-        drifted (for [pod (items "pods")
+        drifted (for [pod (when (evidence/joined? evidence template-drift-joins) (items "pods"))
                       :when (not (-> pod :metadata :deletionTimestamp))
                       :let [{:keys [spec] :as from} (origin pod context)]
                       :when from
@@ -208,5 +216,6 @@
 (def detectives
   [{:name "template-drift"
     :description "Pods that a mutating webhook or a LimitRange changed away from their controller's template"
-    :requires ["pods" "replicasets" "statefulsets" "daemonsets" "jobs" "controllerrevisions"]
+    :requires template-drift-joins
+    :joins template-drift-joins
     :detect detect-template-drift}])

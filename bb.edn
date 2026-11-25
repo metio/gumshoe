@@ -45,6 +45,7 @@
                    [gumshoe.upgrade-readiness-test]
                    [gumshoe.webhook-backends-test]
                    [gumshoe.detective-joins-test]
+                   [gumshoe.detective-joins-unjudged-test]
                    [gumshoe.cause-folding-test]
                    [gumshoe.released-volumes-test]
                    [gumshoe.node-lifecycle-test]
@@ -241,6 +242,7 @@
                                                          'gumshoe.upgrade-readiness-test
                                                          'gumshoe.webhook-backends-test
                                                          'gumshoe.detective-joins-test
+                                                         'gumshoe.detective-joins-unjudged-test
                                                          'gumshoe.cause-folding-test
                                                          'gumshoe.released-volumes-test
                                                          'gumshoe.node-lifecycle-test

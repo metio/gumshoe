@@ -79,12 +79,21 @@
   [policy]
   (= {} (-> policy :spec :podSelector)))
 
+(def isolated-service-joins
+  "A Service's backends are its ready pods, and the NetworkPolicies say which
+   of them admit nothing. Calico's GlobalNetworkPolicies only add a note, and
+   a cluster without Calico does not serve them."
+  ["services" "pods" "networkpolicies"])
+
 (defn detect-isolated-services
+  "Services whose every ready backend is isolated for ingress with no rule
+   admitting anything. Nothing is judged when a joined read did not answer."
   [evidence]
   (let [policies (kubectl/items-of (get evidence "networkpolicies"))
         pods (kubectl/items-of (get evidence "pods"))
         calico? (seq (kubectl/items-of (get evidence global-policy-type)))]
-    (for [service (kubectl/items-of (get evidence "services"))
+    (for [service (when (evidence/joined? evidence isolated-service-joins)
+                    (kubectl/items-of (get evidence "services")))
           :let [selector (-> service :spec :selector)
                 backends (filter #(and (= (kubectl/namespace-of %) (kubectl/namespace-of service))
                                        (services/selects? selector (-> % :metadata :labels))
@@ -111,5 +120,6 @@
     :detect detect-unprotected-namespaces}
    {:name "isolated-services"
     :description "Services whose every ready backend NetworkPolicies isolate without any ingress rule"
-    :requires ["services" "pods" "networkpolicies" global-policy-type]
+    :requires (conj isolated-service-joins global-policy-type)
+    :joins isolated-service-joins
     :detect detect-isolated-services}])

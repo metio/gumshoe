@@ -11,6 +11,7 @@
   (:require [gumshoe.cnpg.retention :as retention]
             [gumshoe.cnpg.storage :as storage]
             [gumshoe.detectives.cnpg :as cnpg]
+            [gumshoe.evidence :as evidence]
             [gumshoe.kubectl :as kubectl]))
 
 (defn- size [bytes] (if bytes (retention/describe-bytes bytes) "unknown"))
@@ -34,10 +35,17 @@
       :hint (str "the driver is expanding it; a volume whose filesystem needs the pod "
                  "restarted stops here until the instance restarts")})))
 
+(def pending-storage-joins
+  "The size each cluster asks for against what its claims request."
+  [cnpg/cluster-type "persistentvolumeclaims"])
+
 (defn detect-pending-storage
+  "Volumes requesting less than their cluster asks for, or still being
+   expanded. Nothing is judged when a joined read did not answer."
   [evidence]
   (let [pvcs (kubectl/items-of (get evidence "persistentvolumeclaims"))]
-    (for [cluster (kubectl/items-of (get evidence cnpg/cluster-type))
+    (for [cluster (when (evidence/joined? evidence pending-storage-joins)
+                    (kubectl/items-of (get evidence cnpg/cluster-type)))
           row (storage/assess cluster pvcs)
           :when (storage/pending? row)]
       (finding cluster row))))
@@ -45,5 +53,6 @@
 (def detectives
   [{:name "cnpg-storage-pending"
     :description "Clusters asking for more volume than their claims request"
-    :requires [cnpg/cluster-type "persistentvolumeclaims"]
+    :requires pending-storage-joins
+    :joins pending-storage-joins
     :detect detect-pending-storage}])

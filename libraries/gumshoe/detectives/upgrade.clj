@@ -10,6 +10,7 @@
   (:require [clojure.string :as str]
             [gumshoe.detectives.nodes :as nodes]
             [gumshoe.endpointslices :as endpointslices]
+            [gumshoe.evidence :as evidence]
             [gumshoe.kubectl :as kubectl]))
 
 ;; --- webhook backends ------------------------------------------------------------
@@ -71,9 +72,16 @@
   (let [shown (take 3 (sort names))]
     (str (str/join ", " shown) (when (< 3 (count names)) (format " and %d more" (- (count names) 3))))))
 
+(def kubelet-apiserver-skew-joins
+  "The kubelets' versions against the API server's."
+  ["nodes" "server-version"])
+
 (defn detect-kubelet-apiserver-skew
+  "Kubelets the version skew policy forbids, or that the next control-plane
+   minor would leave behind. Nothing is judged when a joined read did not answer."
   [evidence]
-  (when-let [server (server-minor (get evidence "server-version"))]
+  (when-let [server (and (evidence/joined? evidence kubelet-apiserver-skew-joins)
+                         (server-minor (get evidence "server-version")))]
     (for [[minor nodes] (group-by nodes/kubelet-minor (kubectl/items-of (get evidence "nodes")))
           :when minor
           :let [[major kubelet] (map parse-long (str/split minor #"\."))
@@ -101,5 +109,6 @@
     :detect detect-webhook-backends}
    {:name "kubelet-apiserver-skew"
     :description "Kubelets the version skew policy forbids, or that the next control-plane minor would leave behind"
-    :requires ["nodes" "server-version"]
+    :requires kubelet-apiserver-skew-joins
+    :joins kubelet-apiserver-skew-joins
     :detect detect-kubelet-apiserver-skew}])

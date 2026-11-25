@@ -8,6 +8,7 @@
    Secret cert-manager manages is left to the certificates detective, which
    reads cert-manager's own view of the renewal."
   (:require [clojure.string :as str]
+            [gumshoe.evidence :as evidence]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]
             [gumshoe.tls :as tls]))
@@ -40,11 +41,20 @@
   [^java.time.Instant from ^java.time.Instant to]
   (.toDays (java.time.Duration/between from to)))
 
+(def tls-secret-joins
+  "The Ingresses name the Secrets they serve, and the Secret read holds the
+   certificates. Gateways name Secrets too, but a cluster without the Gateway
+   API does not serve them, so their read is judged only when it answered."
+  ["ingresses" "tls-secrets"])
+
 (defn detect-tls-secret-problems
+  "Served TLS Secrets whose certificate does not parse, has expired, is not
+   yet valid or expires soon. Nothing is judged when a joined read did not answer."
   [evidence]
   (let [now ^java.time.Instant (:now evidence)
         secrets (into {} (map (juxt #(str (:namespace %) "/" (:name %)) identity)) (get evidence "tls-secrets"))]
-    (for [[key users] (sort-by key (served-secrets (get evidence "ingresses") (get evidence gateway-type)))
+    (for [[key users] (when (evidence/joined? evidence tls-secret-joins)
+                        (sort-by key (served-secrets (get evidence "ingresses") (get evidence gateway-type))))
           :let [secret (get secrets key)]
           :when (and secret now (not (:certificate-name secret)))
           :let [certificate (tls/certificate-base64 (:crt secret))
@@ -80,5 +90,6 @@
 (def detectives
   [{:name "tls-secrets"
     :description "TLS Secrets served by Ingresses and Gateways whose certificate expired or expires soon"
-    :requires ["ingresses" gateway-type "tls-secrets"]
+    :requires (into tls-secret-joins [gateway-type])
+    :joins tls-secret-joins
     :detect detect-tls-secret-problems}])

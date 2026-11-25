@@ -7,7 +7,8 @@
    exceeds what remains after losing the single largest node, the cluster can
    not tolerate a node failure; if it exceeds total capacity, pods can not even
    schedule."
-  (:require [gumshoe.kubectl :as kubectl]
+  (:require [gumshoe.evidence :as evidence]
+            [gumshoe.kubectl :as kubectl]
             [gumshoe.quantity :as quantity]))
 
 (defn- request-of
@@ -71,18 +72,27 @@
 
       :else [])))
 
+(def overcommit-joins
+  "Pod requests against node allocatable: without the pods nothing is
+   requested, and without the nodes nothing is allocatable."
+  ["pods" "nodes"])
+
 (defn detect-overcommit
+  "Requests that exceed what the cluster can hold, or hold without its
+   largest node. Nothing is judged when a joined read did not answer."
   [evidence]
-  (let [pods (get evidence "pods")
-        nodes (get evidence "nodes")]
-    (concat
-     (assess "CPU" 1.0 " cores"
-             (pod-requests pods :cpu) (node-allocatables nodes :cpu))
-     (assess "memory" 1073741824.0 "Gi"
-             (pod-requests pods :memory) (node-allocatables nodes :memory)))))
+  (when (evidence/joined? evidence overcommit-joins)
+    (let [pods (get evidence "pods")
+          nodes (get evidence "nodes")]
+      (concat
+       (assess "CPU" 1.0 " cores"
+               (pod-requests pods :cpu) (node-allocatables nodes :cpu))
+       (assess "memory" 1073741824.0 "Gi"
+               (pod-requests pods :memory) (node-allocatables nodes :memory))))))
 
 (def detectives
   [{:name "overcommit"
     :description "Pod requests fit within the cluster's failure-tolerant capacity"
-    :requires ["pods" "nodes"]
+    :requires overcommit-joins
+    :joins overcommit-joins
     :detect detect-overcommit}])

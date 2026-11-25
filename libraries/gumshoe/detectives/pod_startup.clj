@@ -11,6 +11,7 @@
   (:require [clojure.string :as str]
             [gumshoe.conditions :as conditions]
             [gumshoe.detectives.pods :as pods]
+            [gumshoe.evidence :as evidence]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
@@ -81,11 +82,20 @@
          (sort-by #(or (:lastTimestamp %) (:eventTime %)))
          (group-by (juxt (comp :namespace :involvedObject) (comp :name :involvedObject))))))
 
+(def stalled-startup-joins
+  "The pods and their events: an event names why a pod does not start, and
+   a pod without one is blamed on its node, which an unanswered event read
+   would do for every pod."
+  ["pods" "events"])
+
 (defn detect-stalled-startups
+  "Pods bound to a node that do not start, with the cause their events name.
+   Nothing is judged when a joined read did not answer."
   [evidence]
   (let [now (:now evidence)
         events (pod-events evidence)]
-    (for [pod (kubectl/items-of (get evidence "pods"))
+    (for [pod (when (evidence/joined? evidence stalled-startup-joins)
+                (kubectl/items-of (get evidence "pods")))
           :when (startup-pod? pod)
           :let [component (kubectl/namespace-name-of pod)
                 causes (->> (get events [(kubectl/namespace-of pod) (kubectl/name-of pod)])
@@ -119,5 +129,6 @@
 (def detectives
   [{:name "pod-startup"
     :description "Scheduled pods that never start: sandbox and IP errors, Multi-Attach, attach and mount failures"
-    :requires ["pods" "events"]
+    :requires stalled-startup-joins
+    :joins stalled-startup-joins
     :detect detect-stalled-startups}])
