@@ -286,3 +286,18 @@
                        (with-out-str (is (true? (check {:context "ctx"}))
                                          "an advisory check never stops the playbook")))))]
     (is (str/includes? (stdout/strip-colors out) "shop/web") "the blocking budget is named")))
+
+(deftest loki-discovers-the-namespace-its-workloads-run-in
+  (let [deployment (fn [name] {:metadata {:namespace "loki" :name name}})
+        listing {:exit 0 :err ""
+                 :out (json/generate-string {:items [(deployment "loki-distributor")
+                                                              (deployment "loki-querier")]})}
+        {:keys [path opts stubs evidence]} (get scenarios "loki")
+        {:keys [calls]} (run-book path (assoc (dissoc opts :namespace) :output "text")
+                                  (merge (stubs evidence)
+                                         {#'kubectl/get-selected @#'kubectl/get-selected
+                                          #'shell/execute (fn [& _] listing)
+                                          #'fuzzy/select-single (fn [_ values & _] (first values))})
+                                  [])]
+    (is (= "loki" (:namespace (second (first (filter #(= :collect-workloads (first %)) calls)))))
+        "the namespace is the one the Loki deployments run in, offered once")))

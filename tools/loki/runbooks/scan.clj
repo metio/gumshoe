@@ -42,7 +42,7 @@
   [context opts selector]
   (or (inputs/value :loki-namespace opts)
       (select/pick {:mode :one :label "Loki namespace"
-                    :candidates #(kubectl/namespaces-names (kubectl/get-selected % "deployments" selector))
+                    :candidates #(kubectl/namespaces-of (kubectl/get-selected % "deployments" selector))
                     :empty-message (format "no Loki namespace - set [:loki :namespace] in env.edn, pass --namespace, or check --selector (no deployment matches %s)" selector)
                     :on-empty :fail}
                    {} context)))
