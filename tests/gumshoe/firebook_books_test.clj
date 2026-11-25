@@ -178,7 +178,13 @@
   {:containerStatuses [{:name name :restartCount 0 :ready true
                         :state {:running {:startedAt old}}}]})
 
-(def ^:private namespace-object ["namespaces" {:metadata {:name "fire-drill"}}])
+(def ^:private namespace-object
+  "The drill namespace as a drill creates it, carrying gumshoe's label."
+  ["namespaces" {:metadata {:name "fire-drill" :labels {:app.kubernetes.io/managed-by "gumshoe"}}}])
+
+(def ^:private foreign-namespace
+  "A namespace that happens to be called fire-drill and no drill created."
+  ["namespaces" {:metadata {:name "fire-drill" :labels {:team "payments"}}}])
 
 (defn- pending-claim
   [phase]
@@ -200,7 +206,10 @@
    :extinguish-delete-fails {:opts {:extinguish true} :objects (cons namespace-object burning) :exits {"delete" 1}}
    :extinguish-still-burning {:opts {:extinguish true} :objects (cons namespace-object burning)}
    :extinguish-unanswered {:opts {:extinguish true} :objects [] :answering? false}
-   :extinguish-dry-run {:opts {:extinguish true} :objects (cons namespace-object burning) :dry-run? true}})
+   :extinguish-dry-run {:opts {:extinguish true} :objects (cons namespace-object burning) :dry-run? true}
+   :ignite-foreign-namespace {:opts {} :objects (cons foreign-namespace burning)}
+   :ignite-unanswered {:opts {} :objects [] :answering? false}
+   :extinguish-foreign-namespace {:opts {:extinguish true} :objects (cons foreign-namespace burning)}})
 
 (def ^:private fabric-opts {:host "hv1" :vni 4208})
 
@@ -230,7 +239,10 @@
     :extinguish-dry-run {:opts (assoc fabric-opts :extinguish true) :fdb [guest-row drill-row] :dry-run? true}
     ;; FRR answers and only `bridge fdb show` fails: the empty table still
     ;; reads as a fire that is out
-    :extinguish-fdb-unread {:opts (assoc fabric-opts :extinguish true) :fdb :unread}}})
+    :extinguish-fdb-unread {:opts (assoc fabric-opts :extinguish true) :fdb :unread}
+    ;; FRR answers and `bridge fdb show` answers with no entries at all
+    :extinguish-fdb-empty {:opts (assoc fabric-opts :extinguish true) :fdb []}
+    :ignite-unanswered {:opts fabric-opts :fdb [guest-row] :answering? false}}})
 
 (defn transcripts
   []
