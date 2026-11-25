@@ -18,4 +18,6 @@
   :scope :databases
   :prerequisites {:installed-tools ["kubectl"]
                   :cluster-capabilities []
-                  :kubectl-can-get [cnpg/cluster-type "pods" "persistentvolumeclaims"]}})
+                  :kubectl-can-get [cnpg/cluster-type "pods" "persistentvolumeclaims"]
+                  ;; the connection-ceiling check runs psql in each primary
+                  :kubectl-can-exec ["pods"]}})
