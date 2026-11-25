@@ -123,3 +123,14 @@
 
 (deftest the-readme-example-compiles-and-is-the-suspend-form
   (is (= (source "tests/edn-books/runbooks/kubernetes/cronjobs/suspend.edn") (readme-example))))
+
+(deftest the-scale-form-refuses-a-rehearsal-without-replicas-as-its-book-does
+  (let [clj "runbooks/kubernetes/workloads/scale.clj"
+        scenario {:objects [["deployments" (@#'harness/deployment)]] :target "Deployment shop/web" :dry-run? true}
+        book (harness/failed-transcript (harness/load-spec clj) scenario)
+        dsl (harness/failed-transcript (compiled (get books clj)) scenario)
+        printed (str/join "\n" (:out dsl))]
+    (is (not (str/includes? printed "threw:")) printed)
+    (is (not (str/includes? printed "NullPointerException")) printed)
+    (is (str/includes? printed "--replicas must be a count of zero or more") printed)
+    (is (= book dsl) "the EDN form rehearses as the Clojure book does")))
