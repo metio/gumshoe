@@ -710,6 +710,92 @@ nor False, the first of a repeated type counts, staleness against
 `metadata.generation` is asked separately with `stale?`, and an unreadable
 timestamp yields nil rather than an exception.
 
+## Changes written as data
+
+A change to one object can be written as plain EDN, and
+`gumshoe.dsl/compile` turns it into the change map `mutation/book` and
+`mutation/run-on!` run. The data holds no code: reads, judgements and
+effects are words of a small vocabulary, and anything beyond it is a
+library function registered under a keyword. Every safeguard gumshoe has is
+on unless the change opts out of it with a reason. This is the CronJob
+suspend book (`runbooks/kubernetes/cronjobs/suspend.edn`, beside
+`suspend.clj`):
+
+```clojure
+{:gumshoe/dsl 0
+ :description "Suspends a CronJob so no new Job starts"
+ :target {:pick :namespaced :label "CronJob" :type "cronjobs"
+          :namespace-flag :namespace :name-flag :job
+          :candidates {:unless :state :order :listed}
+          :empty "every CronJob is suspended already"}
+ :prerequisites {:installed-tools ["kubectl" "fzf"]
+                 :cluster-capabilities []
+                 :kubectl-can-get ["cronjobs"]
+                 :kubectl-can-patch ["cronjobs"]}
+ :state {:holds [:field [:spec :suspend] := true]
+         :says "CronJob {target} is suspended"
+         :timeout 30 :interval 3}
+ :refuse [{:when [:state] :says "it is suspended already"}]
+ :confirm {:action "suspend a CronJob" :destructive? false}
+ :items [:call :gumshoe.workloads/suspend-items [:object] true]
+ :announce "Suspend CronJob {target}"
+ :effect [[:kubectl :patch {:resource "cronjob" :merge {:spec {:suspend true}}}]]}
+```
+
+From this, `compile` derives:
+
+- **A pinned subject.** The picked CronJob is read strictly before the
+  confirmation and again after it, and the change is refused when it was
+  replaced, its spec changed or it is gone ("the CronJob no longer
+  exists", or the target's `:gone`). A target names its object's `:type`,
+  or a registered `:parse` that makes a ref of the pick; one with neither
+  is refused.
+- **A post-check from `:state`.** It judges `:holds` on the object read
+  again until `:timeout` passes, and never holds for an object no read
+  found. `:holds :absent` holds only when a read answered NotFound or the
+  object is terminating.
+- **The skip.** A run whose post-check already holds is skipped as done.
+- **The candidates.** `{:unless :state}` offers every object of the type
+  not in the target state yet.
+- **The confirmation.** A `[:kubectl :delete]` makes it destructive, so it
+  asks for "yes"; a destructive change declares `:recovery`.
+
+Strict reads have no opt-out. The others do: `:opt-out {:verify "why"}`
+drops the post-check (the change then has no `:state`), `{:done "why"}`
+the skip, `{:destructive "why"}` the typed confirmation of a delete and
+`{:recovery "why"}` the recovery text. An opt-out that opts out of nothing
+is refused. So is every key, word, registered name or argument count
+`compile` does not know, with a message naming where:
+`[:state :holds 0]: :matches is no predicate - the predicates are …`.
+
+The vocabulary:
+
+- expressions: `[:target]`, `[:ref :namespace]`, `[:object :spec :schedule]`,
+  `[:opt :replicas]`, `[:value :name …]`, `[:read :name …]`, and `[:context]`
+  where reads stand;
+- reads, under `:reads` (read again after the confirmation) and `:values`
+  (computed once): `[:list "type" {:namespace expr}]`, `[:get "type" name
+  {:namespace expr}]`;
+- predicates: `[:field [:spec :replicas] := 0]` and `:not=`, `:<`, `:<=`,
+  `:>`, `:>=`; the same comparisons over two expressions; `[:some? e]`,
+  `[:nil? e]`, `[:not p]`, `[:and …]`, `[:or …]`; and in `:refuse`,
+  `[:state]` and `[:absent]`;
+- effects on the picked object: `[:kubectl :patch {:merge {…}}]`,
+  `[:kubectl :scale {:replicas e}]`, `[:kubectl :annotate {:annotations
+  {"k" e}}]`, `[:kubectl :delete]`;
+- templates: `"Scale {target} to {value.replicas} replica(s)"`;
+- registered functions: `[:call :gumshoe.workloads/scale-items [:ref :kind]
+  [:object] [:value :replicas]]`. `gumshoe.dsl.library` lists gumshoe's;
+  a casebook registers its own with `gumshoe.dsl.registry/register!`,
+  naming the kind (`:predicate`, `:reason`, `:items`, `:value`, `:read`,
+  `:candidates` or `:parse`), so a function that reads the cluster can only
+  stand where reads stand.
+
+`workloads/scale.edn`, `objects/delete.edn` and `cronjobs/resume.edn` sit
+beside their books too, and `tests/gumshoe/dsl_books_test.clj` holds each to
+every transcript its book keeps in the golden harness. `bb run` and the
+catalog read `.clj` books only, so these files run through `compile`.
+
 ## Structure
 
 - `./firebooks`: Directory for all **firebooks**

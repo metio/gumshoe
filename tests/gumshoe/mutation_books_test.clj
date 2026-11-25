@@ -120,7 +120,7 @@
 
 ;; --- running a book ------------------------------------------------------------------
 
-(defn- load-spec
+(defn load-spec
   "The spec a book file hands to mutation/book."
   [path]
   (with-redefs [mutation/book identity]
@@ -907,7 +907,7 @@
    "tools/stageset/runbooks/stageset/reconcile.clj"
    {:failed-after-applying {:objects [[stageset-type (stageset "False")]] :target "apps/site" :opts {:update-now true}}}})
 
-(defn- with-book-redefs
+(defn with-book-redefs
   "(f) with the vars book-redefs names for the book at path fixed; the book
    is loaded already, so its vars resolve."
   [path f]
@@ -915,21 +915,28 @@
     (with-redefs-fn (into {} (for [[sym value] redefs] [(resolve sym) value])) f)
     (f)))
 
+(defn book-transcripts
+  "Every transcript the book at path keeps, scenario by scenario, with spec
+   run in its place: the spec its file holds, or another spec - a
+   gumshoe.dsl form of it - that must keep the same transcripts."
+  [path spec]
+  (let [scenarios (get books path)]
+    (binding [ssh/*user-config* nil]
+      (with-book-redefs
+        path
+        #(assoc (into (sorted-map) (concat (for [[k scenario] scenarios] [k (transcript spec scenario)])
+                                           (for [[k scenario] (get failing path)] [k (failed-transcript spec scenario)])
+                                           (for [[k scenario] (get picks path)] [k (pick-transcript spec scenario)])))
+                :surface (surface spec (let [permitted (get-in scenarios [:permitted :objects])
+                                             refused (get-in scenarios [:refused :objects])]
+                                         (cond-> {:permitted permitted :refused refused}
+                                           (mixed-books path) (assoc :mixed (mixed permitted refused))))))))))
+
 (defn transcripts
   []
-  (binding [ssh/*user-config* nil]
-    (into (sorted-map)
-          (for [[path scenarios] books]
-            (let [spec (load-spec path)]
-              [path (with-book-redefs
-                      path
-                      #(assoc (into (sorted-map) (concat (for [[k scenario] scenarios] [k (transcript spec scenario)])
-                                                         (for [[k scenario] (get failing path)] [k (failed-transcript spec scenario)])
-                                                         (for [[k scenario] (get picks path)] [k (pick-transcript spec scenario)])))
-                              :surface (surface spec (let [permitted (get-in scenarios [:permitted :objects])
-                                                           refused (get-in scenarios [:refused :objects])]
-                                                       (cond-> {:permitted permitted :refused refused}
-                                                         (mixed-books path) (assoc :mixed (mixed permitted refused)))))))])))))
+  (into (sorted-map)
+        (for [path (keys books)]
+          [path (book-transcripts path (load-spec path))])))
 
 (defn write-golden!
   []
@@ -996,7 +1003,7 @@
           (is (nil? action) "no confirmation is shown")
           (is (re-find #"refusing: the pick \"\w+\" does not name a [\w ]+$" out) out))))))
 
-(defn- post-checks-of
+(defn post-checks-of
   "The post-checks the book hands flow/change! in its permitted scenario."
   [spec scenarios]
   (reach-change spec (:permitted scenarios) (fn [_ seen _] (vec (:post-checks seen)))))
