@@ -479,12 +479,19 @@
   "Flushes *out* and whether everything printed to it arrived. A PrintWriter
    swallows the IOException of a full disk or a closed stdout and only
    remembers it for checkError, so without this a report that was never
-   written would end like one that was."
+   written would end like one that was.
+
+   Under babashka a script's *out* is an OutputStreamWriter over System/out,
+   a PrintStream that swallows the same IOException: flushing the writer
+   never throws, and only System/out's own checkError (which flushes it)
+   tells. It is consulted whatever *out* is, because the bytes of the real
+   stdout end there either way."
   []
-  (if (instance? java.io.PrintWriter *out*)
-    (not (.checkError ^java.io.PrintWriter *out*))
-    (try (flush) true
-         (catch java.io.IOException _ false))))
+  (let [out-ok (if (instance? java.io.PrintWriter *out*)
+                 (not (.checkError ^java.io.PrintWriter *out*))
+                 (try (flush) true
+                      (catch java.io.IOException _ false)))]
+    (and out-ok (not (.checkError System/out)))))
 
 (defn- delivered
   "healthy when the report reached stdout; otherwise names the failure on
