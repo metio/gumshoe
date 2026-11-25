@@ -18,7 +18,9 @@
                 {:type :webhook :url \"https://hooks.slack.com/services/...\" :format :slack}]
 
    An announcement never blocks the change it describes: a failing announcer is a
-   warning, never an error."
+   warning, never an error. An :announce that can not be read as a list of
+   announcers is the exception: it refuses the change before anything runs,
+   since nobody chose to make the change unannounced."
   (:require [babashka.http-client :as http]
             [cheshire.core :as json]
             [clojure.string :as str]
@@ -101,16 +103,50 @@
 
 ;; --- fan-out ---------------------------------------------------------------
 
+(defn announcers-of
+  "Pure: the announcers an :announce value configures, as
+   {:announcers [..]} or {:problem \"..\"}. An absent or empty :announce
+   configures none. A single announcer map counts as a list of one. Anything
+   else - a keyword, a boolean, a list holding something other than an
+   announcer map with a keyword :type - is a problem, named so the operator
+   can fix env.edn."
+  [announce]
+  (let [announcer? #(and (map? %) (keyword? (:type %)))]
+    (cond
+      (nil? announce) {:announcers []}
+      (announcer? announce) {:announcers [announce]
+                             :warning ":announce is a list of announcers; a single map is read as a list of one"}
+      (and (or (sequential? announce) (set? announce)) (every? announcer? announce))
+      {:announcers (vec announce)}
+      :else
+      {:problem (format ":announce in env.edn is a list of announcer maps with a keyword :type, such as [{:type :webhook :url \"https://..\"}], not %s"
+                        (pr-str announce))})))
+
 (defn announce!
   "Announces a change through every announcer configured for the current
    environment. A failing announcer is warned about, never fatal - during an
-   incident the changelog itself may be down."
+   incident the changelog itself may be down.
+
+   An :announce that can not be read as announcers throws instead, before
+   any announcer runs. The operator asked for changes to be announced, and
+   carrying on would make this change unannounced without anybody having
+   chosen that; the change runs after the announcement, so it is refused and
+   nothing is changed."
   [system {:keys [cluster] :as data} message]
-  (let [announcers (config/env-value {:kubernetes-cluster cluster} [:announce] [])]
-    (if (empty? announcers)
+  (let [{:keys [announcers problem warning]}
+        (announcers-of (config/env-value {:kubernetes-cluster cluster} [:announce]))]
+    (cond
+      problem
+      (throw (ex-info (str problem " - fix it, or remove it to run without announcements; nothing was changed")
+                      {:announce-problem problem}))
+
+      (empty? announcers)
       (stdout/warn "no announcers configured (:announce in env.edn) - skipping the announcement")
-      (doseq [announcer announcers]
-        (try
-          (announce-via announcer system data message)
-          (catch Exception e
-            (stdout/warn "announcer failed:" (ex-message e))))))))
+
+      :else
+      (do (when warning (stdout/warn warning))
+          (doseq [announcer announcers]
+            (try
+              (announce-via announcer system data message)
+              (catch Exception e
+                (stdout/warn "announcer failed:" (ex-message e)))))))))

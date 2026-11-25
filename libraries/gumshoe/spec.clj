@@ -49,10 +49,18 @@
 (s/def :env/mgr-hosts (s/coll-of string?))
 (s/def :env/ceph (s/keys :opt-un [:env/mgr-hosts]))
 (s/def :env/select (s/map-of keyword? some?))
-(s/def :env/environment (s/keys :opt-un [:env/select :env/vpn :env/ceph]))
+(s/def :env/type keyword?)
+(s/def :env/announcer (s/keys :req-un [:env/type]))
+;; one announcer map is read as a list of one (gumshoe.announce/announcers-of)
+(s/def :env/announce (s/or :one :env/announcer
+                           :many (s/coll-of :env/announcer :kind #(or (sequential? %) (set? %)))))
+(s/def :env/clusters (s/or :one non-blank-string?
+                           :many (s/coll-of non-blank-string? :kind #(or (sequential? %) (set? %)))))
+(s/def :env/environment (s/keys :opt-un [:env/select :env/vpn :env/ceph :env/announce]))
 (s/def :env/environments (s/map-of keyword? :env/environment))
-(s/def :env/defaults (s/keys :opt-un [:env/vpn :env/ceph]))
-(s/def ::env-config (s/keys :opt-un [:env/environments :env/defaults :env/vpn :env/ceph]))
+(s/def :env/defaults (s/keys :opt-un [:env/vpn :env/ceph :env/announce]))
+(s/def ::env-config (s/keys :opt-un [:env/environments :env/defaults :env/vpn :env/ceph
+                                     :env/announce :env/clusters]))
 
 ;; ---------------------------------------------------------------------------
 ;; book descriptors (gumshoe.mutation, gumshoe.detective)
