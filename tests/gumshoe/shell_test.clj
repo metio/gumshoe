@@ -18,12 +18,38 @@
   (testing "a missing binary is a non-zero exit, never a thrown stack trace"
     (is (= 127 (:exit (shell/execute "this-binary-does-not-exist-xyz"))))))
 
+(defn- alive? [pid]
+  (let [handle (java.lang.ProcessHandle/of (long pid))]
+    (and (.isPresent handle) (.isAlive (.get handle)))))
+
+(defn- wait-for
+  "Polls (f) every 50ms for up to ms; its last value."
+  [ms f]
+  (let [deadline (+ (System/currentTimeMillis) ms)]
+    (loop []
+      (let [v (f)]
+        (if (or v (> (System/currentTimeMillis) deadline))
+          v
+          (do (Thread/sleep 50) (recur)))))))
+
 (deftest capture-always-returns-test
   (testing "a captured command that would hang is stopped at the deadline"
     (binding [shell/*timeout-ms* 500]
       (let [r (shell/execute "sleep" "30")]
         (is (= 124 (:exit r)))
         (is (clojure.string/includes? (:err r) "did not finish")))))
+  (testing "the process tree of a command stopped at the deadline is gone"
+    (let [pids (java.io.File/createTempFile "gumshoe-shell-pids" ".txt")]
+      (try
+        (binding [shell/*timeout-ms* 500]
+          (is (= 124 (:exit (shell/execute "sh" "-c" (str "sleep 31 & echo $$ $! > " pids "; wait"))))))
+        (let [ids (map parse-long (re-seq #"\d+" (slurp pids)))]
+          (is (= 2 (count ids)) "the shell and its sleep both recorded their pid")
+          (is (wait-for 5000 #(not-any? alive? ids))
+              "a timed-out command and its children are stopped, not left running untracked")
+          (doseq [id ids :when (alive? id)]
+            (.destroyForcibly (.get (java.lang.ProcessHandle/of (long id))))))
+        (finally (.delete pids)))))
   (testing "a command that finishes within the deadline is untouched"
     (binding [shell/*timeout-ms* 5000]
       (is (= 0 (:exit (shell/execute "echo" "quick"))))))
