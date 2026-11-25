@@ -5,6 +5,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [gumshoe.ceph :as ceph]
             [gumshoe.detectives.ceph :as detectives]
+            [gumshoe.shell :as shell]
             [gumshoe.ssh :as ssh]
             [gumshoe.tools.ceph :as tools-ceph]))
 
@@ -180,3 +181,52 @@
          (summaries (detectives/detect-new-crashes
                      {"crash-ls-new" [{:crash_id "a"} {:crash_id "b"}]}))))
   (is (empty? (detectives/detect-new-crashes {"crash-ls-new" []}))))
+
+(defn- answering
+  [result]
+  (fn [& _] result))
+
+(deftest unarchived-crashes-tell-an-empty-answer-from-none
+  (testing "an answered list is the crashes"
+    (with-redefs [shell/execute (answering {:exit 0 :out "[{\"crash_id\":\"c1\",\"entity\":\"osd.3\"}]" :err ""})]
+      (is (= {:crashes [{:crash_id "c1" :entity "osd.3"}]} (ceph/unarchived-crashes {:host "h"})))))
+  (testing "an answered empty list is no crash"
+    (with-redefs [shell/execute (answering {:exit 0 :out "[]" :err ""})]
+      (is (= {:crashes []} (ceph/unarchived-crashes {:host "h"})))))
+  (testing "a command that failed is unread, with what it said"
+    (with-redefs [shell/execute (answering {:exit 1 :out "" :err "Error initializing cluster client\n"})]
+      (is (= {:unread "ceph crash ls-new failed: Error initializing cluster client"}
+             (ceph/unarchived-crashes {:host "h"})))))
+  (testing "a failure that said nothing names its exit code"
+    (with-redefs [shell/execute (answering {:exit 255 :out "" :err ""})]
+      (is (= {:unread "ceph crash ls-new failed: exit 255"} (ceph/unarchived-crashes {:host "h"})))))
+  (testing "a clean exit without output is no answer"
+    (with-redefs [shell/execute (answering {:exit 0 :out "" :err ""})]
+      (is (= {:unread "ceph crash ls-new answered nothing a crash list parses from"}
+             (ceph/unarchived-crashes {:host "h"})))))
+  (testing "output that does not parse is no answer"
+    (with-redefs [shell/execute (answering {:exit 0 :out "{not json" :err ""})]
+      (is (contains? (ceph/unarchived-crashes {:host "h"}) :unread))))
+  (testing "a document that is not a list is no answer"
+    (with-redefs [shell/execute (answering {:exit 0 :out "{\"crash_id\":\"c1\"}" :err ""})]
+      (is (contains? (ceph/unarchived-crashes {:host "h"}) :unread))))
+  (testing "the read runs ceph crash ls-new as JSON in the connection's mode"
+    (let [seen (atom nil)]
+      (with-redefs [shell/execute (fn [& argv] (reset! seen (vec argv)) {:exit 0 :out "[]" :err ""})]
+        (binding [ssh/*user-config* nil]
+          (ceph/unarchived-crashes {:host "h" :cephadm-shell? true})))
+      (is (= ["sudo" "cephadm" "shell" "--" "ceph" "crash" "ls-new" "--format" "json"]
+             (subvec @seen 8))))))
+
+(deftest archiving-names-each-confirmed-crash
+  (is (= [[:ssh {:host "h"} "ceph" "crash" "archive" "c1"]
+          [:ssh {:host "h"} "ceph" "crash" "archive" "c2"]]
+         (ceph/archive-effects {:host "h"} [{:crash_id "c1"} {:crash_id "c2"}]))))
+
+(deftest confirmed-crashes-are-archived-once-none-of-them-is-listed-unarchived
+  (is (true? (ceph/archived? [{:crash_id "c1"}] {:crashes []})))
+  (is (true? (ceph/archived? [{:crash_id "c1"}] {:crashes [{:crash_id "c9"}]}))
+      "a crash reported later is not one the operator confirmed")
+  (is (false? (ceph/archived? [{:crash_id "c1"}] {:crashes [{:crash_id "c1"}]})))
+  (is (false? (ceph/archived? [{:crash_id "c1"}] {:unread "no answer"}))
+      "a read that did not answer proves nothing"))
