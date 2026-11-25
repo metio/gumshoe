@@ -18,21 +18,6 @@
             [gumshoe.stdout :as stdout]
             [gumshoe.storage :as storage]))
 
-(def options
-  {:namespace {:desc "The namespace of the StatefulSet - interactive selection when omitted"
-               :alias :n
-               :coerce :string}
-   :statefulset {:desc "The StatefulSet to enlarge - interactive selection when omitted"
-                 :alias :s
-                 :coerce :string}
-   :template {:desc "The volume claim template to enlarge - interactive selection when omitted"
-              :alias :t
-              :coerce :string}
-   :capacity {:desc "The new storage capacity (bare numbers mean Gi)"
-              :alias :c
-              :require true
-              :coerce :string}})
-
 (def prerequisites
   {:installed-tools ["kubectl" "fzf"]
    :cluster-capabilities []
@@ -49,6 +34,18 @@
    :name-flag :statefulset
    :empty-message "there is no StatefulSet to enlarge"
    :on-empty :fail})
+
+(def options
+  (select/options
+   statefulset-select
+   {:statefulset {:desc "The StatefulSet to enlarge - interactive selection when omitted"}
+    :template {:desc "The volume claim template to enlarge - interactive selection when omitted"
+               :alias :t
+               :coerce :string}
+    :capacity {:desc "The new storage capacity (bare numbers mean Gi)"
+               :alias :c
+               :require true
+               :coerce :string}}))
 
 (defn- read-strictly
   "{:values <what read returns>} or {:unread <why>}, read as mutation/derived

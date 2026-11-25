@@ -162,6 +162,12 @@ Every book behaves the same way:
 - Every flag is optional where interactive selection can fill the gap: omit
   `--node`, `--namespace`, etc. and pick the item with fuzzy selection (fzf)
   instead. An invalid flag value falls back to selection instead of failing.
+- A selecting flag has the same short alias in every book: `-n` for
+  `--namespace` (and `--node`), `-N` for `--name`, `-p` for `--pick`, and so
+  on (`gumshoe.flags/aliases`). `--name` answered to `-r` in the Flux books
+  and to `-s` in the StageSet and JaaS books, and Thanos' `--service` to
+  `-m`; those still work, print a deprecation note on stderr naming the
+  current alias, and `--help` lists them as deprecated.
 - **`--dry-run` on any book that changes something.** It walks the selection,
   shows exactly the commands it *would* run (`would run: kubectl cordon
   worker-3`), and touches nothing - no prompt, no announcement. Books whose
@@ -633,6 +639,10 @@ the same machine-enforced contract:
   collection that came back empty fails with "nothing was checked". A
   playbook gates on a set of detectives with `(detective/check-step {:title …
   :detectives …})`.
+- **The options a select reads** are derived from it:
+  `(select/options selection {…})` gives each select flag its conventional
+  alias, its coercion and a description from the `:label`, and merges the
+  book's own options and rewordings over them.
 - **A uniform mutation** is `(mutation/book {:select … :confirm … :effect …
   :verify …})` - it declares what to list and pick, the effect plan to run, and
   the post-checks; the select → confirm → announce → execute → verify → banner

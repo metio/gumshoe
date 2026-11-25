@@ -6,7 +6,8 @@
   (:require [gumshoe.conditions :as conditions]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.mutation :as mutation]))
+            [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]))
 
 (defn cronjobs
   [context]
@@ -25,18 +26,18 @@
               (and (some? job)
                    (not (conditions/holds? job "Failed")))))})
 
+(def selection
+  {:mode :namespaced :label "CronJob" :namespace-flag :namespace :name-flag :job
+   :candidates cronjobs})
+
 (mutation/book
  {:description "Starts a Job from a CronJob right now instead of waiting for its schedule"
-  :options {:namespace {:desc "The namespace of the CronJob - interactive selection when omitted"
-                        :alias :n :coerce :string}
-            :job {:desc "The name of the CronJob - interactive selection when omitted"
-                  :alias :j :coerce :string}}
+  :options (select/options selection)
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities []
                   :kubectl-can-get ["cronjobs"]
                   :kubectl-can-create ["jobs"]}
-  :select {:mode :namespaced :label "CronJob" :namespace-flag :namespace :name-flag :job
-           :candidates cronjobs}
+  :select selection
   :confirm {:action "start a Job from a CronJob outside its schedule" :destructive? false}
   ;; the random job name is computed once here and shared by effect and verify
   :derive (fn [{:keys [target]}]

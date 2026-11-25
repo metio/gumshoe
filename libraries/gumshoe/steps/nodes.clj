@@ -23,6 +23,7 @@
   (:require [clojure.string :as str]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.select :as select]
             [gumshoe.verify :as verify]))
 
 (def ^:private node-prerequisites
@@ -31,11 +32,13 @@
    :kubectl-can-get ["nodes"]
    :kubectl-can-patch ["nodes"]})
 
+(def ^:private node-select
+  "What every step's select shares; each adds the candidates it offers."
+  {:mode :one :label "Node" :flag :node})
+
 (defn- node-option
   [verb]
-  {:node {:desc (format "The node to %s - interactive selection when omitted" verb)
-          :alias :n
-          :coerce :string}})
+  (select/options node-select {:node {:desc (format "The node to %s - interactive selection when omitted" verb)}}))
 
 (defn schedulable-nodes
   [context]
@@ -104,8 +107,7 @@
 (def cordon
   {:options (node-option "cordon")
    :prerequisites node-prerequisites
-   :select {:mode :one :label "Node" :flag :node :candidates schedulable-nodes
-            :preview "kubectl describe node {}"}
+   :select (assoc node-select :candidates schedulable-nodes :preview "kubectl describe node {}")
    :empty-message "every node is already cordoned"
    :confirm {:action "cordon (mark unschedulable) a node" :destructive? false}
    :subject node-subject
@@ -123,7 +125,7 @@
    :prerequisites (merge node-prerequisites
                          {:kubectl-can-get ["nodes" "pods"]
                           :kubectl-can-delete ["pods"]})
-   :select {:mode :one :label "Node" :flag :node :candidates all-nodes}
+   :select (assoc node-select :candidates all-nodes)
    :confirm {:action "drain a node - every pod on it is evicted and emptyDir data is deleted"
              :destructive? true}
    :subject node-subject
@@ -136,7 +138,7 @@
 (def uncordon
   {:options (node-option "uncordon")
    :prerequisites node-prerequisites
-   :select {:mode :one :label "Node" :flag :node :candidates cordoned-nodes}
+   :select (assoc node-select :candidates cordoned-nodes)
    :empty-message "no node is cordoned"
    :confirm {:action "uncordon (mark schedulable) a node" :destructive? false}
    :subject node-subject

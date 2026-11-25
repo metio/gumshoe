@@ -13,10 +13,15 @@
             [gumshoe.select :as select]
             [gumshoe.stdout :as stdout]))
 
+(def namespace-select
+  {:mode :one :label "Namespace" :flag :namespace
+   :candidates #(kubectl/names-of (kubectl/get-all % "namespaces"))
+   :empty-message "the cluster has no namespaces"
+   :on-empty :fail})
+
 (def options
-  (merge {:namespace {:desc "The namespace of the app - interactive selection when omitted"
-                      :alias :n
-                      :coerce :string}}
+  (merge (select/options namespace-select
+                         {:namespace {:desc "The namespace of the app - interactive selection when omitted"}})
          detective/output-option))
 
 (def prerequisites
@@ -30,11 +35,7 @@
    chosen or neither an nginx nor a php-fpm container answered."
   [opts]
   (let [context (kubectl/current-context)
-        namespace (select/pick {:mode :one :label "Namespace" :flag :namespace
-                                :candidates #(kubectl/names-of (kubectl/get-all % "namespaces"))
-                                :empty-message "the cluster has no namespaces"
-                                :on-empty :fail}
-                               opts context)]
+        namespace (select/pick namespace-select opts context)]
     (if (nil? namespace)
       nil
       (let [evidence (phpstack/collect-evidence! context namespace)]

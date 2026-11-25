@@ -7,7 +7,8 @@
             [gumshoe.cleanup :as cleanup]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.mutation :as mutation]))
+            [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]))
 
 (defn terminating-namespaces
   [context]
@@ -27,14 +28,16 @@
       (effect/plan (effect/kubectl-stdin context (json/encode finalized)
                                          "replace" "--raw" path "--filename" "-")))))
 
+(def selection
+  {:mode :one :label "Namespace" :flag :namespace :candidates terminating-namespaces})
+
 (mutation/book
  {:description "Removes the kubernetes finalizer from a namespace stuck in Terminating"
-  :options {:namespace {:desc "The stuck namespace - interactive selection when omitted"
-                        :alias :n :coerce :string}}
+  :options (select/options selection {:namespace {:desc "The stuck namespace - interactive selection when omitted"}})
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities []
                   :kubectl-can-get ["namespaces"]}
-  :select {:mode :one :label "Namespace" :flag :namespace :candidates terminating-namespaces}
+  :select selection
   :empty-message "no namespace is stuck in Terminating"
   :confirm {:action "force namespace termination - every resource left in it is deleted"
             :destructive? true}

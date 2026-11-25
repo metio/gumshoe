@@ -15,28 +15,31 @@
             [gumshoe.stdout :as stdout]
             [gumshoe.verify :as verify]))
 
+(def service-select
+  "The Prometheus service to ask. Its candidates and empty message depend on
+   --selector, so the action adds them."
+  {:mode :namespaced :label "Prometheus" :namespace-flag :namespace :name-flag :service
+   :on-empty :fail})
+
 (def options
-  {:metric {:desc "The metric to delete"
-            :alias :m
-            :require true
-            :coerce :string}
-   :namespace {:desc "The namespace of the Prometheus service - interactive selection when omitted"
-               :alias :n
-               :coerce :string}
-   :service {:desc "The name of the Prometheus service - interactive selection when omitted"
-             :alias :s
-             :coerce :string}
-   :selector {:desc "Label selector used to find Prometheus services"
-              :alias :l
-              :default prometheus/governing-service-selector
-              :coerce :string}
-   :port-name {:desc "The service port serving the Prometheus API"
-               :default prometheus/default-port-name
-               :coerce :string}
-   :port {:desc "The local port used for the port-forward"
-          :alias :p
-          :default 46372
-          :coerce :long}})
+  (select/options service-select
+                  {:metric {:desc "The metric to delete"
+                            :alias :m
+                            :require true
+                            :coerce :string}
+                   :namespace {:desc "The namespace of the Prometheus service - interactive selection when omitted"}
+                   :service {:desc "The name of the Prometheus service - interactive selection when omitted"}
+                   :selector {:desc "Label selector used to find Prometheus services"
+                              :alias :l
+                              :default prometheus/governing-service-selector
+                              :coerce :string}
+                   :port-name {:desc "The service port serving the Prometheus API"
+                               :default prometheus/default-port-name
+                               :coerce :string}
+                   :port {:desc "The local port used for the port-forward"
+                          :alias :p
+                          :default 46372
+                          :coerce :long}}))
 
 (def prerequisites
   {:installed-tools ["kubectl" "fzf"]
@@ -71,10 +74,9 @@
   (let [context (kubectl/current-context)
         cluster (kubectl/current-cluster)
         services (delay (kubectl/get-selected context "services" (:selector opts)))
-        target (select/pick {:mode :namespaced :label "Prometheus" :namespace-flag :namespace :name-flag :service
-                             :candidates (fn [_] (kubectl/namespaces-names @services))
-                             :empty-message (format "no service matches %s - check --selector" (:selector opts))
-                             :on-empty :fail}
+        target (select/pick (assoc service-select
+                                   :candidates (fn [_] (kubectl/namespaces-names @services))
+                                   :empty-message (format "no service matches %s - check --selector" (:selector opts)))
                             opts context)
         metric (:metric opts)]
     (if (nil? target)

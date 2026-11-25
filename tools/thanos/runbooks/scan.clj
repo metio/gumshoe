@@ -10,14 +10,17 @@
             [gumshoe.select :as select]
             [gumshoe.thanos :as thanos]))
 
+(def service-select
+  "The Thanos Query service to ask. Its candidates and empty message depend
+   on --selector, so the action adds them."
+  {:mode :namespaced :label "Thanos Query" :namespace-flag :namespace :name-flag :service
+   :on-empty :fail})
+
 (def options
-  (merge {:namespace {:desc "The namespace of the Thanos Query service - interactive selection when omitted"
-                      :alias :n
-                      :coerce :string}
-          :service {:desc "The Thanos Query service - interactive selection when omitted"
-                    :alias :m
-                    :coerce :string}
-          :selector {:desc "Label selector used to find Thanos Query services"
+  (merge (select/options service-select
+                         {:namespace {:desc "The namespace of the Thanos Query service - interactive selection when omitted"}
+                          :service {:desc "The Thanos Query service - interactive selection when omitted"}})
+         {:selector {:desc "Label selector used to find Thanos Query services"
                      :alias :l
                      :default "app.kubernetes.io/name=thanos-query"
                      :coerce :string}
@@ -41,10 +44,9 @@
   [opts run]
   (let [context (kubectl/current-context)
         services (delay (kubectl/get-selected context "services" (:selector opts)))
-        target (select/pick {:mode :namespaced :label "Thanos Query" :namespace-flag :namespace :name-flag :service
-                             :candidates (fn [_] (kubectl/namespaces-names @services))
-                             :empty-message (format "no service matches %s - check --selector" (:selector opts))
-                             :on-empty :fail}
+        target (select/pick (assoc service-select
+                                   :candidates (fn [_] (kubectl/namespaces-names @services))
+                                   :empty-message (format "no service matches %s - check --selector" (:selector opts)))
                             opts context)]
     (if (nil? target)
       false

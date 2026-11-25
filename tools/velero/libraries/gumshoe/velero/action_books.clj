@@ -8,6 +8,7 @@
   (:require [gumshoe.detectives.velero :as velero]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.select :as select]
             [gumshoe.toggle :as toggle]
             [gumshoe.velero.actions :as actions]))
 
@@ -25,8 +26,14 @@
   [context namespace]
   (kubectl/get-namespaced context namespace velero/location-type))
 
+(def ^:private schedule-select
+  "What every Schedule book's select shares; each adds the candidates it offers."
+  {:mode :one :label "Schedule" :flag :schedule})
+
 (def ^:private schedule-option
-  {:schedule {:desc "\"<namespace>/<schedule>\" - interactive selection when omitted" :alias :s :coerce :string}})
+  (select/options schedule-select {:schedule {:desc "\"<namespace>/<schedule>\" - interactive selection when omitted"}}))
+
+(def ^:private backup-select {:mode :one :label "Backup" :flag :backup})
 
 (def schedule-pausing
   "The pause and resume books of a Schedule, as {:on :off} (see gumshoe.toggle)."
@@ -36,7 +43,7 @@
                            :cluster-capabilities []
                            :kubectl-can-get [velero/schedule-type]
                            :kubectl-can-patch [velero/schedule-type]}
-           :select {:mode :one :label "Schedule" :flag :schedule}
+           :select schedule-select
            :subject {:type velero/schedule-type
                      :parse actions/parse-pick
                      :invalid "the pick is not \"<namespace>/<schedule>\""}}
@@ -63,11 +70,11 @@
                    :cluster-capabilities []
                    :kubectl-can-get [velero/schedule-type velero/location-type velero/backup-type]
                    :kubectl-can-create [velero/backup-type]}
-   :select {:mode :one :label "Schedule" :flag :schedule
-            :candidates (fn [context]
-                          (let [in (memoize #(locations context %))]
-                            (picks context velero/schedule-type
-                                   (fn [_ s] (actions/backup-refusal s (in (kubectl/namespace-of s)))))))}
+   :select (assoc schedule-select
+                  :candidates (fn [context]
+                                (let [in (memoize #(locations context %))]
+                                  (picks context velero/schedule-type
+                                         (fn [_ s] (actions/backup-refusal s (in (kubectl/namespace-of s))))))))
    :empty-message "no Schedule can take a backup now - every one failed validation or writes to an unavailable location"
    :confirm {:action "start a backup from a schedule's template" :destructive? false}
    :subject {:type velero/schedule-type :parse actions/parse-pick
@@ -92,16 +99,16 @@
                  :check #(actions/backup-completed? (current))}]))})
 
 (def delete-backup
-  {:options {:backup {:desc "\"<namespace>/<backup>\" - interactive selection when omitted" :alias :b :coerce :string}}
+  {:options (select/options backup-select {:backup {:desc "\"<namespace>/<backup>\" - interactive selection when omitted"}})
    :prerequisites {:installed-tools ["kubectl" "fzf"]
                    :cluster-capabilities []
                    :kubectl-can-get [velero/backup-type velero/location-type velero/restore-type request-type]
                    :kubectl-can-create [request-type]}
-   :select {:mode :one :label "Backup" :flag :backup
-            :candidates (fn [context]
-                          (let [in (memoize #(locations context %))]
-                            (picks context velero/backup-type
-                                   (fn [_ b] (actions/delete-refusal b (in (kubectl/namespace-of b)))))))}
+   :select (assoc backup-select
+                  :candidates (fn [context]
+                                (let [in (memoize #(locations context %))]
+                                  (picks context velero/backup-type
+                                         (fn [_ b] (actions/delete-refusal b (in (kubectl/namespace-of b))))))))
    :empty-message "no Backup can be deleted - each is running, being deleted, or stored where Velero cannot delete"
    :confirm {:action "delete a backup and its data" :destructive? true}
    :subject {:type velero/backup-type :parse actions/parse-pick

@@ -190,13 +190,13 @@
    {:namespace
     {:desc
      "The namespace of the HelmRelease - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :name
     {:desc
      "The name of the HelmRelease - interactive selection when omitted",
-     :alias :r,
-     :coerce :string}},
+     :coerce :string,
+     :alias :N}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [:flux],
@@ -602,8 +602,8 @@
    :options
    {:node
     {:desc "The node to maintain - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :grace-period
     {:desc
      "Seconds each pod is given to terminate - the pod's own value when omitted",
@@ -1340,13 +1340,13 @@
    {:namespace
     {:desc
      "The namespace of the HelmRelease - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :name
     {:desc
      "The name of the HelmRelease - interactive selection when omitted",
-     :alias :r,
-     :coerce :string}},
+     :coerce :string,
+     :alias :N}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [:flux],

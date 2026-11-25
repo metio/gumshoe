@@ -100,8 +100,8 @@
     :coerce :long},
    :node
    {:desc "The node to maintain - interactive selection when omitted",
-    :alias :n,
-    :coerce :string}},
+    :coerce :string,
+    :alias :n}},
   :help
   ["Playbook: cordon, drain, maintain, uncordon, and verify a node"
    ""
@@ -654,12 +654,12 @@
   {:namespace
    {:desc
     "The namespace of the etcd pod - interactive selection when omitted",
-    :alias :n,
-    :coerce :string},
+    :coerce :string,
+    :alias :n},
    :pod
    {:desc "The etcd pod to use - interactive selection when omitted",
-    :alias :p,
-    :coerce :string},
+    :coerce :string,
+    :alias :p},
    :workload
    {:desc "The workload model: s(mall), m(edium), l(arge), xl",
     :alias :l,
@@ -686,12 +686,12 @@
   {:namespace
    {:desc
     "The namespace of the etcd pod - interactive selection when omitted",
-    :alias :n,
-    :coerce :string},
+    :coerce :string,
+    :alias :n},
    :pod
    {:desc "The etcd pod to use - interactive selection when omitted",
-    :alias :p,
-    :coerce :string}},
+    :coerce :string,
+    :alias :p}},
   :help
   ["Checks the health of the etcd endpoint of one etcd pod"
    ""
@@ -710,12 +710,12 @@
   {:namespace
    {:desc
     "The namespace of the etcd pod - interactive selection when omitted",
-    :alias :n,
-    :coerce :string},
+    :coerce :string,
+    :alias :n},
    :pod
    {:desc "The etcd pod to use - interactive selection when omitted",
-    :alias :p,
-    :coerce :string}},
+    :coerce :string,
+    :alias :p}},
   :help
   ["Shows the status of the etcd endpoint of one etcd pod"
    ""
@@ -738,12 +738,12 @@
    :namespace
    {:desc
     "The namespace of the etcd pod - interactive selection when omitted",
-    :alias :n,
-    :coerce :string},
+    :coerce :string,
+    :alias :n},
    :pod
    {:desc "The etcd pod to use - interactive selection when omitted",
-    :alias :p,
-    :coerce :string}},
+    :coerce :string,
+    :alias :p}},
   :help
   ["Reads a single key from etcd through one etcd pod"
    ""
@@ -763,12 +763,12 @@
   {:namespace
    {:desc
     "The namespace of the etcd pod - interactive selection when omitted",
-    :alias :n,
-    :coerce :string},
+    :coerce :string,
+    :alias :n},
    :pod
    {:desc "The etcd pod to use - interactive selection when omitted",
-    :alias :p,
-    :coerce :string}},
+    :coerce :string,
+    :alias :p}},
   :help
   ["Shows the etcd member list as seen by one etcd pod"
    ""
@@ -870,8 +870,8 @@
   {:certificates
    {:desc
     "namespace/name of certificates to renew, repeatable - interactive selection when omitted",
-    :alias :c,
-    :coerce [:string]}},
+    :coerce [:string],
+    :alias :c}},
   :help
   ["Renews certificates managed by cert-manager"
    ""
@@ -899,13 +899,13 @@
   {:job
    {:desc
     "The name of the CronJob - interactive selection when omitted",
-    :alias :j,
-    :coerce :string},
+    :coerce :string,
+    :alias :j},
    :namespace
    {:desc
     "The namespace of the CronJob - interactive selection when omitted",
-    :alias :n,
-    :coerce :string}},
+    :coerce :string,
+    :alias :n}},
   :help
   ["Resumes a suspended CronJob on its schedule"
    ""
@@ -936,13 +936,13 @@
   {:job
    {:desc
     "The name of the CronJob - interactive selection when omitted",
-    :alias :j,
-    :coerce :string},
+    :coerce :string,
+    :alias :j},
    :namespace
    {:desc
     "The namespace of the CronJob - interactive selection when omitted",
-    :alias :n,
-    :coerce :string}},
+    :coerce :string,
+    :alias :n}},
   :help
   ["Starts a Job from a CronJob right now instead of waiting for its schedule"
    ""
@@ -972,13 +972,13 @@
   {:job
    {:desc
     "The name of the CronJob - interactive selection when omitted",
-    :alias :j,
-    :coerce :string},
+    :coerce :string,
+    :alias :j},
    :namespace
    {:desc
     "The namespace of the CronJob - interactive selection when omitted",
-    :alias :n,
-    :coerce :string}},
+    :coerce :string,
+    :alias :n}},
   :help
   ["Suspends a CronJob so no new Job starts"
    ""
@@ -1009,8 +1009,8 @@
   {:pick
    {:desc
     "\"<type> <namespace>/<name> <finalizer>\" - interactive selection when omitted",
-    :alias :p,
-    :coerce :string}},
+    :coerce :string,
+    :alias :p}},
   :help
   ["Removes one controller finalizer from an object stuck terminating"
    ""
@@ -1040,8 +1040,8 @@
   {:release
    {:desc
     "\"<namespace>/<release>\" - interactive selection when omitted",
-    :alias :r,
-    :coerce :string},
+    :coerce :string,
+    :alias :r},
    :to-revision
    {:desc
     "The revision to go back to - the newest earlier deployed one when omitted",
@@ -1075,8 +1075,8 @@
  {:options
   {:namespace
    {:desc "The stuck namespace - interactive selection when omitted",
-    :alias :n,
-    :coerce :string}},
+    :coerce :string,
+    :alias :n}},
   :help
   ["Removes the kubernetes finalizer from a namespace stuck in Terminating"
    ""
@@ -1103,8 +1103,8 @@
  {:options
   {:node
    {:desc "The node to debug - interactive selection when omitted",
-    :alias :n,
-    :coerce :string}},
+    :coerce :string,
+    :alias :n}},
   :help
   ["Starts an interactive netshoot debug session on a node"
    ""
@@ -1131,12 +1131,12 @@
   {:namespace
    {:desc
     "The namespace of the pod - interactive selection when omitted",
-    :alias :n,
-    :coerce :string},
+    :coerce :string,
+    :alias :n},
    :pod
    {:desc "The pod to debug - interactive selection when omitted",
-    :alias :p,
-    :coerce :string}},
+    :coerce :string,
+    :alias :p}},
   :help
   ["Starts an interactive netshoot debug session next to a running pod"
    ""
@@ -1167,8 +1167,8 @@
    :namespace
    {:desc
     "The namespace to run netshoot in - interactive selection when omitted",
-    :alias :n,
-    :coerce :string}},
+    :coerce :string,
+    :alias :n}},
   :help
   ["Starts a standalone interactive netshoot pod in a namespace"
    ""
@@ -1186,8 +1186,8 @@
  {:options
   {:node
    {:desc "The node to cordon - interactive selection when omitted",
-    :alias :n,
-    :coerce :string}},
+    :coerce :string,
+    :alias :n}},
   :help
   ["Marks a single node as unschedulable"
    ""
@@ -1221,8 +1221,8 @@
     :coerce :long},
    :node
    {:desc "The node to drain - interactive selection when omitted",
-    :alias :n,
-    :coerce :string}},
+    :coerce :string,
+    :alias :n}},
   :help
   ["Drains a single node: cordons it and evicts every pod running on it"
    ""
@@ -1253,8 +1253,8 @@
  {:options
   {:node
    {:desc "The node to inspect - interactive selection when omitted",
-    :alias :n,
-    :coerce :string}},
+    :coerce :string,
+    :alias :n}},
   :help
   ["Shows the taints of a single node"
    ""
@@ -1297,8 +1297,8 @@
   {:node
    {:desc
     "The control-plane node to restart kube-apiserver on - interactive selection when omitted",
-    :alias :n,
-    :coerce :string},
+    :coerce :string,
+    :alias :n},
    :user
    {:desc "The SSH user - your ssh config decides when omitted",
     :alias :u,
@@ -1331,8 +1331,8 @@
  {:options
   {:node
    {:desc "The node to uncordon - interactive selection when omitted",
-    :alias :n,
-    :coerce :string}},
+    :coerce :string,
+    :alias :n}},
   :help
   ["Marks a single cordoned node as schedulable again"
    ""
@@ -1361,8 +1361,8 @@
   {:pick
    {:desc
     "\"<type> <namespace>/<name>\" - interactive selection when omitted",
-    :alias :p,
-    :coerce :string}},
+    :coerce :string,
+    :alias :p}},
   :help
   ["Deletes one namespaced object after a server-side dry run accepted it"
    ""
@@ -1392,8 +1392,8 @@
   {:orders
    {:desc
     "namespace/name of invalid orders to recreate, repeatable - interactive selection when omitted",
-    :alias :o,
-    :coerce [:string]}},
+    :coerce [:string],
+    :alias :o}},
   :help
   ["Deletes invalid ACME orders so cert-manager recreates them"
    ""
@@ -1464,13 +1464,13 @@
    :namespace
    {:desc
     "The namespace of the StatefulSet - interactive selection when omitted",
-    :alias :n,
-    :coerce :string},
+    :coerce :string,
+    :alias :n},
    :statefulset
    {:desc
     "The StatefulSet to enlarge - interactive selection when omitted",
-    :alias :s,
-    :coerce :string},
+    :coerce :string,
+    :alias :s},
    :template
    {:desc
     "The volume claim template to enlarge - interactive selection when omitted",
@@ -1498,8 +1498,8 @@
   {:volumes
    {:desc
     "Released PersistentVolumes to delete, repeatable - interactive selection when omitted",
-    :alias :v,
-    :coerce [:string]}},
+    :coerce [:string],
+    :alias :v}},
   :help
   ["Deletes PersistentVolumes stuck in Released"
    ""
@@ -1529,13 +1529,13 @@
   {:namespace
    {:desc
     "The namespace of the PersistentVolumeClaim - interactive selection when omitted",
-    :alias :n,
-    :coerce :string},
+    :coerce :string,
+    :alias :n},
    :pvc
    {:desc
     "The name of the PersistentVolumeClaim - interactive selection when omitted",
-    :alias :p,
-    :coerce :string}},
+    :coerce :string,
+    :alias :p}},
   :help
   ["Deletes a PersistentVolumeClaim that no pod uses"
    ""
@@ -1567,8 +1567,8 @@
   {:pick
    {:desc
     "\"Deployment <namespace>/<name>\" - interactive selection when omitted",
-    :alias :p,
-    :coerce :string}},
+    :coerce :string,
+    :alias :p}},
   :help
   ["Pauses a Deployment's rollouts, so pod template changes wait until it is resumed"
    ""
@@ -1598,8 +1598,8 @@
   {:pick
    {:desc
     "\"<Kind> <namespace>/<name>\" - interactive selection when omitted",
-    :alias :p,
-    :coerce :string}},
+    :coerce :string,
+    :alias :p}},
   :help
   ["Restarts the pods of a Deployment, StatefulSet or DaemonSet through a rollout"
    ""
@@ -1629,8 +1629,8 @@
   {:pick
    {:desc
     "\"Deployment <namespace>/<name>\" - interactive selection when omitted",
-    :alias :p,
-    :coerce :string}},
+    :coerce :string,
+    :alias :p}},
   :help
   ["Resumes a paused Deployment and waits for the rollout it releases"
    ""
@@ -1660,8 +1660,8 @@
   {:pick
    {:desc
     "\"<Kind> <namespace>/<name>\" - interactive selection when omitted",
-    :alias :p,
-    :coerce :string},
+    :coerce :string,
+    :alias :p},
    :to-revision
    {:desc "The revision to go back to - the previous one when omitted",
     :coerce :long}},
@@ -1695,8 +1695,8 @@
   {:pick
    {:desc
     "\"<Kind> <namespace>/<name>\" - interactive selection when omitted",
-    :alias :p,
-    :coerce :string},
+    :coerce :string,
+    :alias :p},
    :replicas
    {:desc "The replica count to scale to", :alias :r, :coerce :long}},
   :help
@@ -1741,8 +1741,8 @@
   {:application
    {:desc
     "\"<namespace>/<name>\" - interactive selection when omitted",
-    :alias :a,
-    :coerce :string},
+    :coerce :string,
+    :alias :a},
    :hard
    {:desc
     "Regenerate the manifests instead of reading the manifest cache",
@@ -1798,8 +1798,8 @@
   {:application
    {:desc
     "\"<namespace>/<name>\" - interactive selection when omitted",
-    :alias :a,
-    :coerce :string},
+    :coerce :string,
+    :alias :a},
    :prune
    {:desc "Delete resources that were removed from Git",
     :coerce :boolean}},
@@ -1992,8 +1992,8 @@
    :osd
    {:desc
     "The OSD to bring back in (3 or osd.3) - interactive selection when omitted",
-    :alias :d,
-    :coerce :fn},
+    :coerce :fn,
+    :alias :d},
    :user
    {:desc "The SSH user - your ssh config decides when omitted",
     :alias :u,
@@ -2220,8 +2220,8 @@
   {:cluster
    {:desc
     "\"<namespace>/<cluster>\" - interactive selection when omitted",
-    :alias :c,
-    :coerce :string},
+    :coerce :string,
+    :alias :c},
    :method
    {:desc
     "barmanObjectStore, plugin or volumeSnapshot - the first the cluster configures when omitted",
@@ -2255,13 +2255,13 @@
  {:options
   {:cluster
    {:desc "Name of the cluster - interactive selection when omitted",
-    :alias :c,
-    :coerce :string},
+    :coerce :string,
+    :alias :c},
    :namespace
    {:desc
     "Namespace of the cluster - interactive selection when omitted",
-    :alias :n,
-    :coerce :string},
+    :coerce :string,
+    :alias :n},
    :promote
    {:desc "Promote this instance to primary - asks for approval first",
     :coerce :string}},
@@ -2283,8 +2283,8 @@
   {:pick
    {:desc
     "\"<namespace>/<cluster> <instance>\" (by name, by number, or *) - interactive selection when omitted",
-    :alias :p,
-    :coerce :string}},
+    :coerce :string,
+    :alias :p}},
   :help
   ["Fences a CloudNativePG instance, or every instance with *"
    ""
@@ -2314,8 +2314,8 @@
   {:cluster
    {:desc
     "\"<namespace>/<cluster>\" - interactive selection when omitted",
-    :alias :c,
-    :coerce :string}},
+    :coerce :string,
+    :alias :c}},
   :help
   ["Hibernates a CloudNativePG cluster, keeping its volumes"
    ""
@@ -2349,12 +2349,12 @@
    :namespace
    {:desc
     "Namespace of the pooler - interactive selection when omitted",
-    :alias :n,
-    :coerce :string},
+    :coerce :string,
+    :alias :n},
    :pooler
    {:desc "Name of the pooler - interactive selection when omitted",
-    :alias :p,
-    :coerce :string}},
+    :coerce :string,
+    :alias :p}},
   :help
   ["Reads a Pooler's PgBouncer admin console and says which fault the log shows"
    ""
@@ -2373,8 +2373,8 @@
   {:cluster
    {:desc
     "\"<namespace>/<cluster>\" - interactive selection when omitted",
-    :alias :c,
-    :coerce :string}},
+    :coerce :string,
+    :alias :c}},
   :help
   ["Rehydrates a hibernated CloudNativePG cluster"
    ""
@@ -2403,8 +2403,8 @@
   {:cluster
    {:desc
     "\"<namespace>/<cluster>\" - interactive selection when omitted",
-    :alias :c,
-    :coerce :string}},
+    :coerce :string,
+    :alias :c}},
   :help
   ["Reloads a CloudNativePG cluster, rolling out changed configuration"
    ""
@@ -2433,8 +2433,8 @@
   {:cluster
    {:desc
     "\"<namespace>/<cluster>\" - interactive selection when omitted",
-    :alias :c,
-    :coerce :string}},
+    :coerce :string,
+    :alias :c}},
   :help
   ["Restarts every instance of a CloudNativePG cluster, one at a time"
    ""
@@ -2463,8 +2463,8 @@
   {:scheduled-backup
    {:desc
     "\"<namespace>/<name>\" - interactive selection when omitted",
-    :alias :s,
-    :coerce :string}},
+    :coerce :string,
+    :alias :s}},
   :help
   ["Resumes a suspended CloudNativePG ScheduledBackup"
    ""
@@ -2516,8 +2516,8 @@
   {:scheduled-backup
    {:desc
     "\"<namespace>/<name>\" - interactive selection when omitted",
-    :alias :s,
-    :coerce :string}},
+    :coerce :string,
+    :alias :s}},
   :help
   ["Suspends a CloudNativePG ScheduledBackup"
    ""
@@ -2548,8 +2548,8 @@
   {:pick
    {:desc
     "\"<namespace>/<cluster> <instance>\" (the instance by name or number) - interactive selection when omitted",
-    :alias :p,
-    :coerce :string}},
+    :coerce :string,
+    :alias :p}},
   :help
   ["Switches a CloudNativePG cluster over to one of its healthy replicas"
    ""
@@ -2579,8 +2579,8 @@
   {:pick
    {:desc
     "\"<namespace>/<cluster> <instance>\" (by name, by number, or *) - interactive selection when omitted",
-    :alias :p,
-    :coerce :string}},
+    :coerce :string,
+    :alias :p}},
   :help
   ["Lifts the fence on a CloudNativePG instance, or on every instance with *"
    ""
@@ -2609,13 +2609,13 @@
  {:options
   {:cluster
    {:desc "Name of the cluster - interactive selection when omitted",
-    :alias :c,
-    :coerce :string},
+    :coerce :string,
+    :alias :c},
    :namespace
    {:desc
     "Namespace of the cluster - interactive selection when omitted",
-    :alias :n,
-    :coerce :string},
+    :coerce :string,
+    :alias :n},
    :window
    {:desc
     "Seconds between the two readings - cover one reconcile interval",
@@ -2662,8 +2662,8 @@
   {:instance
    {:desc
     "The DbInstance to connect to - interactive selection when omitted",
-    :alias :i,
-    :coerce :string},
+    :coerce :string,
+    :alias :i},
    :port
    {:desc "The local port used for the port-forward",
     :alias :p,
@@ -2856,13 +2856,13 @@
   {:name
    {:desc
     "The name of the HelmRelease - interactive selection when omitted",
-    :alias :r,
-    :coerce :string},
+    :coerce :string,
+    :alias :N},
    :namespace
    {:desc
     "The namespace of the HelmRelease - interactive selection when omitted",
-    :alias :n,
-    :coerce :string}},
+    :coerce :string,
+    :alias :n}},
   :help
   ["Clears a HelmRelease's Helm storage so the next action is an install"
    ""
@@ -2891,28 +2891,32 @@
    "Options:"
    "  -n, --namespace  The namespace of the HelmRelease - interactive selection when"
    "                   omitted"
-   "  -r, --name       The name of the HelmRelease - interactive selection when"
-   "                   omitted"
+   "  -N, --name       The name of the HelmRelease - interactive selection when"
+   "                   omitted (deprecated alias: -r, -s)"
    "      --dry-run    Show what would change without changing anything"
    "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
    "  -h, --help       Show this help message"],
   :parsed
-  {"--name web" {:opts {:name "web"}},
-   "-N web" "threw: Unknown option: -N",
-   "-r web" {:opts {:name "web"}},
-   "-s web" "threw: Unknown option: -s"}},
+  {"--name web" {:opts {:name "web"}, :notes []},
+   "-N web" {:opts {:name "web"}, :notes []},
+   "-r web"
+   {:opts {:name "web"},
+    :notes ["-r is a deprecated alias of --name; use -N"]},
+   "-s web"
+   {:opts {:name "web"},
+    :notes ["-s is a deprecated alias of --name; use -N"]}}},
  "tools/flux/runbooks/flux/drift.clj"
  {:options
   {:name
    {:desc
     "The name of the HelmRelease - interactive selection when omitted",
-    :alias :r,
-    :coerce :string},
+    :coerce :string,
+    :alias :N},
    :namespace
    {:desc
     "The namespace of the HelmRelease - interactive selection when omitted",
-    :alias :n,
-    :coerce :string}},
+    :coerce :string,
+    :alias :n}},
   :help
   ["Diffs what a HelmRelease applied against what is live, field by field"
    ""
@@ -2922,28 +2926,32 @@
    "Options:"
    "  -n, --namespace  The namespace of the HelmRelease - interactive selection when"
    "                   omitted"
-   "  -r, --name       The name of the HelmRelease - interactive selection when"
-   "                   omitted"
+   "  -N, --name       The name of the HelmRelease - interactive selection when"
+   "                   omitted (deprecated alias: -r, -s)"
    "      --dry-run    Show what would change without changing anything"
    "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
    "  -h, --help       Show this help message"],
   :parsed
-  {"--name web" {:opts {:name "web"}},
-   "-N web" "threw: Unknown option: -N",
-   "-r web" {:opts {:name "web"}},
-   "-s web" "threw: Unknown option: -s"}},
+  {"--name web" {:opts {:name "web"}, :notes []},
+   "-N web" {:opts {:name "web"}, :notes []},
+   "-r web"
+   {:opts {:name "web"},
+    :notes ["-r is a deprecated alias of --name; use -N"]},
+   "-s web"
+   {:opts {:name "web"},
+    :notes ["-s is a deprecated alias of --name; use -N"]}}},
  "tools/flux/runbooks/flux/reconcile.clj"
  {:options
   {:name
    {:desc
     "The name of the HelmRelease - interactive selection when omitted",
-    :alias :r,
-    :coerce :string},
+    :coerce :string,
+    :alias :N},
    :namespace
    {:desc
     "The namespace of the HelmRelease - interactive selection when omitted",
-    :alias :n,
-    :coerce :string}},
+    :coerce :string,
+    :alias :n}},
   :help
   ["Triggers a flux reconciliation of a single HelmRelease"
    ""
@@ -2965,28 +2973,32 @@
    "Options:"
    "  -n, --namespace  The namespace of the HelmRelease - interactive selection when"
    "                   omitted"
-   "  -r, --name       The name of the HelmRelease - interactive selection when"
-   "                   omitted"
+   "  -N, --name       The name of the HelmRelease - interactive selection when"
+   "                   omitted (deprecated alias: -r, -s)"
    "      --dry-run    Show what would change without changing anything"
    "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
    "  -h, --help       Show this help message"],
   :parsed
-  {"--name web" {:opts {:name "web"}},
-   "-N web" "threw: Unknown option: -N",
-   "-r web" {:opts {:name "web"}},
-   "-s web" "threw: Unknown option: -s"}},
+  {"--name web" {:opts {:name "web"}, :notes []},
+   "-N web" {:opts {:name "web"}, :notes []},
+   "-r web"
+   {:opts {:name "web"},
+    :notes ["-r is a deprecated alias of --name; use -N"]},
+   "-s web"
+   {:opts {:name "web"},
+    :notes ["-s is a deprecated alias of --name; use -N"]}}},
  "tools/flux/runbooks/flux/reset.clj"
  {:options
   {:name
    {:desc
     "The name of the HelmRelease - interactive selection when omitted",
-    :alias :r,
-    :coerce :string},
+    :coerce :string,
+    :alias :N},
    :namespace
    {:desc
     "The namespace of the HelmRelease - interactive selection when omitted",
-    :alias :n,
-    :coerce :string}},
+    :coerce :string,
+    :alias :n}},
   :help
   ["Clears a parked HelmRelease's failure counters and reconciles it"
    ""
@@ -3009,23 +3021,27 @@
    "Options:"
    "  -n, --namespace  The namespace of the HelmRelease - interactive selection when"
    "                   omitted"
-   "  -r, --name       The name of the HelmRelease - interactive selection when"
-   "                   omitted"
+   "  -N, --name       The name of the HelmRelease - interactive selection when"
+   "                   omitted (deprecated alias: -r, -s)"
    "      --dry-run    Show what would change without changing anything"
    "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
    "  -h, --help       Show this help message"],
   :parsed
-  {"--name web" {:opts {:name "web"}},
-   "-N web" "threw: Unknown option: -N",
-   "-r web" {:opts {:name "web"}},
-   "-s web" "threw: Unknown option: -s"}},
+  {"--name web" {:opts {:name "web"}, :notes []},
+   "-N web" {:opts {:name "web"}, :notes []},
+   "-r web"
+   {:opts {:name "web"},
+    :notes ["-r is a deprecated alias of --name; use -N"]},
+   "-s web"
+   {:opts {:name "web"},
+    :notes ["-s is a deprecated alias of --name; use -N"]}}},
  "tools/flux/runbooks/flux/resume.clj"
  {:options
   {:pick
    {:desc
     "\"<Kind> <namespace>/<name>\" - interactive selection when omitted",
-    :alias :p,
-    :coerce :string}},
+    :coerce :string,
+    :alias :p}},
   :help
   ["Resumes a suspended Flux HelmRelease, Kustomization, GitRepository or OCIRepository"
    ""
@@ -3055,8 +3071,8 @@
   {:pick
    {:desc
     "\"<Kind> <namespace>/<name>\" - interactive selection when omitted",
-    :alias :p,
-    :coerce :string}},
+    :coerce :string,
+    :alias :p}},
   :help
   ["Suspends a Flux HelmRelease, Kustomization, GitRepository or OCIRepository"
    ""
@@ -3128,13 +3144,13 @@
   {:name
    {:desc
     "The name of the JsonnetSnippet - interactive selection when omitted",
-    :alias :s,
-    :coerce :string},
+    :coerce :string,
+    :alias :N},
    :namespace
    {:desc
     "The namespace of the JsonnetSnippet - interactive selection when omitted",
-    :alias :n,
-    :coerce :string}},
+    :coerce :string,
+    :alias :n}},
   :help
   ["Requests an immediate re-evaluation of a JsonnetSnippet"
    ""
@@ -3156,28 +3172,32 @@
    "Options:"
    "  -n, --namespace  The namespace of the JsonnetSnippet - interactive selection"
    "                   when omitted"
-   "  -s, --name       The name of the JsonnetSnippet - interactive selection when"
-   "                   omitted"
+   "  -N, --name       The name of the JsonnetSnippet - interactive selection when"
+   "                   omitted (deprecated alias: -r, -s)"
    "      --dry-run    Show what would change without changing anything"
    "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
    "  -h, --help       Show this help message"],
   :parsed
-  {"--name web" {:opts {:name "web"}},
-   "-N web" "threw: Unknown option: -N",
-   "-r web" "threw: Unknown option: -r",
-   "-s web" {:opts {:name "web"}}}},
+  {"--name web" {:opts {:name "web"}, :notes []},
+   "-N web" {:opts {:name "web"}, :notes []},
+   "-r web"
+   {:opts {:name "web"},
+    :notes ["-r is a deprecated alias of --name; use -N"]},
+   "-s web"
+   {:opts {:name "web"},
+    :notes ["-s is a deprecated alias of --name; use -N"]}}},
  "tools/jaas/runbooks/jaas/resume.clj"
  {:options
   {:name
    {:desc
     "The name of the JsonnetSnippet - interactive selection when omitted",
-    :alias :s,
-    :coerce :string},
+    :coerce :string,
+    :alias :N},
    :namespace
    {:desc
     "The namespace of the JsonnetSnippet - interactive selection when omitted",
-    :alias :n,
-    :coerce :string}},
+    :coerce :string,
+    :alias :n}},
   :help
   ["Resumes a suspended JsonnetSnippet"
    ""
@@ -3199,28 +3219,32 @@
    "Options:"
    "  -n, --namespace  The namespace of the JsonnetSnippet - interactive selection"
    "                   when omitted"
-   "  -s, --name       The name of the JsonnetSnippet - interactive selection when"
-   "                   omitted"
+   "  -N, --name       The name of the JsonnetSnippet - interactive selection when"
+   "                   omitted (deprecated alias: -r, -s)"
    "      --dry-run    Show what would change without changing anything"
    "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
    "  -h, --help       Show this help message"],
   :parsed
-  {"--name web" {:opts {:name "web"}},
-   "-N web" "threw: Unknown option: -N",
-   "-r web" "threw: Unknown option: -r",
-   "-s web" {:opts {:name "web"}}}},
+  {"--name web" {:opts {:name "web"}, :notes []},
+   "-N web" {:opts {:name "web"}, :notes []},
+   "-r web"
+   {:opts {:name "web"},
+    :notes ["-r is a deprecated alias of --name; use -N"]},
+   "-s web"
+   {:opts {:name "web"},
+    :notes ["-s is a deprecated alias of --name; use -N"]}}},
  "tools/jaas/runbooks/jaas/suspend.clj"
  {:options
   {:name
    {:desc
     "The name of the JsonnetSnippet - interactive selection when omitted",
-    :alias :s,
-    :coerce :string},
+    :coerce :string,
+    :alias :N},
    :namespace
    {:desc
     "The namespace of the JsonnetSnippet - interactive selection when omitted",
-    :alias :n,
-    :coerce :string}},
+    :coerce :string,
+    :alias :n}},
   :help
   ["Suspends a JsonnetSnippet so the operator stops re-evaluating it"
    ""
@@ -3242,16 +3266,20 @@
    "Options:"
    "  -n, --namespace  The namespace of the JsonnetSnippet - interactive selection"
    "                   when omitted"
-   "  -s, --name       The name of the JsonnetSnippet - interactive selection when"
-   "                   omitted"
+   "  -N, --name       The name of the JsonnetSnippet - interactive selection when"
+   "                   omitted (deprecated alias: -r, -s)"
    "      --dry-run    Show what would change without changing anything"
    "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
    "  -h, --help       Show this help message"],
   :parsed
-  {"--name web" {:opts {:name "web"}},
-   "-N web" "threw: Unknown option: -N",
-   "-r web" "threw: Unknown option: -r",
-   "-s web" {:opts {:name "web"}}}},
+  {"--name web" {:opts {:name "web"}, :notes []},
+   "-N web" {:opts {:name "web"}, :notes []},
+   "-r web"
+   {:opts {:name "web"},
+    :notes ["-r is a deprecated alias of --name; use -N"]},
+   "-s web"
+   {:opts {:name "web"},
+    :notes ["-s is a deprecated alias of --name; use -N"]}}},
  "tools/jaas/runbooks/scan.clj"
  {:options
   {:output
@@ -3525,8 +3553,8 @@
    :namespace
    {:desc
     "The namespace of the Prometheus service - interactive selection when omitted",
-    :alias :n,
-    :coerce :string},
+    :coerce :string,
+    :alias :n},
    :port
    {:desc "The local port used for the port-forward",
     :alias :p,
@@ -3544,8 +3572,8 @@
    :service
    {:desc
     "The name of the Prometheus service - interactive selection when omitted",
-    :alias :s,
-    :coerce :string}},
+    :coerce :string,
+    :alias :s}},
   :help
   ["Deletes every series of a metric from a Prometheus TSDB"
    ""
@@ -3572,7 +3600,8 @@
     {:selector "operated-prometheus=true",
      :port 46372,
      :port-name "web",
-     :metric "query"}},
+     :metric "query"},
+    :notes []},
    "-s query" "threw: Required option: --metric"}},
  "tools/prometheus/runbooks/list_alerting_metrics.clj"
  {:options
@@ -3770,13 +3799,13 @@
    :namespace
    {:desc
     "The namespace of the Prometheus - interactive selection when omitted",
-    :alias :n,
-    :coerce :string},
+    :coerce :string,
+    :alias :n},
    :prometheus
    {:desc
     "The Prometheus instance to resize - interactive selection when omitted",
-    :alias :p,
-    :coerce :string}},
+    :coerce :string,
+    :alias :p}},
   :help
   ["Grows the storage of a prometheus-operator managed Prometheus"
    ""
@@ -3866,13 +3895,13 @@
   {:name
    {:desc
     "The name of the StageSet - interactive selection when omitted",
-    :alias :s,
-    :coerce :string},
+    :coerce :string,
+    :alias :N},
    :namespace
    {:desc
     "The namespace of the StageSet - interactive selection when omitted",
-    :alias :n,
-    :coerce :string},
+    :coerce :string,
+    :alias :n},
    :stage
    {:desc "The stage to promote - interactive selection when omitted",
     :coerce :string}},
@@ -3897,28 +3926,33 @@
    "Options:"
    "  -n, --namespace  The namespace of the StageSet - interactive selection when"
    "                   omitted"
-   "  -s, --name       The name of the StageSet - interactive selection when omitted"
+   "  -N, --name       The name of the StageSet - interactive selection when omitted"
+   "                   (deprecated alias: -r, -s)"
    "      --stage      The stage to promote - interactive selection when omitted"
    "      --dry-run    Show what would change without changing anything"
    "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
    "  -h, --help       Show this help message"],
   :parsed
-  {"--name web" {:opts {:name "web"}},
-   "-N web" "threw: Unknown option: -N",
-   "-r web" "threw: Unknown option: -r",
-   "-s web" {:opts {:name "web"}}}},
+  {"--name web" {:opts {:name "web"}, :notes []},
+   "-N web" {:opts {:name "web"}, :notes []},
+   "-r web"
+   {:opts {:name "web"},
+    :notes ["-r is a deprecated alias of --name; use -N"]},
+   "-s web"
+   {:opts {:name "web"},
+    :notes ["-s is a deprecated alias of --name; use -N"]}}},
  "tools/stageset/runbooks/stageset/reconcile.clj"
  {:options
   {:name
    {:desc
     "The name of the StageSet - interactive selection when omitted",
-    :alias :s,
-    :coerce :string},
+    :coerce :string,
+    :alias :N},
    :namespace
    {:desc
     "The namespace of the StageSet - interactive selection when omitted",
-    :alias :n,
-    :coerce :string},
+    :coerce :string,
+    :alias :n},
    :update-now
    {:desc "Override the update window and roll a held revision now",
     :coerce :boolean}},
@@ -3942,17 +3976,21 @@
    "Options:"
    "  -n, --namespace   The namespace of the StageSet - interactive selection when"
    "                    omitted"
-   "  -s, --name        The name of the StageSet - interactive selection when"
-   "                    omitted"
+   "  -N, --name        The name of the StageSet - interactive selection when"
+   "                    omitted (deprecated alias: -r, -s)"
    "      --update-now  Override the update window and roll a held revision now"
    "      --dry-run     Show what would change without changing anything"
    "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
    "  -h, --help        Show this help message"],
   :parsed
-  {"--name web" {:opts {:name "web"}},
-   "-N web" "threw: Unknown option: -N",
-   "-r web" "threw: Unknown option: -r",
-   "-s web" {:opts {:name "web"}}}},
+  {"--name web" {:opts {:name "web"}, :notes []},
+   "-N web" {:opts {:name "web"}, :notes []},
+   "-r web"
+   {:opts {:name "web"},
+    :notes ["-r is a deprecated alias of --name; use -N"]},
+   "-s web"
+   {:opts {:name "web"},
+    :notes ["-s is a deprecated alias of --name; use -N"]}}},
  "tools/strimzi/runbooks/scan.clj"
  {:options
   {:output
@@ -3979,8 +4017,8 @@
   {:namespace
    {:desc
     "The namespace of the Thanos Query service - interactive selection when omitted",
-    :alias :n,
-    :coerce :string},
+    :coerce :string,
+    :alias :n},
    :output
    {:desc
     "Report format: text, json, edn, or a plugin-registered format",
@@ -4005,8 +4043,8 @@
    :service
    {:desc
     "The Thanos Query service - interactive selection when omitted",
-    :alias :m,
-    :coerce :string}},
+    :coerce :string,
+    :alias :s}},
   :help
   ["Investigates Thanos Query over a port-forward: readiness, stores, rules"
    ""
@@ -4014,7 +4052,8 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -m, --service    The Thanos Query service - interactive selection when omitted"
+   "  -s, --service    The Thanos Query service - interactive selection when omitted"
+   "                   (deprecated alias: -m)"
    "  -l, --selector   Label selector used to find Thanos Query services (default:"
    "                   app.kubernetes.io/name=thanos-query)"
    "  -o, --output     Report format: text, json, edn, or a plugin-registered format"
@@ -4033,15 +4072,24 @@
      :output "text",
      :port 19090,
      :port-name "http",
-     :service "query"}},
+     :service "query"},
+    :notes []},
    "-m query"
    {:opts
     {:selector "app.kubernetes.io/name=thanos-query",
      :output "text",
      :port 19090,
      :port-name "http",
-     :service "query"}},
-   "-s query" "threw: Unknown option: -s"}},
+     :service "query"},
+    :notes ["-m is a deprecated alias of --service; use -s"]},
+   "-s query"
+   {:opts
+    {:selector "app.kubernetes.io/name=thanos-query",
+     :output "text",
+     :port 19090,
+     :port-name "http",
+     :service "query"},
+    :notes []}}},
  "tools/traefik/runbooks/scan.clj"
  {:options
   {:output
@@ -4068,8 +4116,8 @@
   {:namespace
    {:desc
     "The namespace of the app - interactive selection when omitted",
-    :alias :n,
-    :coerce :string},
+    :coerce :string,
+    :alias :n},
    :output
    {:desc
     "Report format: text, json, edn, or a plugin-registered format",
@@ -4095,8 +4143,8 @@
   {:schedule
    {:desc
     "\"<namespace>/<schedule>\" - interactive selection when omitted",
-    :alias :s,
-    :coerce :string}},
+    :coerce :string,
+    :alias :s}},
   :help
   ["Starts a Velero backup now from a Schedule's template"
    ""
@@ -4125,8 +4173,8 @@
   {:backup
    {:desc
     "\"<namespace>/<backup>\" - interactive selection when omitted",
-    :alias :b,
-    :coerce :string}},
+    :coerce :string,
+    :alias :b}},
   :help
   ["Deletes a Velero backup and its data through a DeleteBackupRequest"
    ""
@@ -4155,8 +4203,8 @@
   {:schedule
    {:desc
     "\"<namespace>/<schedule>\" - interactive selection when omitted",
-    :alias :s,
-    :coerce :string}},
+    :coerce :string,
+    :alias :s}},
   :help
   ["Pauses a Velero Schedule"
    ""
@@ -4185,8 +4233,8 @@
   {:schedule
    {:desc
     "\"<namespace>/<schedule>\" - interactive selection when omitted",
-    :alias :s,
-    :coerce :string}},
+    :coerce :string,
+    :alias :s}},
   :help
   ["Resumes a paused Velero Schedule"
    ""

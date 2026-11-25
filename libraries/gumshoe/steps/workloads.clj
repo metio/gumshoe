@@ -9,6 +9,7 @@
    steps. The decisions live in gumshoe.workloads."
   (:require [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.select :as select]
             [gumshoe.toggle :as toggle]
             [gumshoe.workloads :as workloads]))
 
@@ -17,16 +18,18 @@
   (let [pick (workloads/parse-pick target)]
     (when (= "Deployment" (:kind pick)) pick)))
 
+(def ^:private deployment-select {:mode :one :label "Deployment" :flag :pick})
+
 (def deployment-pausing
   "Pause a Deployment's rollouts (:on) and resume them (:off)."
   (toggle/pair
-   {:spec {:options {:pick {:desc "\"Deployment <namespace>/<name>\" - interactive selection when omitted"
-                            :alias :p :coerce :string}}
+   {:spec {:options (select/options deployment-select
+                                    {:pick {:desc "\"Deployment <namespace>/<name>\" - interactive selection when omitted"}})
            :prerequisites {:installed-tools ["kubectl" "fzf"]
                            :cluster-capabilities []
                            :kubectl-can-get ["deployments" "horizontalpodautoscalers"]
                            :kubectl-can-patch ["deployments"]}
-           :select {:mode :one :label "Deployment" :flag :pick}
+           :select deployment-select
            :subject {:parse deployment-pick :invalid "the pick is not \"Deployment <namespace>/<name>\""}
            :derive (fn [{:keys [context ref object]}]
                      (let [hpa (when object
@@ -51,18 +54,17 @@
           :announce "Resume %s" :verified "%s is resumed and rolled out"
           :verify {:timeout 600}}}))
 
+(def ^:private cronjob-select {:mode :namespaced :label "CronJob" :namespace-flag :namespace :name-flag :job})
+
 (def cronjob-suspending
   "Suspend a CronJob (:on) and resume it on its schedule (:off)."
   (toggle/pair
-   {:spec {:options {:namespace {:desc "The namespace of the CronJob - interactive selection when omitted"
-                                 :alias :n :coerce :string}
-                     :job {:desc "The name of the CronJob - interactive selection when omitted"
-                           :alias :j :coerce :string}}
+   {:spec {:options (select/options cronjob-select)
            :prerequisites {:installed-tools ["kubectl" "fzf"]
                            :cluster-capabilities []
                            :kubectl-can-get ["cronjobs"]
                            :kubectl-can-patch ["cronjobs"]}
-           :select {:mode :namespaced :label "CronJob" :namespace-flag :namespace :name-flag :job}
+           :select cronjob-select
            :subject {:type "cronjobs"}}
     ;; in the order the API lists them, as kubectl get shows them
     :candidates (fn [context wanted]

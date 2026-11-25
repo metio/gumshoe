@@ -8,6 +8,7 @@
   (:require [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]
             [gumshoe.tools.jaas :as jaas]))
 
 (def reconcile-annotation "reconcile.fluxcd.io/requestedAt")
@@ -29,18 +30,18 @@
                                                           jaas/jsonnetsnippet-type name)
                          :status :lastHandledReconcileAt)))})
 
+(def selection
+  {:mode :namespaced :label "JsonnetSnippet" :namespace-flag :namespace :name-flag :name
+   :candidates snippets})
+
 (mutation/book
  {:description "Requests an immediate re-evaluation of a JsonnetSnippet"
-  :options {:namespace {:desc "The namespace of the JsonnetSnippet - interactive selection when omitted"
-                        :alias :n :coerce :string}
-            :name {:desc "The name of the JsonnetSnippet - interactive selection when omitted"
-                   :alias :s :coerce :string}}
+  :options (select/options selection)
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities [:jaas]
                   :kubectl-can-get [jaas/jsonnetsnippet-type]
                   :kubectl-can-patch [jaas/jsonnetsnippet-type]}
-  :select {:mode :namespaced :label "JsonnetSnippet" :namespace-flag :namespace :name-flag :name
-           :candidates snippets}
+  :select selection
   ;; The token is derived once, in :derive, so the effect that stamps it and the
   ;; post-check that waits for it are looking at the same value.
   :derive (fn [_] {:token (str (java.time.Instant/now))})

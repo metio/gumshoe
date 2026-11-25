@@ -6,7 +6,8 @@
   (:require [gumshoe.cleanup :as cleanup]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.mutation :as mutation]))
+            [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]))
 
 (defn gone-check
   [context namespace name target]
@@ -14,18 +15,18 @@
    :timeout 120 :interval 10 :verifies-absence? true
    :check (fn [] (kubectl/confirmed-gone? context namespace "persistentvolumeclaims" name))})
 
+(def selection
+  {:mode :namespaced :label "PersistentVolumeClaim" :namespace-flag :namespace :name-flag :pvc
+   :candidates kubectl/unused-pvc-candidates})
+
 (mutation/book
  {:description "Deletes a PersistentVolumeClaim that no pod uses"
-  :options {:namespace {:desc "The namespace of the PersistentVolumeClaim - interactive selection when omitted"
-                        :alias :n :coerce :string}
-            :pvc {:desc "The name of the PersistentVolumeClaim - interactive selection when omitted"
-                  :alias :p :coerce :string}}
+  :options (select/options selection)
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities []
                   :kubectl-can-get ["persistentvolumeclaims" "pods"]
                   :kubectl-can-delete ["persistentvolumeclaims"]}
-  :select {:mode :namespaced :label "PersistentVolumeClaim" :namespace-flag :namespace :name-flag :pvc
-           :candidates kubectl/unused-pvc-candidates}
+  :select selection
   :empty-message "every PersistentVolumeClaim is in use"
   :confirm {:action "delete a PersistentVolumeClaim - the data on the volume is lost"
             :destructive? true}

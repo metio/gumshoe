@@ -38,12 +38,12 @@
    {:namespace
     {:desc
      "The namespace of the etcd pod - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :pod
     {:desc "The etcd pod to use - interactive selection when omitted",
-     :alias :p,
-     :coerce :string},
+     :coerce :string,
+     :alias :p},
     :workload
     {:desc "The workload model: s(mall), m(edium), l(arge), xl",
      :alias :l,
@@ -102,12 +102,12 @@
    {:namespace
     {:desc
      "The namespace of the etcd pod - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :pod
     {:desc "The etcd pod to use - interactive selection when omitted",
-     :alias :p,
-     :coerce :string}},
+     :coerce :string,
+     :alias :p}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -159,12 +159,12 @@
    {:namespace
     {:desc
      "The namespace of the etcd pod - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :pod
     {:desc "The etcd pod to use - interactive selection when omitted",
-     :alias :p,
-     :coerce :string}},
+     :coerce :string,
+     :alias :p}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -230,12 +230,12 @@
    {:namespace
     {:desc
      "The namespace of the etcd pod - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :pod
     {:desc "The etcd pod to use - interactive selection when omitted",
-     :alias :p,
-     :coerce :string},
+     :coerce :string,
+     :alias :p},
     :key
     {:desc "The etcd key to read - interactive selection when omitted",
      :alias :k,
@@ -312,12 +312,12 @@
    {:namespace
     {:desc
      "The namespace of the etcd pod - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :pod
     {:desc "The etcd pod to use - interactive selection when omitted",
-     :alias :p,
-     :coerce :string}},
+     :coerce :string,
+     :alias :p}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -367,8 +367,8 @@
    {:namespace
     {:desc
      "The namespace to run netshoot in - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :host-network
     {:desc "Run netshoot in the node's network namespace",
      :alias :r,
@@ -403,8 +403,8 @@
    :options
    {:node
     {:desc "The node to inspect - interactive selection when omitted",
-     :alias :n,
-     :coerce :string}},
+     :coerce :string,
+     :alias :n}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -443,12 +443,12 @@
    {:namespace
     {:desc
      "Namespace of the cluster - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :cluster
     {:desc "Name of the cluster - interactive selection when omitted",
-     :alias :c,
-     :coerce :string},
+     :coerce :string,
+     :alias :c},
     :promote
     {:desc
      "Promote this instance to primary - asks for approval first",
@@ -487,12 +487,12 @@
    {:namespace
     {:desc
      "Namespace of the pooler - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :pooler
     {:desc "Name of the pooler - interactive selection when omitted",
-     :alias :p,
-     :coerce :string},
+     :coerce :string,
+     :alias :p},
     :lines
     {:desc "How many log lines to read",
      :alias :l,
@@ -551,12 +551,12 @@
    {:namespace
     {:desc
      "Namespace of the cluster - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :cluster
     {:desc "Name of the cluster - interactive selection when omitted",
-     :alias :c,
-     :coerce :string},
+     :coerce :string,
+     :alias :c},
     :window
     {:desc
      "Seconds between the two readings - cover one reconcile interval",
@@ -597,8 +597,8 @@
    {:instance
     {:desc
      "The DbInstance to connect to - interactive selection when omitted",
-     :alias :i,
-     :coerce :string},
+     :coerce :string,
+     :alias :i},
     :port
     {:desc "The local port used for the port-forward",
      :alias :p,
@@ -642,13 +642,13 @@
    {:namespace
     {:desc
      "The namespace of the HelmRelease - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :name
     {:desc
      "The name of the HelmRelease - interactive selection when omitted",
-     :alias :r,
-     :coerce :string}},
+     :coerce :string,
+     :alias :N}},
    :prerequisites
    {:installed-tools ["kubectl" "helm" "fzf"],
     :cluster-capabilities [:flux],
@@ -687,20 +687,20 @@
   {:description
    "Deletes every series of a metric from a Prometheus TSDB",
    :options
-   {:metric
-    {:desc "The metric to delete",
-     :alias :m,
-     :require true,
-     :coerce :string},
-    :namespace
+   {:namespace
     {:desc
      "The namespace of the Prometheus service - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :service
     {:desc
      "The name of the Prometheus service - interactive selection when omitted",
-     :alias :s,
+     :coerce :string,
+     :alias :s},
+    :metric
+    {:desc "The metric to delete",
+     :alias :m,
+     :require true,
      :coerce :string},
     :selector
     {:desc "Label selector used to find Prometheus services",

@@ -7,7 +7,8 @@
             [gumshoe.conditions :as conditions]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.mutation :as mutation]))
+            [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]))
 
 (def certificate-type "certificates.cert-manager.io")
 
@@ -33,14 +34,16 @@
       :timeout 180 :interval 10
       :fetch #(kubectl/get-namespaced-resource context namespace certificate-type name)})))
 
+(def selection
+  {:mode :many :label "Certificate" :flag :certificates :candidates certificates})
+
 (mutation/book
  {:description "Renews certificates managed by cert-manager"
-  :options {:certificates {:desc "namespace/name of certificates to renew, repeatable - interactive selection when omitted"
-                           :alias :c :coerce [:string]}}
+  :options (select/options selection {:certificates {:desc "namespace/name of certificates to renew, repeatable - interactive selection when omitted"}})
   :prerequisites {:installed-tools ["cmctl" "kubectl" "fzf"]
                   :cluster-capabilities []
                   :kubectl-can-get [certificate-type]}
-  :select {:mode :many :label "Certificate" :flag :certificates :candidates certificates}
+  :select selection
   :confirm {:action "renew certificates - new certificates are requested from the issuer" :destructive? false}
   :announce (fn [{:keys [target]}] (format "Renew certificates [%s]" (str/join ", " target)))
   :effect (fn [{:keys [context target]}] (renew-effect context target))

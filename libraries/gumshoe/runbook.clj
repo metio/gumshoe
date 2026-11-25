@@ -13,6 +13,7 @@
             [clojure.string :as str]
             [gumshoe.command :as command]
             [gumshoe.config :as config]
+            [gumshoe.flags :as flags]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.flow :as flow]
             [gumshoe.hooks :as hooks]
@@ -43,18 +44,23 @@
 
 (defn cli-spec
   "The babashka.cli spec a book with these options parses its arguments
-   with: the options and the standard flags, unknown flags refused."
+   with: the options and the standard flags, unknown flags refused, and the
+   deprecated aliases the options still take (gumshoe.flags), each named in
+   its option's description."
   [options]
-  {:spec (merge options standard-options)
+  {:spec (merge (flags/documented options) standard-options)
+   :alias (flags/deprecated-aliases options)
    :restrict true})
 
 (defn arguments
-  "What a book with these options makes of its arguments, as {:opts ..}.
+  "What a book with these options makes of its arguments, as {:opts ..
+   :notes [..]}, the notes naming each deprecated alias the arguments use.
    A refused argument goes to `error-fn` as babashka.cli hands it over, or
    throws without one."
   ([options args] (arguments options args nil))
   ([options args error-fn]
-   {:opts (cli/parse-opts args (cond-> (cli-spec options) error-fn (assoc :error-fn error-fn)))}))
+   {:opts (cli/parse-opts args (cond-> (cli-spec options) error-fn (assoc :error-fn error-fn)))
+    :notes (flags/notes options args)}))
 
 (defn help-text
   ([description spec] (help-text description spec nil))
@@ -327,11 +333,12 @@
       ;; stand between the user and the usage text
       (if (some #{"-h" "--help"} *command-line-args*)
         (println (help config))
-        (let [{:keys [opts]} (arguments options *command-line-args* error-fn)]
+        (let [{:keys [opts notes]} (arguments options *command-line-args* error-fn)]
           ;; select the output theme and the interactive backend from env.edn (or a
           ;; plugin's, just loaded) before anything prints or prompts
           (theme/apply!)
           (ui/activate!)
+          (doseq [note notes] (stdout/warn note))
           (when-not (prerequisites? prerequisites opts)
             (stdout/print-banner stdout/red (str (theme/token :error) " PREREQUISITES NOT MET - nothing was attempted"))
             (stdout/err-println "Next: install the missing tools, connect to the right cluster/VPN, or fix the")

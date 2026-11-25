@@ -19,11 +19,15 @@
             [gumshoe.stdout :as stdout]
             [gumshoe.tools.flux :as flux]))
 
+(def helmrelease-select
+  "The HelmRelease to compare. Its candidates are defined below, so the
+   action adds them."
+  {:mode :namespaced :label "HelmRelease" :namespace-flag :namespace :name-flag :name
+   :empty-message "no HelmRelease exists"
+   :on-empty :fail})
+
 (def options
-  {:namespace {:desc "The namespace of the HelmRelease - interactive selection when omitted"
-               :alias :n :coerce :string}
-   :name {:desc "The name of the HelmRelease - interactive selection when omitted"
-          :alias :r :coerce :string}})
+  (select/options helmrelease-select))
 
 (def prerequisites
   {:installed-tools ["kubectl" "helm" "fzf"]
@@ -76,11 +80,7 @@
 (defn- show-drift
   [opts _ctx]
   (let [context (kubectl/current-context)
-        target (select/pick {:mode :namespaced :label "HelmRelease" :namespace-flag :namespace :name-flag :name
-                             :candidates drifted-first
-                             :empty-message "no HelmRelease exists"
-                             :on-empty :fail}
-                            opts context)]
+        target (select/pick (assoc helmrelease-select :candidates drifted-first) opts context)]
     (if (nil? target)
       false
       (let [{:keys [namespace name]} (kubectl/namespace-name-map target)

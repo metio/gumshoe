@@ -24,18 +24,6 @@
 
 (def prometheus-type prometheus/prometheus-type)
 
-(def options
-  {:namespace {:desc "The namespace of the Prometheus - interactive selection when omitted"
-               :alias :n
-               :coerce :string}
-   :prometheus {:desc "The Prometheus instance to resize - interactive selection when omitted"
-                :alias :p
-                :coerce :string}
-   :capacity {:desc "The new storage capacity (bare numbers mean Gi)"
-              :alias :c
-              :require true
-              :coerce :string}})
-
 (def prerequisites
   {:installed-tools ["kubectl" "fzf"]
    :cluster-capabilities []
@@ -51,6 +39,14 @@
    :name-flag :prometheus
    :empty-message "there is no Prometheus to resize"
    :on-empty :fail})
+
+(def options
+  (select/options prometheus-select
+                  {:prometheus {:desc "The Prometheus instance to resize - interactive selection when omitted"}
+                   :capacity {:desc "The new storage capacity (bare numbers mean Gi)"
+                              :alias :c
+                              :require true
+                              :coerce :string}}))
 
 (defn- planned
   "{:values {:plan :problems}} for growing the Prometheus resource to

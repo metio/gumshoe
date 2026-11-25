@@ -6,6 +6,7 @@
   (:require [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]
             [gumshoe.workloads :as workloads]))
 
 (defn- candidates
@@ -13,15 +14,17 @@
   (workloads/picks (for [[type kind] workloads/types] [kind (kubectl/get-all context type)])
                    (fn [kind workload] (nil? (workloads/restart-refusal kind workload)))))
 
+(def selection
+  {:mode :one :label "Workload" :flag :pick :candidates candidates})
+
 (mutation/book
  {:description "Restarts the pods of a Deployment, StatefulSet or DaemonSet through a rollout"
-  :options {:pick {:desc "\"<Kind> <namespace>/<name>\" - interactive selection when omitted"
-                   :alias :p :coerce :string}}
+  :options (select/options selection {:pick {:desc "\"<Kind> <namespace>/<name>\" - interactive selection when omitted"}})
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities []
                   :kubectl-can-get (mapv first workloads/types)
                   :kubectl-can-patch (mapv first workloads/types)}
-  :select {:mode :one :label "Workload" :flag :pick :candidates candidates}
+  :select selection
   :empty-message "no workload runs pods that a rollout could restart"
   :confirm {:action (str "restart every pod of the workload, one batch at a time as its update strategy allows - "
                          "a workload with a single replica is unavailable while its pod restarts")

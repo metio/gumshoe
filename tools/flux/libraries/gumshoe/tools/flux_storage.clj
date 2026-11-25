@@ -51,6 +51,7 @@
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.playbook :as playbook]
+            [gumshoe.select :as select]
             [gumshoe.steps.flux :as flux-steps]
             [gumshoe.steps.objects :as objects]
             [gumshoe.stdout :as stdout]
@@ -579,14 +580,14 @@
   [context]
   (mapv kubectl/namespace-name-of (kubectl/items-of (kubectl/get-all context flux/helmrelease-type))))
 
+(def helmrelease-select
+  {:mode :namespaced :label "HelmRelease" :namespace-flag :namespace :name-flag :name
+   :candidates helmrelease-picks})
+
 (def playbook
   {:description "Clears a HelmRelease's Helm storage so the next action is an install"
-   :options {:namespace {:desc "The namespace of the HelmRelease - interactive selection when omitted"
-                         :alias :n :coerce :string}
-             :name {:desc "The name of the HelmRelease - interactive selection when omitted"
-                    :alias :r :coerce :string}}
-   :select {:mode :namespaced :label "HelmRelease" :namespace-flag :namespace :name-flag :name
-            :candidates helmrelease-picks}
+   :options (select/options helmrelease-select)
+   :select helmrelease-select
    :confirm {:action "suspend its owner, delete the release's workloads, volumes and Helm storage, then resume it to install afresh"
              :destructive? true}
    :recovery recovery

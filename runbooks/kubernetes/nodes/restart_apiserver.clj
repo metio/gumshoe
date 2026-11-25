@@ -10,16 +10,9 @@
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]
             [gumshoe.ssh :as ssh]
             [gumshoe.stdout :as stdout]))
-
-(def options
-  {:node {:desc "The control-plane node to restart kube-apiserver on - interactive selection when omitted"
-          :alias :n
-          :coerce :string}
-   :user {:desc "The SSH user - your ssh config decides when omitted"
-          :alias :u
-          :coerce :string}})
 
 (defn connection
   "The node's own name is the SSH destination; sudo is needed for crictl."
@@ -73,14 +66,25 @@
      :before (when-not (apiserver/restart-refusal target object)
                (running-container conn))}))
 
+(def node-select
+  {:mode :one :label "Control-plane node" :flag :node
+   :candidates candidates
+   :preview "kubectl describe node {}"})
+
+(def options
+  (select/options node-select
+                  {:node {:desc "The control-plane node to restart kube-apiserver on - interactive selection when omitted"}
+                   :user {:desc "The SSH user - your ssh config decides when omitted"
+                          :alias :u
+                          :coerce :string}}))
+
 (mutation/book
  {:description "Restarts kube-apiserver on one control-plane node (stale discovery, renewed certificates)"
   :options options
   :prerequisites {:installed-tools ["kubectl" "fzf" "ssh"]
                   :cluster-capabilities []
                   :kubectl-can-get ["nodes"]}
-  :select {:mode :one :label "Control-plane node" :flag :node :candidates candidates
-           :preview "kubectl describe node {}"}
+  :select node-select
   :empty-message "no node carries the control-plane role label"
   :subject {:type "nodes"}
   :derive derive-state

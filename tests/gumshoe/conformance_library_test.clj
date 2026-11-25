@@ -564,3 +564,21 @@
           (is (str/includes? err "note: ") err)
           (is (str/includes? err "casebook.verified.unverified has no post-check") err)))
       (finally (fs/delete-tree root)))))
+
+(deftest the-explicit-options-of-a-derived-option-map-are-checked
+  (let [file (str (fs/create-temp-file {:suffix ".clj"}))]
+    (try
+      (spit file (str header
+                      "(ns casebook.derived \"Derives its select flags.\"\n"
+                      "  (:require [gumshoe.mutation :as mutation] [gumshoe.select :as select]))\n"
+                      "(def selection {:mode :one :label \"Thing\" :flag :pick})\n"
+                      "(mutation/book\n"
+                      " {:description \"Derives\"\n"
+                      "  :options (select/options selection {:force {:alias :f :colour true}})\n"
+                      "  :select selection})\n"))
+      (let [messages (map :message (conformance/option-problems [(conformance/parse file)]))]
+        (is (some #(str/includes? % "option :force has no :desc") messages))
+        (is (some #(str/includes? % "unknown option keys [:colour]") messages))
+        (is (not-any? #(str/includes? % ":pick") messages)
+            "the derived option is complete and not read statically"))
+      (finally (fs/delete file)))))

@@ -135,8 +135,8 @@
    {:certificates
     {:desc
      "namespace/name of certificates to renew, repeatable - interactive selection when omitted",
-     :alias :c,
-     :coerce [:string]}},
+     :coerce [:string],
+     :alias :c}},
    :prerequisites
    {:installed-tools ["cmctl" "kubectl" "fzf"],
     :cluster-capabilities [],
@@ -253,13 +253,13 @@
    {:namespace
     {:desc
      "The namespace of the CronJob - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :job
     {:desc
      "The name of the CronJob - interactive selection when omitted",
-     :alias :j,
-     :coerce :string}},
+     :coerce :string,
+     :alias :j}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -441,13 +441,13 @@
    {:namespace
     {:desc
      "The namespace of the CronJob - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :job
     {:desc
      "The name of the CronJob - interactive selection when omitted",
-     :alias :j,
-     :coerce :string}},
+     :coerce :string,
+     :alias :j}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -582,13 +582,13 @@
    {:namespace
     {:desc
      "The namespace of the CronJob - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :job
     {:desc
      "The name of the CronJob - interactive selection when omitted",
-     :alias :j,
-     :coerce :string}},
+     :coerce :string,
+     :alias :j}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -710,8 +710,8 @@
    {:pick
     {:desc
      "\"<type> <namespace>/<name> <finalizer>\" - interactive selection when omitted",
-     :alias :p,
-     :coerce :string}},
+     :coerce :string,
+     :alias :p}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -849,8 +849,8 @@
    {:release
     {:desc
      "\"<namespace>/<release>\" - interactive selection when omitted",
-     :alias :r,
-     :coerce :string},
+     :coerce :string,
+     :alias :r},
     :to-revision
     {:desc
      "The revision to go back to - the newest earlier deployed one when omitted",
@@ -1011,8 +1011,8 @@
    :options
    {:namespace
     {:desc "The stuck namespace - interactive selection when omitted",
-     :alias :n,
-     :coerce :string}},
+     :coerce :string,
+     :alias :n}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -1152,8 +1152,8 @@
    :options
    {:node
     {:desc "The node to cordon - interactive selection when omitted",
-     :alias :n,
-     :coerce :string}},
+     :coerce :string,
+     :alias :n}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -1343,8 +1343,8 @@
    :options
    {:node
     {:desc "The node to drain - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :grace-period
     {:desc
      "Seconds each pod is given to terminate - the pod's own value when omitted",
@@ -1598,8 +1598,8 @@
    {:node
     {:desc
      "The control-plane node to restart kube-apiserver on - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :user
     {:desc "The SSH user - your ssh config decides when omitted",
      :alias :u,
@@ -1749,8 +1749,8 @@
    :options
    {:node
     {:desc "The node to uncordon - interactive selection when omitted",
-     :alias :n,
-     :coerce :string}},
+     :coerce :string,
+     :alias :n}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -1859,8 +1859,8 @@
    {:pick
     {:desc
      "\"<type> <namespace>/<name>\" - interactive selection when omitted",
-     :alias :p,
-     :coerce :string}},
+     :coerce :string,
+     :alias :p}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -2013,8 +2013,8 @@
    {:orders
     {:desc
      "namespace/name of invalid orders to recreate, repeatable - interactive selection when omitted",
-     :alias :o,
-     :coerce [:string]}},
+     :coerce [:string],
+     :alias :o}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -2167,8 +2167,8 @@
    {:volumes
     {:desc
      "Released PersistentVolumes to delete, repeatable - interactive selection when omitted",
-     :alias :v,
-     :coerce [:string]}},
+     :coerce [:string],
+     :alias :v}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -2319,13 +2319,13 @@
    {:namespace
     {:desc
      "The namespace of the PersistentVolumeClaim - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :pvc
     {:desc
      "The name of the PersistentVolumeClaim - interactive selection when omitted",
-     :alias :p,
-     :coerce :string}},
+     :coerce :string,
+     :alias :p}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -2450,8 +2450,8 @@
    {:pick
     {:desc
      "\"Deployment <namespace>/<name>\" - interactive selection when omitted",
-     :alias :p,
-     :coerce :string}},
+     :coerce :string,
+     :alias :p}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -2561,8 +2561,8 @@
    {:pick
     {:desc
      "\"<Kind> <namespace>/<name>\" - interactive selection when omitted",
-     :alias :p,
-     :coerce :string}},
+     :coerce :string,
+     :alias :p}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -2671,8 +2671,8 @@
    {:pick
     {:desc
      "\"Deployment <namespace>/<name>\" - interactive selection when omitted",
-     :alias :p,
-     :coerce :string}},
+     :coerce :string,
+     :alias :p}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -2788,8 +2788,8 @@
    {:pick
     {:desc
      "\"<Kind> <namespace>/<name>\" - interactive selection when omitted",
-     :alias :p,
-     :coerce :string},
+     :coerce :string,
+     :alias :p},
     :to-revision
     {:desc
      "The revision to go back to - the previous one when omitted",
@@ -2919,8 +2919,8 @@
    {:pick
     {:desc
      "\"<Kind> <namespace>/<name>\" - interactive selection when omitted",
-     :alias :p,
-     :coerce :string},
+     :coerce :string,
+     :alias :p},
     :replicas
     {:desc "The replica count to scale to", :alias :r, :coerce :long}},
    :prerequisites
@@ -3032,8 +3032,8 @@
    {:application
     {:desc
      "\"<namespace>/<name>\" - interactive selection when omitted",
-     :alias :a,
-     :coerce :string},
+     :coerce :string,
+     :alias :a},
     :hard
     {:desc
      "Regenerate the manifests instead of reading the manifest cache",
@@ -3154,8 +3154,8 @@
    {:application
     {:desc
      "\"<namespace>/<name>\" - interactive selection when omitted",
-     :alias :a,
-     :coerce :string},
+     :coerce :string,
+     :alias :a},
     :prune
     {:desc "Delete resources that were removed from Git",
      :coerce :boolean}},
@@ -3272,8 +3272,8 @@
    {:cluster
     {:desc
      "\"<namespace>/<cluster>\" - interactive selection when omitted",
-     :alias :c,
-     :coerce :string},
+     :coerce :string,
+     :alias :c},
     :method
     {:desc
      "barmanObjectStore, plugin or volumeSnapshot - the first the cluster configures when omitted",
@@ -3389,8 +3389,8 @@
    {:pick
     {:desc
      "\"<namespace>/<cluster> <instance>\" (by name, by number, or *) - interactive selection when omitted",
-     :alias :p,
-     :coerce :string}},
+     :coerce :string,
+     :alias :p}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -3509,8 +3509,8 @@
    {:cluster
     {:desc
      "\"<namespace>/<cluster>\" - interactive selection when omitted",
-     :alias :c,
-     :coerce :string}},
+     :coerce :string,
+     :alias :c}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -3621,8 +3621,8 @@
    {:cluster
     {:desc
      "\"<namespace>/<cluster>\" - interactive selection when omitted",
-     :alias :c,
-     :coerce :string}},
+     :coerce :string,
+     :alias :c}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -3730,8 +3730,8 @@
    {:cluster
     {:desc
      "\"<namespace>/<cluster>\" - interactive selection when omitted",
-     :alias :c,
-     :coerce :string}},
+     :coerce :string,
+     :alias :c}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -3848,8 +3848,8 @@
    {:cluster
     {:desc
      "\"<namespace>/<cluster>\" - interactive selection when omitted",
-     :alias :c,
-     :coerce :string}},
+     :coerce :string,
+     :alias :c}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -3961,8 +3961,8 @@
    {:scheduled-backup
     {:desc
      "\"<namespace>/<name>\" - interactive selection when omitted",
-     :alias :s,
-     :coerce :string}},
+     :coerce :string,
+     :alias :s}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -4073,8 +4073,8 @@
    {:scheduled-backup
     {:desc
      "\"<namespace>/<name>\" - interactive selection when omitted",
-     :alias :s,
-     :coerce :string}},
+     :coerce :string,
+     :alias :s}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -4187,8 +4187,8 @@
    {:pick
     {:desc
      "\"<namespace>/<cluster> <instance>\" (the instance by name or number) - interactive selection when omitted",
-     :alias :p,
-     :coerce :string}},
+     :coerce :string,
+     :alias :p}},
    :prerequisites
    {:installed-tools ["kubectl" "kubectl-cnpg" "fzf"],
     :cluster-capabilities [],
@@ -4305,8 +4305,8 @@
    {:pick
     {:desc
      "\"<namespace>/<cluster> <instance>\" (by name, by number, or *) - interactive selection when omitted",
-     :alias :p,
-     :coerce :string}},
+     :coerce :string,
+     :alias :p}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -4431,13 +4431,13 @@
    {:namespace
     {:desc
      "The namespace of the HelmRelease - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :name
     {:desc
      "The name of the HelmRelease - interactive selection when omitted",
-     :alias :r,
-     :coerce :string}},
+     :coerce :string,
+     :alias :N}},
    :prerequisites
    {:installed-tools ["flux" "kubectl" "fzf"],
     :cluster-capabilities [],
@@ -4573,13 +4573,13 @@
    {:namespace
     {:desc
      "The namespace of the HelmRelease - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :name
     {:desc
      "The name of the HelmRelease - interactive selection when omitted",
-     :alias :r,
-     :coerce :string}},
+     :coerce :string,
+     :alias :N}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [:flux],
@@ -4735,8 +4735,8 @@
    {:pick
     {:desc
      "\"<Kind> <namespace>/<name>\" - interactive selection when omitted",
-     :alias :p,
-     :coerce :string}},
+     :coerce :string,
+     :alias :p}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -4869,8 +4869,8 @@
    {:pick
     {:desc
      "\"<Kind> <namespace>/<name>\" - interactive selection when omitted",
-     :alias :p,
-     :coerce :string}},
+     :coerce :string,
+     :alias :p}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -5062,13 +5062,13 @@
    {:namespace
     {:desc
      "The namespace of the JsonnetSnippet - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :name
     {:desc
      "The name of the JsonnetSnippet - interactive selection when omitted",
-     :alias :s,
-     :coerce :string}},
+     :coerce :string,
+     :alias :N}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [:jaas],
@@ -5262,13 +5262,13 @@
    {:namespace
     {:desc
      "The namespace of the JsonnetSnippet - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :name
     {:desc
      "The name of the JsonnetSnippet - interactive selection when omitted",
-     :alias :s,
-     :coerce :string}},
+     :coerce :string,
+     :alias :N}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [:jaas],
@@ -5480,13 +5480,13 @@
    {:namespace
     {:desc
      "The namespace of the JsonnetSnippet - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :name
     {:desc
      "The name of the JsonnetSnippet - interactive selection when omitted",
-     :alias :s,
-     :coerce :string}},
+     :coerce :string,
+     :alias :N}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [:jaas],
@@ -5662,13 +5662,13 @@
    {:namespace
     {:desc
      "The namespace of the StageSet - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :name
     {:desc
      "The name of the StageSet - interactive selection when omitted",
-     :alias :s,
-     :coerce :string},
+     :coerce :string,
+     :alias :N},
     :stage
     {:desc "The stage to promote - interactive selection when omitted",
      :coerce :string}},
@@ -5846,13 +5846,13 @@
    {:namespace
     {:desc
      "The namespace of the StageSet - interactive selection when omitted",
-     :alias :n,
-     :coerce :string},
+     :coerce :string,
+     :alias :n},
     :name
     {:desc
      "The name of the StageSet - interactive selection when omitted",
-     :alias :s,
-     :coerce :string},
+     :coerce :string,
+     :alias :N},
     :update-now
     {:desc "Override the update window and roll a held revision now",
      :coerce :boolean}},
@@ -5974,8 +5974,8 @@
    {:schedule
     {:desc
      "\"<namespace>/<schedule>\" - interactive selection when omitted",
-     :alias :s,
-     :coerce :string}},
+     :coerce :string,
+     :alias :s}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -6092,8 +6092,8 @@
    {:backup
     {:desc
      "\"<namespace>/<backup>\" - interactive selection when omitted",
-     :alias :b,
-     :coerce :string}},
+     :coerce :string,
+     :alias :b}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -6207,8 +6207,8 @@
    {:schedule
     {:desc
      "\"<namespace>/<schedule>\" - interactive selection when omitted",
-     :alias :s,
-     :coerce :string}},
+     :coerce :string,
+     :alias :s}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -6319,8 +6319,8 @@
    {:schedule
     {:desc
      "\"<namespace>/<schedule>\" - interactive selection when omitted",
-     :alias :s,
-     :coerce :string}},
+     :coerce :string,
+     :alias :s}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],

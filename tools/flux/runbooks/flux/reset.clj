@@ -17,6 +17,7 @@
   (:require [gumshoe.conditions :as conditions]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]
             [gumshoe.tools.flux :as flux]))
 
 (defn- helmreleases
@@ -30,18 +31,18 @@
     :timeout 300 :interval 15
     :fetch #(kubectl/get-namespaced-resource context namespace flux/helmrelease-type name)}))
 
+(def selection
+  {:mode :namespaced :label "HelmRelease" :namespace-flag :namespace :name-flag :name
+   :candidates helmreleases})
+
 (mutation/book
  {:description "Clears a parked HelmRelease's failure counters and reconciles it"
-  :options {:namespace {:desc "The namespace of the HelmRelease - interactive selection when omitted"
-                        :alias :n :coerce :string}
-            :name {:desc "The name of the HelmRelease - interactive selection when omitted"
-                   :alias :r :coerce :string}}
+  :options (select/options selection)
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities [:flux]
                   :kubectl-can-get [flux/helmrelease-type]
                   :kubectl-can-patch [flux/helmrelease-type]}
-  :select {:mode :namespaced :label "HelmRelease" :namespace-flag :namespace :name-flag :name
-           :candidates helmreleases}
+  :select selection
   :confirm {:action "clear the failure counters and reconcile" :destructive? false}
   :subject {:type flux/helmrelease-type}
   :refusal (fn [{:keys [target object]}] (flux/helmrelease-refusal target object))

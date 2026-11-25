@@ -8,10 +8,15 @@
             [gumshoe.select :as select]
             [gumshoe.stdout :as stdout]))
 
+(def node-select
+  "The node to inspect. Its candidates come from the run's one read of the
+   nodes, so the action adds them."
+  {:mode :one :label "Node" :flag :node
+   :empty-message "the cluster has no nodes"
+   :on-empty :fail})
+
 (def options
-  {:node {:desc "The node to inspect - interactive selection when omitted"
-          :alias :n
-          :coerce :string}})
+  (select/options node-select {:node {:desc "The node to inspect - interactive selection when omitted"}}))
 
 (def prerequisites
   {:installed-tools ["kubectl" "fzf"]
@@ -22,10 +27,7 @@
   [opts _ctx]
   (let [context (kubectl/current-context)
         nodes (delay (kubectl/get-all context "nodes"))
-        node-name (select/pick {:mode :one :label "Node" :flag :node
-                                :candidates (fn [_] (kubectl/names-of @nodes))
-                                :empty-message "the cluster has no nodes"
-                                :on-empty :fail}
+        node-name (select/pick (assoc node-select :candidates (fn [_] (kubectl/names-of @nodes)))
                                opts context)]
     (if (nil? node-name)
       false

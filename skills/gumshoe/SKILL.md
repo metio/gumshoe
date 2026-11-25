@@ -101,6 +101,11 @@ otherwise ask for:
 - **Pass every selecting flag.** A book picks a missing or invalid node,
   namespace or object with fzf, which fails at once without a terminal.
   `--help` names the flags (`--node`, `--namespace`, `--pod`, `--host`, …).
+  A selecting flag has one short alias in every book (`-n` namespace and
+  node, `-N` name, `-p` pick, …; `gumshoe.flags/aliases` holds the list).
+  The aliases `--name` and Thanos' `--service` had before (`-r`, `-s`,
+  `-m`) still parse, and print a deprecation note on stderr naming the
+  current one; write the current alias or the long flag.
 - **Use `--output json`** (or `edn`) on detectives and scans. Results go to
   standard output and diagnostics to standard error, so `2> scan.log | jq`
   parses the report while the log keeps the prerequisite checklist and any
@@ -274,6 +279,17 @@ mostly data:
   checked". `:requires` must name the evidence keys as the collection
   returns them, keywords or strings. `(detective/check-step {:title …
   :detectives … :blocking? false})` is the playbook step for the same;
+- a book derives the options its select reads instead of writing them:
+  `(def selection {:mode … :label … :flag …})` and `:options
+  (select/options selection {…})`, where the map adds the book's own
+  options and rewords a select flag's `:desc` without touching its alias or
+  coercion. Each select flag gets its short alias from
+  `gumshoe.flags/aliases`, so it is the same in every book and steps from
+  different tools join in one playbook; a new select flag gets its entry
+  there, and `select/options` refuses two options sharing an alias when the
+  book loads. A bespoke book declares its select once without
+  `:candidates` and adds them at the pick, `(select/pick (assoc
+  node-select :candidates …) opts context)`;
 - a uniform change is `(mutation/book {:select … :confirm … :effect …
   :verify …})`. Conformance requires each spec to carry a readable
   `:confirm {:action …}`, an explicit `:destructive?` true or false,

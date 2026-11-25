@@ -6,6 +6,7 @@
   (:require [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
+            [gumshoe.select :as select]
             [gumshoe.workloads :as workloads]))
 
 (defn- hpas
@@ -18,16 +19,18 @@
                      [kind (kubectl/get-all context type)])
                    (constantly true)))
 
+(def selection
+  {:mode :one :label "Workload" :flag :pick :candidates candidates})
+
 (mutation/book
  {:description "Scales a Deployment or StatefulSet to a replica count"
-  :options {:pick {:desc "\"<Kind> <namespace>/<name>\" - interactive selection when omitted"
-                   :alias :p :coerce :string}
-            :replicas {:desc "The replica count to scale to" :alias :r :coerce :long}}
+  :options (select/options selection {:pick {:desc "\"<Kind> <namespace>/<name>\" - interactive selection when omitted"}
+                                      :replicas {:desc "The replica count to scale to" :alias :r :coerce :long}})
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities []
                   :kubectl-can-get ["deployments" "statefulsets" "horizontalpodautoscalers"]
                   :kubectl-can-patch ["deployments" "statefulsets"]}
-  :select {:mode :one :label "Workload" :flag :pick :candidates candidates}
+  :select selection
   :empty-message "no Deployment or StatefulSet to scale"
   :confirm {:action "scale a workload" :destructive? false}
   :subject {:parse workloads/parse-pick
