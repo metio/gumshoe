@@ -1,0 +1,54 @@
+{
+  "a fail-closed validating webhook and an ignoring mutating one, both without a ready backend, beside a serving one" : {
+    "findings" : [ {
+      "severity" : "critical",
+      "component" : "kyverno",
+      "summary" : "ValidatingWebhookConfiguration webhook validate.kyverno.svc calls Service policy/kyverno, which has no ready endpoint",
+      "hint" : "failurePolicy Fail - every request it matches is refused, and an upgrade that recreates pods stalls on it; bring its pods up or delete the configuration",
+      "detective" : "webhook-backends"
+    }, {
+      "severity" : "warning",
+      "component" : "injector",
+      "summary" : "MutatingWebhookConfiguration webhook inject.mesh.io calls Service mesh/injector, which has no ready endpoint",
+      "hint" : "failurePolicy Ignore - every request it matches waits 5s before it passes unchecked",
+      "detective" : "webhook-backends"
+    } ],
+    "checked" : [ {
+      "name" : "webhook-backends",
+      "description" : "Admission webhooks whose Service has no ready endpoint"
+    } ],
+    "summary" : {
+      "critical" : 1,
+      "warning" : 1,
+      "info" : 0
+    }
+  },
+  "the EndpointSlice read did not answer" : {
+    "findings" : [ ],
+    "checked" : [ {
+      "name" : "webhook-backends",
+      "description" : "Admission webhooks whose Service has no ready endpoint",
+      "unread" : true
+    } ],
+    "summary" : {
+      "critical" : 0,
+      "warning" : 0,
+      "info" : 0
+    },
+    "nothing-checked" : true
+  },
+  "the MutatingWebhookConfiguration read did not answer" : {
+    "findings" : [ ],
+    "checked" : [ {
+      "name" : "webhook-backends",
+      "description" : "Admission webhooks whose Service has no ready endpoint",
+      "unread" : true
+    } ],
+    "summary" : {
+      "critical" : 0,
+      "warning" : 0,
+      "info" : 0
+    },
+    "nothing-checked" : true
+  }
+}

@@ -187,7 +187,7 @@ The detectives compose from one domain to the whole cluster:
 | `runbooks/detectives/platform.clj` | control plane, nodes, calico, CSI storage |
 | `runbooks/detectives/storage.clj`, `csi.clj` | pending and unused claims, attachments, orphaned volumes |
 | `runbooks/detectives/events.clj` | Warning events of the last hour |
-| `runbooks/detectives/upgrade.clj` | removed APIs, webhooks, version skew, drain blockers |
+| `runbooks/detectives/upgrade.clj` | removed APIs, webhooks, version skew, drain blockers; an admission webhook whose Service has no ready endpoint is critical when it fails closed (`webhook-backends`), and the check is unread when either webhook configuration read, the Service read or the EndpointSlice read did not answer, or no webhook configuration exists |
 | `runbooks/detectives/apiversions.clj` | CRD discovery drift |
 | `runbooks/detectives/security.clj`, `rbac.clj` | RBAC, pod security, network segmentation |
 | `runbooks/detectives/posture.clj` | probes, image tags, replicas, PDBs, deprecated APIs, template drift |
