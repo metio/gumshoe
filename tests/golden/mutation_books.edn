@@ -145,7 +145,8 @@
    :empty-message nil,
    :confirm
    {:action
-    "renew certificates - new certificates are requested from the issuer"},
+    "renew certificates - new certificates are requested from the issuer",
+    :destructive? false},
    :details
    ["What it does:"
     "  picks one or more of Certificate (--certificates, or interactively)"
@@ -521,7 +522,8 @@
     :name-flag :job},
    :empty-message nil,
    :confirm
-   {:action "start a Job from a CronJob outside its schedule"},
+   {:action "start a Job from a CronJob outside its schedule",
+    :destructive? false},
    :details
    ["What it does:"
     "  picks one CronJob by namespace and name (--namespace and --job, or interactively)"
@@ -1436,7 +1438,8 @@
     :flag :node,
     :preview "kubectl describe node {}"},
    :empty-message "every node is already cordoned",
-   :confirm {:action "cordon (mark unschedulable) a node"},
+   :confirm
+   {:action "cordon (mark unschedulable) a node", :destructive? false},
    :details
    ["What it does:"
     "  picks one Node (--node, or interactively)"
@@ -2213,7 +2216,8 @@
     :kubectl-can-patch ["nodes"]},
    :select {:mode :one, :label "Node", :flag :node},
    :empty-message "no node is cordoned",
-   :confirm {:action "uncordon (mark schedulable) a node"},
+   :confirm
+   {:action "uncordon (mark schedulable) a node", :destructive? false},
    :details
    ["What it does:"
     "  picks one Node (--node, or interactively)"
@@ -6965,7 +6969,9 @@
     :namespace-flag :namespace,
     :name-flag :name},
    :empty-message nil,
-   :confirm {:action "request a JsonnetSnippet re-evaluation"},
+   :confirm
+   {:action "request a JsonnetSnippet re-evaluation",
+    :destructive? false},
    :details
    ["What it does:"
     "  picks one JsonnetSnippet by namespace and name (--namespace and --name, or interactively)"
@@ -7178,7 +7184,7 @@
     :namespace-flag :namespace,
     :name-flag :name},
    :empty-message nil,
-   :confirm {:action "resume a JsonnetSnippet"},
+   :confirm {:action "resume a JsonnetSnippet", :destructive? false},
    :details
    ["What it does:"
     "  picks one suspended JsonnetSnippet by namespace and name (--namespace and --name, or interactively)"
@@ -7413,7 +7419,7 @@
     :namespace-flag :namespace,
     :name-flag :name},
    :empty-message nil,
-   :confirm {:action "suspend a JsonnetSnippet"},
+   :confirm {:action "suspend a JsonnetSnippet", :destructive? false},
    :details
    ["What it does:"
     "  picks one JsonnetSnippet by namespace and name (--namespace and --name, or interactively)"
@@ -7474,7 +7480,13 @@
      nil
      "--namespace=apps"]],
    :precondition nil,
-   :announce "Promote stage null of StageSet apps/site"},
+   :announce "Promote stage null of StageSet apps/site",
+   :checks
+   [{:description
+     "stage null of StageSet apps/site acted on the promotion",
+     :timeout 300,
+     :interval 5,
+     :holds false}]},
   :dry-run
   {:result true,
    :out
@@ -7510,12 +7522,24 @@
      nil
      "--namespace=site"]],
    :precondition nil,
-   :announce "Promote stage null of StageSet site"},
+   :announce "Promote stage null of StageSet site",
+   :checks
+   [{:description "stage null of StageSet site acted on the promotion",
+     :timeout 300,
+     :interval 5,
+     :holds false}]},
   :permitted
-  {:action "promote a StageSet stage",
+  {:checks
+   [{:description
+     "stage prod of StageSet apps/site acted on the promotion",
+     :timeout 300,
+     :interval 5,
+     :holds false}],
    :destructive? false,
+   :announce "Promote stage prod of StageSet apps/site",
+   :out "▸ Stage: prod",
+   :action "promote a StageSet stage",
    :items ["apps/site"],
-   :step "promote a StageSet stage",
    :plan
    [[:cmd
      "stagesetctl"
@@ -7524,9 +7548,8 @@
      "--stage"
      "prod"
      "--namespace=apps"]],
-   :precondition nil,
-   :out "▸ Stage: prod",
-   :announce "Promote stage prod of StageSet apps/site"},
+   :step "promote a StageSet stage",
+   :precondition nil},
   :picked
   {:result true,
    :out "▸ StageSet: apps/site\n▸ Stage: prod",
@@ -7541,10 +7564,17 @@
      "prod"
      "--namespace=apps"]]},
   :refused
-  {:action "promote a StageSet stage",
+  {:checks
+   [{:description
+     "stage prod of StageSet apps/site acted on the promotion",
+     :timeout 300,
+     :interval 5,
+     :holds false}],
    :destructive? false,
+   :announce "Promote stage prod of StageSet apps/site",
+   :out "▸ Stage: prod",
+   :action "promote a StageSet stage",
    :items ["apps/site"],
-   :step "promote a StageSet stage",
    :plan
    [[:cmd
      "stagesetctl"
@@ -7553,14 +7583,20 @@
      "--stage"
      "prod"
      "--namespace=apps"]],
-   :precondition nil,
-   :out "▸ Stage: prod",
-   :announce "Promote stage prod of StageSet apps/site"},
+   :step "promote a StageSet stage",
+   :precondition nil},
   :spec-changed
-  {:action "promote a StageSet stage",
+  {:checks
+   [{:description
+     "stage prod of StageSet apps/site acted on the promotion",
+     :timeout 300,
+     :interval 5,
+     :holds false}],
    :destructive? false,
+   :announce "Promote stage prod of StageSet apps/site",
+   :out "▸ Stage: prod",
+   :action "promote a StageSet stage",
    :items ["apps/site"],
-   :step "promote a StageSet stage",
    :plan
    [[:cmd
      "stagesetctl"
@@ -7569,9 +7605,8 @@
      "--stage"
      "prod"
      "--namespace=apps"]],
-   :precondition nil,
-   :out "▸ Stage: prod",
-   :announce "Promote stage prod of StageSet apps/site"},
+   :step "promote a StageSet stage",
+   :precondition nil},
   :surface
   {:description
    "Manually promotes a held StageSet stage via stagesetctl",
@@ -7599,13 +7634,13 @@
     :namespace-flag :namespace,
     :name-flag :name},
    :empty-message nil,
-   :confirm {:action "promote a StageSet stage"},
+   :confirm {:action "promote a StageSet stage", :destructive? false},
    :details
    ["What it does:"
     "  picks one StageSet by namespace and name (--namespace and --name, or interactively)"
     "  asks to confirm: promote a StageSet stage"
     "  announces the change to the changelog"
-    "  has no post-check"
+    "  verifies the result before it reports success"
     ""
     "Needs:"
     "  tools: stagesetctl, kubectl, fzf"
@@ -7613,10 +7648,17 @@
     "  cluster capabilities: stageset"],
    :candidates {:permitted ["apps/site"], :refused ["apps/site"]}},
   :unanswered
-  {:action "promote a StageSet stage",
+  {:checks
+   [{:description
+     "stage prod of StageSet apps/site acted on the promotion",
+     :timeout 300,
+     :interval 5,
+     :holds false}],
    :destructive? false,
+   :announce "Promote stage prod of StageSet apps/site",
+   :out "▸ Stage: prod",
+   :action "promote a StageSet stage",
    :items ["apps/site"],
-   :step "promote a StageSet stage",
    :plan
    [[:cmd
      "stagesetctl"
@@ -7625,18 +7667,24 @@
      "--stage"
      "prod"
      "--namespace=apps"]],
-   :precondition nil,
-   :out "▸ Stage: prod",
-   :announce "Promote stage prod of StageSet apps/site"},
+   :step "promote a StageSet stage",
+   :precondition nil},
   :unanswered-pick
   {:result false,
    :out
    "❌ could not list the StageSet candidates - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
   :unknown-stage
-  {:action "promote a StageSet stage",
+  {:checks
+   [{:description
+     "stage null of StageSet apps/site acted on the promotion",
+     :timeout 300,
+     :interval 5,
+     :holds false}],
    :destructive? false,
+   :announce "Promote stage null of StageSet apps/site",
+   :out "🔶 Stage 'qa' is not a valid choice, please select one",
+   :action "promote a StageSet stage",
    :items ["apps/site"],
-   :step "promote a StageSet stage",
    :plan
    [[:cmd
      "stagesetctl"
@@ -7645,9 +7693,8 @@
      "--stage"
      nil
      "--namespace=apps"]],
-   :precondition nil,
-   :out "🔶 Stage 'qa' is not a valid choice, please select one",
-   :announce "Promote stage null of StageSet apps/site"},
+   :step "promote a StageSet stage",
+   :precondition nil},
   :unpicked
   {:result false,
    :out
@@ -7799,7 +7846,8 @@
     :namespace-flag :namespace,
     :name-flag :name},
    :empty-message nil,
-   :confirm {:action "trigger a StageSet reconciliation"},
+   :confirm
+   {:action "trigger a StageSet reconciliation", :destructive? false},
    :details
    ["What it does:"
     "  picks one StageSet by namespace and name (--namespace and --name, or interactively)"
