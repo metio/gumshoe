@@ -23,6 +23,10 @@
                    [gumshoe.catalog-test]
                    [gumshoe.main-test]
                    [gumshoe.ceph-test]
+                   [gumshoe.ceph-upgrade-backups-test]
+                   [gumshoe.certificate-renew-test]
+                   [gumshoe.files-test]
+                   [gumshoe.read-all-books-test]
                    [gumshoe.capabilities-test]
                    [gumshoe.command-test]
                    [gumshoe.config-test]
@@ -230,6 +234,10 @@
                                                          'gumshoe.catalog-test
                                                          'gumshoe.main-test
                                                          'gumshoe.ceph-test
+                                                         'gumshoe.ceph-upgrade-backups-test
+                                                         'gumshoe.certificate-renew-test
+                                                         'gumshoe.files-test
+                                                         'gumshoe.read-all-books-test
                                                          'gumshoe.capabilities-test
                                                          'gumshoe.command-test
                                                          'gumshoe.config-test
