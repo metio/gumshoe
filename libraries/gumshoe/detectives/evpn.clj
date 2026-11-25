@@ -16,15 +16,18 @@
             [gumshoe.evpn :as evpn]))
 
 (defn- gateway-vteps
+  "The gateway VTEPs the scan was given, or nil when none were: an empty set
+  would read every VTEP as no gateway, which is a judgement the scan cannot
+  make without them."
   [evidence]
-  (set (get-in evidence ["config" :evpn :gateway-vteps])))
+  (some-> (seq (get evidence "evpn-gateway-vteps")) set))
 
 (defn- guest-mac-prefixes
   "Prefixes that mark a MAC as a guest rather than fabric infrastructure. Empty
   means every MAC is treated as a guest, which is the safe default for a fabric
-  whose addressing is not declared."
+  whose addressing is not declared: it reports more, never less."
   [evidence]
-  (set (get-in evidence ["config" :evpn :guest-mac-prefixes])))
+  (set (get evidence "evpn-guest-mac-prefixes")))
 
 (defn- guest-mac?
   [prefixes mac]
@@ -43,50 +46,76 @@
 
 (defn- gateway-hint
   [vtep gateways]
-  (if (contains? gateways vtep)
+  (cond
+    (nil? gateways)
+    (str "two VTEPs disagree about the same MAC; the owner is authoritative. Whether "
+         vtep " is a gateway VTEP could not be judged, because no gateway VTEPs were "
+         "given (--gateway-vteps or :evpn :gateway-vteps in env.edn), so a router's "
+         "proxy-advertised route cannot be told apart from a stale host route")
+
+    (contains? gateways vtep)
     (str "a gateway VTEP has claimed a guest MAC, which is what "
          "proxy-macip-advertisement on a router's IRB does: the router proxies the "
          "guest's neighbour entry and advertises a type-2 MAC+IP route, and MAC+IP "
          "outranks the owner's MAC-only route no matter whose mobility sequence is "
          "higher. Removing the setting stops new proxy entries but does not withdraw "
          "the routes already advertised - those have to be cleared on the router")
+
+    :else
     (str "two VTEPs disagree about the same MAC; the owner is authoritative, so "
          "whatever advertises " vtep " is stale or misconfigured")))
 
-(defn detect-mac-ownership
+(defn detect-ownership-conflicts
+  "The provable case: some host has the tap, and another host reaches the MAC
+  through a VTEP that is not the owner's. It needs no gateway VTEPs to find
+  one; they only decide which cause the hint names."
+  [evidence]
+  (let [macs (get evidence "evpn-macs")
+        gateways (gateway-vteps evidence)
+        owned (owners macs)]
+    (for [{:keys [vni mac type host vtep remote-seq]} macs
+          :when (= :remote type)
+          :let [owner (get owned [vni mac])]
+          :when (and owner (not= vtep (:vtep owner)))]
+      {:severity :critical
+       :component (str "vni " vni "/" mac)
+       :summary (str "MAC is local on " (:host owner) " (" (:intf owner) ") but "
+                     host " reaches it via " vtep)
+       :hint (str (gateway-hint vtep gateways)
+                  (when (and (:seq owner) remote-seq (> (:seq owner) remote-seq))
+                    (str ". The owner's mobility sequence (" (:seq owner)
+                         ") is already higher than the winning route's (" remote-seq
+                         "), so this will not resolve by itself")))})))
+
+(defn detect-gateway-only-macs
+  "The suspicious case: a guest MAC no scanned host claims, reachable only
+  through a gateway VTEP. Without gateway VTEPs nothing can be judged, and the
+  check is marked unread through its :judges rather than passing."
   [evidence]
   (let [macs (get evidence "evpn-macs")
         gateways (gateway-vteps evidence)
         prefixes (guest-mac-prefixes evidence)
         owned (owners macs)]
-    (concat
-     ;; the provable case: some host has the tap, and someone points elsewhere
-     (for [{:keys [vni mac type host vtep remote-seq]} macs
-           :when (= :remote type)
-           :let [owner (get owned [vni mac])]
-           :when (and owner (not= vtep (:vtep owner)))]
-       {:severity :critical
-        :component (str "vni " vni "/" mac)
-        :summary (str "MAC is local on " (:host owner) " (" (:intf owner) ") but "
-                      host " reaches it via " vtep)
-        :hint (str (gateway-hint vtep gateways)
-                   (when (and (:seq owner) remote-seq (> (:seq owner) remote-seq))
-                     (str ". The owner's mobility sequence (" (:seq owner)
-                          ") is already higher than the winning route's (" remote-seq
-                          "), so this will not resolve by itself")))})
-     ;; the suspicious case: a guest MAC nobody claims, reachable only via a gateway
-     (for [[[vni mac] entries] (group-by (juxt :vni :mac) macs)
-           :when (and (guest-mac? prefixes mac)
-                      (not (get owned [vni mac]))
-                      (seq entries)
-                      (every? #(contains? gateways (:vtep %)) entries))]
-       {:severity :warning
-        :component (str "vni " vni "/" mac)
-        :summary (str "guest MAC is reachable only through a gateway VTEP ("
-                      (str/join ", " (sort (distinct (map :vtep entries)))) ")")
-        :hint (str "no scanned host reports it as local. Either its host is outside "
-                   ":evpn :hosts, or a gateway has claimed it the way "
-                   "proxy-macip-advertisement does")}))))
+    (when gateways
+      (for [[[vni mac] entries] (group-by (juxt :vni :mac) macs)
+            :when (and (guest-mac? prefixes mac)
+                       (not (get owned [vni mac]))
+                       (seq entries)
+                       (every? #(contains? gateways (:vtep %)) entries))]
+        {:severity :warning
+         :component (str "vni " vni "/" mac)
+         :summary (str "guest MAC is reachable only through a gateway VTEP ("
+                       (str/join ", " (sort (distinct (map :vtep entries)))) ")")
+         :hint (str "no scanned host reports it as local. Either its host is outside "
+                    ":evpn :hosts, or a gateway has claimed it the way "
+                    "proxy-macip-advertisement does")}))))
+
+(defn detect-mac-ownership
+  "Both ownership judgements over one evidence map: the conflicts a host's own
+  tap proves, then the guest MACs only a gateway reaches."
+  [evidence]
+  (concat (detect-ownership-conflicts evidence)
+          (detect-gateway-only-macs evidence)))
 
 (def ^:private not-collected
   {:read? false :error "not collected"})
@@ -205,11 +234,88 @@
                     "host is often the symptom - check it before trusting a clean "
                     "result"))})))
 
+(declare detectives)
+
+(def ^:private input-wording
+  "How a report names each judged input, and how a scan without it widens a
+  check besides leaving the checks that judge it unjudged."
+  {"gateway-vteps" {:label "gateway VTEPs"}
+   "guest-mac-prefixes" {:label "guest MAC prefixes"
+                         :consequence "every MAC counts as a guest"
+                         :widens "evpn-gateway-only-mac also reports infrastructure MACs that sit behind a gateway"
+                         :note "evpn-gateway-only-mac counts every MAC as a guest"}})
+
+(defn- names
+  [checks]
+  (str/join ", " checks))
+
+(defn missing-inputs
+  "Every judged input the scan has no value for, from the \"evpn-inputs\"
+  evidence: its option and env.edn path, the checks that cannot judge without
+  it - those whose :judges hold its evidence key - and what it changes
+  otherwise. Hosts and VNIs are never judged here: the scan refuses to start
+  without them."
+  [evidence]
+  (let [declared (into {} (map (juxt :input identity)) evpn/inputs)]
+    (for [{:keys [input option env-path source]} (get evidence "evpn-inputs")
+          :let [key (get-in declared [input :evidence])]
+          :when (and key (= "missing" source))]
+      (merge {:input input :option option :env-path env-path
+              :unjudged (vec (for [{:keys [name judges]} detectives
+                                   :when (some #{key} judges)]
+                               name))}
+             (get input-wording input {:label input})))))
+
+(defn- supply
+  [{:keys [option env-path]}]
+  (str "pass " option " or set " (str/join " " env-path) " in env.edn"))
+
+(defn missing-input-lines
+  "One line per missing judged input for stderr: what is missing, how to
+  supply it, and which checks cannot judge without it."
+  [evidence]
+  (for [{:keys [label unjudged note] :as missing} (missing-inputs evidence)
+        :when (or (seq unjudged) note)]
+    (str "no " label " - " (supply missing) "; "
+         (if (seq unjudged)
+           (str (names unjudged) " cannot judge without them and "
+                (if (= 1 (count unjudged)) "is" "are") " reported as unjudged")
+           note))))
+
+(defn detect-missing-inputs
+  "A judged input nobody supplied. One that leaves a check unjudged is a
+  warning naming that check, because the check's silence reads as clean to
+  anyone who does not look at its unread mark; one that only widens a check
+  is info. The inputs matter only to checks over the MAC tables, so without
+  those there is nothing to report, and a collection that read nothing still
+  ends as nothing checked."
+  [evidence]
+  (for [{:keys [label option unjudged consequence widens] :as missing}
+        (when (some? (get evidence "evpn-macs")) (missing-inputs evidence))
+        :when (or (seq unjudged) consequence)]
+    (if (seq unjudged)
+      {:severity :warning
+       :component option
+       :summary (str "no " label " were given, so " (names unjudged) " could not judge")
+       :hint (str (supply missing) "; until then " (names unjudged)
+                  (if (= 1 (count unjudged)) " is" " are")
+                  " unjudged, and " (if (= 1 (count unjudged)) "its" "their")
+                  " silence is not a clean result")}
+      {:severity :info
+       :component option
+       :summary (str "no " label " were given, so " consequence)
+       :hint (str (supply missing) "; until then " widens)})))
+
 (def detectives
   [{:name "evpn-mac-ownership"
     :description "guest MACs the fabric attributes to a VTEP that is not their host's"
-    :requires ["evpn-macs" "config"]
-    :detect detect-mac-ownership}
+    :requires ["evpn-macs"]
+    :detect detect-ownership-conflicts}
+   {:name "evpn-gateway-only-mac"
+    :description "guest MACs no scanned host owns that every VTEP reaches through a gateway VTEP"
+    :requires ["evpn-macs"]
+    :judges ["evpn-gateway-vteps"]
+    :detect detect-gateway-only-macs}
    {:name "evpn-fdb-conflict"
     :description "hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local and whether BGP still advertises the remote one"
     :requires ["evpn-fdb"]
@@ -221,4 +327,8 @@
    {:name "evpn-static-fdb"
     :description "static fdb entries, which outrank EVPN learning and go stale silently"
     :requires ["evpn-fdb"]
-    :detect detect-static-fdb}])
+    :detect detect-static-fdb}
+   {:name "evpn-inputs"
+    :description "values the scan judges against that neither an option nor env.edn supplied, and the checks that could not judge without them"
+    :requires ["evpn-macs"]
+    :detect detect-missing-inputs}])

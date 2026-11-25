@@ -162,6 +162,13 @@ and outcome; the path is printed after the final banner.
   refused the read, or because the scope it judges selected no subjects, so
   an empty finding list from it proves nothing. Say so when you report a
   clean result.
+- A book that judges against values from its options or env.edn names a
+  missing one on stderr. The fabric detective without gateway VTEPs marks
+  `evpn-gateway-only-mac` `unread`, adds an `evpn-inputs` warning naming it,
+  and lists where each value came from under `inputs` (`option`, `env.edn`
+  or `missing`). env.edn picks its environment by kubectl context, so a
+  shell without one supplies nothing from it; pass every value as a flag
+  there.
 - `nothing-checked: true` means no detective read anything. The book exits 1
   and the run is not a clean result; report it as unchecked, then look for
   the scope or capability that left every detective without evidence.
@@ -187,7 +194,7 @@ The detectives compose from one domain to the whole cluster:
 | `runbooks/detectives/observability.clj` | Prometheus, Alertmanager, ThanosRuler |
 | `runbooks/detectives/dns.clj` | nameservers, SOA replication, answer consistency |
 | `runbooks/detectives/mail.clj` | MX, SPF, DKIM, DMARC, rDNS, live SMTP/POP3/IMAP with TLS |
-| `runbooks/detectives/fabric.clj` | EVPN-VXLAN MAC ownership, over SSH; each `evpn-fdb-conflict` finding carries `local-uptime`, `bgp-route` (`present`/`absent`/`unread`) and `classification` (`live-misadvertisement`/`orphan`/`unknown`) |
+| `runbooks/detectives/fabric.clj` | EVPN-VXLAN MAC ownership, over SSH; each `evpn-fdb-conflict` finding carries `local-uptime`, `bgp-route` (`present`/`absent`/`unread`) and `classification` (`live-misadvertisement`/`orphan`/`unknown`); takes `--hosts`, `--vni`, `--gateway-vteps` and `--guest-mac-prefixes`, each overriding env.edn's `:evpn` value |
 
 Posture findings describe risks that may be deliberate choices, so they run
 only when posture is asked for.

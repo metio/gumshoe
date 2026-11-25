@@ -102,6 +102,7 @@
                    [gumshoe.services-test]
                    [gumshoe.scheduling-test]
                    [gumshoe.evpn-test]
+                   [gumshoe.fabric-inputs-test]
                    [gumshoe.expectations-test]
                    [gumshoe.tools.flux-test]
                    [gumshoe.tools.flux-suspend-test]
@@ -292,6 +293,7 @@
                                                          'gumshoe.services-test
                                                          'gumshoe.scheduling-test
                                                          'gumshoe.evpn-test
+                                                         'gumshoe.fabric-inputs-test
                                                          'gumshoe.expectations-test
                                                          'gumshoe.tools.flux-test
                                                          'gumshoe.tools.flux-suspend-test

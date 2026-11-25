@@ -13,9 +13,13 @@
    stale VTEP still stands behind the remote entry (`bgp-route`). An `orphan`
    has no such path and a local delete holds; a `live-misadvertisement` has one
    and a delete is relearned. A read that did not answer reports `unread` and
-   `unknown`, never an absent route."
-  (:require [clojure.string :as str]
-            [gumshoe.config :as config]
+   `unknown`, never an absent route.
+
+   Hosts, VNIs, gateway VTEPs and guest MAC prefixes each come from their
+   option, else from env.edn's :evpn block for the current kubectl context.
+   Without gateway VTEPs evpn-gateway-only-mac cannot judge: stderr says so,
+   the report marks it unread, and an evpn-inputs finding names it."
+  (:require [gumshoe.config :as config]
             [gumshoe.detective :as detective]
             [gumshoe.detectives.evpn :as evpn-detectives]
             [gumshoe.evpn :as evpn]
@@ -30,6 +34,10 @@
     :vni {:desc "Comma-separated VNIs - env.edn's :evpn :vnis when omitted"
           :alias :n
           :coerce :string}
+    :gateway-vteps {:desc "Comma-separated gateway VTEPs, the routers' own - env.edn's :evpn :gateway-vteps when omitted; without either, evpn-gateway-only-mac cannot judge"
+                    :coerce :string}
+    :guest-mac-prefixes {:desc "Comma-separated MAC prefixes of guests - env.edn's :evpn :guest-mac-prefixes when omitted; without either, every MAC counts as a guest"
+                         :coerce :string}
     :user {:desc "The SSH user - your ssh config decides when omitted"
            :alias :u
            :coerce :string}}
@@ -38,22 +46,14 @@
 (def prerequisites
   {:installed-tools ["ssh"]})
 
-(defn- split-list
-  [s]
-  (when-not (nil? s)
-    (->> (str/split (str s) #",")
-         (map str/trim)
-         (remove str/blank?)
-         vec)))
-
 (defn- collect
-  "The fabric's evidence over SSH, or nil when no hosts or VNIs are known."
+  "The fabric's evidence over SSH with the values it is judged against, or nil
+   when no hosts or VNIs are known."
   [opts]
   (let [signals (inputs/current-signals)
-        hosts (or (seq (split-list (:hosts opts)))
-                  (seq (config/env-value signals [:evpn :hosts])))
-        vnis (or (some->> (split-list (:vni opts)) (map parse-long) (remove nil?) seq)
-                 (seq (config/env-value signals [:evpn :vnis])))]
+        resolved (evpn/resolve-inputs opts #(config/env-value signals %))
+        hosts (get-in resolved ["hosts" :value])
+        vnis (get-in resolved ["vnis" :value])]
     (stdout/print-section "🔌 Fabric")
     (cond
       (empty? hosts)
@@ -65,8 +65,12 @@
           nil)
 
       :else
-      (assoc (evpn/collect-evidence! (evpn/connections hosts {:user (:user opts)}) vnis)
-             "config" (config/active-config signals)))))
+      (let [judged (evpn/input-evidence resolved)]
+        (doseq [line (evpn-detectives/missing-input-lines judged)]
+          (stdout/warn line))
+        (merge (evpn/collect-evidence! (evpn/connections hosts {:user (:user opts)}) vnis)
+               judged
+               {"config" (config/active-config signals)})))))
 
 (detective/book
  {:description "Investigates an EVPN-VXLAN fabric over SSH"
@@ -74,4 +78,5 @@
   :prerequisites prerequisites
   :detectives evpn-detectives/detectives
   :when-to-run "Reach for this when hosts or guests are unreachable and nothing inside the cluster explains it - a guest whose MAC the fabric attributes to the wrong VTEP is up and serving, and invisible."
-  :collect collect})
+  :collect collect
+  :extra (fn [evidence] {:inputs (get evidence "evpn-inputs")})})

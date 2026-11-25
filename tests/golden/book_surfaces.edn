@@ -346,7 +346,15 @@
    "  -h, --help      Show this help message"]},
  "runbooks/detectives/fabric.clj"
  {:options
-  {:hosts
+  {:gateway-vteps
+   {:desc
+    "Comma-separated gateway VTEPs, the routers' own - env.edn's :evpn :gateway-vteps when omitted; without either, evpn-gateway-only-mac cannot judge",
+    :coerce :string},
+   :guest-mac-prefixes
+   {:desc
+    "Comma-separated MAC prefixes of guests - env.edn's :evpn :guest-mac-prefixes when omitted; without either, every MAC counts as a guest",
+    :coerce :string},
+   :hosts
    {:desc
     "Comma-separated fabric hosts - env.edn's :evpn :hosts when omitted",
     :alias :H,
@@ -373,15 +381,23 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -H, --hosts     Comma-separated fabric hosts - env.edn's :evpn :hosts when"
-   "                  omitted"
-   "  -n, --vni       Comma-separated VNIs - env.edn's :evpn :vnis when omitted"
-   "  -u, --user      The SSH user - your ssh config decides when omitted"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "      --guest-mac-prefixes  Comma-separated MAC prefixes of guests - env.edn's"
+   "                            :evpn :guest-mac-prefixes when omitted; without"
+   "                            either, every MAC counts as a guest"
+   "  -H, --hosts               Comma-separated fabric hosts - env.edn's :evpn"
+   "                            :hosts when omitted"
+   "      --gateway-vteps       Comma-separated gateway VTEPs, the routers' own -"
+   "                            env.edn's :evpn :gateway-vteps when omitted; without"
+   "                            either, evpn-gateway-only-mac cannot judge"
+   "  -o, --output              Report format: text, json, edn, or a"
+   "                            plugin-registered format (default: text)"
+   "      --no-color            Disable colored output (also honors the NO_COLOR env"
+   "                            var)"
+   "  -n, --vni                 Comma-separated VNIs - env.edn's :evpn :vnis when"
+   "                            omitted"
+   "      --dry-run             Show what would change without changing anything"
+   "  -h, --help                Show this help message"
+   "  -u, --user                The SSH user - your ssh config decides when omitted"]},
  "runbooks/detectives/mail.clj"
  {:options
   {:dkim-selectors
