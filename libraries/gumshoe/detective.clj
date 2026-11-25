@@ -86,7 +86,10 @@
            detectives)
    evidence))
 
-(defn- empty-subjects? [v]
+(defn empty-subjects?
+  "Whether one evidence value holds nothing to judge: nil, an empty list,
+   or a kubectl list document whose :items are empty."
+  [v]
   (or (nil? v)
       (and (map? v) (contains? v :items) (empty? (:items v)))
       (and (coll? v) (not (map? v)) (empty? v))))

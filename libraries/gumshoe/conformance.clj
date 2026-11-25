@@ -18,8 +18,9 @@
    resolves to nothing fails the gate instead of the run.
 
    Every mutation spec a book or library defines is judged as it evaluates -
-   what a book hands mutation/book, playbook/book or dispatch/book, and what
-   a library var holds - against the part of its contract that needs no
+   what a book hands mutation/book, playbook/book or dispatch/book, each
+   stage of what it hands firebook/book (see gumshoe.firebook/stages), and
+   what a library var holds - against the part of its contract that needs no
    cluster: a confirmation action an operator can read, whether it is
    destructive, its :prerequisites, an :effect, and a :verify or a stated
    reason for having none,
@@ -60,6 +61,7 @@
             [edamame.core :as edamame]
             [gumshoe.change :as change]
             [gumshoe.dispatch :as dispatch]
+            [gumshoe.firebook :as firebook]
             [gumshoe.mutation :as mutation]
             [gumshoe.playbook :as playbook]
             [gumshoe.runbook :as runbook]))
@@ -201,8 +203,8 @@
   "Loads a book with runbook/*loading* bound, so the harness hands back the
    book's config instead of running it. Returns {:file :error} for a book
    that does not load, else {:file :ns :specs}, where :specs are the
-   specs the book handed to mutation/book, playbook/book and dispatch/book,
-   each as [builder spec], captured as the builders received them, so a
+   specs the book handed to mutation/book, playbook/book, dispatch/book and
+   firebook/book, each as [builder spec], captured as the builders received them, so a
    spec built with merge, toggle/pair or a library function is seen as it
    runs."
   [file]
@@ -212,7 +214,8 @@
         error (try
                 (with-redefs [mutation/book (capture :mutation mutation/book)
                               playbook/book (capture :playbook playbook/book)
-                              dispatch/book (capture :dispatch dispatch/book)]
+                              dispatch/book (capture :dispatch dispatch/book)
+                              firebook/book (capture :firebook firebook/book)]
                   (binding [runbook/*loading* true]
                     (load-file file)))
                 nil
@@ -543,14 +546,26 @@
           :when (change-step? v)]
       {:name (str name " " k) :spec v :select (or (:select v) select)})))
 
+(defn firebook-specs
+  "The change specs a firebook spec runs, one per stage, named
+   \"<name> :ignite\" and \"<name> :extinguish\": every stage of a firebook
+   changes something, and each is a mutation spec the engine runs (see
+   gumshoe.firebook/stages). A spec firebook/drill-spec refuses has none
+   here; the book then does not load, which unloadable reports."
+  [name spec]
+  (when-let [drill (try (firebook/drill-spec spec) (catch clojure.lang.ExceptionInfo _ nil))]
+    (for [[stage stage-spec] (sort-by key (firebook/stages drill))]
+      {:name (str name " " stage) :spec stage-spec :select (:select stage-spec)})))
+
 (defn captured-specs
   "The specs a book handed the harness builders (see load-book), named after
    the book's namespace. A spec handed to mutation/book is one whether or not
-   it carries an :effect."
+   it carries an :effect; one handed to firebook/book is its stages."
   [book-name captured]
   (mapcat (fn [[builder spec]]
-            (if (= :mutation builder)
-              (when (map? spec) [{:name (str book-name) :spec spec :select (:select spec)}])
+            (case builder
+              :mutation (when (map? spec) [{:name (str book-name) :spec spec :select (:select spec)}])
+              :firebook (when (map? spec) (firebook-specs (str book-name) spec))
               (specs-in (str book-name) spec nil)))
           captured))
 

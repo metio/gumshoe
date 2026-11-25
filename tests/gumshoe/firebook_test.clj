@@ -4,7 +4,13 @@
 (ns gumshoe.firebook-test
   (:require [cheshire.core :as json]
             [clojure.string :as str]
-            [clojure.test :refer [deftest is testing]]
+            [clojure.test :refer [deftest is testing are]]
+            [gumshoe.change :as change]
+            [gumshoe.conformance :as conformance]
+            [gumshoe.flow :as flow]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.mutation :as mutation]
+            [gumshoe.runbook :as runbook]
             [gumshoe.detectives.evpn :as evpn-detectives]
             [gumshoe.detectives.pods :as pods]
             [gumshoe.effect :as effect]
@@ -89,10 +95,10 @@
 (deftest a-detective-that-throws-is-not-a-fire-that-is-out
   (let [expect {:detectives [{:name "broken" :requires ["pods"] :detect (fn [_] (throw (ex-info "boom" {})))}]
                 :fire? (constantly true)}]
-    (is (thrown? clojure.lang.ExceptionInfo (doall (firebook/fire-findings expect {"pods" {:items []}} {}))))
+    (is (thrown? clojure.lang.ExceptionInfo (doall (firebook/fire-findings expect {"pods" {:items [{}]}} {}))))
     (testing "so the out check does not hold"
       (is (false? (binding [*err* (java.io.StringWriter.)]
-                    (verify/eventually (assoc (firebook/out-check (assoc expect :collect (constantly {"pods" {:items []}})) {})
+                    (verify/eventually (assoc (firebook/out-check (assoc expect :collect (constantly {"pods" {:items [{}]}})) {})
                                               :timeout 0))))))))
 
 (deftest a-check-over-evidence-its-detective-read-nothing-from-waits-for-an-answer
@@ -145,3 +151,235 @@
                (firebook/drill-spec (assoc kubernetes-spec :options {:extinguish {:desc "x"}}))))
   (is (thrown? clojure.lang.ExceptionInfo
                (firebook/drill-spec (assoc kubernetes-spec :options {:everything {:desc "x" :alias :e}})))))
+
+;; --- an empty or unanswered reading never puts the fire out ---------------------
+
+(def ^:private fdb-detective
+  {:name "evpn-static-fdb" :requires ["evpn-fdb"]
+   :detect (fn [evidence] (for [{:keys [mac]} (get evidence "evpn-fdb") :when (= "fire" mac)]
+                            {:component mac}))})
+
+(def ^:private fdb-expect
+  {:detectives [fdb-detective] :fire? (fn [{:keys [component]} _] (= "fire" component))})
+
+(deftest an-empty-reading-is-never-evidence-the-fire-is-out
+  (are [evidence expect-extra blind?]
+       (= blind? (some? (firebook/empty-reading (merge fdb-expect expect-extra) evidence)))
+    {"evpn-fdb" []}                    {}                                   true
+    {"evpn-fdb" {:items []}}           {}                                   true
+    {"evpn-fdb" nil}                   {}                                   true
+    {}                                 {}                                   true
+    {"evpn-fdb" [{:mac "guest"}]}      {}                                   false
+    {"evpn-fdb" {:items [{}]}}         {}                                   false
+    {"evpn-fdb" []}                    {:empty-is-out "the namespace is confirmed gone"} false))
+
+(deftest an-empty-reading-names-the-detective-and-what-it-read
+  (is (= "the evpn-static-fdb detective reads only an empty evpn-fdb, and an empty reading never shows the fire is out"
+         (firebook/empty-reading fdb-expect {"evpn-fdb" []}))))
+
+(deftest a-detective-with-several-reads-is-blind-only-when-all-are-empty
+  (let [expect {:detectives [{:name "d" :requires ["a" "b"] :detect (constantly [])}]}]
+    (is (some? (firebook/empty-reading expect {"a" [] "b" {:items []}})))
+    (is (nil? (firebook/empty-reading expect {"a" [] "b" [{:x 1}]})))))
+
+(defn- attempt-check
+  "What one attempt of a firebook check over the evidence collect returns:
+   true, false, or the message of a read that did not answer."
+  [make-check expect collect]
+  (verify/attempt (:check (make-check (assoc expect :collect collect) {}))))
+
+(def ^:private unanswered-collect
+  (fn [_] (throw (firebook/unread "hv1: host is not reachable over ssh"))))
+
+(deftest the-out-check-holds-only-on-an-answered-reading-without-the-fire
+  (are [collect expect-extra verdict]
+       (= verdict (let [r (attempt-check firebook/out-check (merge fdb-expect expect-extra) collect)]
+                    (if (string? r) :unread r)))
+    (constantly {"evpn-fdb" [{:mac "guest"}]})               {} true
+    (constantly {"evpn-fdb" [{:mac "guest"} {:mac "fire"}]}) {} false
+    (constantly {"evpn-fdb" []})                             {} :unread
+    (constantly {"evpn-fdb" nil})                            {} :unread
+    unanswered-collect                                       {} :unread
+    (constantly {"evpn-fdb" []})                             {:empty-is-out "confirmed gone"} true
+    (constantly {"evpn-fdb" nil})                            {:empty-is-out "confirmed gone"} :unread
+    unanswered-collect                                       {:empty-is-out "confirmed gone"} :unread))
+
+(deftest the-fire-check-holds-only-on-an-answered-reading-with-the-fire
+  (are [collect verdict]
+       (= verdict (let [r (attempt-check firebook/fire-check fdb-expect collect)]
+                    (if (string? r) :unread r)))
+    (constantly {"evpn-fdb" [{:mac "fire"}]})  true
+    (constantly {"evpn-fdb" [{:mac "guest"}]}) false
+    (constantly {"evpn-fdb" []})               false
+    (constantly {"evpn-fdb" nil})              :unread
+    unanswered-collect                         :unread))
+
+(deftest a-firebook-whose-out-check-could-not-fail-closed-is-refused
+  (let [fabric {:description "d" :drill "x" :fire "f"
+                :derive (fn [_] {:target "t" :system "s"})
+                :ignite {:items (constantly ["i"]) :effect (constantly [])}
+                :extinguish {:put-out "p" :items (constantly ["i"]) :effect (constantly [])}}]
+    (are [expect refused?]
+         (= refused? (try (firebook/drill-spec (assoc fabric :expect expect)) false
+                          (catch clojure.lang.ExceptionInfo _ true)))
+      fdb-expect                                                         false
+      (assoc fdb-expect :empty-is-out "confirmed gone")                  false
+      (assoc fdb-expect :empty-is-out "")                                true
+      (assoc fdb-expect :empty-is-out "  ")                              true
+      (assoc fdb-expect :empty-is-out true)                              true
+      (assoc fdb-expect :detectives [(dissoc fdb-detective :requires)])  true
+      (assoc fdb-expect :detectives [(dissoc fdb-detective :requires)]
+             :empty-is-out "the collect throws on an empty table")       false)))
+
+(deftest a-kubernetes-drill-states-why-its-empty-listing-is-out
+  (is (str/includes? (get-in (firebook/drill-spec kubernetes-spec) [:expect :empty-is-out])
+                     "namespace is gone")))
+
+;; --- the drill namespace guard ----------------------------------------------------
+
+(deftest a-drill-acts-only-on-a-namespace-a-drill-created
+  (are [namespace refused?]
+       (= refused? (some? (firebook/foreign-namespace namespace)))
+    nil                                                                                 false
+    (firebook/namespace-manifest)                                                       false
+    {:metadata {:name "fire-drill"}}                                                    true
+    {:metadata {:name "fire-drill" :labels {:team "payments"}}}                         true
+    {:metadata {:name "fire-drill" :labels {(keyword "app.kubernetes.io/managed-by") "Helm"}}} true))
+
+(deftest the-kubernetes-guard-reads-the-namespace-and-refuses-a-foreign-one
+  (let [{:keys [reads refusal]} (firebook/drill-spec kubernetes-spec)
+        read-args (atom nil)]
+    (with-redefs [kubectl/get-cluster-resource (fn [& args] (reset! read-args args) {:metadata {:name "fire-drill"}})]
+      (is (= {:metadata {:name "fire-drill"}} ((:drill-namespace reads) {:context "ctx"})))
+      (is (= ["ctx" "namespaces" "fire-drill"] @read-args)))
+    (is (nil? (refusal {:drill-namespace nil})))
+    (is (str/includes? (refusal {:drill-namespace {:metadata {:name "fire-drill"}}}) "no drill created it"))))
+
+;; --- every stage is a change spec the mutation engine runs ----------------------
+
+(def ^:private firebook-files
+  ["firebooks/kubernetes/crash_loop.clj"
+   "firebooks/kubernetes/image_pull.clj"
+   "firebooks/kubernetes/pending_pvc.clj"
+   "firebooks/fabric/stale_fdb_entry.clj"])
+
+(defn- firebook-spec
+  "The spec a firebook file hands firebook/book."
+  [file]
+  (let [captured (atom nil)]
+    (with-redefs [firebook/book (fn [spec] (reset! captured spec))]
+      (binding [runbook/*loading* true] (load-file file)))
+    @captured))
+
+(deftest every-firebook-file-is-listed-here
+  (is (= (set firebook-files)
+         (set (map str (filter #(str/ends-with? % ".clj")
+                               (map #(.getPath ^java.io.File %) (file-seq (java.io.File. "firebooks")))))))))
+
+(deftest every-firebook-stage-is-a-change-spec-that-meets-the-contract
+  (doseq [file firebook-files
+          :let [drill (firebook/drill-spec (firebook-spec file))]
+          [stage spec] (firebook/stages drill)]
+    (testing (str file " " stage)
+      (let [canonical (change/normalize spec)]
+        (is (empty? (conformance/contract-problems canonical)))
+        (is (empty? (conformance/guard-problems canonical)))
+        (is (false? (get-in canonical [:confirm :destructive?])))
+        (is (fn? (:connect canonical)) "acts on what the drill derives, never on an implicit context")
+        (is (nil? (:done canonical)) "a drill is never skipped as already done")))))
+
+(deftest conformance-judges-each-stage-a-firebook-hands-the-harness
+  (doseq [file firebook-files]
+    (is (= [(str "b :extinguish") (str "b :ignite")]
+           (map :name (conformance/captured-specs 'b [[:firebook (firebook-spec file)]])))
+        file))
+  (testing "a stage missing its effect is a finding"
+    (let [spec (-> (firebook-spec "firebooks/fabric/stale_fdb_entry.clj")
+                   (update :ignite dissoc :effect))
+          ignite (some #(when (str/ends-with? (:name %) ":ignite") %)
+                       (conformance/captured-specs 'b [[:firebook spec]]))]
+      (is (some #{"declares no :effect"} (conformance/spec-problems ignite))))))
+
+(def ^:private fabric-opts {:host "hv1" :vni 4208})
+
+(deftest a-firebook-runs-its-stage-through-the-mutation-engine-only
+  (let [drill (firebook/drill-spec (firebook-spec "firebooks/fabric/stale_fdb_entry.clj"))]
+    (are [opts action]
+         (let [runs (atom [])]
+           (with-redefs [mutation/run-on! (fn [spec target o _] (swap! runs conj [spec target o]) true)
+                         flow/change! (fn [_] (throw (ex-info "a firebook never calls gumshoe.flow itself" {})))]
+             (binding [*err* (java.io.StringWriter.) *out* (java.io.StringWriter.)]
+               (firebook/run! drill opts nil)))
+           (let [[[spec target o] & more] @runs]
+             (and (empty? more)
+                  (= "hv1 lo.4208" target)
+                  (= opts o)
+                  (= action (get-in spec [:confirm :action])))))
+      fabric-opts                         "start a fire drill: a static fdb entry that outranks EVPN"
+      (assoc fabric-opts :extinguish true) "put out the fire: remove the drill's fdb entry")))
+
+(deftest a-drill-is-lit-only-after-a-real-ignite-proved-the-fire
+  (are [opts ok dry-run? lit?]
+       (let [lit (atom false)
+             drill {:drill "d" :fire "f" :derive (fn [_] {:target "t" :system "s"})
+                    :ignite {} :extinguish {} :expect fdb-expect
+                    :lit (fn [_] (reset! lit true))}]
+         (with-redefs [mutation/run-on! (constantly ok)]
+           (binding [flow/*dry-run* dry-run?]
+             (firebook/run! drill opts nil)))
+         (= lit? @lit))
+    {}                  true  false true
+    {}                  false false false
+    {}                  true  true  false
+    {:extinguish true}  true  false false))
+
+(deftest a-firebook-derives-its-context-once-per-run
+  (let [calls (atom 0)
+        drill {:drill "d" :fire "f" :derive (fn [_] (swap! calls inc) {:target "t" :system "s"})
+               :ignite {} :extinguish {} :expect fdb-expect}]
+    (with-redefs [mutation/run-on! (fn [spec target opts _]
+                                     ((:connect spec) opts)
+                                     ((get-in spec [:values :gumshoe.firebook/drill]) {:opts opts})
+                                     true)]
+      (firebook/run! drill {} nil))
+    (is (= 1 @calls))))
+
+(deftest a-stage-hands-its-callbacks-the-drill-context
+  (let [seen (atom [])
+        record (fn [k] (fn [ctx] (swap! seen conj [k (:vni ctx) (:cluster ctx)]) [k]))
+        drill (firebook/drill-spec
+               {:description "d" :drill "d" :fire "f"
+                :derive (fn [{:keys [vni]}] {:vni vni :target "t" :system "s"})
+                :ignite {:items (record :items) :effect (record :effect) :recovery (record :recovery)}
+                :extinguish {:put-out "p" :items (record :items) :effect (record :effect)
+                             :checks (fn [ctx] [{:description (str "checks " (:vni ctx)) :check (constantly true)}])}
+                :expect fdb-expect})
+        {:keys [ignite extinguish]} (firebook/stages drill)
+        ctx {:context nil :cluster "t" :opts {:vni 7} :gumshoe.firebook/drill {:vni 7 :target "t" :system "s"}}]
+    (testing "the connection names the target and the system"
+      (is (= {:context nil :cluster "t" :announce-as "s"} ((:connect ignite) {:vni 7}))))
+    ((:items ignite) ctx) ((:effect ignite) ctx) ((:recovery ignite) ctx)
+    (is (= [[:items 7 "t"] [:effect 7 "t"] [:recovery 7 "t"]] @seen))
+    (testing "the ignite announces the drill and proves the fire"
+      (is (= "Fire drill started: d" ((:announce ignite) ctx)))
+      (is (= ["the fire is burning: the evpn-static-fdb detective reports it"]
+             (map :description ((:verify ignite) ctx)))))
+    (testing "the extinguish announces nothing and proves the fire out after its own checks"
+      (is (nil? (:announce extinguish)))
+      (is (= ["checks 7" "the fire is out: the evpn-static-fdb detective no longer reports it"]
+             (map :description ((:verify extinguish) ctx)))))
+    (testing "an ignite without recovery still says the drill may be lit; an extinguish without one gets the engine's guidance"
+      (is (string? (:recovery (:ignite (firebook/stages (update drill :ignite dissoc :recovery))))))
+      (is (nil? (:recovery extinguish))))))
+
+(deftest every-firebook-post-check-fails-closed
+  (doseq [file firebook-files
+          :let [drill (firebook/drill-spec (firebook-spec file))
+                opts (if (str/includes? file "fabric") fabric-opts {})]
+          [stage spec] (firebook/stages drill)]
+    (testing (str file " " stage)
+      (with-redefs [kubectl/current-context (constantly "ctx")
+                    kubectl/current-cluster (constantly "cluster")]
+        (let [ctx {:context "ctx" :opts opts :gumshoe.firebook/drill ((:derive drill) opts)}]
+          (is (= [] (binding [*err* (java.io.StringWriter.)]
+                      (verify/fail-closed-findings ((:verify spec) ctx))))))))))

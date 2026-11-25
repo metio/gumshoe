@@ -436,9 +436,12 @@ The drill is over when the detectives are green again. Available drills:
 A firebook proves its fire with the detective meant to find it: after lighting
 it, the book runs that detective until it reports the fire, and after
 `--extinguish` until it no longer does, so a drill whose detective has stopped
-seeing the fault fails instead of lighting green. Both changes are effect
-plans, so `--dry-run` shows them without touching anything. A kubernetes drill
-is a spec naming its manifests and the detective:
+seeing the fault fails instead of lighting green. An empty or unanswered
+reading never counts as the fire being out. Both changes run through the same
+engine as every other change, so `--dry-run` shows them without touching
+anything, and a cluster drill refuses to burn in or delete a `fire-drill`
+namespace that no drill created. A kubernetes drill is a spec naming its
+manifests and the detective:
 
 ```clojure
 (firebook/book

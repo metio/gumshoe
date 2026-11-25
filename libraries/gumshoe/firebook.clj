@@ -23,40 +23,55 @@
    Any other drill declares its parts itself:
 
      {:description .. :options .. :prerequisites .. :drill .. :fire ..
-      :derive (fn [opts] -> map)   ; merged into ctx; names the :target the
-                                   ; confirmation shows and the :system the
-                                   ; announcement names
+      :derive (fn [opts] -> map)   ; merged into every callback's ctx; names the
+                                   ; :target the confirmation shows, the :system
+                                   ; the announcement names, and the :context
+      :reads {name (fn [ctx] -> value)}   ; optional, live reads of both stages;
+                                          ; they see the engine's ctx, before
+                                          ; what :derive returns
+      :refusal (fn [ctx] -> reason or nil) ; optional, guards both stages
       :ignite {:items  (fn [ctx] -> seq)        ; what the confirmation lists
                :effect (fn [ctx] -> effect plan)
                :recovery \"...\" or (fn [ctx] -> string)}  ; optional
       :extinguish {:put-out \"...\"             ; \"put out the fire: <put-out>\"
                    :items .. :effect .. :recovery ..
                    :checks (fn [ctx] -> post-checks)}  ; optional, before the out check
-      :expect {:detectives [..]
+      :expect {:detectives [..]                 ; each declares :requires
                :collect (fn [ctx] -> evidence)  ; throws `unread` when it read nothing
                :fire? (fn [finding ctx] -> bool)
+               :empty-is-out \"why\"            ; optional, see empty-reading
                :timeout 30 :interval 5 :out-timeout 60}
       :lit (fn [ctx])}            ; prints what to do once the fire burns
 
-   Both changes run through gumshoe.flow as effect plans, so --dry-run shows
-   them and changes nothing. After the ignite the burning check runs the
-   expected detectives over freshly read evidence until one reports the fire;
-   after the extinguish the out check runs them until none does. Evidence a
-   detective read nothing from counts as not yet verified, so neither check
-   holds on a read that did not answer. A change that fails records its
-   :recovery, which the harness prints under the FAILED banner: the fire may
-   still burn."
+   `stages` turns the drill into two mutation specs, the ignite and the
+   extinguish, and `run!` runs the one the flags ask for through
+   gumshoe.mutation/run-on!, as every other change runs: :reads and
+   :refusal are judged before the confirmation and again after it, a
+   rehearsal under --dry-run shows the plan and changes nothing, and a
+   change that fails records its :recovery, which the harness prints under
+   the FAILED banner: the fire may still burn. A kubernetes drill refuses a
+   fire-drill namespace no drill created (foreign-namespace). The firebook
+   keeps only what is a drill's own: which stage runs, the fire and out
+   checks, and the :lit message.
+
+   After the ignite the burning check runs the expected detectives over
+   freshly read evidence until one reports the fire; after the extinguish
+   the out check runs them until none does. Evidence a detective read
+   nothing from counts as not yet verified, and so does evidence a detective
+   read only empty lists from, unless the drill says why an empty reading
+   is real evidence of absence (:empty-is-out): neither check holds on a
+   read that did not answer, and the out check never holds on an empty
+   one."
   (:refer-clojure :exclude [run!])
   (:require [cheshire.core :as json]
             [clojure.string :as str]
-            [gumshoe.announce :as announce]
             [gumshoe.catalog :as catalog]
             [gumshoe.detective :as detective]
             [gumshoe.effect :as effect]
             [gumshoe.evpn :as evpn]
             [gumshoe.flow :as flow]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.outcome :as outcome]
+            [gumshoe.mutation :as mutation]
             [gumshoe.prerequisites :as prerequisites]
             [gumshoe.runbook :as runbook]
             [gumshoe.shell :as shell]
@@ -216,15 +231,38 @@
    :interval interval
    :check #(boolean (seq (fire-findings expect (judged-evidence expect ctx) ctx)))})
 
+(defn empty-reading
+  "Why evidence is too empty for the out check to call the fire out, or nil.
+   Pure. An expected detective whose required evidence all came back as
+   empty lists judged nothing: an fdb table read as no rows, a listing that
+   answered with no objects. Its silence then says as little as a read that
+   did not answer, so it never shows the fire is out. A drill whose empty
+   reading is real evidence of absence says why as :empty-is-out, and the
+   reading is accepted as it is. A kubectl list whose :items are empty is an
+   empty reading too (see gumshoe.detective/empty-subjects?)."
+  [{:keys [detectives empty-is-out]} evidence]
+  (when-not empty-is-out
+    (let [blind (filter (fn [{:keys [requires]}]
+                          (and (seq requires) (every? #(detective/empty-subjects? (get evidence %)) requires)))
+                        detectives)]
+      (when (seq blind)
+        (format "%s only an empty %s, and an empty reading never shows the fire is out"
+                (detectives-report blind "read")
+                (str/join ", " (distinct (mapcat :requires blind))))))))
+
 (defn out-check
   "The post-check of an extinguish: the expected detectives no longer report
-   the fire."
+   the fire, over evidence that answered and is not empty (see
+   empty-reading). Either kind of silence counts as not yet verified."
   [{:keys [detectives out-timeout interval] :or {out-timeout 60 interval 5} :as expect} ctx]
   {:description (str "the fire is out: " (detectives-report detectives "no longer report") " it")
    :timeout out-timeout
    :interval interval
    :verifies-absence? true
-   :check #(empty? (fire-findings expect (judged-evidence expect ctx) ctx))})
+   :check #(let [evidence (judged-evidence expect ctx)]
+             (when-let [why (empty-reading expect evidence)]
+               (throw (unread why)))
+             (empty? (fire-findings expect evidence ctx)))})
 
 ;; --- the kubernetes drill ----------------------------------------------------
 
@@ -262,15 +300,34 @@
   (stdout/err-println "   The drill is over when the findings are green again.")
   (stdout/err-println "   Extinguish with --extinguish once you are done."))
 
+(def ^:private managed-by (keyword "app.kubernetes.io/managed-by"))
+
+(defn foreign-namespace
+  "Why the drill must not burn in or delete the namespace object read as
+   the drill namespace, or nil. Pure. A namespace a drill created carries
+   gumshoe's managed-by label (see namespace-manifest); one without it
+   belongs to somebody else, who named it fire-drill, and neither applying
+   the drill into it nor deleting it with everything in it is the drill's
+   to do. An absent namespace is nil: the ignite creates it, and the
+   extinguish finds nothing to delete."
+  [namespace]
+  (when (and namespace (not= "gumshoe" (get-in namespace [:metadata :labels managed-by])))
+    (str "namespace " drill-namespace " exists and no drill created it (it lacks the label "
+         "app.kubernetes.io/managed-by=gumshoe), so the drill neither burns in it nor deletes it")))
+
 (defn kubernetes-drill
   "The parts of a drill that burns inside the drill namespace, derived from
    its :drill, :manifests and :expect: the change plans, the namespace check,
-   the evidence its detectives read, and the prerequisites that needs. A
-   finding counts as the fire only when it is about an object of the drill
-   namespace, so a real fault elsewhere on the cluster never stands in for it."
+   the guard against a namespace no drill created, the evidence its
+   detectives read, and the prerequisites that needs. A finding counts as
+   the fire only when it is about an object of the drill namespace, so a
+   real fault elsewhere on the cluster never stands in for it."
   [{:keys [drill manifests expect]}]
   (let [{:keys [detectives fire?]} expect]
-    {:derive (fn [_]
+    {:reads {:drill-namespace (fn [{:keys [context]}]
+                                (kubectl/get-cluster-resource context "namespaces" drill-namespace))}
+     :refusal (fn [{:keys [drill-namespace]}] (foreign-namespace drill-namespace))
+     :derive (fn [_]
                (let [cluster (kubectl/current-cluster)]
                  {:context (kubectl/current-context) :cluster cluster
                   :system cluster :target cluster}))
@@ -285,6 +342,8 @@
                   :checks (fn [ctx] [(namespace-gone-check ctx)])
                   :recovery kubernetes-recovery}
      :expect (assoc expect
+                    :empty-is-out (str "the extinguish first confirms the " drill-namespace
+                                       " namespace is gone, so an empty listing shows the drill's objects are gone too")
                     :collect (fn [{:keys [context cluster]}]
                                (detective/read-evidence context cluster detectives))
                     :fire? (fn [finding ctx] (and (in-drill-namespace? finding) (fire? finding ctx))))
@@ -330,11 +389,23 @@
                 :alias :e
                 :coerce :boolean}})
 
+(defn- expect-problem
+  "Why expect cannot judge the fire out fail-closed, or nil."
+  [{:keys [detectives empty-is-out] :as expect}]
+  (cond
+    (and (contains? expect :empty-is-out) (not (and (string? empty-is-out) (not (str/blank? empty-is-out)))))
+    ":empty-is-out must be a string saying why an empty reading shows the fire is out"
+
+    (and (not empty-is-out) (some #(empty? (:requires %)) detectives))
+    (str "an expected detective without :requires cannot tell an empty reading from the fire being out: "
+         (str/join ", " (map :name (filter #(empty? (:requires %)) detectives))))))
+
 (defn drill-spec
   "The spec a firebook runs: a kubernetes drill's derived parts under what the
    spec declares itself, its options with --extinguish, and its prerequisites
    joined with the drill's. Throws when an option of the spec takes
-   --extinguish or its alias -e."
+   --extinguish or its alias -e, and when its :expect cannot judge the fire
+   out fail-closed (see empty-reading)."
   [{:keys [manifests options] :as spec}]
   (when (or (contains? options :extinguish) (some #(= :e (:alias %)) (vals options)))
     (throw (ex-info "a firebook's own options must leave --extinguish and -e to the firebook" {:options options})))
@@ -343,35 +414,80 @@
                            (dissoc derived :prerequisites)
                            ;; a kubernetes drill's :expect is derived from the spec's
                            (cond-> spec manifests (dissoc :expect)))]
+    (when-let [problem (expect-problem (:expect merged))]
+      (throw (ex-info (str "a firebook's :expect is refused: " problem) {:expect (:expect merged)})))
     (assoc merged
            :options (merge options (extinguish-option (get-in merged [:extinguish :put-out])))
            :prerequisites (prerequisites/union (:prerequisites derived) (:prerequisites spec)))))
 
+(defn- drill-ctx
+  "The context a firebook callback receives: the engine's, with what the
+   drill's :derive returned merged over it."
+  [ctx]
+  (merge ctx (::drill ctx)))
+
+(defn- in-drill
+  "f called with drill-ctx, for a callback written against the drill's
+   context; a string or nil as it is."
+  [f]
+  (if (fn? f) (fn [ctx] (f (drill-ctx ctx))) f))
+
+(defn connection
+  "What gumshoe.mutation's :connect returns for what a drill's :derive
+   returned: its :context, its :target as what the confirmation shows the
+   change acting on, and its :system as what the changelog names."
+  [{:keys [context target system]}]
+  {:context context :cluster target :announce-as system})
+
+(defn stages
+  "The two changes of a drill-spec, as mutation specs: {:ignite .. :extinguish ..}.
+   Each runs through gumshoe.mutation/run-on! as every other change does, so
+   it is judged, confirmed, guarded, announced, applied and verified there.
+   The drill's :derive becomes the :connect and the per-run value every
+   callback reads its context from; its :reads and :refusal guard both
+   stages, before the confirmation and again after it. The ignite announces
+   the drill and proves the fire burns (fire-check); the extinguish proves
+   it is out (out-check) after its own :checks. Neither declares :done: a
+   drill relit over a burning fire proves the detective again, and an
+   extinguish skipped because the detectives see no fire would leave the
+   drill's objects behind. Neither is destructive: a drill acts only on what
+   it is contained to (its namespace, or a MAC no guest can hold)."
+  [{:keys [drill fire derive ignite extinguish expect prerequisites reads refusal]}]
+  (let [shared (cond-> {:prerequisites (or prerequisites {})
+                        :connect (fn [opts] (connection (derive opts)))
+                        :values {::drill (fn [{:keys [opts]}] (derive opts))}}
+                 reads (assoc :reads reads)
+                 refusal (assoc :refusal (in-drill refusal)))]
+    {:ignite (merge shared
+                    {:confirm {:action (str "start a fire drill: " fire) :destructive? false}
+                     :items (in-drill (:items ignite))
+                     :effect (in-drill (:effect ignite))
+                     :announce (fn [_] (str "Fire drill started: " drill))
+                     :verify (fn [ctx] [(fire-check expect (drill-ctx ctx))])
+                     :recovery (in-drill (or (:recovery ignite) ignite-recovery))})
+     :extinguish (cond-> (merge shared
+                                {:confirm {:action (str "put out the fire: " (:put-out extinguish)) :destructive? false}
+                                 :items (in-drill (:items extinguish))
+                                 :effect (in-drill (:effect extinguish))
+                                 :verify (fn [ctx]
+                                           (let [ctx (drill-ctx ctx)]
+                                             (concat (when-let [checks (:checks extinguish)] (checks ctx))
+                                                     [(out-check expect ctx)])))})
+                   (:recovery extinguish) (assoc :recovery (in-drill (:recovery extinguish))))}))
+
 (defn run!
-  "Lights the drill, or puts it out under --extinguish, through gumshoe.flow.
-   Returns true only when the change ran and its post-checks held."
-  [{:keys [drill fire derive ignite extinguish expect lit]} opts announcement-data]
-  (let [ctx (merge {:opts opts :announcement-data announcement-data} (derive opts))
+  "Lights the drill, or puts it out under --extinguish, as the stage of
+   `stages` gumshoe.mutation/run-on! runs, and prints the drill's :lit once
+   a real ignite proved the fire burns. Returns true only when the change
+   ran and its post-checks held, or a rehearsal showed it."
+  [{:keys [lit] :as drill} opts announcement-data]
+  (let [derive (memoize (:derive drill))
         extinguishing? (boolean (:extinguish opts))
-        {:keys [items effect checks recovery]} (if extinguishing? extinguish ignite)
-        ok (flow/change!
-            {:confirmation {:action (if extinguishing?
-                                      (str "put out the fire: " (:put-out extinguish))
-                                      (str "start a fire drill: " fire))
-                            :target (:target ctx)
-                            :items (items ctx)}
-             :announce! (when-not extinguishing?
-                          #(announce/announce! (:system ctx) announcement-data
-                                               (str "Fire drill started: " drill)))
-             :effect (effect ctx)
-             :post-checks (concat (when checks (checks ctx))
-                                  [(if extinguishing? (out-check expect ctx) (fire-check expect ctx))])})]
-    (cond
-      flow/*dry-run* ok
-      (not ok) (do (outcome/recovery! (if extinguishing? recovery (or recovery ignite-recovery)) ctx)
-                   false)
-      :else (do (when (and lit (not extinguishing?)) (lit ctx))
-                true))))
+        stage (get (stages (assoc drill :derive derive)) (if extinguishing? :extinguish :ignite))
+        ok (mutation/run-on! stage (:target (derive opts)) opts announcement-data)]
+    (when (and ok lit (not extinguishing?) (not flow/*dry-run*))
+      (lit (merge {:opts opts :announcement-data announcement-data} (derive opts))))
+    ok))
 
 (defn book
   "Builds and runs a firebook from its spec (see the namespace doc)."
