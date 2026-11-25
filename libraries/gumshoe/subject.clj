@@ -173,6 +173,13 @@
       ["available" (:numberAvailable status)]
       ["unavailable" (:numberUnavailable status)]])))
 
+(defn- key-name
+  "A map key as written in the object. kubectl output is read with keyword
+   keys, so a prefixed key such as app.kubernetes.io/name is a namespaced
+   keyword whose `name` alone drops the prefix."
+  [k]
+  (if (keyword? k) (subs (str k) 1) (str k)))
+
 (defn- service-facts
   [service]
   (let [spec (:spec service)]
@@ -180,7 +187,7 @@
      [["type" (:type spec)]
       ["clusterIP" (:clusterIP spec)]
       ["ports" (some->> spec :ports (map #(str (:port %) "/" (:protocol %))) (str/join ", "))]
-      ["selector" (some->> spec :selector (map (fn [[k v]] (str (name k) "=" v))) (str/join ","))]])))
+      ["selector" (some->> spec :selector (map (fn [[k v]] (str (key-name k) "=" v))) (str/join ","))]])))
 
 (defn- pv-facts
   [pv]
@@ -198,7 +205,7 @@
       ;; the CSI volume's backing attributes (a ceph-csi pool/image, a Longhorn
       ;; handle, ...), so the operator can look the volume up on the storage side -
       ;; the storage root cause often lives there, not in Kubernetes.
-      (for [[k v] attributes] [(str "csi " (name k)) v])))))
+      (for [[k v] attributes] [(str "csi " (key-name k)) v])))))
 
 (defn- ingress-facts
   [ingress]

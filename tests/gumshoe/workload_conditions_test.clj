@@ -4,6 +4,9 @@
 (ns gumshoe.workload-conditions-test
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [clojure.test.check :as tc]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
             [gumshoe.cron :as cron]
             [gumshoe.detectives.disruption :as disruption]
             [gumshoe.detectives.pods :as pods]
@@ -169,3 +172,110 @@
     (is (= [:critical] (map :severity (hpa-findings [young] {:hpa-grace-minutes 0}))))
     (is (= ["HorizontalPodAutoscaler cannot read its metrics (FailedGetPodsMetric), held under 5m"]
            (map :summary (hpa-findings [young] {:hpa-grace-minutes 5}))))))
+
+;; --- cron intervals over real calendars ------------------------------------------
+
+(defn- longest-gap-in-days
+  "The longest gap, in days, between two dates from 2024 to 2110 that satisfy
+   fires? - a brute-force reading of the calendar the interval must bound."
+  [fires?]
+  (let [days (->> (iterate #(.plusDays ^java.time.LocalDate % 1) (java.time.LocalDate/of 2024 1 1))
+                  (take-while #(.isBefore ^java.time.LocalDate % (java.time.LocalDate/of 2110 1 1)))
+                  (filter fires?))]
+    (->> (map (fn [a b] (.between java.time.temporal.ChronoUnit/DAYS a b)) days (rest days))
+         (reduce max 0))))
+
+(defn- days-of [schedule] (.toDays ^java.time.Duration (cron/interval schedule)))
+
+(deftest a-late-day-of-month-bounds-the-months-it-skips
+  (doseq [day (range 1 32)]
+    (let [schedule (str "0 0 " day " * *")
+          real (longest-gap-in-days #(= day (.getDayOfMonth ^java.time.LocalDate %)))]
+      (is (<= real (days-of schedule)) schedule)
+      (when (<= day 28)
+        (is (= 31 (days-of schedule)) "a day every month has keeps the one-month bound")))))
+
+(deftest a-day-31-cronjob-is-not-stopped-in-july
+  (is (empty? (workloads/detect-stale-cronjobs
+               {:now (java.time.Instant/parse "2026-07-20T00:00:00Z")
+                "cronjobs" {:items [(cronjob "0 0 31 * *" :last "2026-05-31T00:00:00Z")]}}))))
+
+(deftest day-of-month-lists-and-ranges-property
+  (let [property (prop/for-all [days (gen/not-empty (gen/set (gen/choose 1 31) {:max-elements 3}))
+                                as-range? gen/boolean]
+                   (let [days (sort days)
+                         field (if (and as-range? (> (count days) 1))
+                                 (str (first days) "-" (last days))
+                                 (clojure.string/join "," days))
+                         wanted (if (and as-range? (> (count days) 1))
+                                  (set (range (first days) (inc (last days))))
+                                  (set days))
+                         real (longest-gap-in-days #(contains? wanted (.getDayOfMonth ^java.time.LocalDate %)))]
+                     (<= real (days-of (str "15 4 " field " * *")))))]
+    (is (:pass? (tc/quick-check 60 property :seed 20261125)))))
+
+(deftest twenty-ninth-of-february-spans-a-century-year
+  (let [real (longest-gap-in-days #(and (= 2 (.getMonthValue ^java.time.LocalDate %))
+                                        (= 29 (.getDayOfMonth ^java.time.LocalDate %))))]
+    (is (= 2921 real) "2096-02-29 to 2104-02-29")
+    (doseq [schedule ["0 0 29 2 *" "0 0 29 FEB *" "0 0 29 1-3 *" "0 0 */2 */1 *"]]
+      (is (<= real (days-of schedule)) schedule)))
+  (testing "a restricted month that can not be February keeps the year bound"
+    (is (= 366 (days-of "0 0 31 1,3 *")))
+    (is (= 366 (days-of "0 0 31 JAN *")))
+    (is (= 366 (days-of "0 0 1 2 *")))))
+
+(defn- robfig-hours
+  "The hours robfig/cron fires a */n hour field at: 0, n, 2n ... up to 23."
+  [n]
+  (filter #(zero? (mod % n)) (range 24)))
+
+(defn- longest-gap-in-a-wrapping-field
+  [fired range]
+  (let [times (concat fired [(+ range (first fired))])]
+    (reduce max (map - (rest times) times))))
+
+(deftest hour-and-minute-steps-bound-the-real-gap
+  (doseq [n (range 1 200)]
+    (let [real-hours (longest-gap-in-a-wrapping-field (robfig-hours n) 24)
+          hours (.toHours ^java.time.Duration (cron/interval (str "0 */" n " * * *")))
+          real-minutes (longest-gap-in-a-wrapping-field (filter #(zero? (mod % n)) (range 60)) 60)
+          minutes (.toMinutes ^java.time.Duration (cron/interval (str "*/" n " * * * *")))]
+      (is (<= real-hours hours 24) (str "*/" n " hours"))
+      (is (<= real-minutes minutes 60) (str "*/" n " minutes")))))
+
+(deftest huge-steps-are-the-coarser-unit
+  (doseq [n ["24" "60" "9999999999999999" "99999999999999999999999999"]]
+    (is (= (java.time.Duration/ofDays 1) (cron/interval (str "0 */" n " * * *"))) n))
+  (doseq [n ["60" "61" "10000000000000000" "99999999999999999999999999"]]
+    (is (= (java.time.Duration/ofHours 1) (cron/interval (str "*/" n " * * * *"))) n))
+  (testing "a huge step no longer stops the stale check for every other CronJob"
+    (is (= ["CronJob (@hourly) has not run since 2026-11-17T11:00:00Z"]
+           (stale (cronjob "0 */9999999999999999 * * *" :last "2026-11-18T00:00:00Z")
+                  (cronjob "*/99999999999999999999 * * * *" :last "2026-11-18T11:30:00Z")
+                  (cronjob "@hourly" :last "2026-11-17T11:00:00Z"))))))
+
+(deftest a-zero-step-never-fires
+  (doseq [schedule ["*/0 * * * *" "0 */0 * * *" "0 0 */0 * *" "0 0 1 */00 *" "0 0 * * */0"
+                    "0 0 1-10/0 * *" "0,5/0 * * * *"]]
+    (is (nil? (cron/interval schedule)) schedule)))
+
+(def ^:private field-item
+  (gen/one-of [(gen/return "*") (gen/return "?")
+               (gen/fmap str (gen/choose 0 40))
+               (gen/fmap (fn [[a b]] (str a "-" b)) (gen/tuple (gen/choose 0 31) (gen/choose 0 31)))
+               (gen/fmap #(str "*/" %) (gen/one-of [(gen/choose 0 100)
+                                                     (gen/return "99999999999999999999")]))
+               (gen/fmap (fn [[a b]] (str a "/" b)) (gen/tuple (gen/choose 0 31) (gen/choose 0 70)))
+               (gen/elements ["MON" "FEB" "JAN-MAR" "L" "x"])]))
+
+(deftest every-schedule-reads-or-is-nil-property
+  (let [field (gen/fmap #(clojure.string/join "," %) (gen/not-empty (gen/vector field-item 1 3)))
+        property (prop/for-all [fields (gen/vector field 5)]
+                   (let [interval (cron/interval (clojure.string/join " " fields))]
+                     (or (nil? interval)
+                         (and (pos? (.toSeconds ^java.time.Duration interval))
+                              ;; the stale check scales it and subtracts it from now
+                              (some? (.minus (java.time.Instant/parse "2026-11-18T12:00:00Z")
+                                             (.multipliedBy ^java.time.Duration interval 2)))))))]
+    (is (:pass? (tc/quick-check 1000 property :seed 20261125)))))

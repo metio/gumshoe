@@ -13,7 +13,7 @@
 
 (defn parse
   "A size as a byte count, the keyword :unlimited for '-1', or nil when it can
-   not be parsed. '0' is treated as :unlimited, matching PHP's post_max_size."
+   not be parsed or does not fit in a long. '0' is treated as :unlimited, matching PHP's post_max_size."
   [value]
   (let [text (str/lower-case (str/trim (str value)))]
     (cond
@@ -21,7 +21,11 @@
       (= "0" text) :unlimited
       :else (when-let [[_ number suffix] (re-matches #"(\d+)\s*([kmg]?)b?" text)]
               (when-let [factor (get suffix-factors suffix)]
-                (* (parse-long number) factor))))))
+                ;; a digit run beyond a long, or a product that overflows one,
+                ;; is a limit we can not represent, so it is unknown
+                (when-let [n (parse-long number)]
+                  (try (Math/multiplyExact (long n) (long factor))
+                       (catch ArithmeticException _ nil))))))))
 
 (defn human
   "Bytes as a compact human string; passes :unlimited and nil straight through
