@@ -45,9 +45,12 @@
 
    The steps are built from the shared step libraries: gumshoe.steps.flux
    suspends and resumes the owner and the HelmRelease, gumshoe.steps.objects
-   deletes the workloads and volumes, and gumshoe.playbook places a caller's
-   steps at the positions."
+   deletes the workloads and volumes, gumshoe.change/compose combines each
+   builder's part with the step's own keys and the observation every change
+   step shares, and gumshoe.playbook places a caller's steps at the
+   positions."
   (:require [clojure.string :as str]
+            [gumshoe.change :as change]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.playbook :as playbook]
@@ -319,12 +322,14 @@
 
 ;; --- the steps ---------------------------------------------------------------------
 
-(defn- deriver
-  "The :derive of every change step: a fresh observation and a timestamp."
+(defn- observing
+  "The part every change step shares: the value :observed, a fresh
+   observation taken once per step, and the step's :recovery. It is a value
+   rather than a read, so each step's precondition judges the observation
+   its confirmation showed, with only the pinned HelmRelease read again."
   [observe!]
-  (fn [{:keys [context target]}]
-    {:observed (observe! context target)
-     :timestamp (str (java.time.Instant/now))}))
+  {:values {:observed (fn [{:keys [context target]}] (observe! context target))}
+   :recovery recovery})
 
 (def ^:private release-pin
   (fn [{:keys [observed]}]
@@ -430,8 +435,8 @@
    position a caller's steps take right after it, or nil where none may go."
   []
   (let [observe! (observer)
-        derive-step (deriver observe!)
-        change (fn [step] (merge {:derive derive-step :recovery recovery} step))]
+        shared (observing observe!)
+        change (fn [& parts] (apply change/compose shared parts))]
     [[nil
       {:title "🔬 Read the HelmRelease, its owner and its storage"
        :prerequisites reads
@@ -439,56 +444,54 @@
 
      [nil
       (change
-       (merge
-        {:title "⏸  Suspend the owner (Kustomization or ResourceSet) that renders the HelmRelease"
-         :prerequisites {:kubectl-can-patch [flux/kustomization-type]}
-         :confirm {:action "suspend the owner that renders the HelmRelease" :destructive? false}
-         :precondition (fn [{:keys [observed]}] (readable? observed))
-         :items (unless-unread
-                 (fn [{:keys [observed]}]
-                   [(if-let [{:keys [kind namespace name]} (:owner observed)]
-                      (format "suspend %s %s/%s, so it does not re-apply the HelmRelease meanwhile" kind namespace name)
-                      "no Kustomization or ResourceSet lists the HelmRelease - nothing to suspend")]))}
-        (flux-steps/suspend {:object (comp :owner :observed) :none "no owner to suspend"
-                             :timeout (wait-of :deletion) :interval 5})))]
+       {:title "⏸  Suspend the owner (Kustomization or ResourceSet) that renders the HelmRelease"
+        :prerequisites {:kubectl-can-patch [flux/kustomization-type]}
+        :confirm {:action "suspend the owner that renders the HelmRelease" :destructive? false}
+        :precondition (fn [{:keys [observed]}] (readable? observed))
+        :items (unless-unread
+                (fn [{:keys [observed]}]
+                  [(if-let [{:keys [kind namespace name]} (:owner observed)]
+                     (format "suspend %s %s/%s, so it does not re-apply the HelmRelease meanwhile" kind namespace name)
+                     "no Kustomization or ResourceSet lists the HelmRelease - nothing to suspend")]))}
+       (flux-steps/suspend {:object (comp :owner :observed) :none "no owner to suspend"
+                            :timeout (wait-of :deletion) :interval 5}))]
 
      [:after-suspend
       (change
-       (merge
-        {:title "⏸  Suspend the HelmRelease and wait for a running action to finish"
-         :prerequisites {:kubectl-can-patch [flux/helmrelease-type]}
-         :confirm {:action "suspend the HelmRelease" :destructive? false}
-         :pin release-pin
-         :precondition (fn [{:keys [observed]}] (readable? observed))
-         :items (unless-unread
-                 (fn [{:keys [target observed]}]
-                   [(format "suspend HelmRelease %s and wait up to %ds (spec.timeout) for a running Helm action to end"
-                            target (:in-flight (waits observed)))]))}
-        (flux-steps/suspend {:object release-object :none "no HelmRelease to suspend"
-                             :timeout (wait-of :in-flight) :interval 5
-                             :description "the HelmRelease is suspended and no Helm action is running"
-                             :also (fn [{:keys [context observed]} _] (quiet? context observed))})))]
+       {:title "⏸  Suspend the HelmRelease and wait for a running action to finish"
+        :prerequisites {:kubectl-can-patch [flux/helmrelease-type]}
+        :confirm {:action "suspend the HelmRelease" :destructive? false}
+        :pin release-pin
+        :precondition (fn [{:keys [observed]}] (readable? observed))
+        :items (unless-unread
+                (fn [{:keys [target observed]}]
+                  [(format "suspend HelmRelease %s and wait up to %ds (spec.timeout) for a running Helm action to end"
+                           target (:in-flight (waits observed)))]))}
+       (flux-steps/suspend {:object release-object :none "no HelmRelease to suspend"
+                            :timeout (wait-of :in-flight) :interval 5
+                            :description "the HelmRelease is suspended and no Helm action is running"
+                            :also (fn [{:keys [context observed]} _] (quiet? context observed))}))]
 
      [:after-workloads
-      (change
-       (-> {:title "🗑  Delete the release's workloads"
+      (-> (change
+           {:title "🗑  Delete the release's workloads"
             :prerequisites {:kubectl-can-delete workload-types}
             :confirm {:action "delete the release's workloads" :destructive? true}
             :precondition deletable?}
-           (merge (objects/delete {:objects (comp :workloads :observed) :none "the release has no workloads"
-                                   :timeout (wait-of :deletion)}))
-           (update :items unless-unread)))]
+           (objects/delete {:objects (comp :workloads :observed) :none "the release has no workloads"
+                            :timeout (wait-of :deletion)}))
+          (update :items unless-unread))]
 
      [:after-volumes
-      (change
-       (-> {:title "🗑  Delete the release's volumes"
+      (-> (change
+           {:title "🗑  Delete the release's volumes"
             :prerequisites {:kubectl-can-delete ["persistentvolumeclaims"]}
             :confirm {:action "delete the release's volumes - their data is lost" :destructive? true :separately? true}
             :precondition deletable?}
-           (merge (objects/delete {:objects (comp :volumes :observed) :none "the release has no volumes"
-                                   :timeout (wait-of :deletion)
-                                   :item #(str "delete " % " and the data on it")}))
-           (update :items unless-unread)))]
+           (objects/delete {:objects (comp :volumes :observed) :none "the release has no volumes"
+                            :timeout (wait-of :deletion)
+                            :item #(str "delete " % " and the data on it")}))
+          (update :items unless-unread))]
 
      [:after-storage
       (change
@@ -512,32 +515,30 @@
 
      [nil
       (change
-       (merge
-        {:title "▶  Resume the HelmRelease, which installs"
-         :prerequisites {:kubectl-can-patch [flux/helmrelease-type]}
-         :confirm {:action "resume the HelmRelease" :destructive? false}
-         :precondition (fn [{:keys [observed]}] (readable? observed))
-         :items (fn [{:keys [target]}] [(format "resume HelmRelease %s and request a reconcile, which installs it" target)])}
-        (flux-steps/resume {:object release-object :none "no HelmRelease to resume"
-                            :timeout (wait-of :release-ready) :interval 15
-                            :description "the HelmRelease is Ready on a fresh install (revision 1, deployed)"
-                            :also (fn [{:keys [context observed]} _] (fresh-install? context observed))})))]
+       {:title "▶  Resume the HelmRelease, which installs"
+        :prerequisites {:kubectl-can-patch [flux/helmrelease-type]}
+        :confirm {:action "resume the HelmRelease" :destructive? false}
+        :precondition (fn [{:keys [observed]}] (readable? observed))
+        :items (fn [{:keys [target]}] [(format "resume HelmRelease %s and request a reconcile, which installs it" target)])}
+       (flux-steps/resume {:object release-object :none "no HelmRelease to resume"
+                           :timeout (wait-of :release-ready) :interval 15
+                           :description "the HelmRelease is Ready on a fresh install (revision 1, deployed)"
+                           :also (fn [{:keys [context observed]} _] (fresh-install? context observed))}))]
 
      [:after-resume
       (change
-       (merge
-        {:title "▶  Resume the owner (Kustomization or ResourceSet)"
-         :prerequisites {:kubectl-can-patch [flux/kustomization-type]}
-         :confirm {:action "resume the owner that renders the HelmRelease" :destructive? false}
-         :precondition (fn [{:keys [observed]}] (or (some? (:known-owner observed)) (readable? observed)))
-         :items (fn [{:keys [observed]}]
-                  [(if-let [{:keys [kind namespace name]} (:known-owner observed)]
-                     (format "resume %s %s/%s and request a reconcile" kind namespace name)
-                     "no owner to resume")])}
-        (flux-steps/resume {:object (comp :known-owner :observed) :none "no owner to resume"
-                            :timeout (fn [{:keys [observed]}]
-                                       (:owner-ready (waits (assoc observed :owner (:known-owner observed)))))
-                            :interval 15})))]]))
+       {:title "▶  Resume the owner (Kustomization or ResourceSet)"
+        :prerequisites {:kubectl-can-patch [flux/kustomization-type]}
+        :confirm {:action "resume the owner that renders the HelmRelease" :destructive? false}
+        :precondition (fn [{:keys [observed]}] (or (some? (:known-owner observed)) (readable? observed)))
+        :items (fn [{:keys [observed]}]
+                 [(if-let [{:keys [kind namespace name]} (:known-owner observed)]
+                    (format "resume %s %s/%s and request a reconcile" kind namespace name)
+                    "no owner to resume")])}
+       (flux-steps/resume {:object (comp :known-owner :observed) :none "no owner to resume"
+                           :timeout (fn [{:keys [observed]}]
+                                      (:owner-ready (waits (assoc observed :owner (:known-owner observed)))))
+                           :interval 15}))]]))
 
 (def positions
   "Where a caller's steps may go, in run order, each named for the step it

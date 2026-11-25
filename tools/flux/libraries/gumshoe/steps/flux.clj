@@ -10,11 +10,18 @@
    fluxcd.controlplane.io/reconcile annotation instead.
 
    A builder returns the parts of a step that act - :effect and :verify, and
-   :derive where the step needs a token - and the caller merges them into a
-   step map with its own title, confirmation, prerequisites, :precondition and
-   :recovery (see gumshoe.playbook). The object comes from a function of the
-   step's context, so a step acts on whatever its :derive observed; a step
-   whose object is nil plans a note and checks nothing."
+   the :values entry :timestamp where the step needs a token - and the caller
+   combines them with its own title, confirmation, prerequisites, reads,
+   values, :refusal and :recovery through gumshoe.change/compose (see
+   gumshoe.playbook), which merges the values by name and refuses a name two
+   parts bind differently. The object comes from a function of the step's
+   context, so a step acts on whatever its reads and values observed; a step
+   whose object is nil plans a note and checks nothing.
+
+   A step that resumes or reconciles stamps a token, the value `timestamp`
+   computes once per run, so the effect and the post-check agree on it. A
+   caller whose own value holds the token names it with :token, and the
+   builder then declares no value of its own."
   (:require [gumshoe.conditions :as conditions]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
@@ -65,19 +72,35 @@
 (defn- seconds [timeout ctx]
   (if (number? timeout) timeout (timeout ctx)))
 
+(defn timestamp
+  "The :values entry :timestamp of a step that stamps a token: now, as an
+   instant. One function, so every builder of a composed step declaring it
+   binds the same entry."
+  [_]
+  (str (java.time.Instant/now)))
+
+(defn- token-values
+  "The :values a step stamping its token declares: :timestamp, unless the
+   caller names its own value with :token."
+  [token]
+  (when-not token {:values {:timestamp timestamp}}))
+
 (defn- switch
-  [{:keys [object none timeout interval description also]} wanted done? default-description]
-  {:effect (fn [{:keys [context timestamp] :as ctx}]
-             (if-let [o (object ctx)]
-               (suspend-effect context o wanted timestamp)
-               (effect/plan (effect/note none))))
-   :verify (fn [{:keys [context] :as ctx}]
-             (when-let [o (object ctx)]
-               [{:description (or description (default-description o))
-                 :timeout (seconds timeout ctx) :interval interval
-                 :check #(let [live (fetch context o)]
-                           (and (done? (:kind o) live)
-                                (if also (also ctx live) true)))}]))})
+  [{:keys [object none timeout interval description also token]} wanted done? default-description]
+  (let [token-of (or token :timestamp)]
+    (merge
+     (when-not wanted (token-values token))
+     {:effect (fn [{:keys [context] :as ctx}]
+                (if-let [o (object ctx)]
+                  (suspend-effect context o wanted (token-of ctx))
+                  (effect/plan (effect/note none))))
+      :verify (fn [{:keys [context] :as ctx}]
+                (when-let [o (object ctx)]
+                  [{:description (or description (default-description o))
+                    :timeout (seconds timeout ctx) :interval interval
+                    :check #(let [live (fetch context o)]
+                              (and (done? (:kind o) live)
+                                   (if also (also ctx live) true)))}]))})))
 
 (defn suspend
   "The :effect and :verify of a step that suspends the object `(object ctx)`
@@ -95,11 +118,13 @@
   (switch spec true suspended? #(str (label %) " is suspended")))
 
 (defn resume
-  "The :effect and :verify of a step that resumes the object `(object ctx)`
-   returns, requesting a reconcile at the context's :timestamp, and waits
-   until it is no longer suspended and Ready. Takes what `suspend` takes; the
-   default description is \"<Kind> <ns>/<name> is resumed and Ready\". The
-   step's :derive supplies :timestamp."
+  "The :values, :effect and :verify of a step that resumes the object
+   `(object ctx)` returns, requesting a reconcile at the token, and waits
+   until it is no longer suspended and Ready. Takes what `suspend` takes, and
+   :token, the name of the caller's value holding the token; the default
+   description is \"<Kind> <ns>/<name> is resumed and Ready\". Without
+   :token the token is the value :timestamp, which the returned :values
+   declares with `timestamp`."
   [spec]
   (switch spec false (fn [kind live] (and (not (suspended? kind live)) (ready? live)))
           #(str (label %) " is resumed and Ready")))
@@ -120,21 +145,24 @@
   (= token (-> object :status :lastHandledReconcileAt)))
 
 (defn reconcile
-  "The :derive, :effect and :verify of a step that asks the object
+  "The :values, :effect and :verify of a step that asks the object
    `(object ctx)` returns to reconcile now and waits until its controller
-   handled that request. Takes :object, :none, :timeout, :interval and
-   :description as `suspend` does; the default description is \"<Kind>
-   <ns>/<name> handled the reconcile request\". The token is the context's
-   :timestamp, which the returned :derive sets; a step with its own :derive
-   sets :timestamp there instead."
-  [{:keys [object none timeout interval description]}]
-  {:derive (fn [_] {:timestamp (str (java.time.Instant/now))})
-   :effect (fn [{:keys [context timestamp] :as ctx}]
-             (if-let [o (object ctx)]
-               (reconcile-effect context o timestamp)
-               (effect/plan (effect/note none))))
-   :verify (fn [{:keys [context timestamp] :as ctx}]
-             (when-let [o (object ctx)]
-               [{:description (or description (str (label o) " handled the reconcile request"))
-                 :timeout (seconds timeout ctx) :interval interval
-                 :check #(handled? (fetch context o) timestamp)}]))})
+   handled that request. Takes :object, :none, :timeout, :interval,
+   :description and :token as `resume` does; the default description is
+   \"<Kind> <ns>/<name> handled the reconcile request\". The effect stamps
+   the token and the post-check waits for that same token, so the token is a
+   value of the run, computed once: :timestamp from the returned :values, or
+   the caller's own value :token names."
+  [{:keys [object none timeout interval description token]}]
+  (let [token-of (or token :timestamp)]
+    (merge
+     (token-values token)
+     {:effect (fn [{:keys [context] :as ctx}]
+                (if-let [o (object ctx)]
+                  (reconcile-effect context o (token-of ctx))
+                  (effect/plan (effect/note none))))
+      :verify (fn [{:keys [context] :as ctx}]
+                (when-let [o (object ctx)]
+                  [{:description (or description (str (label o) " handled the reconcile request"))
+                    :timeout (seconds timeout ctx) :interval interval
+                    :check #(handled? (fetch context o) (token-of ctx))}]))})))

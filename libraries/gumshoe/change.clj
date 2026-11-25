@@ -123,7 +123,52 @@
    :recheck beside :reads, either alias beside a named entry, a :reads or
    :values that is not a map of keyword to function, a name the engine
    binds itself or both maps bind, and a reserved name in the wrong map. mutation/book normalizes
-   when the book loads, so such a book fails the conformance gate.")
+   when the book loads, so such a book fails the conformance gate.
+
+   compose combines several specs - a builder's fragment and the caller's
+   own keys - into one canonical change map, key by key. Each part is
+   first mapped onto the canonical keys as normalize maps it, so a part may
+   use the aliases, and the result is a canonical map normalize accepts as
+   it is. A part may be nil. The rules never weaken a guard or a
+   post-check: every part's refusal still refuses, every part's post-check
+   still runs, and a change is destructive when any part says so.
+     :reads :values     merged by name; a name two parts bind to different
+                        functions is refused, the same function is one entry
+     :refusal           every part's, judged in part order; the first reason
+                        any part gives refuses, and the parts after it are
+                        not judged
+     :verify :items     every part's, concatenated in part order
+     :done              done when every part's :done holds: true is
+                        absorbed by a function (the engine joins a :done
+                        function with every post-check, so true adds
+                        nothing beside one), and functions must all hold; a
+                        part without :done is neutral, its post-checks still
+                        join the composed :verify every :done is judged with
+     :subjects          concatenated: the :target entries' refs are joined,
+                        and a ref two of them return is refused when they are
+                        computed; a :pick or :reads entry is single-valued
+     :confirm           merged key by key: :destructive? and :separately?
+                        are OR-ed, every other key is single-valued
+     :prerequisites     joined as gumshoe.prerequisites/union joins them
+     :options           joined by name; an option two parts declare with a
+                        different :coerce, :alias or :default is refused
+     :no-verify :no-guard  every part's reason, joined with \"; \"; refused
+                        when any part has a :verify, or a guard (:refusal,
+                        :subjects), since the composed change then has one
+     every other key    single-valued: two parts giving different values
+                        (:effect, :select, :connect, :title, :recovery,
+                        :announce, ...) are refused
+   A combined function remembers the functions it combines, each once, so
+   every grouping of the same parts behaves alike (compose is associative),
+   and composing a result with a part it already holds returns that result
+   unchanged. Two separate compose calls build two combined functions that
+   behave alike and are not =, since functions compare by identity.
+   compose skips the checks that need the whole change (a :done true
+   without :verify, a :recheck with nothing to judge it, :connect beside a
+   subject), because a fragment may be completed by a later compose;
+   normalize makes them when the composed spec runs or its book loads."
+  (:require [clojure.string :as str]
+            [gumshoe.prerequisites :as prerequisites]))
 
 (def unmet
   "What a :refusal returns to refuse in the generic words of gumshoe.flow:
@@ -188,13 +233,22 @@
         (some? subjects) (conj {:from :target :refs subjects})
         (some? pin) (conj {:from :reads :ref pin})))))
 
+(defn- precondition-refusal
+  "A :precondition as a refusal returning unmet. It carries the
+   precondition, so compose judges one precondition once however many parts
+   name it."
+  [precondition]
+  (with-meta (fn [ctx] (when-not (precondition ctx) unmet))
+    {::precondition precondition}))
+
+(declare combined first-reason)
+
 (defn- refusal-of
   "The one guard: :refusal, then :precondition as a refusal returning unmet."
   [{:keys [refusal precondition]}]
-  (cond
-    (nil? precondition) refusal
-    (nil? refusal) (fn [ctx] (when-not (precondition ctx) unmet))
-    :else (fn [ctx] (or (refusal ctx) (when-not (precondition ctx) unmet)))))
+  (if (nil? precondition)
+    refusal
+    (combined :refusal first-reason [refusal (precondition-refusal precondition)])))
 
 (defn- select-of
   [{:keys [select empty-message]}]
@@ -308,11 +362,10 @@
     (invalid! "a :subject needs a select that picks one object, not a :many select"
               {:select select})))
 
-(defn normalize
-  "spec as the canonical change map (see the namespace doc): every alias
-   replaced by its canonical form, every other key carried as it is.
-   Idempotent, pure, and throws ex-info with ::invalid for a spec it
-   refuses."
+(defn- canonical
+  "spec with every alias replaced by its canonical form and each key checked
+   on its own, without the checks that need the whole change (check-done!,
+   check-runnable!), so a fragment compose combines passes through it."
   [spec]
   (when-not (map? spec)
     (invalid! (str "a change spec is a map, not " (pr-str spec)) {:spec spec}))
@@ -334,9 +387,17 @@
                     (some? announce) (assoc :announce announce)
                     (some? done) (assoc :done done))]
     (check-entries-apart! canonical)
-    (check-done! canonical)
-    (check-runnable! canonical)
     canonical))
+
+(defn normalize
+  "spec as the canonical change map (see the namespace doc): every alias
+   replaced by its canonical form, every other key carried as it is.
+   Idempotent, pure, and throws ex-info with ::invalid for a spec it
+   refuses."
+  [spec]
+  (doto (canonical spec)
+    (check-done!)
+    (check-runnable!)))
 
 (defn subject
   "The entry of a canonical spec's :subjects that comes :from source, or nil."
@@ -380,3 +441,218 @@
   "The function a canonical spec's :recheck alias declared, or nil."
   [spec]
   (get-in spec [:reads recheck-entry]))
+
+;; --- composition ---------------------------------------------------------------------
+
+(defn- parts-of
+  "The functions f combines for key, or [f] when it combines none."
+  [key f]
+  (or (get-in (meta f) [::parts key]) [f]))
+
+(defn- combined
+  "One function for key standing for the distinct functions of given (by
+   identity, a precondition's refusal by its precondition, in order, each
+   combined one flattened into what it combines), built by (join fs). A given function that already stands for exactly
+   those is returned as it is, so combining a function with one it already
+   combines yields the same function; nil when there are none."
+  [key join given]
+  (let [given (remove nil? given)
+        identity-of #(or (::precondition (meta %)) %)
+        fs (->> (mapcat #(parts-of key %) given)
+                (reduce (fn [[seen acc :as kept] f]
+                          (if (contains? seen (identity-of f))
+                            kept
+                            [(conj seen (identity-of f)) (conj acc f)]))
+                        [#{} []])
+                second)]
+    (when (seq fs)
+      (or (some #(when (= fs (parts-of key %)) %) given)
+          (with-meta (join fs) {::parts {key fs}})))))
+
+(defn- first-reason
+  [fs]
+  (fn [ctx] (some #(% ctx) fs)))
+
+(defn- concatenated
+  [fs]
+  (fn [ctx] (into [] (mapcat #(% ctx)) fs)))
+
+(defn- all-hold
+  [fs]
+  (fn [ctx] (every? #(% ctx) fs)))
+
+(defn- ref-key [{:keys [type namespace name]}] [type namespace name])
+
+(defn- distinct-refs!
+  [refs]
+  (doseq [[[type namespace name] n] (frequencies (map ref-key refs))
+          :when (< 1 n)]
+    (invalid! (format "two parts of the change name the subject %s %s - a subject is read, pinned and refused once, so one part names it"
+                      type (if namespace (str namespace "/" name) name))
+              {:ref {:type type :namespace namespace :name name}}))
+  refs)
+
+(defn- joined-refs
+  [fs]
+  (fn [ctx] (distinct-refs! (into [] (mapcat #(% ctx)) fs))))
+
+(defn- single
+  "The one value two parts give key: either, when only one gives it or both
+   give the same."
+  [key a b]
+  (cond
+    (nil? a) b
+    (nil? b) a
+    (= a b) a
+    :else (invalid! (format "two parts of the change give %s differently - a change has one %s, so one part names it"
+                            key key)
+                    {:key key :values [a b]})))
+
+(defn- by-name
+  "The entries of two {name -> function} maps as one, in part order; a name
+   both bind is one entry when they bind the same function and refused
+   otherwise."
+  [key a b]
+  (let [entries (reduce (fn [acc [name f]]
+                          (if-let [seen (some #(when (= name (first %)) %) acc)]
+                            (if (= (second seen) f)
+                              acc
+                              (invalid! (format "two parts of the change bind the %s entry %s to different functions - name one of them otherwise"
+                                                key name)
+                                        {key name}))
+                            (conj acc [name f])))
+                        []
+                        (concat a b))]
+    (when (seq entries) (apply array-map (mapcat identity entries)))))
+
+(defn- either-true
+  [a b]
+  (cond
+    (or (true? a) (true? b)) true
+    (or (false? a) (false? b)) false
+    :else nil))
+
+(defn- combine-confirm
+  [a b]
+  (not-empty
+   (into {}
+         (keep (fn [k]
+                 (let [v (if (#{:destructive? :separately?} k)
+                           (either-true (get a k) (get b k))
+                           (single [:confirm k] (get a k) (get b k)))]
+                   (when (some? v) [k v]))))
+         (distinct (concat (keys a) (keys b))))))
+
+(def ^:private option-identity [:coerce :alias :default])
+
+(defn- combine-options
+  [a b]
+  (reduce-kv (fn [acc k v]
+               (if-let [seen (get acc k)]
+                 (if (= (select-keys seen option-identity) (select-keys v option-identity))
+                   acc
+                   (invalid! (format "two parts of the change declare --%s differently: %s and %s"
+                                     (name k) (pr-str seen) (pr-str v))
+                             {:option k :declarations [seen v]}))
+                 (assoc acc k v)))
+             (or a {})
+             (or b {})))
+
+(defn- combine-prerequisites
+  [a b]
+  (try
+    (prerequisites/union a b)
+    (catch clojure.lang.ExceptionInfo e
+      (invalid! (str "two parts of the change cannot share their prerequisites: " (ex-message e))
+                (ex-data e)))))
+
+(defn- combine-subjects
+  "Two canonical :subjects vectors as one, in order of first appearance per
+   :from: the :target entries' refs joined, a :pick or :reads entry
+   single-valued."
+  [a b]
+  (let [entries (concat a b)]
+    (not-empty
+     (vec (for [from (distinct (map :from entries))
+                :let [same (filter #(= from (:from %)) entries)]]
+            (if (= :target from)
+              (assoc (reduce (fn [x y] (merge-with #(single [:subjects :target] %1 %2) x y))
+                             (map #(dissoc % :refs) same))
+                     :refs (combined :refs joined-refs (map :refs same)))
+              (reduce #(single [:subjects from] %1 %2) same)))))))
+
+(defn- combine-done
+  [a b]
+  (let [given (remove nil? [a b])
+        fns (remove true? given)]
+    (cond
+      (empty? given) nil
+      (empty? fns) true
+      :else (combined :done all-hold fns))))
+
+(def ^:private reason-separator "; ")
+
+(defn- reasons
+  "Two parts' reasons for key as one, each distinct reason once, in part
+   order. A reason that is not a string is single-valued, and conformance
+   says what is wrong with it."
+  [key a b]
+  (if (and (string? a) (string? b))
+    (str/join reason-separator (distinct (mapcat #(str/split % #"; ") [a b])))
+    (single key a b)))
+
+(defn- guarded?
+  [{:keys [refusal subjects]}]
+  (or (some? refusal) (seq subjects)))
+
+(defn- check-reasons!
+  "Refuses a composed change that says it has no post-check or no guard
+   while one of its parts gives it one. Judged on the result, so it holds
+   for every grouping of the parts."
+  [{:keys [no-verify no-guard verify] :as composed}]
+  (when (and (some? no-verify) (some? verify))
+    (invalid! (format "a part of the change says it has no post-check (%s) and a part declares a :verify - drop the reason"
+                      (pr-str no-verify))
+              {:no-verify no-verify}))
+  (when (and (some? no-guard) (guarded? composed))
+    (invalid! (format "a part of the change says it has no guard (%s) and a part declares a :refusal or :subjects - drop the reason"
+                      (pr-str no-guard))
+              {:no-guard no-guard})))
+
+(def ^:private rules
+  {:reads #(by-name :reads %1 %2)
+   :values #(by-name :values %1 %2)
+   :refusal #(combined :refusal first-reason [%1 %2])
+   :verify #(combined :verify concatenated [%1 %2])
+   :items #(combined :items concatenated [%1 %2])
+   :done combine-done
+   :subjects combine-subjects
+   :confirm combine-confirm
+   :prerequisites combine-prerequisites
+   :options combine-options
+   :no-verify #(reasons :no-verify %1 %2)
+   :no-guard #(reasons :no-guard %1 %2)})
+
+(defn- combine
+  ([] {})
+  ([a b]
+   (into {}
+         (keep (fn [k]
+                 (let [x (get a k) y (get b k)
+                       v (cond
+                           (nil? x) y
+                           (nil? y) x
+                           :else ((get rules k #(single k %1 %2)) x y))]
+                   (when (some? v) [k v]))))
+         (distinct (concat (keys a) (keys b))))))
+
+(defn compose
+  "One canonical change map from several specs, each a fragment or a whole
+   spec in any spelling normalize accepts, combined key by key as the
+   namespace doc lists; nil parts are skipped. Pure and associative, and
+   composing a result with a part it holds again returns it unchanged.
+   Throws ex-info with ::invalid for parts that clash."
+  [& parts]
+  (doto (reduce combine (map canonical (remove nil? parts)))
+    (check-entries-apart!)
+    (check-reasons!)))

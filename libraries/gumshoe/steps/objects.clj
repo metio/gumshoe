@@ -5,10 +5,11 @@
   "Steps over a list of Kubernetes objects, each {:type :namespace :name}.
 
    A builder returns the parts of a step that act - :items, :effect and
-   :verify - and the caller merges them into a step map with its own title,
-   confirmation, prerequisites, :derive, :precondition and :recovery (see
-   gumshoe.playbook). The objects come from a function of the step's
-   context, so a step reads them from whatever its :derive observed."
+   :verify - and the caller combines them with its own title, confirmation,
+   prerequisites, reads, values, :refusal and :recovery through
+   gumshoe.change/compose (see gumshoe.playbook). The objects come from a function of the step's
+   context, so a step reads them from whatever its reads and values
+   observed."
   (:require [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]))
 
