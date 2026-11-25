@@ -3,6 +3,7 @@
 
 (ns gumshoe.federation-test
   (:require [clojure.test :refer [deftest is testing]]
+            [gumshoe.detective :as detective]
             [gumshoe.detectives.matrix :as matrix]))
 
 (defn- summaries
@@ -108,3 +109,21 @@
   (is (= ["could not read the federation destinations (unreachable)"]
          (map :summary (matrix/detect-federation-destinations
                         {"admin?" true "host" "matrix.example.org" "destinations" {:reachable false}})))))
+
+(defn- check-unread?
+  [name evidence]
+  (detective/unread? (first (filter #(= name (:name %)) matrix/detectives)) evidence))
+
+(deftest federation-destinations-are-unread-without-an-admin-token-test
+  (is (check-unread? "matrix-federation-destinations"
+                     {"host" "synapse.example.org" "admin?" false "destinations" nil}))
+  (is (not (check-unread? "matrix-federation-destinations"
+                          {"host" "synapse.example.org" "admin?" true
+                           "destinations" {:reachable true :status 200 :json {:destinations []}}}))))
+
+(deftest a-2xx-key-answer-without-valid-until-is-critical-test
+  (doseq [[label keys] [["html" {:reachable true :status 200 :body "<!doctype html><html></html>" :json nil}]
+                        ["json without the field" {:reachable true :status 200 :json {:server_name "example.org"}}]]]
+    (let [findings (matrix/detect-signing-keys {:now now "host" "h" "server-keys" keys})]
+      (is (= #{"the signing keys endpoint answered without valid_until_ts"} (summaries findings)) label)
+      (is (= :critical (:severity (first findings))) label))))
