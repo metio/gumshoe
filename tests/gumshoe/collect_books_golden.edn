@@ -1408,7 +1408,7 @@
      "ctx"
      "services"
      "app.kubernetes.io/name=thanos-query"]
-    [:choose "Thanos Query" [] nil nil]
+    [:choose "Thanos Query" ["monitoring/thanos-query"] nil nil]
     [:port-forward
      {:context "ctx",
       :namespace "monitoring",
@@ -1433,7 +1433,7 @@
      "ctx"
      "services"
      "app.kubernetes.io/name=thanos-query"]
-    [:choose "Thanos Query" [] nil nil]
+    [:choose "Thanos Query" ["monitoring/thanos-query"] nil nil]
     [:port-forward
      {:context "ctx",
       :namespace "monitoring",
@@ -1470,7 +1470,7 @@
      "ctx"
      "services"
      "app.kubernetes.io/name=thanos-query"]
-    [:choose "Thanos Query" [] nil nil]
+    [:choose "Thanos Query" ["monitoring/thanos-query"] nil nil]
     [:port-forward
      {:context "ctx",
       :namespace "monitoring",
@@ -1495,7 +1495,7 @@
      "ctx"
      "services"
      "app.kubernetes.io/name=thanos-query"]
-    [:choose "Thanos Query" [] nil nil]
+    [:choose "Thanos Query" ["monitoring/thanos-query"] nil nil]
     [:port-forward
      {:context "ctx",
       :namespace "monitoring",
@@ -1525,7 +1525,7 @@
      "ctx"
      "services"
      "app.kubernetes.io/name=thanos-query"]
-    [:choose "Thanos Query" [] nil nil]]}},
+    [:choose "Thanos Query" ["monitoring/thanos-query"] nil nil]]}},
  "upload"
  {"candidates unanswered"
   {:result false,
