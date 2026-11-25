@@ -120,6 +120,8 @@
                    [gumshoe.cnpg.operations-test]
                    [gumshoe.cnpg.actions-test]
                    [gumshoe.pooler-test]
+                   [gumshoe.pooler-endpoints-test]
+                   [gumshoe.endpointslices-test]
                    gumshoe.pooler-console-test
                    [gumshoe.cnpg-volumes-test]
                    [gumshoe.cnpg-console-test]
@@ -312,6 +314,8 @@
                                                          'gumshoe.cnpg.operations-test
                                                          'gumshoe.cnpg.actions-test
                                                          'gumshoe.pooler-test
+                                                         'gumshoe.pooler-endpoints-test
+                                                         'gumshoe.endpointslices-test
                                                          'gumshoe.pooler-console-test
                                                          'gumshoe.cnpg-volumes-test
                                                          'gumshoe.cnpg-console-test

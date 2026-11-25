@@ -214,6 +214,8 @@ Every book behaves the same way:
   The `json` and `edn` outputs mark it `:unread` in `:checked`. A detective
   that judges a chosen set of subjects - the hosts a scope selected - names
   their evidence keys as `:judges`, and reads nothing when they are all empty.
+  A detective that joins several reads names them as `:joins`, and reads
+  nothing when any one of them did not answer.
 - A run in which no check read anything has not passed: it prints that
   nothing was checked, marks the `json` and `edn` output `:nothing-checked`,
   and exits `1`.

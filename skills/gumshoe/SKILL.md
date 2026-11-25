@@ -159,8 +159,9 @@ and outcome; the path is printed after the final banner.
   the other nodes of a DaemonSet pod pinned to one node, and comes last.
 - `checked` lists every detective that ran. An entry with `unread` read
   nothing, for example because the cluster does not serve that CRD or RBAC
-  refused the read, or because the scope it judges selected no subjects, so
-  an empty finding list from it proves nothing. Say so when you report a
+  refused the read, or because the scope it judges selected no subjects, or
+  because one of the reads it joins did not answer, so an empty finding list
+  from it proves nothing. Say so when you report a
   clean result.
 - A book that judges against values from its options or env.edn names a
   missing one on stderr. The fabric detective without gateway VTEPs marks
@@ -190,7 +191,7 @@ The detectives compose from one domain to the whole cluster:
 | `runbooks/detectives/apiversions.clj` | CRD discovery drift |
 | `runbooks/detectives/security.clj`, `rbac.clj` | RBAC, pod security, network segmentation |
 | `runbooks/detectives/posture.clj` | probes, image tags, replicas, PDBs, deprecated APIs, template drift |
-| `runbooks/detectives/databases.clj` | CloudNativePG and db-operator |
+| `runbooks/detectives/databases.clj` | CloudNativePG and db-operator; a CNPG Pooler declaring instances whose Service resolves to no ready EndpointSlice address is critical (`cnpg-pooler-endpoints`, component the Pooler), and the check is unread when the Pooler, Service or EndpointSlice read did not answer |
 | `runbooks/detectives/observability.clj` | Prometheus, Alertmanager, ThanosRuler |
 | `runbooks/detectives/dns.clj` | nameservers, SOA replication, answer consistency |
 | `runbooks/detectives/mail.clj` | MX, SPF, DKIM, DMARC, rDNS, live SMTP/POP3/IMAP with TLS |
@@ -305,7 +306,13 @@ mostly data:
   the json/edn report. Checks whose `:requires` all came back nil are marked
   unread, so a collection that read nothing fails with "nothing was
   checked". `:requires` must name the evidence keys as the collection
-  returns them, keywords or strings. `(detective/check-step {:title …
+  returns them, keywords or strings. A check that judges a chosen set of
+  subjects names their keys as `:judges` and is unread when every one is
+  empty; a check that joins several reads (a Pooler to its Service and the
+  Service's EndpointSlices) names them as `:joins` and is unread when any
+  one of them is nil, so a read that did not answer never reads as an empty
+  side of the join. An unread check still runs, so its `:detect` returns
+  nothing when a joined key is nil. `(detective/check-step {:title …
   :detectives … :blocking? false})` is the playbook step for the same;
 - a book derives the options its select reads instead of writing them:
   `(def selection {:mode … :label … :flag …})` and `:options

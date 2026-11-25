@@ -9,24 +9,15 @@
    control-plane minor would leave behind."
   (:require [clojure.string :as str]
             [gumshoe.detectives.nodes :as nodes]
+            [gumshoe.endpointslices :as endpointslices]
             [gumshoe.kubectl :as kubectl]))
 
 ;; --- webhook backends ------------------------------------------------------------
 
-(def ^:private service-name-label :kubernetes.io/service-name)
-
-(defn- ready-endpoint?
-  "Whether an EndpointSlice endpoint takes traffic; an unset ready means true."
-  [endpoint]
-  (not (false? (-> endpoint :conditions :ready))))
-
 (defn ready-backends
   "The namespace/name of every Service with at least one ready endpoint."
-  [endpointslices]
-  (set (for [slice (kubectl/items-of endpointslices)
-             :let [service (get-in slice [:metadata :labels service-name-label])]
-             :when (and service (some ready-endpoint? (:endpoints slice)))]
-         (str (kubectl/namespace-of slice) "/" service))))
+  [slices]
+  (endpointslices/ready-backends slices))
 
 (defn detect-webhook-backends
   "Webhooks whose Service exists but has no ready endpoint. A missing Service

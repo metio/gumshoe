@@ -1,0 +1,34 @@
+{
+  "a single-replica pooler whose pod is not ready, beside a serving one and one scaled to 0" : {
+    "findings" : [ {
+      "severity" : "critical",
+      "component" : "db/pooler-rw",
+      "summary" : "serves nothing: Service db/pooler-rw has no ready address while the Pooler declares 1 instance",
+      "hint" : "every client connecting through db/pooler-rw is refused or times out; read why the pooler's pods are not ready: `kubectl -n db get pods -l cnpg.io/poolerName=pooler-rw` and the events of Deployment db/pooler-rw",
+      "detective" : "cnpg-pooler-endpoints"
+    } ],
+    "checked" : [ {
+      "name" : "cnpg-pooler-endpoints",
+      "description" : "Poolers declaring instances whose Service resolves to no ready address, a total outage for their clients"
+    } ],
+    "summary" : {
+      "critical" : 1,
+      "warning" : 0,
+      "info" : 0
+    }
+  },
+  "the EndpointSlice read did not answer" : {
+    "findings" : [ ],
+    "checked" : [ {
+      "name" : "cnpg-pooler-endpoints",
+      "description" : "Poolers declaring instances whose Service resolves to no ready address, a total outage for their clients",
+      "unread" : true
+    } ],
+    "summary" : {
+      "critical" : 0,
+      "warning" : 0,
+      "info" : 0
+    },
+    "nothing-checked" : true
+  }
+}

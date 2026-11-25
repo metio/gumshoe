@@ -38,6 +38,18 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
   quiet while the cluster itself is unhealthy, and its hint distinguishes
   `password authentication failed` (the pooler) from `connect failed` (the
   backend being unreachable, which a restart will not fix).
+- **Pooler endpoint detective** - a Pooler declaring one or more instances
+  whose Service resolves to no ready address is a total outage for every client
+  connecting through it, and is reported as critical against the Pooler, so a
+  single-replica pooler whose pod is not ready reads as a pooler serving
+  nothing rather than as one pod among many. CNPG names a Pooler's Service
+  after the Pooler and selects its pods by `cnpg.io/poolerName`, and a Service
+  of our own selecting those pods counts too; its addresses come from the
+  Service's `discovery.k8s.io/v1` EndpointSlices, where a terminating endpoint
+  is not ready. A missing Service is reported the same way. A Pooler declaring
+  0 instances is not a finding. The check joins the Pooler, Service and
+  EndpointSlice reads, and when any of them did not answer it is marked unread
+  instead of reporting zero endpoints.
 - **Pooler login detective** - a pooler whose backend rejects the login it
   makes for each client is healthy in every field of the resource API: the pods
   are ready and the Pooler phase is active while no client reaches the database.
