@@ -200,3 +200,42 @@
       (let [config (binding [runbook/*loading* true] (load-file path))]
         (is (false? (:announce? config)) "the book posts nothing to the changelog")
         (is (true? (:change? config)) "pre-hooks still see a change")))))
+
+(deftest change-book?-test
+  (testing "a book that announces is a change book unless it says otherwise"
+    (is (true? (runbook/change-book? {} {})))
+    (is (false? (runbook/change-book? {:announce? false} {})))
+    (is (true? (runbook/change-book? {:announce? false :change? true} {})))
+    (is (false? (runbook/change-book? {:change? false} {}))))
+  (testing "a :change? function is judged on the parsed options"
+    (let [config {:announce? false :change? (fn [opts] (some? (:promote opts)))}]
+      (is (false? (runbook/change-book? config {})))
+      (is (true? (runbook/change-book? config {:promote "pg-2"})))))
+  (testing "its answer is a boolean"
+    (is (true? (runbook/change-book? {:change? (constantly "yes")} {})))
+    (is (false? (runbook/change-book? {:change? (constantly nil)} {})))))
+
+(defn- book-config [path]
+  (binding [runbook/*loading* true] (load-file path)))
+
+(deftest debug-pods-and-promotions-are-changes-test
+  (testing "netshoot run starts a privileged pod, so pre-hooks see a change"
+    (is (true? (runbook/change-book? (book-config "runbooks/kubernetes/netshoot/run.clj") {}))))
+  (testing "the cnpg console is a change only when it promotes"
+    (let [config (book-config "tools/cnpg/runbooks/cnpg_console.clj")]
+      (is (false? (runbook/change-book? config {})))
+      (is (true? (runbook/change-book? config {:promote "pg-2"}))))))
+
+(deftest every-bespoke-book-that-changes-declares-it-test
+  (let [files (->> (concat (fs/glob "runbooks" "**.clj") (fs/glob "firebooks" "**.clj")
+                           (fs/glob "tools" "*/runbooks/**.clj"))
+                   (map str)
+                   (filter #(let [text (slurp %)]
+                              (and (str/includes? text "(runbook/execute!")
+                                   (str/includes? text "flow/change!"))))
+                   sort)]
+    (is (seq files) "the sweep finds the bespoke books that call flow/change!")
+    (doseq [path files]
+      (let [config (book-config path)]
+        (is (or (not (false? (:announce? config))) (contains? config :change?))
+            (str path " changes something through flow/change! but posts nothing and declares no :change?, so pre-hooks would see a read-only book"))))))

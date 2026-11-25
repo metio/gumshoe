@@ -161,21 +161,40 @@
 
 (deftest any-matching?-test
   (testing "a non-empty name list means at least one resource matches the selector"
-    (with-redefs [shell/stdout-of (fn [& _] "deployment.apps/loki\nstatefulset.apps/loki-backend")]
-      (is (kubectl/any-matching? "deployment,statefulset" "app.kubernetes.io/name=loki"))))
-  (testing "empty output - no match, or an unreachable API - reads as absent, never throws"
-    (with-redefs [shell/stdout-of (fn [& _] "")]
-      (is (not (kubectl/any-matching? "deployment" "app.kubernetes.io/name=loki"))))))
+    (with-redefs [shell/execute (fn [& _] {:exit 0 :out "deployment.apps/loki\nstatefulset.apps/loki-backend" :err ""})]
+      (is (true? (kubectl/any-matching? "deployment,statefulset" "app.kubernetes.io/name=loki")))))
+  (testing "an answered empty list is false"
+    (with-redefs [shell/execute (fn [& _] {:exit 0 :out "" :err ""})]
+      (is (false? (kubectl/any-matching? "deployment" "app.kubernetes.io/name=loki")))))
+  (testing "an unreachable API server is nil, never an absence"
+    (with-redefs [shell/execute (fn [& _] {:exit 1 :out "" :err "Unable to connect to the server: i/o timeout"})]
+      (is (nil? (kubectl/any-matching? "deployment" "app.kubernetes.io/name=loki"))))))
+
+(deftest existence-of-test
+  (is (true? (kubectl/existence-of {:exit 0 :out "customresourcedefinition.apiextensions.k8s.io/x" :err ""})))
+  (is (false? (kubectl/existence-of {:exit 0 :out "  " :err ""})) "an answered empty name list")
+  (is (false? (kubectl/existence-of {:exit 1 :out "" :err "Error from server (NotFound): customresourcedefinitions.apiextensions.k8s.io \"x\" not found"})))
+  (is (false? (kubectl/existence-of {:exit 1 :out "" :err "error: the server doesn't have a resource type \"csidriver\""})))
+  (testing "a read that did not answer is nil"
+    (is (nil? (kubectl/existence-of {:exit 1 :out "" :err "Unable to connect to the server: dial tcp: i/o timeout"})))
+    (is (nil? (kubectl/existence-of {:exit 1 :out "" :err "Error from server (Forbidden): customresourcedefinitions is forbidden"})))
+    (is (nil? (kubectl/existence-of {:exit 1 :out "" :err ""})))
+    (is (nil? (kubectl/existence-of {:exit -1 :out "" :err ""})) "a timed-out command")))
 
 (deftest serves-crd?-test
   (testing "serves-crd? checks the named CRD via resource-exists?"
-    (with-redefs [shell/exit-code-of
+    (with-redefs [shell/execute
                   (fn [& args]
                     (if (= (vec args) ["kubectl" "get" "customresourcedefinition"
-                                       "certificates.cert-manager.io" "--request-timeout=5s"])
-                      0 1))]
-      (is (kubectl/serves-crd? "certificates.cert-manager.io"))
-      (is (not (kubectl/serves-crd? "absent.example.com"))))))
+                                       "certificates.cert-manager.io" "--output=name" "--request-timeout=5s"])
+                      {:exit 0 :out "customresourcedefinition.apiextensions.k8s.io/certificates.cert-manager.io" :err ""}
+                      {:exit 1 :out "" :err "Error from server (NotFound): customresourcedefinitions.apiextensions.k8s.io \"absent.example.com\" not found"}))]
+      (is (true? (kubectl/serves-crd? "certificates.cert-manager.io")))
+      (is (false? (kubectl/serves-crd? "absent.example.com")))))
+  (testing "an API server that did not answer leaves the question open"
+    (with-redefs [shell/execute (fn [& _] {:exit 1 :out "" :err "Unable to connect to the server: EOF"})]
+      (is (nil? (kubectl/serves-crd? "certificates.cert-manager.io")))
+      (is (nil? (kubectl/resource-exists? "csidriver" "rbd.csi.ceph.com"))))))
 
 (defn- helm-owner? [item] (= "helm" (get-in item [:metadata :labels :owner])))
 

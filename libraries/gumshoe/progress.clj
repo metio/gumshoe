@@ -16,14 +16,14 @@
   "Whether the task list repaints in place. The repaint moves the cursor on
    stderr, so stderr must be a terminal: `bb book 2> run.log` gets each item
    once instead of a repaint every 90 ms, and FORCE_COLOR asks for colour, not
-   for cursor movement into a log. NO_COLOR turns it off as well. Colours off
-   while stdout is a terminal means --no-color, which also stops it; with
-   stdout captured (`-o json | jq`) colours are off for stdout's sake and the
-   terminal on stderr still gets the live list."
-  [{:keys [stderr-terminal? stdout-terminal? no-color? colors-enabled?]}]
+   for cursor movement into a log. NO_COLOR and --no-color turn it off as
+   well. With stdout captured (`-o json | jq`) colours are off for stdout's
+   sake and the terminal on stderr still gets the live list, unless one of
+   those asked for no decoration."
+  [{:keys [stderr-terminal? no-color? no-color-flag?]}]
   (boolean (and stderr-terminal?
                 (not no-color?)
-                (or colors-enabled? (not stdout-terminal?)))))
+                (not no-color-flag?))))
 
 (defn- terminal?
   "Whether fd points at a device. Where /proc is unavailable the target is
@@ -38,9 +38,8 @@
 (defn- live?
   []
   (animate? {:stderr-terminal? (terminal? 2)
-             :stdout-terminal? (terminal? 1)
              :no-color? (not (str/blank? (System/getenv "NO_COLOR")))
-             :colors-enabled? (stdout/colors-enabled?)}))
+             :no-color-flag? (stdout/no-color-requested?)}))
 
 (defn- spinner
   [frame]

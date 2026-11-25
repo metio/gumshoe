@@ -32,17 +32,18 @@
     (stdout/print-section "🔌 Connection")
     (if-not (ssh/check-connection? connection)
       false
-      (let [health (ceph/health-status connection)
-            forced (boolean (:force opts))
+      (let [forced (boolean (:force opts))
+            health-read (ceph/health-result connection)
+            health (:status health-read)
+            refusal (ceph/change-refusal health-read forced)
             daemons (ceph/daemons connection)
             daemon (interact/choose-one "Daemon" (sort (map :daemon_name daemons)) (:daemon opts))]
         (cond
           (nil? daemon)
           (do (stdout/error "no daemon selected") false)
 
-          (and (not= "HEALTH_OK" health) (not forced))
-          (do (stdout/error (format "cluster is %s - resolve that first, or rerun with --force" health))
-              false)
+          refusal
+          (do (stdout/error refusal) false)
 
           :else
           (let [before (ceph/daemon-named daemons daemon)]

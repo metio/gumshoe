@@ -50,12 +50,23 @@
   [container resource]
   (quantity/quantity->number (get-in container [:resources :requests resource])))
 
+(defn- unreadable-requests
+  "The resources whose request the container sets to something that is not a
+   quantity, so the request is unknown rather than unset."
+  [container]
+  (set (for [resource [:cpu :memory]
+             :let [raw (get-in container [:resources :requests resource])]
+             :when (and (some? raw) (nil? (request-of container resource)))]
+         resource)))
+
 (defn usage-rows
   "One row per workload and container that Prometheus has usage for:
    {:namespace :workload :container :pods :cpu-request :memory-request :cpu
     :memory}, requests in cores and bytes (nil when unset), usage the highest of
-   any pod. Init containers are left out; their requests apply only while they
-   run."
+   any pod. A row whose request some replica sets to a value that is not a
+   quantity also carries :unreadable-requests, the set of those resources, so
+   an unparseable request is never judged as an unset one. Init containers
+   are left out; their requests apply only while they run."
   [pods cpu memory]
   (let [entries (for [pod (kubectl/items-of pods)
                       :when (not (#{"Succeeded" "Failed"} (-> pod :status :phase)))
@@ -67,17 +78,20 @@
                    :container (:name container)
                    :cpu-request (request-of container :cpu)
                    :memory-request (request-of container :memory)
+                   :unreadable-requests (unreadable-requests container)
                    :cpu (get cpu key)
                    :memory (get memory key)})
         maximum (fn [values] (when-let [present (seq (remove nil? values))] (apply max present)))]
     (->> entries
          (group-by (juxt :namespace :workload :container))
          (map (fn [[[namespace workload container] group]]
-                {:namespace namespace :workload workload :container container :pods (count group)
-                 :cpu-request (maximum (map :cpu-request group))
-                 :memory-request (maximum (map :memory-request group))
-                 :cpu (maximum (map :cpu group))
-                 :memory (maximum (map :memory group))}))
+                (let [unreadable (reduce into #{} (map :unreadable-requests group))]
+                  (cond-> {:namespace namespace :workload workload :container container :pods (count group)
+                           :cpu-request (maximum (map :cpu-request group))
+                           :memory-request (maximum (map :memory-request group))
+                           :cpu (maximum (map :cpu group))
+                           :memory (maximum (map :memory group))}
+                    (seq unreadable) (assoc :unreadable-requests unreadable)))))
          (sort-by (juxt :namespace :workload :container)))))
 
 ;; --- recommendations -------------------------------------------------------------------
@@ -116,6 +130,15 @@
     (and (>= request (* 2 recommendation)) (>= (- request recommendation) (waste-floor resource))) :over
     :else :fits))
 
+(defn- row-verdict
+  "verdict for one resource of a row, or :unreadable when a replica sets that
+   request to a value that is not a quantity."
+  [row resource request usage recommendation]
+  (cond
+    (nil? usage) nil
+    (contains? (:unreadable-requests row) resource) :unreadable
+    :else (verdict resource request usage recommendation)))
+
 (defn judge
   "A usage row with its recommendations and per-resource verdicts."
   [row]
@@ -124,12 +147,12 @@
     (assoc row
            :cpu-recommendation cpu
            :memory-recommendation memory
-           :cpu-verdict (verdict :cpu (:cpu-request row) (:cpu row) cpu)
-           :memory-verdict (verdict :memory (:memory-request row) (:memory row) memory))))
+           :cpu-verdict (row-verdict row :cpu (:cpu-request row) (:cpu row) cpu)
+           :memory-verdict (row-verdict row :memory (:memory-request row) (:memory row) memory))))
 
 (defn actionable?
   [row]
-  (boolean (some #{:missing :under :over} [(:cpu-verdict row) (:memory-verdict row)])))
+  (boolean (some #{:missing :unreadable :under :over} [(:cpu-verdict row) (:memory-verdict row)])))
 
 ;; --- formatting -------------------------------------------------------------------------
 
@@ -140,6 +163,15 @@
 (defn format-memory
   [bytes]
   (if bytes (str (long (Math/ceil (/ bytes mebibyte))) "Mi") "-"))
+
+(defn format-request
+  "A row's request of resource for the table: \"?\" when a replica sets it to
+   a value that is not a quantity, \"-\" when it is unset."
+  [row resource]
+  (cond
+    (contains? (:unreadable-requests row) resource) "?"
+    (= :cpu resource) (format-cpu (:cpu-request row))
+    :else (format-memory (:memory-request row))))
 
 (defn patch-line
   "The kubectl set resources command that applies a row's recommendations, or

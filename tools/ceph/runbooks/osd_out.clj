@@ -32,8 +32,10 @@
     (stdout/print-section "🔌 Connection")
     (if-not (ssh/check-connection? connection)
       false
-      (let [health (ceph/health-status connection)
-            forced (boolean (:force opts))
+      (let [forced (boolean (:force opts))
+            health-read (ceph/health-result connection)
+            health (:status health-read)
+            refusal (ceph/change-refusal health-read forced)
             osds (ceph/osds connection)
             in-osds (filter ceph/osd-in? osds)
             candidates (sort (map ceph/osd-name in-osds))
@@ -48,9 +50,8 @@
           (do (stdout/error "refusing to take out the last in-OSD - the cluster would lose all data placement")
               false)
 
-          (and (not= "HEALTH_OK" health) (not forced))
-          (do (stdout/error (format "cluster is %s - resolve that first, or rerun with --force" health))
-              false)
+          refusal
+          (do (stdout/error refusal) false)
 
           :else
           (do

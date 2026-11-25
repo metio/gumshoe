@@ -4,14 +4,34 @@
 (ns gumshoe.ssh
   "Running commands on remote hosts over SSH. Unattended by design: BatchMode
    with a short connect timeout, so a book fails fast instead of hanging on a
-   password prompt. Works against any distribution - all it needs is ssh on
+   password prompt, and keepalives, so a connection whose peer vanished
+   mid-command ends instead of hanging on a read nobody will answer. Works against any distribution - all it needs is ssh on
    the far end (and sudo only for the books that ask for it)."
   (:require [babashka.fs :as fs]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
-(def ^:private options
-  ["-o" "BatchMode=yes" "-o" "ConnectTimeout=5"])
+(def default-server-alive
+  "ssh asks the server for a sign of life after :interval seconds of silence
+   and gives up after :count-max unanswered asks, so a dead peer ends the
+   command after about a minute. A connection map overrides either with
+   :server-alive-interval or :server-alive-count-max; an interval of 0 turns
+   the keepalives off."
+  {:interval 15 :count-max 4})
+
+(defn- non-negative-int
+  "value when it is a non-negative integer, else the default: a keepalive
+   setting ssh would refuse must not stop a book from connecting at all."
+  [value default]
+  (if (and (integer? value) (not (neg? value))) value default))
+
+(defn- options
+  [connection]
+  (let [interval (non-negative-int (:server-alive-interval connection) (:interval default-server-alive))
+        count-max (non-negative-int (:server-alive-count-max connection) (:count-max default-server-alive))]
+    ["-o" "BatchMode=yes" "-o" "ConnectTimeout=5"
+     "-o" (str "ServerAliveInterval=" interval)
+     "-o" (str "ServerAliveCountMax=" count-max)]))
 
 (def ^:dynamic *user-config*
   "Which ssh config to name with -F. ::probe looks for the invoking user's, nil
@@ -67,7 +87,7 @@
   [connection command-args]
   (vec (concat ["ssh" "-q"]
                (config-arg)
-               options
+               (options connection)
                ["--" (target connection)]
                (map shell-quote command-args))))
 

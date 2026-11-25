@@ -264,29 +264,50 @@
   (zero? (shell/exit-code-of "kubectl" "auth" "can-i" "create" resource
                              "--subresource=exec" "--all-namespaces" "--quiet")))
 
+(defn- answered-empty?
+  "A failed kubectl get that still answered: the object or the resource type
+   does not exist."
+  [err]
+  (boolean (re-find #"\(NotFound\)|doesn't have a resource type" (str err))))
+
+(defn existence-of
+  "Pure: the answer of a name-only existence read (`kubectl get ..
+   --output=name`): true when it named something, false when it answered that
+   nothing matches - a clean exit with no names, NotFound, or a resource type
+   the API server does not have - and nil when it did not answer, so an
+   unreachable or wedged API server is never read as an absence."
+  [{:keys [exit out err]}]
+  (cond
+    (and (= 0 exit) (not (str/blank? out))) true
+    (= 0 exit) false
+    (answered-empty? err) false
+    :else nil))
+
 (defn resource-exists?
-  "Whether a named cluster-scoped resource (e.g. a CRD) is present. Bounded with a
-   short request timeout so capability detection stays snappy against a wedged or
-   unreachable API server."
+  "Whether a named cluster-scoped resource (e.g. a CRD) is present: true,
+   false when the API server answered that it is absent, or nil when it did
+   not answer. Bounded with a short request timeout so capability detection
+   stays snappy against a wedged or unreachable API server."
   [type name]
-  (zero? (shell/exit-code-of "kubectl" "get" type name "--request-timeout=5s")))
+  (existence-of (shell/execute "kubectl" "get" type name "--output=name" "--request-timeout=5s")))
 
 (defn any-matching?
   "Whether any resource of `type` matches a label `selector`, across all namespaces
    - the existence check for a tool installed WITHOUT its own CRD, where a Helm
    chart instead labels its workloads (app.kubernetes.io/name=<tool>). Name-only and
    bounded with a short timeout, so capability detection stays snappy; runs against
-   the current kubectl context, like resource-exists?. An unreachable API or a
-   no-match both yield false (absent)."
+   the current kubectl context, like resource-exists?. True, false for an answered
+   no-match, or nil when the API server did not answer."
   [type selector]
-  (not (str/blank? (shell/stdout-of "kubectl" "get" type "--all-namespaces"
-                                    (str "--selector=" selector)
-                                    "--output=name" "--request-timeout=5s"))))
+  (existence-of (shell/execute "kubectl" "get" type "--all-namespaces"
+                               (str "--selector=" selector)
+                               "--output=name" "--request-timeout=5s")))
 
 (defn serves-crd?
   "Whether the cluster serves a CRD by its full plural.group name (e.g.
    \"certificates.cert-manager.io\") - the existence check for an operator that
-   installs its own CRD. A capability detector for such a tool is just
+   installs its own CRD. True, false, or nil when the API server did not
+   answer, as resource-exists? returns. A capability detector for such a tool is just
    #(serves-crd? \"…\"), the CRD-shaped sibling of resource-exists? and any-matching?."
   [crd]
   (resource-exists? "customresourcedefinition" crd))
@@ -392,12 +413,6 @@
   "A fresh cache for *read-cache*."
   []
   (atom {}))
-
-(defn- answered-empty?
-  "A failed kubectl get that still answered: the object or the resource type
-   does not exist."
-  [err]
-  (boolean (re-find #"\(NotFound\)|doesn't have a resource type" (str err))))
 
 (defn- did-not-answer
   "The ::unread exception a strict read throws for a kubectl get that did not
