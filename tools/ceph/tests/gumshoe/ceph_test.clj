@@ -3,7 +3,10 @@
 
 (ns gumshoe.ceph-test
   (:require [clojure.test :refer [deftest is testing]]
+            [babashka.fs]
             [gumshoe.ceph :as ceph]
+            [gumshoe.interact]
+            [gumshoe.runbook :as runbook]
             [gumshoe.detectives.ceph :as detectives]
             [gumshoe.shell :as shell]
             [gumshoe.ssh :as ssh]
@@ -230,3 +233,91 @@
   (is (false? (ceph/archived? [{:crash_id "c1"}] {:crashes [{:crash_id "c1"}]})))
   (is (false? (ceph/archived? [{:crash_id "c1"}] {:unread "no answer"}))
       "a read that did not answer proves nothing"))
+
+(deftest all-on-version-compares-the-whole-version-number-test
+  (let [on (fn [version] {:overall {(keyword (str "ceph version " version " (0123456789abcdef) quincy (stable)")) 52}})]
+    (is (= "17.2.10" (ceph/version-number "ceph version 17.2.10 (abc) quincy (stable)")))
+    (is (nil? (ceph/version-number "not a ceph version")))
+    (is (ceph/all-on-version? (on "17.2.10") "17.2.10"))
+    (is (not (ceph/all-on-version? (on "17.2.10") "17.2.1")) "a prefix of the running version")
+    (is (not (ceph/all-on-version? (on "17.2.9") "17.2")) "a short target")
+    (is (not (ceph/all-on-version? (on "17.2.9") "18")) "a major alone")
+    (is (not (ceph/all-on-version? (on "17.2.9") "0123")) "a piece of the commit hash")
+    (is (not (ceph/all-on-version? {:overall {}} "17.2.9")) "nothing running")
+    (is (not (ceph/all-on-version? nil "17.2.9")) "versions not read")))
+
+(defn- answering
+  "A shell/execute stub answering every ssh command with result."
+  [result]
+  (fn [& _] (merge {:exit 0 :out "" :err ""} result)))
+
+(deftest health-result-test
+  (with-redefs [shell/execute (answering {:out "{\"health\":{\"status\":\"HEALTH_WARN\"}}"})]
+    (is (= {:ok? true :status "HEALTH_WARN"} (ceph/health-result {:host "ceph-1"}))))
+  (testing "a command that did not answer is not ok?"
+    (with-redefs [shell/execute (answering {:exit 255 :out ""})]
+      (is (not (:ok? (ceph/health-result {:host "ceph-1"})))))
+    (with-redefs [shell/execute (answering {:out "mgr restarting"})]
+      (is (not (:ok? (ceph/health-result {:host "ceph-1"})))))
+    (with-redefs [shell/execute (answering {:out "{\"fsid\":\"x\"}"})]
+      (is (not (:ok? (ceph/health-result {:host "ceph-1"}))) "a status without health"))))
+
+(deftest healthy-enough-test
+  (is (ceph/healthy-enough? {:ok? true :status "HEALTH_OK"}))
+  (is (ceph/healthy-enough? {:ok? true :status "HEALTH_WARN"}))
+  (is (not (ceph/healthy-enough? {:ok? true :status "HEALTH_ERR"})))
+  (is (not (ceph/healthy-enough? {:ok? false :status nil})) "an unread status is not healthy")
+  (is (not (ceph/healthy-enough? {:ok? true :status "HEALTH_UNKNOWN"}))))
+
+(deftest upgrade-refusal-test
+  (is (nil? (ceph/upgrade-refusal {:ok? true :status "HEALTH_OK"})))
+  (is (nil? (ceph/upgrade-refusal {:ok? true :status "HEALTH_WARN"})))
+  (is (re-find #"HEALTH_ERR" (ceph/upgrade-refusal {:ok? true :status "HEALTH_ERR"})))
+  (is (re-find #"could not read" (ceph/upgrade-refusal {:ok? false :status nil}))))
+
+(defn- with-out-str-and-err
+  "The value of f, with what it prints to stdout and stderr swallowed."
+  [f]
+  (let [value (atom nil)]
+    (binding [*err* (java.io.StringWriter.)]
+      (with-out-str (reset! value (f))))
+    @value))
+
+(def ^:private upgrade-book
+  (binding [runbook/*loading* true]
+    (load-file "tools/ceph/playbooks/upgrade.clj")))
+
+(defn- run-upgrade
+  "Runs the upgrade playbook's action with the health read (`ceph status
+   --format json`) answered by status-result and every other ssh command, the
+   backups among them, answered with content. Every confirmation is declined
+   and counted. Returns the action's result, the commands it streamed and how
+   often it asked. Nothing is written: the backup directory and files are
+   stubbed."
+  [status-result]
+  (let [streamed (atom [])
+        asked (atom 0)
+        health-read? (fn [args] (and (some #{"status"} args) (some #{"json"} args)))]
+    (with-redefs [ssh/check-connection? (constantly true)
+                  shell/execute (fn [& args]
+                                  (if (health-read? args)
+                                    ((answering status-result))
+                                    ((answering {:out "dump"}))))
+                  shell/run-with-output (fn [& args] (swap! streamed conj (vec args)) 0)
+                  gumshoe.interact/confirm! (fn [& _] (swap! asked inc) false)
+                  babashka.fs/create-dirs (fn [& _] nil)
+                  spit (fn [& _] nil)]
+      (let [result (with-out-str-and-err
+                     #((:action upgrade-book) {:host "ceph-1.example.org" :target-version "17.2.9"} {}))]
+        {:result result :streamed @streamed :asked @asked}))))
+
+(deftest upgrade-refuses-a-cluster-whose-health-was-not-read-test
+  (doseq [[label result] [["ssh failed" {:exit 255 :out ""}]
+                          ["mgr restarting" {:out "not json"}]
+                          ["HEALTH_ERR" {:out "{\"health\":{\"status\":\"HEALTH_ERR\"}}"}]]]
+    (let [{:keys [result streamed asked]} (run-upgrade result)]
+      (is (false? result) label)
+      (is (zero? asked) label)
+      (is (not-any? #(some #{"upgrade"} %) streamed) label)))
+  (testing "a readable HEALTH_OK reaches the confirmation, so the refusals are the health read's"
+    (is (= 1 (:asked (run-upgrade {:out "{\"health\":{\"status\":\"HEALTH_OK\"}}"}))))))

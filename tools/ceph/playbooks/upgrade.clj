@@ -4,14 +4,15 @@
 (ns playbooks.ceph.upgrade
   "Playbook: upgrades a cephadm-managed ceph cluster to a target version.
 
-   1. preflight - show status and versions, refuse on HEALTH_ERR
+   1. preflight - show status and versions, refuse on HEALTH_ERR or a health
+      status that could not be read
    2. backup - capture config, osd/fs/crush/auth dumps to LOCAL files, so the
       safety net does not live on the cluster being changed; refuse to proceed
       if any backup comes back empty
    3. start - ceph orch upgrade start (after confirmation)
    4. watch - poll the upgrade status until it finishes
-   5. verify - every daemon reports the target version and the cluster is not
-      HEALTH_ERR
+   5. verify - every daemon reports the target version and the cluster reports
+      HEALTH_OK or HEALTH_WARN
 
    --require-osd-release runs the one-way ratchet afterwards, separately
    confirmed. --status just shows the current upgrade progress and changes
@@ -126,9 +127,9 @@
       :post-checks [{:description (format "every daemon reports version %s" target)
                      :timeout 120 :interval 15
                      :check (fn [] (ceph/all-on-version? (ceph/versions connection) target))}
-                    {:description "the cluster is not HEALTH_ERR after the upgrade"
+                    {:description "the cluster reports HEALTH_OK or HEALTH_WARN after the upgrade"
                      :timeout 120 :interval 15
-                     :check (fn [] (not= "HEALTH_ERR" (ceph/health-status connection)))}]})))
+                     :check (fn [] (ceph/healthy-enough? (ceph/health-result connection)))}]})))
 
 (defn- upgrade
   [opts {:keys [announcement-data]}]
@@ -148,12 +149,12 @@
           false)
 
       :else
-      (let [health (ceph/health-status connection)]
+      (let [refusal (ceph/upgrade-refusal (ceph/health-result connection))]
         (stdout/print-section "1/5 🩺 Preflight")
         (ceph/ceph-stream! connection "status")
         (ceph/ceph-stream! connection "versions")
-        (if (= "HEALTH_ERR" health)
-          (do (stdout/error "cluster is HEALTH_ERR - resolve that before upgrading") false)
+        (if refusal
+          (do (stdout/error refusal) false)
           (do
             (stdout/print-section "2/5 💾 Backup")
             (let [directory (str (fs/path "ceph-backups" (str host "-" (timestamp))))]
