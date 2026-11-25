@@ -647,7 +647,10 @@ the same machine-enforced contract:
   names its target with `:connect`, which returns the context the callbacks
   and the effect receive and the names the confirmation and the changelog
   show (`gumshoe.ceph/connect`); a debug session that announces nothing sets
-  `:announce? false`. A spec a playbook shares lives in a
+  `:announce? false`. These keys are aliases of one canonical change map,
+  which `gumshoe.change/normalize` builds before the engine runs; a spec
+  that names one thing two ways is refused when the book loads (see the
+  namespace docstring for the map and the aliases). A spec a playbook shares lives in a
   library, and the runbook names its description beside it:
   `(mutation/book (merge nodes/cordon {:description "…"}))`, so the catalog
   reads it without loading the book.

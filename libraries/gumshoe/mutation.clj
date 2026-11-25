@@ -10,6 +10,13 @@
    checks) stay small, named, and testable; the flow around them is written and
    tested once, here.
 
+   book, run!, run-on!, parse-pick and details first map a spec onto the
+   canonical change map with gumshoe.change/normalize, and the engine reads
+   only that map. The keys below are what books write; :subject, a
+   :subjects function, :pin, :precondition, a top-level :empty-message and
+   :announce? are aliases normalize keeps indefinitely, and a spec naming
+   one thing two ways is refused when the book loads (see gumshoe.change).
+
    Spec:
      {:description   \"...\"
       :options       {..cli options for the target flags..}
@@ -184,6 +191,7 @@
    that cannot be read when the confirmation is shown is refused as well."
   (:require [clojure.string :as str]
             [clojure.walk :as walk]
+            [gumshoe.change :as change]
             [gumshoe.effect :as effect]
             [gumshoe.flow :as flow]
             [gumshoe.prerequisites :as prerequisites]
@@ -321,11 +329,11 @@
   (str type " " (when namespace (str namespace "/")) name))
 
 (defn subjects-of
-  "The refs the :subjects of a spec returns for ctx, as a vector, or nil
-   without :subjects. A ref without a :type and a :name is a mistake in the
-   spec and throws."
-  [{:keys [subjects]} ctx]
-  (when subjects
+  "The refs the :target subjects of a spec (its :subjects function) return
+   for ctx, as a vector, or nil without them. A ref without a :type and a
+   :name is a mistake in the spec and throws."
+  [spec ctx]
+  (when-let [subjects (:refs (change/subject (change/normalize spec) :target))]
     (let [refs (vec (subjects ctx))]
       (doseq [ref refs]
         (when-not (and (:type ref) (:name ref))
@@ -401,24 +409,26 @@
    be what the select picks (accepted?), or it is refused in the default
    words. Pure, so run!, run-on! and every playbook step judge a pick the
    same way before anything is read."
-  [{:keys [subject select]} target]
-  (let [refused {:refusal (invalid-pick subject select target)}]
+  [spec target]
+  (let [{:keys [select] :as spec} (change/normalize spec)
+        subject (change/pick-subject spec)
+        refused {:refusal (invalid-pick subject select target)}]
     (if subject
       (let [ref (subject-ref subject select target)]
         (if (and ref (named? target)) {:ref ref} refused))
       (if (accepted? select target) {:ref nil} refused))))
 
 (defn- subject-derive
-  "derive preceded by the subject and subjects reads, as one function of
-   the base context, which holds the subject's :ref parse-pick made: {:ref
-   :object} and {:refs :objects} merged with what derive returns for the
-   context holding them. nil when the spec has none of them."
-  [{:keys [subject subjects derive] :as spec}]
-  (if (or subject subjects)
+  "derive preceded by the reads of the :pick and :target subjects, as one
+   function of the base context, which holds the :ref parse-pick made:
+   {:ref :object} and {:refs :objects} merged with what derive returns for
+   the context holding them. nil when the spec has none of them."
+  [{:keys [derive] :as spec}]
+  (if (or (change/subject spec :pick) (change/subject spec :target))
     (fn [{:keys [ref context] :as base}]
-      (let [values (when subject
+      (let [values (when (change/subject spec :pick)
                      {:ref ref :object (read-subject base)})
-            values (if subjects
+            values (if (change/subject spec :target)
                      (let [refs (subjects-of spec (merge base values))]
                        (assoc values :refs refs :objects (read-subjects context refs)))
                      values)]
@@ -438,45 +448,43 @@
       ctx)))
 
 (defn- judged-precondition
-  "The :refusal and :precondition of a spec as one thunk over ctx, or nil
-   when the spec has neither. Both judge ctx as rechecked makes it; a pick
-   that does not parse never reaches here, parse-pick refused it."
-  [{:keys [refusal precondition recheck] :as spec} ctx]
-  (when (and recheck (not (or refusal precondition)))
-    (throw (ex-info "a :recheck is judged by :refusal or :precondition, and the spec has neither"
-                    {:recheck recheck})))
-  (when (or refusal precondition)
+  "The :refusal of a spec as a thunk over ctx, or nil without one. It judges
+   ctx as rechecked makes it; a reason is printed as \"refusing: <reason>\",
+   and change/unmet refuses in gumshoe.flow's own words. A pick that does
+   not parse never reaches here, parse-pick refused it."
+  [{:keys [refusal] :as spec} ctx]
+  (when refusal
     (fn []
-      (let [ctx (rechecked spec ctx)
-            why (when refusal (refusal ctx))]
+      (let [why (refusal (rechecked spec ctx))]
         (cond
+          (= change/unmet why) false
           why (refuse! why)
-          precondition (boolean (precondition ctx))
           :else true)))))
 
 (defn- pin-of
-  "The ref the change pins and its fingerprint at the confirmation: the
-   spec's :pin when it names one, else the subject's ref, whose object ctx
-   already holds from the strict read before the confirmation."
-  [{:keys [pin subject]} {:keys [context ref object] :as ctx}]
-  (cond
-    pin (when-let [pinned (pin ctx)]
-          {:ref pinned :before (fingerprint (fetch-pinned context pinned) (:facts pinned))})
-    (and subject ref) (let [pinned (cond-> ref (:facts subject) (assoc :facts (:facts subject)))]
-                        {:ref pinned :before (fingerprint object (:facts pinned))})
-    :else nil))
+  "The ref the change pins and its fingerprint at the confirmation: the ref
+   of its :reads subject when it has one, else the :pick subject's ref,
+   whose object ctx already holds from the strict read before the
+   confirmation."
+  [spec {:keys [context ref object] :as ctx}]
+  (let [pin (change/pin spec)
+        subject (change/pick-subject spec)]
+    (cond
+      pin (when-let [pinned (pin ctx)]
+            {:ref pinned :before (fingerprint (fetch-pinned context pinned) (:facts pinned))})
+      (and subject ref) (let [pinned (cond-> ref (:facts subject) (assoc :facts (:facts subject)))]
+                          {:ref pinned :before (fingerprint object (:facts pinned))})
+      :else nil)))
 
 (defn- connect
   "{:context :cluster :announce-as} for the spec: what its :connect returns
    for opts, or nil when that could not be reached; the kube context and its
-   cluster without :connect."
-  [{:keys [connect subject subjects pin]} opts]
+   cluster without :connect. change/normalize refuses :connect beside any
+   subject."
+  [{:keys [connect]} opts]
   (if connect
-    (do (when (or subject subjects pin)
-          (throw (ex-info "a :subject, :subjects or :pin reads its objects with kubectl, so a spec with :connect takes neither"
-                          {:subject subject})))
-        (when-let [connection (connect opts)]
-          (update connection :announce-as #(or % (:cluster connection)))))
+    (when-let [connection (connect opts)]
+      (update connection :announce-as #(or % (:cluster connection))))
     (let [context (kubectl/current-context)
           cluster (kubectl/current-cluster)]
       {:context context :cluster cluster :announce-as cluster})))
@@ -523,7 +531,7 @@
       (fallback-guidance {:applied changed
                           :stopped stopped
                           :post-check-failed? (false? verified)
-                          :announced? (boolean (and announce (not (false? (:announce? spec)))))
+                          :announced? (boolean announce)
                           :subject (str/join ", " (select/items (:mode select) target))
                           :cluster cluster}))))
 
@@ -533,7 +541,7 @@
    {:keys [context cluster announce-as]} target ref opts announcement-data]
   (let [base (cond-> {:context context :cluster cluster :target target
                       :opts opts :announcement-data announcement-data}
-               (:subject spec) (assoc :ref ref))
+               (change/pick-subject spec) (assoc :ref ref))
         {:keys [values unread]} (derived (subject-derive spec) base)]
     (if unread
       (do (stdout/error (format "could not read what the change rests on - %s" unread))
@@ -583,7 +591,8 @@
    `opts` is the parsed CLI flags; `announcement-data` is the value the runbook
    action receives in its ctx (nil when the book does not announce)."
   [spec target opts announcement-data]
-  (let [{:keys [ref refusal]} (parse-pick spec target)]
+  (let [spec (change/normalize spec)
+        {:keys [ref refusal]} (parse-pick spec target)]
     (if refusal
       (refuse! refusal)
       (if-let [connection (connect spec opts)]
@@ -598,24 +607,25 @@
    parse-pick refuses the pick, otherwise the
    change's result. Use run! for a single confirmed step; use run-on! to compose
    several steps against one already-picked subject."
-  [{:keys [select empty-message] :as spec} opts announcement-data]
-  (if-let [connection (connect spec opts)]
-    (let [{:keys [candidates target unread]} (select/resolve-target select opts (:context connection))]
-      (cond
-        unread (select/unread! select unread)
+  [spec opts announcement-data]
+  (let [{:keys [select] :as spec} (change/normalize spec)]
+    (if-let [connection (connect spec opts)]
+      (let [{:keys [candidates target unread]} (select/resolve-target select opts (:context connection))]
+        (cond
+          unread (select/unread! select unread)
 
-        (empty? candidates)
-        (do (stdout/ok (or empty-message "nothing to do")) true)
+          (empty? candidates)
+          (do (stdout/ok (or (:empty-message select) "nothing to do")) true)
 
-        (select/nothing-selected? (:mode select) target)
-        (do (stdout/error (format "no %s selected" (:label select))) false)
+          (select/nothing-selected? (:mode select) target)
+          (do (stdout/error (format "no %s selected" (:label select))) false)
 
-        :else
-        (let [{:keys [ref refusal]} (parse-pick spec target)]
-          (if refusal
-            (refuse! refusal)
-            (run-connected! spec connection target ref opts announcement-data)))))
-    false))
+          :else
+          (let [{:keys [ref refusal]} (parse-pick spec target)]
+            (if refusal
+              (refuse! refusal)
+              (run-connected! spec connection target ref opts announcement-data)))))
+      false)))
 
 (defn picks
   "How a select spec chooses its subject, in the words --help shows."
@@ -634,29 +644,31 @@
 
 (defn details
   "What --help says a mutation book does, generated from its spec."
-  [{:keys [select confirm precondition refusal recheck subject subjects announce verify pin prerequisites]}]
-  (concat
-   ["What it does:"
-    (str "  picks " (picks select))
-    (str "  asks to confirm: " (:action confirm)
-         (when (:destructive? confirm) " (destructive - type yes)"))]
-   (when (or precondition refusal recheck subject subjects pin)
-     ["  checks again right before acting that what was confirmed still holds"])
-   (when announce ["  announces the change to the changelog"])
-   [(if verify
-      "  verifies the result before it reports success"
-      "  has no post-check")]
-   (needs prerequisites)))
+  [spec]
+  (let [{:keys [select confirm refusal recheck subjects announce verify prerequisites]} (change/normalize spec)]
+    (concat
+     ["What it does:"
+      (str "  picks " (picks select))
+      (str "  asks to confirm: " (:action confirm)
+           (when (:destructive? confirm) " (destructive - type yes)"))]
+     (when (or refusal recheck (seq subjects))
+       ["  checks again right before acting that what was confirmed still holds"])
+     (when announce ["  announces the change to the changelog"])
+     [(if verify
+        "  verifies the result before it reports success"
+        "  has no post-check")]
+     (needs prerequisites))))
 
 (defn book
   "Builds and runs a standalone mutating runbook from a declarative spec (see the
    namespace doc). To compose several confirmed steps in one playbook, define each
    step's spec and call `run!` per step from a bespoke runbook/execute! :action."
-  [{:keys [description options prerequisites] :as spec}]
-  (runbook/execute!
-   (cond-> {:description description
-            :options (or options {})
-            :prerequisites prerequisites
-            :details (details spec)
-            :action (fn [opts {:keys [announcement-data]}] (run! spec opts announcement-data))}
-     (contains? spec :announce?) (assoc :announce? (:announce? spec)))))
+  [spec]
+  (let [{:keys [description options prerequisites announce] :as spec} (change/normalize spec)]
+    (runbook/execute!
+     (cond-> {:description description
+              :options (or options {})
+              :prerequisites prerequisites
+              :details (details spec)
+              :action (fn [opts {:keys [announcement-data]}] (run! spec opts announcement-data))}
+       (false? announce) (assoc :announce? false)))))

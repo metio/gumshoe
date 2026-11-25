@@ -380,6 +380,20 @@ mostly data:
   `:connect` takes none of them and re-checks its object in `:precondition`. A change nobody else
   needs to hear of, such as a netshoot debug session, sets `:announce?
   false` and runs as a read-only book does (`runbooks/kubernetes/netshoot/node.clj`);
+- every spec shape above is an alias of one canonical change map, and
+  `gumshoe.change/normalize` maps a spec onto it before the engine reads it
+  (its docstring lists the map and the aliases): `:subject`, a `:subjects`
+  function and `:pin` become entries of a `:subjects` vector, each naming
+  `:from :pick`, `:target` or `:reads`; `:precondition` becomes part of
+  `:refusal`, refusing in flow's generic words; a top-level `:empty-message`
+  moves into `:select` (so a select's own `:empty-message` now shows for a
+  mutation book too); `:announce? false` becomes `:announce false`. Old keys
+  keep working. A spec naming one thing two ways - a canonical `:subjects`
+  beside `:subject` or `:pin`, two different empty messages, an `:announce`
+  message beside `:announce? false` - or one the engine cannot run (a
+  `:recheck` with no `:refusal` or `:precondition`, a `:subject` on a `:many`
+  select, `:connect` with any subject) is refused when the book loads, and
+  the conformance gate reports it as `is refused: …`;
 - a pair of books that set one boolean state and set it back - suspend and
   resume, pause and resume - is one `(toggle/pair {…})` declaration from
   `gumshoe.toggle`, returning `{:on <spec> :off <spec>}`: the shared spec

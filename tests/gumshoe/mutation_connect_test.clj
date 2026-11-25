@@ -105,8 +105,12 @@
 
 (deftest announce?-reaches-the-harness
   (binding [runbook/*loading* true]
-    (testing "a spec that names it passes it through"
-      (is (false? (:announce? (mutation/book (assoc (spec) :announce? false)))))
-      (is (true? (:announce? (mutation/book (assoc (spec) :announce? true))))))
-    (testing "a spec that does not name it leaves the harness default"
-      (is (not (contains? (mutation/book (spec)) :announce?))))))
+    (testing "a spec that posts nothing tells the harness so"
+      (is (false? (:announce? (mutation/book (-> (spec) (dissoc :announce) (assoc :announce? false))))))
+      (is (false? (:announce? (mutation/book (-> (spec) (dissoc :announce) (assoc :announce false)))))))
+    (testing "a spec that announces leaves the harness default, which announces"
+      (is (not (contains? (mutation/book (assoc (spec) :announce? true)) :announce?)))
+      (is (not (contains? (mutation/book (spec)) :announce?))))
+    (testing "a changelog message beside :announce? false is refused when the book loads"
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"an :announce message and :announce\? false"
+                            (mutation/book (assoc (spec) :announce? false)))))))

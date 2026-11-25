@@ -48,6 +48,7 @@
             [babashka.fs :as fs]
             [clojure.string :as str]
             [edamame.core :as edamame]
+            [gumshoe.change :as change]
             [gumshoe.dispatch :as dispatch]
             [gumshoe.mutation :as mutation]
             [gumshoe.playbook :as playbook]
@@ -423,8 +424,9 @@
    select, whose candidates may be either. Each carries the flags that name
    the pick and, with a :subject, the ref its parser makes of the pick and no
    object, as the engine hands a pin before anything is read."
-  [{:keys [subject]} {:keys [mode flag namespace-flag name-flag] :as select}]
-  (let [qualified (str probe-namespace "/" probe-name)
+  [spec {:keys [mode flag namespace-flag name-flag] :as select}]
+  (let [subject (change/pick-subject (change/normalize spec))
+        qualified (str probe-namespace "/" probe-name)
         picks (case mode
                 :namespaced [qualified]
                 :many [[qualified] [probe-namespace]]
@@ -447,8 +449,8 @@
    ignores it fingerprints another namespace's object, and nothing says so.
    A pin that returns nil for every probe pins nothing until derived values
    it reads exist, which the engine permits, and is not judged."
-  [{:keys [pin] :as spec} select]
-  (when (some? pin)
+  [spec select]
+  (when-some [pin (change/pin (change/normalize spec))]
     (if-not (callable? pin)
       ["declares a :pin that is not a function"]
       (let [results (for [ctx (pin-probes spec select)]
@@ -524,9 +526,17 @@
             (sort-by (comp str key) (ns-interns ns)))))
 
 (defn spec-problems
-  "contract-problems and pin-problems of one spec, {:spec :select}."
+  "contract-problems and pin-problems of one spec, {:spec :select}, judged
+   on the canonical change map, so an alias and its canonical key get the
+   same findings. A spec gumshoe.change/normalize refuses has that refusal
+   as its one problem."
   [{:keys [spec select]}]
-  (concat (contract-problems spec) (pin-problems spec select)))
+  (let [{:keys [canonical refused]} (try {:canonical (change/normalize spec)}
+                                         (catch clojure.lang.ExceptionInfo e
+                                           (if (change/invalid? e) {:refused (ex-message e)} (throw e))))]
+    (if refused
+      [(str "is refused: " refused)]
+      (concat (contract-problems canonical) (pin-problems canonical select)))))
 
 (defn- contains-spec?
   "Whether spec holds every entry of library-spec as the same value, as
