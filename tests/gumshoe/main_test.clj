@@ -8,6 +8,7 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.catalog]
+            [gumshoe.flags :as flags]
             [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.main :as main]
             [gumshoe.shell :as shell]))
@@ -215,3 +216,83 @@
           (is (= "stray" (:argument (first @refusals)))))
         (testing "flags alone still parse"
           (is (= {:dry-run true :no-color true} (main/detect-options ["--dry-run" "--no-color"]))))))))
+
+(defn- picks-the-book
+  "Runs the run door with args against the fake catalog, picking its one book,
+   and returns [exit query launched]."
+  [args]
+  (let [launched (atom nil) query (atom nil)]
+    (with-fake-catalog launched
+      (with-redefs [fuzzy/select-single (fn [_ rows q] (reset! query q) (first rows))]
+        (let [exit (main/run args)]
+          [exit @query @launched])))))
+
+(deftest an-option-before-or-among-leading-search-terms-reaches-the-book-test
+  (doseq [args [["--dry-run" "fabric"] ["fabric" "--dry-run"] ["fabric" "--dry-run" "vni"]
+                ["fabric" "vni" "--dry-run"] ["--no-color" "--dry-run" "fabric"]]]
+    (testing (pr-str args)
+      (let [[exit _ launched] (picks-the-book args)]
+        (is (zero? exit))
+        (is (some #{"--dry-run"} launched) (pr-str launched))))))
+
+(defn- refused
+  "The data of the refusal parse-with-search-terms throws for args under the
+   door's spec, with its :error-fn removed so the test process keeps running."
+  [spec args takes]
+  (try (flags/parse-with-search-terms args (dissoc @spec :error-fn) takes)
+       nil
+       (catch clojure.lang.ExceptionInfo e (ex-data e))))
+
+(deftest an-option-after-a-search-term-is-refused-test
+  (testing "the run door"
+    (doseq [[args arg] [[["--no-color" "drain" "--dry-run"] "--dry-run"]
+                        [["drain" "--no-color" "node" "--dry-run"] "--dry-run"]
+                        [["--dry-run" "drain" "--no-color"] "--no-color"]
+                        [["--no-color" "drain" "-h"] "-h"]
+                        [["--" "--dry-run"] "--dry-run"]]]
+      (let [data (refused #'main/run-spec args "run")]
+        (is (= :option-after-search-term (:cause data)) (pr-str args))
+        (is (= arg (:argument data)) (pr-str args))
+        (is (str/includes? (str (:msg data)) (pr-str arg))))))
+  (testing "the front door"
+    (let [data (refused #'main/gumshoe-spec ["--host" "h" "foo" "--pod" "p"] "gumshoe")]
+      (is (= :option-after-search-term (:cause data)))
+      (is (= "--pod" (:argument data)))))
+  (testing "search terms alone, and options before them, still parse"
+    (is (= {:opts {:no-color true} :args ["drain" "node"]}
+           (flags/parse-with-search-terms ["--no-color" "drain" "node"] (dissoc @#'main/run-spec :error-fn) "run")))
+    (is (= {:opts {:host "h"}}
+           (flags/parse-with-search-terms ["--host" "h"] (dissoc @#'main/gumshoe-spec :error-fn) "gumshoe")))))
+
+(deftest a-refused-door-launches-nothing-test
+  (testing "the error-fn the doors hand the refusal to runs, and the search never starts"
+    (doseq [[door args] [[main/run ["--no-color" "drain" "--dry-run"]]
+                         [main/front-door ["--host" "h" "foo" "--pod" "p"]]]]
+      (let [launched (atom nil) searched (atom false) err (java.io.StringWriter.)]
+        (with-fake-catalog launched
+          (with-redefs [fuzzy/select-single (fn [& _] (reset! searched true) nil)
+                        main/investigate (fn [& _] (reset! launched :investigate) 0)]
+            (let [thrown (try (binding [*err* err]
+                                (with-redefs-fn {#'main/run-spec (dissoc @#'main/run-spec :error-fn)
+                                                 #'main/gumshoe-spec (dissoc @#'main/gumshoe-spec :error-fn)}
+                                  #(door args)))
+                              nil
+                              (catch clojure.lang.ExceptionInfo e e))]
+              (is (some? thrown) (pr-str args))
+              (is (false? @searched))
+              (is (nil? @launched)))))))))
+
+(deftest a-real-run-refuses-an-option-after-a-search-term-test
+  (fs/with-temp-dir [tmp {}]
+    (let [casebook (fs/path tmp "casebook")
+          pin (fs/path tmp "gitlibs" "libs" "io.github.metio" "gumshoe" (apply str (repeat 40 "d")))]
+      (fs/create-dirs (fs/path casebook "runbooks"))
+      (echo-book! pin "upstream")
+      (casebook-edn! casebook pin)
+      (doseq [args [["run" "--no-color" "drain" "--dry-run"]
+                    ["run" "drain" "--no-color" "node" "--dry-run"]
+                    ["gumshoe" "--host" "h" "foo" "--pod" "p"]]]
+        (let [{:keys [exit err out]} (apply bb-in casebook args)]
+          (is (= 1 exit) (pr-str args))
+          (is (str/includes? err "was not read") (str (pr-str args) " " err))
+          (is (not (str/includes? out "upstream")) "no book ran"))))))
