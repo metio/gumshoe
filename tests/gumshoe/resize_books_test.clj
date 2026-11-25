@@ -205,18 +205,20 @@
         record (outcome/fresh)
         eventually verify/eventually
         shell! (fn [stdin argv] (respond! state log stdin (vec argv)))
-        out (java.io.StringWriter.)]
+        out (java.io.StringWriter.)
+        err (java.io.StringWriter.)
+        printed #(vec (remove str/blank? (str/split-lines (stdout/strip-colors (str %)))))]
     (with-redefs-fn
       {#'storage/resize-preflights (atom (if preflight [preflight] []))
        #'watch/resize-watcher-builders (atom [])
        #'shell/execute (fn [& argv] (shell! nil argv))
        #'shell/execute-with-stdin (fn [stdin & argv] (shell! stdin argv))
        ;; run-with-output streams what the command prints, where execute
-       ;; captures it
+       ;; captures it: the command inherits both streams
        #'shell/run-with-output (fn [& argv]
                                  (let [{:keys [exit out err]} (shell! nil argv)]
-                                   (doseq [text [out err] :when (not (str/blank? text))]
-                                     (println text))
+                                   (when-not (str/blank? out) (println out))
+                                   (when-not (str/blank? err) (binding [*out* *err*] (println err)))
                                    exit))
        #'kubectl/current-context (constantly "ctx")
        #'kubectl/current-cluster (constantly "cluster")
@@ -232,7 +234,7 @@
                                                     (assoc :watch? (some? (:watch check)))))
                              (eventually (assoc check :timeout 0)))}
       (fn []
-        (let [result (binding [*out* out *err* out
+        (let [result (binding [*out* out *err* err
                                outcome/*record* record
                                flow/*dry-run* (boolean dry-run?)]
                        (attempt (fn [] ((:action config) opts {:announcement-data nil}))))
@@ -241,13 +243,14 @@
                                                    :outcome (if (true? result) :ok :failed)}
                                                   @record)]
           (cond-> {:result result
-                   :out (vec (remove str/blank? (str/split-lines (stdout/strip-colors (str out)))))
+                   :out (printed err)
                    :banner text
                    :recovery (vec (outcome/recovery-lines tone @record))}
             (seq @confirmations) (assoc :confirmations @confirmations)
             (seq @announced) (assoc :announced @announced)
             (seq @log) (assoc :mutations @log)
-            (seq @checks) (assoc :checks @checks)))))))
+            (seq @checks) (assoc :checks @checks)
+            (seq (printed out)) (assoc :stdout (printed out))))))))
 
 (defn surface
   [config]

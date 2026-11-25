@@ -396,8 +396,9 @@
   {:result false, :out ["❌ the cluster has no nodes"], :commands []},
   :picked
   {:result true,
-   :out ["▸ Node: n2" "dedicated=db:NoSchedule"],
-   :commands []},
+   :out ["▸ Node: n2"],
+   :commands [],
+   :stdout ["dedicated=db:NoSchedule"]},
   :surface
   {:description "Shows the taints of a single node",
    :options
