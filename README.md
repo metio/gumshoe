@@ -223,6 +223,32 @@ Every book behaves the same way:
 - The exit code tells the truth: `0` on success, `1` on failure, any abort
   (whether or not anything changed), or a failed post-check. Detectives exit
   `1` when they find something critical, so they work in scripts and cron.
+- A read-only book that did its job and reported critical findings ends under
+  a yellow `FINDINGS - the book ran and reported N critical findings, see
+  above` banner, while one that could not do its job - a refused
+  prerequisite, a read that did not answer, a crashed check, a report that
+  never reached stdout - ends under the red `FAILED` banner, naming why where
+  it can. When both happen in one run, the run is `FAILED`. A book that prints
+  its own report records its critical findings with
+  `(gumshoe.outcome/findings! {:critical n})` before it returns false, and a
+  detective book's report does so on its own. A change book never ends as
+  findings: a check that stops a change is a refusal.
+- Both end with exit `1` by default. The opt-in detailed contract,
+  `--exit-codes detailed` on any book or `GUMSHOE_EXIT_CODES=detailed` in the
+  environment (the flag wins, and the variable also reaches the books the
+  front doors launch), tells them apart by the exit code alone:
+
+  | Exit | Default | Detailed |
+  |------|---------|----------|
+  | `0`  | success, or nothing critical | the same |
+  | `1`  | a critical finding, a failure, an abort, a failed post-check | a failure, an abort, a failed post-check, an unread source, a refused prerequisite, anything unexpected |
+  | `2`  | never | the book ran and reported critical findings, and nothing else went wrong |
+
+  Every failure exits `1` under both contracts, so a CI job that treats any
+  non-zero exit as failure keeps working with either. Unlike `grep` and
+  `diff`, gumshoe's `2` never means trouble. A value of `GUMSHOE_EXIT_CODES`
+  that names no contract is ignored with a warning, and `--exit-codes` with
+  one is refused.
 - Diagnostics go to stderr, results go to stdout - piping and redirecting always
   stays clean.
 - A check whose evidence all came back empty-handed - a CRD the cluster does

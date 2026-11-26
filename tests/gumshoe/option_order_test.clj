@@ -23,7 +23,7 @@
             [gumshoe.select :as select]
             [gumshoe.stdout :as stdout]))
 
-(def ^:private standard [:dry-run :no-color :help])
+(def ^:private standard [:dry-run :no-color :exit-codes :help])
 
 (defn help-order
   "The long flags --help lists, in the order it lists them."
@@ -73,7 +73,7 @@
 (deftest a-book-option-named-like-a-standard-flag-keeps-its-place
   (let [options (option-map [:a :b :c :d :e :f :g :h :i])
         options (apply array-map (concat (mapcat identity options) [:dry-run {:desc "Rehearse" :coerce :boolean}]))]
-    (is (= [:a :b :c :d :e :f :g :h :i :dry-run :no-color :help] (help-order (config-of options))))))
+    (is (= [:a :b :c :d :e :f :g :h :i :dry-run :no-color :exit-codes :help] (help-order (config-of options))))))
 
 ;; --- builders -----------------------------------------------------------------
 
@@ -89,7 +89,7 @@
     (is (= [:namespace :name :k1 :k2 :k3 :k4 :k5 :k6 :k7 :k8] (vec (keys merged))))
     (is (= {:desc "The release to reset" :coerce :string :alias :N} (:name merged))
         "an overriding key keeps its alias and its first position")
-    (is (= [:namespace :name :k1 :k2 :k3 :k4 :k5 :k6 :k7 :k8 :dry-run :no-color :help]
+    (is (= [:namespace :name :k1 :k2 :k3 :k4 :k5 :k6 :k7 :k8 :dry-run :no-color :exit-codes :help]
            (help-order (config-of merged))))))
 
 (deftest detective-book-lists-output-after-the-books-options

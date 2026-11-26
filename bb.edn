@@ -124,6 +124,7 @@
                    [gumshoe.conditions-test]
                    [gumshoe.outcome-test]
                    [gumshoe.verdict-contract-test]
+                   [gumshoe.findings-exit-test]
                    [gumshoe.unread-subjects-test]
                    [gumshoe.pod-containers-test]
                    [gumshoe.correlation-test]
@@ -414,6 +415,7 @@
                                                          'gumshoe.conditions-test
                                                          'gumshoe.outcome-test
                                                          'gumshoe.verdict-contract-test
+                                                         'gumshoe.findings-exit-test
                                                          'gumshoe.unread-subjects-test
                                                          'gumshoe.pod-containers-test
                                                          'gumshoe.correlation-test

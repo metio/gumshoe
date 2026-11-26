@@ -3,9 +3,11 @@
 
 (ns gumshoe.verdict-contract-test
   "The final banner and the exit code of a run are one contract: a green DONE
-   only with exit 0, a FAILED, NOT VERIFIED or BLOCKED only with exit 1, and
-   no banner claiming a change, a verification or an absence of change the
-   record does not support."
+   only with exit 0, a FAILED, NOT VERIFIED or BLOCKED only with exit 1, a
+   FINDINGS banner only over a run that did its job and found something
+   critical - exiting 1, or 2 under the detailed contract - and no banner
+   claiming a change, a verification or an absence of change the record does
+   not support."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.effect :as effect]
@@ -52,15 +54,34 @@
       aborted? (assoc :aborted "declined at the confirmation")
       paused? (assoc :paused "continue with --segment 2"))))
 
+(def ^:private reports
+  "What a run's reports can have recorded: nothing, findings with nothing
+   critical, critical findings, each with or without a reason the run could
+   not do its job."
+  (for [findings [nil {:critical 0 :warning 2 :info 1} {:critical 2 :warning 1 :info 0}]
+        incomplete [nil ["nothing was checked"]]]
+    (cond-> {}
+      findings (assoc :findings findings)
+      incomplete (assoc :incomplete incomplete))))
+
 (defn- violations
   "What is wrong with the verdict of one run, as strings; empty when the
    banner and the exit code agree."
   [config opts outcome record findings?]
   (let [{{:keys [tone text]} :banner exit :exit} (runbook/verdict config opts outcome record findings?)
-        changed? (or (pos? (:applied record)) (some? (:thunk record)))]
+        changed? (or (pos? (:applied record)) (some? (:thunk record)))
+        detailed? (= "detailed" (:exit-codes opts))]
     (cond-> []
       (and (= :ok tone) (not= 0 exit)) (conj "a green banner with exit 1")
       (and (= :error tone) (not= 1 exit)) (conj "a red banner with exit 0")
+      (and (str/starts-with? text "FINDINGS") (not= (if detailed? 2 1) exit))
+      (conj "a FINDINGS banner without the findings exit code")
+      (and (= 2 exit) (not (str/starts-with? text "FINDINGS"))) (conj "exit 2 without a FINDINGS banner")
+      (and (= 2 exit) (not detailed?)) (conj "exit 2 outside the detailed contract")
+      (and (str/starts-with? text "FINDINGS")
+           (or (seq (:incomplete record)) (not= :failed outcome)
+               (not (pos? (get-in record [:findings :critical] 0)))))
+      (conj "a FINDINGS banner over a run that could not do its job")
       (and (str/starts-with? text "DONE") (not= 0 exit)) (conj "DONE with exit 1")
       (and (re-find #"^(FAILED|NOT VERIFIED|BLOCKED)|^DRY RUN failed" text) (not= 1 exit))
       (conj "a failure banner with exit 0")
@@ -71,22 +92,68 @@
       (str/includes? text "0 effects") (conj "counts 0 effects"))))
 
 (deftest the-banner-and-the-exit-code-agree-for-every-run
+  ;; every book, mode, outcome and record, crossed with what the reports
+  ;; recorded; and under the default contract the exit code of each run is
+  ;; the one the record gives without the report keys, so no existing
+  ;; caller sees a different exit code
   (let [checked (atom 0)
         broken (atom [])]
     (doseq [config books
             dry-run? [false true]
+            exit-codes [nil "detailed"]
             outcome [:ok :failed :error]
             findings? [false true]
-            record (records)
-            :let [opts {:dry-run dry-run?}
-                  problems (violations config opts outcome record findings?)]]
+            base (records)
+            report reports
+            :let [record (merge base report)
+                  opts (cond-> {:dry-run dry-run?} exit-codes (assoc :exit-codes exit-codes))
+                  problems (cond-> (violations config opts outcome record findings?)
+                             (and (nil? exit-codes)
+                                  (not= (outcome/exit-code outcome base)
+                                        (:exit (runbook/verdict config opts outcome record findings?))))
+                             (conj "a default exit code that differs from the record without report keys"))]]
       (swap! checked inc)
       (when (and (seq problems) (< (count @broken) 5))
         (swap! broken conj {:config config :opts opts :outcome outcome :record record
                             :verdict (runbook/verdict config opts outcome record findings?)
                             :problems problems})))
-    (is (< 100000 @checked))
+    (is (= (* 124416 2 (count reports)) @checked))
     (is (empty? @broken) (pr-str @broken))))
+
+(deftest only-a-read-only-run-that-failed-on-critical-findings-exits-2
+  ;; the converse of the contract: every run that exits 2 is a findings-only
+  ;; run, and every findings-only run under the detailed contract exits 2
+  (let [twos (atom 0)
+        broken (atom [])]
+    (doseq [config books
+            dry-run? [false true]
+            outcome [:ok :failed :error]
+            base (records)
+            report reports
+            :let [record (merge base report)
+                  opts {:dry-run dry-run? :exit-codes "detailed"}
+                  exit (:exit (runbook/verdict config opts outcome record true))
+                  expected (and (not (runbook/change-book? config opts))
+                                (= :failed outcome)
+                                (zero? (outcome/exit-code :ok base))
+                                (not (:aborted base))
+                                (not (:paused base))
+                                (empty? (:incomplete record))
+                                (pos? (get-in record [:findings :critical] 0)))]]
+      (when (= 2 exit) (swap! twos inc))
+      (when (and (not= expected (= 2 exit)) (< (count @broken) 5))
+        (swap! broken conj {:config config :opts opts :outcome outcome :record record :exit exit})))
+    (is (pos? @twos))
+    (is (empty? @broken) (pr-str @broken))))
+
+(deftest the-contract-test-catches-findings-that-mask-a-failure
+  ;; A positive control: a findings rule that ignores the incomplete reasons
+  ;; banners a run that read nothing as findings, which the contract names.
+  (with-redefs [outcome/findings-only? (fn [{:keys [changes? outcome]} record]
+                                         (and (not changes?) (= :failed outcome)
+                                              (pos? (outcome/critical-findings record))))]
+    (is (seq (violations {:announce? false} {:exit-codes "detailed"} :failed
+                         {:applied 0 :findings {:critical 1} :incomplete ["nothing was checked"]} true)))))
 
 (deftest the-contract-test-catches-a-banner-that-ignores-the-record
   ;; A positive control: an exit code judged from the outcome alone lets a
