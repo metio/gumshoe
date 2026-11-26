@@ -5,7 +5,14 @@
   "Detectives for Cluster API (cluster.x-k8s.io, v1beta2 conditions): workload
    Clusters that are not Available or that the management cluster cannot
    reach, Machines that failed, never finish provisioning or never finish
-   deleting, and MachineHealthChecks whose remediation is blocked."
+   deleting, and MachineHealthChecks whose remediation is blocked.
+
+   Cluster API 1.11 and later serve v1beta2, whose status.conditions hold the
+   v1beta2 condition types. Before it the API serves only v1beta1, whose
+   status.conditions hold the older types and whose status.v1beta2.conditions
+   hold the v1beta2 ones (from Cluster API 1.9). A v1beta1 object is judged
+   on the latter, and one that carries neither is reported as unread, since
+   its conditions cannot be interpreted."
   (:require [clojure.string :as str]
             [gumshoe.conditions :as conditions]
             [gumshoe.kubectl :as kubectl]
@@ -26,6 +33,49 @@
 
 (def machine-causes
   ["BootstrapConfigReady" "InfrastructureReady" "NodeHealthy"])
+
+(def ^:private v1beta2-markers
+  "Per kind, the condition type only the v1beta2 condition set carries, so
+   its presence in status.conditions says the list holds v1beta2 types."
+  {"Cluster" "Available"
+   "Machine" "Available"
+   "MachineHealthCheck" "RemediationAllowed"})
+
+(defn v1beta2-view
+  "The object with its v1beta2 conditions in status.conditions, where the
+   detectives read them, or nil when it carries none. An object whose
+   apiVersion is not cluster.x-k8s.io/v1beta1 is v1beta2 and returned as it
+   is. A v1beta1 object is read from status.v1beta2.conditions; failing that,
+   its status.conditions count only when they carry the kind's v1beta2
+   marker type."
+  [kind object]
+  (let [v1beta1? (= "cluster.x-k8s.io/v1beta1" (:apiVersion object))
+        nested (-> object :status :v1beta2 :conditions)
+        marker (v1beta2-markers kind)]
+    (cond
+      (not v1beta1?) object
+      (seq nested) (assoc-in object [:status :conditions] nested)
+      (some #(= marker (:type %)) (-> object :status :conditions)) object
+      :else nil)))
+
+(defn- unread-conditions-finding
+  [kind object]
+  {:severity :warning
+   :reports-unread true
+   :component (kubectl/namespace-name-of object)
+   :summary (format "the conditions of this %s were not read: it is served as v1beta1 without v1beta2 conditions" kind)
+   :hint (str "neither status.conditions nor status.v1beta2.conditions carries Cluster API's v1beta2 condition types"
+              " (Cluster API 1.8 or older), so its availability and health are not judged - read them with kubectl describe")})
+
+(defn- judged
+  "The findings of judge over the object's v1beta2 view, or, for an object
+   without v1beta2 conditions, the unread finding plus what judge concludes
+   with no conditions at all - its phase, pause and deletion still read."
+  [kind judge object now]
+  (if-let [view (v1beta2-view kind object)]
+    (judge view now)
+    (cons (unread-conditions-finding kind object)
+          (judge (assoc-in object [:status :conditions] []) now))))
 
 (defn- explain
   [condition]
@@ -133,15 +183,16 @@
 
 (defn detect-clusters
   [evidence]
-  (mapcat #(cluster-findings % (:now evidence)) (kubectl/items-of (get evidence cluster-type))))
+  (mapcat #(judged "Cluster" cluster-findings % (:now evidence)) (kubectl/items-of (get evidence cluster-type))))
 
 (defn detect-machines
   [evidence]
-  (mapcat #(machine-findings % (:now evidence)) (kubectl/items-of (get evidence machine-type))))
+  (mapcat #(judged "Machine" machine-findings % (:now evidence)) (kubectl/items-of (get evidence machine-type))))
 
 (defn detect-healthchecks
   [evidence]
-  (keep healthcheck-finding (kubectl/items-of (get evidence healthcheck-type))))
+  (mapcat #(judged "MachineHealthCheck" (fn [object _] (remove nil? [(healthcheck-finding object)])) % (:now evidence))
+          (kubectl/items-of (get evidence healthcheck-type))))
 
 (def detectives
   [{:name "capi-clusters"

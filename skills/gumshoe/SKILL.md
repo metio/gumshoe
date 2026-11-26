@@ -255,9 +255,11 @@ flow logs), cert-manager, Cluster API, CloudNativePG, Crossplane, db-operator,
 external-dns, Flagger, Flux, Gateway API, JaaS, Karpenter, Kueue, Loki,
 Prometheus, StageSet, Strimzi, Thanos, Traefik, and Velero. Outside it they
 cover ceph and OpenNebula over SSH, Matrix homeservers, restic repositories,
-the nginx/php-fpm upload limit chain of an app (when nginx or PHP did not
-answer, `upload-limits` warns that the effective limit is unknown and
-judges only the side that answered), and host facts from
+the nginx/php-fpm upload limit chain of an app (PHP's limits come from
+php-fpm itself, `php-fpm -i` with each pool's overrides from `php-fpm -tt`,
+and a warning names limits read only from the CLI's `php -i`; when nginx or
+PHP did not answer, `upload-limits` warns that the effective limit is
+unknown and judges only the side that answered), and host facts from
 node_exporter: `tools/node-exporter/runbooks/facts.clj` reads every host's
 CPU count, memory, kernel, OS and exporter health through PromQL and compares
 the reporting hosts with a file of declared names (`--declared`), with the
@@ -914,7 +916,11 @@ mostly data:
 A plugin calls `gumshoe.plugin/provide!` once with any of the seams:
 announcers, detectives, capabilities, tools, pre- and post-hooks, secrets,
 themes, prerequisites, drill-down probes, kinds and fetched edges.
-`examples/example/plugin.clj` uses every one. Hooks and announcers print to
+`examples/example/plugin.clj` uses every one. A fetched-edges builder runs
+under strict reads, so a read that does not answer is named in the
+drill-down as unread and fails the run, never shown as nothing related. An
+owner kind no plugin registered is offered as an unsupported kind and is
+never read. Hooks and announcers print to
 stderr, because a post-hook runs after a scan printed its report on stdout. In the gumshoe repository,
 `bb test` runs the unit and conformance suites; the conformance suite
 requires that every file parses, and a license header, a namespace

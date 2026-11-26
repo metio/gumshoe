@@ -164,6 +164,11 @@
     (str "  " (situation-color situation (str "· " (get situation-text situation (name situation)))))
     ""))
 
+(defn unsupported-text
+  "How the drill-down names a kind it cannot read."
+  [kind]
+  (str "unsupported kind " kind))
+
 (defn menu-items
   [{:keys [subject situation edges]} trail]
   (let [recommended (recommended-probe situation)
@@ -171,11 +176,16 @@
                       {:type :probe :probe probe
                        :label (str (:label probe)
                                    (when (= (:key probe) recommended) "   ⭐ recommended"))})
-        edge-items (for [edge edges]
-                     {:type :pivot :subject (:subject edge)
-                      :label (str (situation-marker (:situation edge))
-                                  "➜ " (:relation edge) ": " (subject/display (:subject edge))
-                                  (situation-badge (:situation edge)))})]
+        edge-items (for [edge edges
+                         :let [kind (-> edge :subject :kind)]]
+                     (if (subject/readable? kind)
+                       {:type :pivot :subject (:subject edge)
+                        :label (str (situation-marker (:situation edge))
+                                    "➜ " (:relation edge) ": " (subject/display (:subject edge))
+                                    (situation-badge (:situation edge)))}
+                       {:type :unsupported :subject (:subject edge)
+                        :label (str "· " (:relation edge) ": " (subject/display (:subject edge))
+                                    "  · " (unsupported-text kind))}))]
     (vec (concat probe-items
                  edge-items
                  (when (seq trail) [{:type :back :label "⬆ back to the previous subject"}])
@@ -186,13 +196,44 @@
 ;; Hostname matching (pure): resolve a customer-reported host to the routes that
 ;; serve it, wildcards included.
 
+(defn normalize-host
+  "A hostname as DNS compares it: trimmed, lower-cased and without the
+   trailing dot of a fully qualified name. Hostnames are case-insensitive,
+   and an operator may type or paste one in any case."
+  [host]
+  (let [host (str/lower-case (str/trim (str host)))]
+    (if (str/ends-with? host ".") (subs host 0 (dec (count host))) host)))
+
+(defn- wildcard-suffix
+  "The \".example.org\" a \"*.example.org\" pattern matches under, or nil
+   for a pattern without a leading wildcard label."
+  [pattern]
+  (when (str/starts-with? pattern "*.") (subs pattern 1)))
+
 (defn host-matches?
+  "Whether a Gateway API hostname serves host. A wildcard matches any number
+   of labels in front of its suffix, as the HTTPRoute hostnames field defines:
+   \"*.example.org\" serves a.example.org and a.b.example.org, never
+   example.org itself."
   [pattern host]
-  (let [pattern (str pattern)]
+  (let [pattern (normalize-host pattern)
+        host (normalize-host host)]
     (or (= pattern host)
-        (and (str/starts-with? pattern "*.")
-             (str/ends-with? host (subs pattern 1))
-             (not= host (subs pattern 1))))))
+        (boolean (when-let [suffix (wildcard-suffix pattern)]
+                   (and (str/ends-with? host suffix) (not= host (subs suffix 1))))))))
+
+(defn ingress-host-matches?
+  "Whether an Ingress rule's host serves host. An Ingress wildcard covers
+   exactly one DNS label: \"*.example.org\" serves a.example.org, never
+   a.b.example.org nor example.org."
+  [pattern host]
+  (let [pattern (normalize-host pattern)
+        host (normalize-host host)]
+    (or (= pattern host)
+        (boolean (when-let [suffix (wildcard-suffix pattern)]
+                   (and (str/ends-with? host suffix)
+                        (let [label (subs host 0 (- (count host) (count suffix)))]
+                          (and (seq label) (not (str/includes? label "."))))))))))
 
 (defn routes-for-host
   "Pure: the HTTPRoute items whose hostnames serve the given host."
@@ -206,7 +247,7 @@
    for a customer-reported URL that is not fronted by Gateway API."
   [ingress-items host]
   (filter (fn [ingress]
-            (some #(host-matches? % host) (keep :host (-> ingress :spec :rules))))
+            (some #(ingress-host-matches? % host) (keep :host (-> ingress :spec :rules))))
           ingress-items))
 
 (defn parse-top-usage
@@ -252,11 +293,15 @@
 ;; Live fetching and the loop (impure).
 
 (defn- fetch-object
+  "The object subject names, or nil when it could not be read. A kind the
+   drill-down cannot read is never asked for, so kubectl never sees an empty
+   type."
   [context {:keys [kind namespace name]}]
-  (let [type (subject/kind->type kind)]
-    (if (str/blank? (str namespace))
-      (kubectl/get-cluster-resource context type name)
-      (kubectl/get-namespaced-resource context namespace type name))))
+  (when (subject/readable? kind)
+    (let [type (subject/kind->type kind)]
+      (if (str/blank? (str namespace))
+        (kubectl/get-cluster-resource context type name)
+        (kubectl/get-namespaced-resource context namespace type name)))))
 
 (defn- pod-subject
   [pod]
@@ -317,46 +362,86 @@
   {:pre [(string? kind) (fn? builder)]}
   (swap! extra-fetched-edges update kind (fnil conj []) builder))
 
-(defn plugin-fetched-edges
-  "The registered cluster-querying edges for a subject. Each builder is isolated
-   and capped: one that throws - an unreachable apiserver, a CRD this cluster
-   does not serve - costs its own edges and says so, while the rest of the
-   drill-down carries on, and no single builder can bury the trail under a
-   hundred rows."
-  [context {:keys [kind] :as subject} object]
-  (vec
-   (mapcat (fn [builder]
-             (try
-               ;; realized inside the try, so a query that blows up midway
-               ;; through a lazy seq is caught here rather than at the caller
-               (take related-cap (vec (builder context subject object)))
-               (catch Exception e
-                 (stdout/err-println
-                  (stdout/yellow (format "  could not fetch what relates to this %s: %s"
-                                         kind (ex-message e))))
-                 nil)))
-           (get @extra-fetched-edges kind))))
+(defn edge-lookup
+  "Runs one lookup of related objects under strict reads: {:edges [..]} when
+   every read it made answered, or {:unread {:what what :why <message>}} when
+   one did not. A read RBAC forbids, a timeout or an unreachable API throws
+   under strict reads, so it is reported as unread and never taken for an
+   object with nothing related. A read that answers that the resource type is
+   not served still answers, with nothing. The edges are realized inside, so
+   a read that fails midway through a lazy seq is caught here, and capped, so
+   no single lookup buries the trail."
+  [what thunk]
+  (try
+    {:edges (vec (take related-cap (binding [kubectl/*strict-reads* true] (vec (thunk)))))}
+    (catch Exception e
+      {:unread {:what what :why (or (ex-message e) (str (class e)))}})))
 
-(defn- fetched-edges!
-  "Related subjects that need a cluster query: a node's pods, a workload's pods,
-   a service's backends and what fronts it, plus whatever a plugin registered for
-   this kind. Unhealthy-first and capped, so a busy node does not bury the trail."
-  [context {:keys [kind namespace name] :as subject} object]
-  (concat
-   (case kind
-     "Pod"
-     (for [service (kubectl/items-of (kubectl/get-namespaced context namespace "services"))
-           :when (subject/service-selects-pod? service object)]
-       {:relation "member of" :subject (subject/subject "Service" namespace (kubectl/name-of service))})
-     "Node"
-     (pod-edges-from "hosts pod" (unhealthy-first (kubectl/items-of (kubectl/pods-on-node context name))))
-     ("Deployment" "StatefulSet" "DaemonSet" "ReplicaSet" "Job")
-     (pod-edges-from "pod" (selected-pods context namespace (-> object :spec :selector :matchLabels)))
-     "Service"
-     (concat (exposed-by! context namespace name)
-             (pod-edges-from "backend pod" (selected-pods context namespace (-> object :spec :selector))))
-     [])
-   (plugin-fetched-edges context subject object)))
+(defn- merge-lookups
+  [lookups]
+  {:edges (vec (mapcat :edges lookups))
+   :unread (vec (keep :unread lookups))})
+
+(defn plugin-fetched-edges-result
+  "The registered cluster-querying edges for a subject as {:edges [..]
+   :unread [{:what :why} ..]}. Each builder runs on its own under strict
+   reads: one whose read did not answer costs its own edges and is named
+   under :unread, while the rest of the drill-down carries on."
+  [context {:keys [kind] :as subject} object]
+  (merge-lookups
+   (for [builder (get @extra-fetched-edges kind)]
+     (edge-lookup (format "what relates to this %s" kind)
+                  #(builder context subject object)))))
+
+(defn- unread-line
+  [{:keys [what why]}]
+  (format "could not read %s: %s - what relates to it there is unknown" what why))
+
+(defn plugin-fetched-edges
+  "The registered cluster-querying edges for a subject, read as
+   plugin-fetched-edges-result reads them. A builder whose read did not
+   answer says so on stderr and contributes nothing."
+  [context subject object]
+  (let [{:keys [edges unread]} (plugin-fetched-edges-result context subject object)]
+    (doseq [u unread]
+      (stdout/err-println (stdout/yellow (str "  " (unread-line u)))))
+    edges))
+
+(defn- built-in-lookups
+  "The built-in cluster queries for a subject, each its own edge lookup so
+   one unanswered read costs only its own edges."
+  [context {:keys [kind namespace name]} object]
+  (case kind
+    "Pod"
+    [(edge-lookup "the Services that select this pod"
+                  #(for [service (kubectl/items-of (kubectl/get-namespaced context namespace "services"))
+                         :when (subject/service-selects-pod? service object)]
+                     {:relation "member of" :subject (subject/subject "Service" namespace (kubectl/name-of service))}))]
+    "Node"
+    [(edge-lookup "the pods on this node"
+                  #(pod-edges-from "hosts pod" (unhealthy-first (kubectl/items-of (kubectl/pods-on-node context name)))))]
+    ("Deployment" "StatefulSet" "DaemonSet" "ReplicaSet" "Job")
+    [(edge-lookup "the pods of this workload"
+                  #(pod-edges-from "pod" (selected-pods context namespace (-> object :spec :selector :matchLabels))))]
+    "Service"
+    [(edge-lookup "the routes and ingresses that expose this Service"
+                  #(exposed-by! context namespace name))
+     (edge-lookup "the backend pods of this Service"
+                  #(pod-edges-from "backend pod" (selected-pods context namespace (-> object :spec :selector))))]
+    []))
+
+(defn fetched-edges
+  "Related subjects that need a cluster query, as {:edges [..] :unread
+   [{:what :why} ..]}: a node's pods, a workload's pods, a service's backends
+   and what fronts it, plus whatever a plugin registered for this kind.
+   Unhealthy-first and capped, so a busy node does not bury the trail. Every
+   query reads strictly, so one that did not answer is named under :unread
+   instead of showing as nothing related."
+  [context subject object]
+  (let [built-in (merge-lookups (built-in-lookups context subject object))
+        plugins (plugin-fetched-edges-result context subject object)]
+    {:edges (into (:edges built-in) (:edges plugins))
+     :unread (into (:unread built-in) (:unread plugins))}))
 
 (defn- collapse-replicaset!
   "Rewrites an 'owned by ReplicaSet' edge to its Deployment, so the operator
@@ -381,31 +466,48 @@
     {:missing? true}
     {:unread? true}))
 
-(defn- focus!
+(defn focus!
+  "Everything the drill-down shows for subject: {:subject :object :facts
+   :situation :edges :unread-edges}, or {:subject .. :unsupported? true} for
+   a kind it cannot read, {:missing? true} when the cluster answered that the
+   object does not exist and {:unread? true} when its read did not answer."
   [context subject]
-  (let [object (fetch-object context subject)]
-    (if (nil? object)
-      (assoc (unfetched context subject) :subject subject)
-      (let [object-edges (map #(collapse-replicaset! context %)
-                              (subject/object-edges (:kind subject) object))]
-        {:subject subject
-         :object object
-         :facts (subject/facts (:kind subject) object)
-         :situation (subject/situation (:kind subject) object)
-         :edges (concat object-edges (fetched-edges! context subject object))}))))
+  (if-not (subject/readable? (:kind subject))
+    {:subject subject :unsupported? true}
+    (let [object (fetch-object context subject)]
+      (if (nil? object)
+        (assoc (unfetched context subject) :subject subject)
+        (let [object-edges (map #(collapse-replicaset! context %)
+                                (subject/object-edges (:kind subject) object))
+              {:keys [edges unread]} (fetched-edges context subject object)]
+          {:subject subject
+           :object object
+           :facts (subject/facts (:kind subject) object)
+           :situation (subject/situation (:kind subject) object)
+           :edges (concat object-edges edges)
+           :unread-edges unread})))))
+
+(defn warning-events-args
+  "The kubectl argv listing the Warning events about subject. Events are
+   selected by the involved object's kind as well as its name, because a
+   Deployment, its Service and its HorizontalPodAutoscaler often share one
+   name. A namespaced object's events live in its namespace. A
+   cluster-scoped object's (a node's) are recorded in the default namespace,
+   so they are searched across all namespaces, where the kind keeps a
+   namespaced object of the same name out."
+  [context {:keys [kind namespace name]}]
+  (let [scope (if (str/blank? (str namespace)) ["--all-namespaces"] [(str "--namespace=" namespace)])]
+    (into ["kubectl" (str "--context=" context)]
+          (concat scope
+                  ["get" "events"
+                   (str "--field-selector=involvedObject.kind=" kind ",involvedObject.name=" name ",type=Warning")
+                   "--output=custom-columns=REASON:.reason,MESSAGE:.message" "--no-headers"]))))
 
 (defn- recent-warnings
   "The recent Warning events about this object - the concise smoking gun,
-   captured (so it is time-bounded) rather than the whole describe output. A
-   cluster-scoped object's events (a node's) live in the default namespace, so
-   they are searched across all namespaces rather than the current one."
-  [context {:keys [namespace name]}]
-  (let [scope (if (str/blank? (str namespace)) ["--all-namespaces"] [(str "--namespace=" namespace)])
-        args (into ["kubectl" (str "--context=" context)]
-                   (concat scope
-                           ["get" "events"
-                            (str "--field-selector=involvedObject.name=" name ",type=Warning")
-                            "--output=custom-columns=REASON:.reason,MESSAGE:.message" "--no-headers"]))]
+   captured (so it is time-bounded) rather than the whole describe output."
+  [context subject]
+  (let [args (warning-events-args context subject)]
     (->> (apply shell/stdout-of args)
          str/split-lines
          (remove str/blank?)
@@ -448,6 +550,8 @@
       (stdout/err-println (format "  %-14s %s" (str label ":") value)))
     (when-let [usage (usage-line context subject)]
       (stdout/err-println (format "  %-14s %s" "usage:" usage)))
+    (doseq [u (:unread-edges focus)]
+      (stdout/error (unread-line u)))
     (when (and situation (not= :ok situation))
       (stdout/warn (get situation-text situation (name situation)))
       (auto-surface! context focus))))
@@ -498,10 +602,13 @@
 (defn investigate!
   "Runs the drill-down loop from a starting subject, optionally seeded with a
    breadcrumb trail (for --resume). Returns true when every subject it
-   focused on was read - an object found absent counts as read - so the
-   harness closes on a green banner and offers the reproducer of everything
-   it ran. A subject whose read did not answer is reported as unread, never
-   as deleted, and makes it return false."
+   focused on was read - an object found absent counts as read - and every
+   lookup of what relates to them answered, so the harness closes on a green
+   banner and offers the reproducer of everything it ran. A subject whose
+   read did not answer is reported as unread, never as deleted, and a lookup
+   of related objects that did not answer is named; either makes it return
+   false. A subject of a kind the drill-down cannot read is named as
+   unsupported and costs nothing: nothing was asked of the cluster."
   ([context start] (investigate! context start []))
   ([context start initial-trail]
    (stdout/print-section "🔦 Drill-down investigation")
@@ -521,6 +628,13 @@
               (recur (peek trail) (pop trail) false)
               (finish [subject] false)))
 
+        (:unsupported? focus)
+        (do (stdout/warn (format "%s is of an %s - gumshoe has no type to read it with"
+                                 (subject/display subject) (unsupported-text (:kind subject))))
+            (if (seq trail)
+              (recur (peek trail) (pop trail) read-all?)
+              (finish [subject] read-all?)))
+
         (:missing? focus)
         (do (stdout/warn (format "%s not found - it may have just been deleted" (subject/display subject)))
             (if (seq trail)
@@ -530,7 +644,8 @@
         :else
         (do
           (render! context focus)
-          (let [item (choose! focus trail)]
+          (let [read-all? (and read-all? (empty? (:unread-edges focus)))
+                item (choose! focus trail)]
             (case (:type item)
               (nil :done) (finish (conj trail subject) read-all?)
               :back (recur (peek trail) (pop trail) read-all?)
@@ -539,4 +654,8 @@
                       (recur subject trail read-all?))
               :probe (do (run-probe! context subject (:probe item))
                          (recur subject trail read-all?))
+              :unsupported (do (stdout/warn (format "%s is of an %s - gumshoe has no type to read it with"
+                                                    (subject/display (:subject item))
+                                                    (unsupported-text (-> item :subject :kind))))
+                               (recur subject trail read-all?))
               :pivot (recur (:subject item) (conj trail subject) read-all?)))))))))

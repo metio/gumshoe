@@ -187,10 +187,16 @@
   "One row per container of the given pods that can declare resources -
    regular, init and native sidecar containers, never ephemeral ones - as
    {:namespace :pod :container :role :memory-request :memory-limit
-    :cpu-request :cpu-limit}, a value nil when it is not set."
+    :cpu-request :cpu-limit}, a value nil when it is not set. A pod that
+   sets pod-level resources (spec.resources, which the scheduler reserves
+   for the whole pod) gets a row of its own first, with role :pod and
+   container \"-\", so a pod budgeted only at that level does not read as
+   one without requests."
   [pods-list]
   (for [pod (items-of pods-list)
-        container (pod-containers pod)
+        container (concat (when (seq (-> pod :spec :resources))
+                            [{:name "-" ::role :pod :resources (-> pod :spec :resources)}])
+                          (pod-containers pod))
         :when (not= :ephemeral (::role container))
         :let [{:keys [requests limits]} (:resources container)]]
     {:namespace (namespace-of pod)

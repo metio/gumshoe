@@ -46,7 +46,7 @@
             (when-not (:found-nginx? evidence)
               (stdout/warn "no nginx container answered 'nginx -T' - reporting the PHP side only"))
             (when-not (:found-php? evidence)
-              (stdout/warn "no php container answered 'php -i' - reporting the nginx side only"))
+              (stdout/warn "no container answered 'php-fpm -i' or 'php -i' - reporting the nginx side only"))
             evidence))))))
 
 (detective/book

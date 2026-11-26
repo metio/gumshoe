@@ -74,9 +74,10 @@
 
 (defn- resolve-host
   [context host]
-  (pick-subject "what serves this host"
-                (stdout/with-spinner (format "resolving routes, ingresses and services for %s" host)
-                                     #(host-subjects context host))))
+  (let [host (investigation/normalize-host host)]
+    (pick-subject "what serves this host"
+                  (stdout/with-spinner (format "resolving routes, ingresses and services for %s" host)
+                                       #(host-subjects context host)))))
 
 (defn- resolve-namespace-pod
   [context namespace]

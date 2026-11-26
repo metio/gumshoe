@@ -37,6 +37,7 @@
          "DaemonSet" "daemonsets"
          "ReplicaSet" "replicasets"
          "Job" "jobs"
+         "CronJob" "cronjobs"
          "Service" "services"
          "Ingress" "ingresses"
          "HTTPRoute" "httproutes.gateway.networking.k8s.io"
@@ -46,6 +47,14 @@
   "The kubectl resource type for a kind, or nil when the kind is unknown."
   [kind]
   (get @kind-types kind))
+
+(defn readable?
+  "Whether the drill-down can read a subject of kind: the kind is built in or
+   a plugin registered its type with register-kind!. An owner reference or a
+   scale target may name any kind, and one without a known type cannot be
+   fetched, so it is offered as unsupported instead of read as an empty type."
+  [kind]
+  (some? (kind->type kind)))
 
 ;; ---------------------------------------------------------------------------
 ;; Facts: a pure at-a-glance summary of an object, as ordered [label value]

@@ -4,7 +4,8 @@
 (ns runbooks.kubernetes.pods.list-resources
   "Lists the resource requests and limits of every container of every pod,
    init containers and native sidecars included, since both count towards
-   what the scheduler reserves for the pod."
+   what the scheduler reserves for the pod. A pod that sets pod-level
+   resources (spec.resources) shows them on a row of role pod."
   (:require [gumshoe.kubectl :as kubectl]
             [gumshoe.runbook :as runbook]
             [gumshoe.stdout :as stdout]))

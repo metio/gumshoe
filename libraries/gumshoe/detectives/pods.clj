@@ -11,12 +11,27 @@
             [gumshoe.scheduling :as scheduling]))
 
 ;; CrashLoopBackOff is judged with the restart loops below, by how much of
-;; its workload loops; these block a container outright.
+;; its workload loops; these block a container outright. The kubelet names
+;; them as the container's waiting reason (pkg/kubelet/images and
+;; pkg/kubelet/kuberuntime): the image cannot be pulled, inspected or may not
+;; be pulled at all, the container's config or the container itself cannot be
+;; created, or the kubelet's own pre-start step for it failed.
 (def ^:private bad-waiting-reasons
   {"ImagePullBackOff" :critical
    "ErrImagePull" :critical
+   "ErrImageNeverPull" :critical
+   "ImageInspectError" :critical
+   "InvalidImageName" :critical
    "CreateContainerConfigError" :critical
-   "InvalidImageName" :critical})
+   "CreateContainerError" :critical
+   "PreStartHookError" :critical})
+
+;; A reason that can clear on the kubelet's next attempt is reported only once
+;; the container has waited this long: CreateContainerError also covers a
+;; container name the runtime still holds from the previous attempt, which the
+;; kubelet's retry resolves within a sync or two.
+(def ^:private waiting-grace-minutes
+  {"CreateContainerError" 5})
 
 (def ^:private loop-min-restarts 3)
 (def ^:private loop-recent-minutes 30)
@@ -62,7 +77,8 @@
 (defn reported-waiting?
   "Whether a container waits in a way this detective reports by name - a
    crash loop, or a waiting reason it rates - so another detective can leave
-   the pod to it."
+   the pod to it. A reason with a grace period counts from the start: within
+   it, the wait is the kubelet retrying, not a cause to report elsewhere."
   [status]
   (boolean (or (crash-loop-back-off? status)
                (bad-waiting-reasons (-> status :state :waiting :reason)))))
@@ -93,6 +109,26 @@
   (when-let [last (-> status :lastState :terminated)]
     (format "last exit code %s (%s)" (:exitCode last) (or (:reason last) "no reason"))))
 
+(defn- waiting-since
+  "When a container started waiting, as far as the pod tells: the end of its
+   last run, else when the pod was bound to its node, else when it was
+   created. A waiting state carries no timestamp of its own."
+  [pod status]
+  (or (instant (-> status :lastState :terminated :finishedAt))
+      (when (conditions/holds? pod "PodScheduled")
+        (instant (:lastTransitionTime (conditions/condition pod "PodScheduled"))))
+      (instant (-> pod :metadata :creationTimestamp))))
+
+(defn- past-grace?
+  "Whether a container waiting on reason has waited past that reason's grace
+   period. A reason without one, or a wait whose start or the current time is
+   unknown, is past it: the wait is reported rather than assumed transient."
+  [pod status reason now]
+  (if-let [grace (waiting-grace-minutes reason)]
+    (let [since (waiting-since pod status)]
+      (or (nil? since) (nil? now) (<= grace (minutes-between since now))))
+    true))
+
 (defn- container-findings
   [pod now outage?]
   (let [component (kubectl/namespace-name-of pod)
@@ -105,7 +141,7 @@
      (for [status statuses
            :let [reason (-> status :state :waiting :reason)
                  severity (bad-waiting-reasons reason)]
-           :when severity]
+           :when (and severity (past-grace? pod status reason now))]
        {:severity severity
         :component component
         :summary (format "container %s is waiting: %s" (:name status) reason)
