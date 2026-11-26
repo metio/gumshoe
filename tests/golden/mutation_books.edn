@@ -45,7 +45,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: certificate shop/web-tls was reissued (revision above 0) and is Ready"],
+    "  ❌ certificate shop/web-tls was reissued (revision above 0) and is Ready"
+    "    NOT verified within 0s: certificate shop/web-tls was reissued (revision above 0) and is Ready"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -604,7 +605,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: CronJob batch/nightly is suspended"],
+    "  ❌ CronJob batch/nightly is suspended"
+    "    NOT verified within 0s: CronJob batch/nightly is suspended"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -1017,7 +1019,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: namespace stuck is gone"],
+    "  ❌ namespace stuck is gone"
+    "    NOT verified within 0s: namespace stuck is gone"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -1200,7 +1203,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: node n1 is unschedulable"],
+    "  ❌ node n1 is unschedulable"
+    "    NOT verified within 0s: node n1 is unschedulable"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -1359,8 +1363,9 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: node n1 is unschedulable"
-    "❌ NOT verified within 0s: no evictable pods remain on node n1"],
+    "  ✅ verified: node n1 is unschedulable"
+    "  ❌ no evictable pods remain on node n1"
+    "    NOT verified within 0s: no evictable pods remain on node n1"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -1650,7 +1655,8 @@
     "started-at : <instant>"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: kube-apiserver was replaced and answers /readyz (was abc123)"],
+    "  ❌ kube-apiserver was replaced and answers /readyz (was abc123)"
+    "    NOT verified within 0s: kube-apiserver was replaced and answers /readyz (was abc123)"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -1881,7 +1887,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: node n1 is schedulable"],
+    "  ❌ node n1 is schedulable"
+    "    NOT verified within 0s: node n1 is schedulable"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -2157,7 +2164,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: invalid order shop/web-1 is cleared"],
+    "  ❌ invalid order shop/web-1 is cleared"
+    "    NOT verified within 0s: invalid order shop/web-1 is cleared"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -2315,7 +2323,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: PersistentVolume pv-1 is gone"],
+    "  ❌ PersistentVolume pv-1 is gone"
+    "    NOT verified within 0s: PersistentVolume pv-1 is gone"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -2464,7 +2473,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: PersistentVolumeClaim shop/data is gone"],
+    "  ❌ PersistentVolumeClaim shop/data is gone"
+    "    NOT verified within 0s: PersistentVolumeClaim shop/data is gone"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -3111,7 +3121,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: Deployment shop/web runs 3 ready replica(s)"],
+    "  ❌ Deployment shop/web runs 3 ready replica(s)"
+    "    NOT verified within 0s: Deployment shop/web runs 3 ready replica(s)"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -5293,7 +5304,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: JsonnetSnippet apps/site handled the reconcile request"],
+    "  ❌ JsonnetSnippet apps/site handled the reconcile request"
+    "    NOT verified within 0s: JsonnetSnippet apps/site handled the reconcile request"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -5482,7 +5494,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: JsonnetSnippet apps/site is no longer suspended"],
+    "  ❌ JsonnetSnippet apps/site is no longer suspended"
+    "    NOT verified within 0s: JsonnetSnippet apps/site is no longer suspended"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -5686,7 +5699,8 @@
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  consumers keep serving the last published artifact while suspended"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: JsonnetSnippet apps/site reports itself suspended"],
+    "  ❌ JsonnetSnippet apps/site reports itself suspended"
+    "    NOT verified within 0s: JsonnetSnippet apps/site reports itself suspended"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -6061,7 +6075,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: StageSet apps/site handled the reconcile request and rolled the held update"],
+    "  ❌ StageSet apps/site handled the reconcile request and rolled the held update"
+    "    NOT verified within 0s: StageSet apps/site handled the reconcile request and rolled the held update"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery

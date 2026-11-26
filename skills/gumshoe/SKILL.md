@@ -1051,8 +1051,11 @@ The surface, all on stderr so a result on stdout stays clean:
 - `(stdout/note "text")` and `(stdout/detail "text")`, plain lines without a
   mark, at the margin and one level in, for prose, hints and hand-laid rows;
 - `(stdout/banner :failure "text")`, a full-width banner;
-- `(gumshoe.progress/checklist [[label thunk] …])` and
-  `(gumshoe.progress/watch-futures! [[label future] …])`, live task lists;
+- `(gumshoe.progress/run-steps [{:label … :run (fn [] …)} …])`, a live task
+  list of a book's own steps, returning one result per step; `checklist`
+  (`[[label thunk] …]`, true when all held), `with-board` with `add!`,
+  `run!`, `status!` for phases that are not a static list, and
+  `watch-futures!` for parallel tasks;
 - `(stdout/print-table [["POD" :pod]] rows)`, an aligned table;
 - `(stdout/print-command "kubectl" "get" "pods")`, the echo of a command.
 
@@ -1064,6 +1067,20 @@ a context `(render/context theme color?)` and returning the string, for a
 test or a book that composes a line inside another (`(stdout/detail
 (render/item (stdout/context) :failure "…"))`). `(theme/glyph :finding)`
 gives the bare glyph for a menu label or a heading.
+
+A task list draws each row `:not-yet` until it starts, a spinner while it
+runs, then `:done`, `:failure`, `:not-yet` with a reason when the step could
+not read its answer, or `:finding` for a best-effort post-check that could
+not confirm. A step is `:done` only on `true`, a truthy non-map value, or
+`{:ok? true}`: a throw, `nil`, `{:unread? true}` or a map without `:ok?`
+never is. What a step prints on stderr is drawn under its row, and
+`(progress/status! "12 of 48 reads")` sets its transient status line.
+Mutation books, playbooks and firebooks render their post-checks this way:
+each check is a row (`verified: …` once it holds), its wait line is the
+row's status, and a failed check's reason is a plain line under it. Off a
+terminal, under `NO_COLOR` or `--no-color`, every row prints once when it
+settles, with no cursor movement and no colour, so a log or an agent reading
+stderr gets plain lines.
 
 Conformance names an outcome glyph written by hand inside a printed string
 (`println`, `str`, `format`, `err-println` or a `gumshoe.stdout` printer) as
