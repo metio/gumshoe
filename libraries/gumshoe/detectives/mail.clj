@@ -241,4 +241,5 @@
    {:name "mail-services"
     :description "SMTP/POP3/IMAP ports reachable, STARTTLS offered, certificates valid"
     :requires ["probes" "host"]
+    :joins ["probes"]
     :detect (about "host" detect-service-problems)}])

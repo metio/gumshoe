@@ -315,7 +315,9 @@
 ;; ./gumshoe - the one front door
 
 (def ^:private gumshoe-spec
-  {:spec {:host {:desc "Drill down from a hostname a user reported" :coerce :string}
+  {:spec {:dry-run (get-in run-spec [:spec :dry-run])
+          :no-color (get-in run-spec [:spec :no-color])
+          :host {:desc "Drill down from a hostname a user reported" :coerce :string}
           :pod {:desc "Drill down from a pod (namespace/name)" :coerce :string}
           :node {:desc "Drill down from a node" :coerce :string}
           :namespace {:desc "Drill down from a namespace" :alias :n :coerce :string}
@@ -379,17 +381,21 @@
   [args]
   (let [raw (raw-args args)
         {:keys [opts args]} (when-not (book-path? (first raw)) (flags/parse-with-search-terms raw gumshoe-spec "gumshoe"))]
+    (when (:no-color opts) (stdout/disable-colors!))
     (cond
       (book-path? (first raw)) (launch-path (first raw) (rest raw))
       (:help opts)
       (do (stdout/err-println (stdout/bold "gumshoe - the SRE detective"))
           (stdout/err-println "  gumshoe                     the guided menu")
           (stdout/err-println "  gumshoe --host <hostname>   drill down from a lead (also --pod/--node/--namespace)")
-          (stdout/err-println "  gumshoe <search terms>      fuzzy-launch a book by name")
+          (stdout/err-println "  gumshoe [--dry-run] [--no-color] <search terms>")
+          (stdout/err-println "                              fuzzy-launch a book by name (an option after a search term is refused)")
           (stdout/err-println "  gumshoe <path> [flags]      run the book at a listed path")
           (stdout/err-println "  gumshoe --list              print every book as path, tab, description")
           0)
       (:list opts) (do (run! println (catalog-lines (catalog/books))) 0)
-      (some opts [:host :pod :node :namespace]) (investigate (lead-args opts))
-      (seq args) (run args)
+      (some opts [:host :pod :node :namespace]) (investigate (into (lead-args opts) (passthrough opts)))
+      ;; A dry run rehearses one book, so --dry-run without search terms opens
+      ;; the book finder rather than the guided menu, whose scans change nothing.
+      (or (seq args) (:dry-run opts)) (run (into (passthrough opts) args))
       :else (guided))))
