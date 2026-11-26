@@ -126,7 +126,9 @@ otherwise ask for:
   <step>`); otherwise it exits 1: `no <kind> <namespace>/<name> - not
   found`, the change's `refusing: <reason>` (an unhealthy cluster, a
   running operation), `<kind> <name> is present but not eligible for this
-  change`, or, where the book cannot read the object (no typed subject, a
+  change`, `could not tell whether <kind> <name> is already done - the
+  done-check could not be read: <the read>` (run it again once the API
+  answers), or, where the book cannot read the object (no typed subject, a
   multi-pick, a name without its namespace), `not found among the
   candidates`. With no target named, a book with nothing to change says so
   and exits 0.
@@ -678,6 +680,28 @@ mostly data:
   when reached, because its evidence is what the run is about to change. A
   driver that confirms a segment itself calls `(playbook/prejudge! steps
   ctx waits-first?)` before its confirmation;
+- a playbook or dispatcher whose select leaves out what is already done or
+  not eligible declares, beside its `:select`, a `:subject` that reads a
+  named target and a `:done` that judges the whole procedure took effect
+  on it, so `--namespace X` reports `no Namespace X - not found`, `present
+  but not eligible`, or `skipped, already done` (exit 0) instead of the
+  generic `not found among the candidates`:
+
+  ```clojure
+  (playbook/book
+   {:select {:mode :one :label "Namespace" :flag :namespace
+             :candidates (fn [context] (unadopted-namespaces context))}
+    :subject {:type "namespaces"}
+    :done (fn [{:keys [object]}] (= "true" (get-in object [:metadata :labels :adopted])))
+    :confirm {:action "adopt the namespace" :destructive? true}
+    :steps […]})
+  ```
+
+  `:done` receives the context the subject read made (`:object`, `:ref`,
+  `:target`, `:opts`); `playbook/pick-spec` builds what `mutation/pick!`
+  judges. A playbook without a `:subject` reads the target by the
+  `:subject` of its first change step that has no `:select` of its own;
+  only the playbook's `:done` can call a named target done;
 - any step whose failure leaves a system parked or half-owned - a controller
   suspended, a finalizer stripped, an owner removed before its replacement
   exists - carries `:recovery`, a string or `(fn [ctx] …)` returning one,
@@ -730,7 +754,8 @@ mostly data:
   not read; `firebooks/fabric/stale_fdb_entry.clj` is the example;
 - a dispatcher is `(dispatch/book {:select … :classify (fn [ctx target] key)
   :routes {key {:playbook …}}})`, one front door that runs the playbook a
-  subject's kind routes to;
+  subject's kind routes to; its own `:subject` and `:done` judge a named
+  target its select leaves out, as a playbook's do;
 - a bespoke or read-only book picks its subject from a cluster read with
   `(select/pick {:mode … :label … :candidates (fn [context] names)
   :empty-message … :on-empty :fail} opts context)`, which lists the

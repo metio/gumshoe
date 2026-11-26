@@ -1139,17 +1139,22 @@
    strict read found no such object, :unread when the read did not answer,
    :not-eligible when the object exists but is neither offered nor already
    done (the candidates leave out what the change cannot act on as well as
-   what needs no change), or nil when nothing could read it. A named target
-   is never reported as done on this path, and never replaced by another
-   candidate."
-  [{:keys [label]} named found]
-  (let [shown (if (string? named) named (str/join ", " named))]
-    (case found
-      :absent (format "no %s %s - not found" label shown)
-      :unread (format "could not read %s %s, so whether it exists or needs no change is unknown" label shown)
-      :not-eligible (format "%s %s is present but not eligible for this change - it is not among the candidates and not already done; nothing was changed" label shown)
-      (format "%s %s not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"
-              label shown))))
+   what needs no change), :undecided when it exists and the read its :done
+   judges did not answer, naming that read as `why`, or nil when nothing
+   could read it. A named target is never reported as done on this path,
+   and never replaced by another candidate."
+  ([select named found]
+   (named-but-not-offered select named found nil))
+  ([{:keys [label]} named found why]
+   (let [shown (if (string? named) named (str/join ", " named))]
+     (case found
+       :absent (format "no %s %s - not found" label shown)
+       :unread (format "could not read %s %s, so whether it exists or needs no change is unknown" label shown)
+       :undecided (format "could not tell whether %s %s is already done - the done-check could not be read: %s; it is not among the candidates, so nothing was changed"
+                          label shown (or why "a read did not answer"))
+       :not-eligible (format "%s %s is present but not eligible for this change - it is not among the candidates and not already done; nothing was changed" label shown)
+       (format "%s %s not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"
+               label shown)))))
 
 (defn- judge-named!
   "The named target exists but the select did not offer it. It succeeds
@@ -1157,13 +1162,16 @@
    unanswered read is printed as a run of the change prints it, and an
    object that is neither done nor refused is not eligible, because the
    filter that left it out may be one the change relies on (cnpg restart
-   offers healthy clusters only)."
+   offers healthy clusters only). One whose :done could not be judged,
+   because a read it rests on did not answer, is neither: the run fails
+   and names that read."
   [spec named opts]
-  (let [{:keys [done refusal unread] :as verdict} (prejudge spec named opts nil)]
+  (let [{:keys [done refusal unread undecided] :as verdict} (prejudge spec named opts nil)]
     (cond
       (nil? verdict) false
       done (skipped! spec done)
       (or refusal unread) (prejudge-printed verdict)
+      undecided (do (stdout/error (named-but-not-offered (:select spec) named :undecided undecided)) false)
       :else (do (stdout/error (named-but-not-offered (:select spec) named :not-eligible)) false))))
 
 (defn- not-offered!

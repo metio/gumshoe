@@ -301,3 +301,35 @@
           (is (false? result) "the filter that left it out may be one the change relies on")
           (is (str/includes? printed "CronJob shop/nightly is present but not eligible for this change") printed)
           (is (empty? confirmations)))))))
+
+(deftest named-but-not-offered-names-the-done-check-it-could-not-read
+  (let [text (mutation/named-but-not-offered {:label "Thing"} "t1" :undecided "kubectl get did not answer: i/o timeout")]
+    (is (str/starts-with? text "could not tell whether Thing t1 is already done - the done-check could not be read: kubectl get did not answer: i/o timeout"))
+    (is (str/includes? text "nothing was changed"))
+    (is (not (str/includes? text "not already done")))))
+
+(deftest a-named-target-whose-done-check-did-not-answer-fails-and-names-the-read
+  (let [spec {:select {:mode :one :label "Thing" :flag :thing :candidates (fn [_] [])}
+              :subject {:type "things"}
+              :confirm {:action "change a thing" :destructive? false}
+              :prerequisites {}
+              :effect (fn [_] [[:note "nothing"]])
+              :done true
+              :verify (fn [_] [{:description "the thing holds"
+                                :check (fn [] (throw (ex-info "kubectl get things t1 did not answer: i/o timeout"
+                                                              {:gumshoe.kubectl/unread true})))}])}
+        out (java.io.StringWriter.)
+        picked (binding [*out* out *err* out]
+                 (with-redefs [shell/execute (fn [& argv]
+                                               (let [argv (vec (filter string? argv))]
+                                                 (cond
+                                                   (some #{"--ignore-not-found"} argv) {:exit 0 :out "thing/t1\n" :err ""}
+                                                   (some #{"get"} argv)
+                                                   {:exit 0 :out "{\"kind\":\"Thing\",\"metadata\":{\"name\":\"t1\",\"uid\":\"u1\",\"resourceVersion\":\"1\"}}" :err ""}
+                                                   :else {:exit 1 :out "" :err "unexpected"})))]
+                   (mutation/pick! spec {:thing "t1"} "ctx")))
+        printed (str out)]
+    (is (= {:result false} picked) printed)
+    (is (str/includes? printed "could not tell whether Thing t1 is already done - the done-check could not be read: kubectl get things t1 did not answer: i/o timeout") printed)
+    (is (not (str/includes? printed "not already done")) printed)
+    (is (not (str/includes? printed "present but not eligible")) printed)))

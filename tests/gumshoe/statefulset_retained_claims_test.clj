@@ -89,7 +89,10 @@
     (is (= #{"data-web-0" "data-web-1" "data-web-2"} patched))
     (is (some #(re-find #"plan: data-web-2: 10Gi -> 20Gi \(kept from a replica that does not run now\)" %) out))
     (is (some #(re-find #"plan: data-web-0: 10Gi -> 20Gi$" %) out))
-    (is (some #(= "all 3 PVCs report capacity 20Gi" (:description %)) checks))
+    (is (= ["all 1 PVCs report capacity 20Gi"
+            "the 2 kept claims of replicas that do not run (data-web-1, data-web-2) accepted the resize to 20Gi"]
+           (take 2 (map :description checks)))
+        "the running replica's claim is confirmed by capacity, the kept ones by what they accepted")
     (is (re-find #"data-web-2" (pr-str confirmations)) "the confirmation names the retained claim")))
 
 (deftest the-book-refuses-a-claim-it-cannot-tie-to-the-statefulset

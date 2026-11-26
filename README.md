@@ -718,6 +718,24 @@ the same machine-enforced contract:
 - **A dispatcher** is `(dispatch/book {:select … :classify … :routes {…}})` -
   it picks a subject, asks it what it is, and runs the playbook that kind
   routes to, applying that route's option defaults once the route is known.
+- **A named target the select leaves out** is judged by the book's
+  `:subject` and `:done`. A mutation spec declares them beside its `:select`,
+  and so do a playbook and a dispatcher:
+
+  ```clojure
+  {:select {:mode :one :label "Namespace" :flag :namespace
+            :candidates (fn [context] (unadopted-namespaces context))}
+   :subject {:type "namespaces"}
+   :done (fn [{:keys [object]}] (= "true" (get-in object [:metadata :labels :adopted])))
+   …}
+  ```
+
+  With them, `--namespace X` for a namespace the candidates do not offer
+  reports `no Namespace X - not found`, `Namespace X is present but not
+  eligible for this change`, or `skipped, already done` (exit 0); without
+  them the run fails closed with `not found among the candidates`. A
+  playbook without a `:subject` reads the target by the `:subject` of its
+  first change step that picks through the playbook's select.
 - **A bespoke book** calls `runbook/execute!` directly with its own `:action`,
   for the handful with genuinely custom flow (multi-step orchestration,
   port-forwards, two-step selection). Even these express their change as an
