@@ -93,7 +93,10 @@
   "The positions alone, in election order, with the cost of each alternative.
    :behind holds every other positioned instance with the bytes choosing it
    would discard; a negative count is an instance further ahead than a
-   candidate that ranks first only because it is not in recovery."
+   candidate that ranks first because it is not in recovery, or, when that
+   instance is not in recovery either, because its pod name sorts first.
+   :out-of-recovery names every positioned instance not in recovery, in
+   election order; more than one means more than one accepts writes."
   [readings]
   (let [ranked (positioned readings)
         best (first ranked)
@@ -115,6 +118,7 @@
                          {:instance (:instance reading)
                           :bytes (- top (position-of reading))})
                        (rest ranked))
+         :out-of-recovery (mapv :instance (filter primary? ranked))
          :unreadable unreadable
          :unpositioned without-position}))))
 
@@ -149,10 +153,11 @@
    plainly as what is known: an unread instance, or one that answered without
    a position, may hold the furthest position of all, which would make the
    candidate below the wrong one."
-  [{:keys [candidate lsn ties behind unreadable unpositioned reason in-recovery?]}]
+  [{:keys [candidate lsn ties behind unreadable unpositioned reason in-recovery? out-of-recovery]}]
   (if (nil? candidate)
     [(str "no promotion candidate: " reason)]
     (let [ahead (filter #(neg? (:bytes %)) behind)
+          writable (set out-of-recovery)
           gaps (concat
                 (when (seq unreadable)
                   [(format "%s could not be read, and an unread instance may sit further ahead than %s"
@@ -169,11 +174,21 @@
                        (str/join ", " ties)))
          (not in-recovery?)
          (conj (str candidate " does not report itself in recovery, so it may not be a standby - "
-                    "check what it is before treating it as one")))
+                    "check what it is before treating it as one"))
+         (< 1 (count out-of-recovery))
+         (conj (format (str "%d instances report themselves out of recovery: %s - more than one "
+                            "accepts writes, so promoting is not the repair; they rank by pod name, "
+                            "as CloudNativePG orders instances out of recovery, and their positions "
+                            "do not choose between them")
+                       (count out-of-recovery) (str/join ", " out-of-recovery))))
        (concat
         (for [{:keys [instance bytes]} ahead]
-          (format "%s sits %s further ahead than %s, which ranks first only because it is not in recovery"
-                  instance (describe-bytes (- bytes)) candidate))
+          (if (contains? writable instance)
+            (format (str "%s sits %s further ahead than %s and is not in recovery either - %s "
+                         "ranks first only because its pod name sorts first")
+                    instance (describe-bytes (- bytes)) candidate candidate)
+            (format "%s sits %s further ahead than %s, which ranks first only because it is not in recovery"
+                    instance (describe-bytes (- bytes)) candidate)))
         (for [{:keys [instance bytes]} behind
               :when (pos? bytes)]
           (format "promoting %s instead would discard %s that %s already holds"
