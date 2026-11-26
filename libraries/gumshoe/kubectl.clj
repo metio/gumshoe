@@ -823,17 +823,46 @@
       true)
     (catch Exception _ false)))
 
+(defn bind-failure
+  "Why a bind to port failed, from the BindException's message: :in-use when
+   something holds the port, :permission-denied when this user may not bind
+   it, or :other. The JDK raises BindException for EADDRINUSE, EACCES and
+   EADDRNOTAVAIL alike and tells them apart only by the message, whose
+   wording differs between runtimes: the JVM says \"Address already in use\",
+   babashka's native image \"Address in use\". A message
+   naming neither cause on a port below 1024 counts as denied, since that is
+   what an unprivileged user meets there."
+  [port message]
+  (let [message (str message)]
+    (cond
+      (re-find #"(?i)\bin use\b" message) :in-use
+      (re-find #"(?i)permission denied|not permitted" message) :permission-denied
+      (and (int? port) (< port 1024)) :permission-denied
+      :else :other)))
+
+(defn- try-bind!
+  "Binds port on 127.0.0.1 and releases it at once; throws when it cannot."
+  [port]
+  (with-open [_socket (java.net.ServerSocket. (int port) 1 (java.net.InetAddress/getByName "127.0.0.1"))]
+    true))
+
 (defn- port-bindable?
   "Whether this process could bind port on 127.0.0.1 right now. A program
    holding the port without accepting connections is caught here, where a
-   connection attempt would miss it. Only a BindException means the port is
-   held; any other failure is thrown as itself, so it is never reported as
-   an occupied port."
+   connection attempt would miss it. Only a bind that failed because the
+   address is in use means the port is held. A bind refused for permission
+   throws ex-info with :reason :permission-denied, and any other failure is
+   thrown as itself, so neither is reported as an occupied port."
   [port]
   (try
-    (with-open [_socket (java.net.ServerSocket. (int port) 1 (java.net.InetAddress/getByName "127.0.0.1"))]
-      true)
-    (catch java.net.BindException _ false)))
+    (try-bind! port)
+    (catch java.net.BindException e
+      (case (bind-failure port (ex-message e))
+        :in-use false
+        :permission-denied (throw (ex-info (str "permission denied for port " port)
+                                           {:reason :permission-denied :port port}
+                                           e))
+        (throw e)))))
 
 (defn valid-local-port?
   "Whether port can be a local port to forward to: 1 to 65535. Port 0 asks
@@ -863,8 +892,8 @@
 
 (defn local-port-problem
   "Why with-port-forward may not use port, or nil: a port outside 1-65535,
-   one something already holds, or a check that failed for another reason,
-   named as itself."
+   one something already holds, one this user may not bind, or a check that
+   failed for another reason, named as itself."
   [port]
   (if-not (valid-local-port? port)
     (local-port-message port)
@@ -872,7 +901,9 @@
       (when (local-port-taken? port)
         (format "local port %d is already in use - pick another with --port" port))
       (catch Exception e
-        (format "local port %d could not be checked: %s" port (or (ex-message e) (str e)))))))
+        (if (= :permission-denied (:reason (ex-data e)))
+          (format "permission denied for port %d - this user may not bind it (ports below 1024 usually need root); pick another with --port" port)
+          (format "local port %d could not be checked: %s" port (or (ex-message e) (str e))))))))
 
 (defn free-local-port
   "A port on 127.0.0.1 nothing holds right now, chosen by the kernel from the

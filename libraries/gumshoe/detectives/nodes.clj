@@ -9,6 +9,40 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
 
+(def healthy-when-true
+  "Node conditions besides Ready whose status True means the subsystem works,
+   so False is the problem: the conditions the EKS node monitoring agent sets."
+  #{"KernelReady" "NetworkingReady" "StorageReady" "AcceleratedHardwareReady" "ContainerRuntimeReady"})
+
+(def problem-when-true
+  "Node conditions whose status True means the problem is present: the
+   kubelet's pressures and NetworkUnavailable."
+  #{"MemoryPressure" "DiskPressure" "PIDPressure" "NetworkUnavailable"})
+
+(defn condition-polarity
+  "How a node condition other than Ready reads: :healthy-when-true or
+   :problem-when-true. A type neither list names is read by its name: one
+   ending in Ready follows Ready's convention, as the EKS agent's do, and any
+   other follows the pressures' and node-problem-detector's (KernelDeadlock,
+   ReadonlyFilesystem, FrequentKubeletRestart, ...)."
+  [type]
+  (cond
+    (healthy-when-true type) :healthy-when-true
+    (problem-when-true type) :problem-when-true
+    (str/ends-with? (str type) "Ready") :healthy-when-true
+    :else :problem-when-true))
+
+(defn condition-problem
+  "The summary of a node condition other than Ready that reports a problem,
+   or nil when it reports none: a condition in its unhealthy state, or one
+   whose status is Unknown, whichever its polarity."
+  [{:keys [type status]}]
+  (let [bad (case (condition-polarity type) :healthy-when-true "False" :problem-when-true "True")]
+    (cond
+      (= bad status) (if (= "True" bad) (format "%s is active" type) (format "%s is False" type))
+      (= "Unknown" status) (format "%s is Unknown" type)
+      :else nil)))
+
 (defn detect-node-problems
   [evidence]
   (let [nodes (kubectl/items-of (get evidence "nodes"))]
@@ -22,20 +56,20 @@
          :summary (format "node is not Ready (status %s)" (or (:status ready) "unknown"))
          :hint (:message ready)}
         (:lastTransitionTime ready)))
-     ;; Every non-Ready node condition follows the same convention: status True
-     ;; means the problem is present. Reading them generically catches the built-in
-     ;; pressures and NetworkUnavailable, plus every node-problem-detector
-     ;; condition (KernelDeadlock, ReadonlyFilesystem, FrequentKubeletRestart, ...),
-     ;; without a hardcoded list.
+     ;; A node that is not Ready is already critical above, and a kubelet that
+     ;; stopped posting status turns every other condition Unknown; those
+     ;; Unknowns follow from the finding above and would only repeat it.
      (for [node nodes
+           :let [ready? (= "True" (:status (conditions/condition node "Ready")))]
            condition (-> node :status :conditions)
-           :let [type (:type condition)]
-           :when (not= "Ready" type)
-           :when (= "True" (:status condition))]
+           :when (not= "Ready" (:type condition))
+           :let [summary (condition-problem condition)]
+           :when summary
+           :when (or ready? (not= "Unknown" (:status condition)))]
        (onset/since
         {:severity :warning
          :component (kubectl/name-of node)
-         :summary (format "%s is active" type)
+         :summary summary
          :hint (:message condition)}
         (:lastTransitionTime condition)))
      (for [node nodes
@@ -110,7 +144,7 @@
 
 (def detectives
   [{:name "nodes"
-    :description "Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
+    :description "Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
     :requires ["nodes"]
     :detect detect-node-problems}
    {:name "node-removals"

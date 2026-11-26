@@ -8,12 +8,20 @@
    group bounds, scale-up backoff and the autoscaler's health verdict, so no
    cloud API is needed to tell why nodes do not arrive.
 
-   The status is YAML under data.status. A payload that is not a YAML map -
-   the human-readable text older releases wrote - yields no findings beyond
-   staleness."
+   The status is YAML under data.status. A payload that is not the
+   structured status - the human-readable text older releases wrote - was
+   not read: the check reports staleness but counts as unread, never as
+   passed, because its parsed-status evidence is nil and the check joins it.
+   The text format has no specification to parse it against."
   (:require [clj-yaml.core :as yaml]
             [clojure.string :as str]
             [gumshoe.onset :as onset]))
+
+(def parsed-status-key
+  "The evidence key holding data.status parsed as the structured status, nil
+   when the ConfigMap is missing or its status is in a format this check does
+   not read. The check joins it, so such a status leaves the check unread."
+  "cluster-autoscaler-parsed-status")
 
 (def last-updated-annotation "cluster-autoscaler.kubernetes.io/last-updated")
 
@@ -106,7 +114,7 @@
 (defn detect-autoscaler-status
   [evidence]
   (let [configmap (get evidence "cluster-autoscaler-status")
-        status (parse-status configmap)
+        status (or (get evidence parsed-status-key) (parse-status configmap))
         stale (stale-finding configmap (get evidence :now))]
     (cond
       (nil? configmap) []
@@ -118,5 +126,6 @@
 (def detectives
   [{:name "cluster-autoscaler"
     :description "The cluster autoscaler's status: stopped, halted by unready nodes, node groups in scale-up backoff or below their minimum"
-    :requires ["cluster-autoscaler-status"]
+    :requires ["cluster-autoscaler-status" parsed-status-key]
+    :joins [parsed-status-key]
     :detect detect-autoscaler-status}])

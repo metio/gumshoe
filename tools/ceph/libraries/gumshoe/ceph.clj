@@ -7,10 +7,10 @@
    tooling are already there, no sudo needed. For a host that only carries the
    cephadm bootstrap binary, set :cephadm-shell? on the connection and every
    command is wrapped in 'sudo cephadm shell -- ...' instead."
-  (:require [cheshire.core :as json]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [gumshoe.concurrent :as concurrent]
             [gumshoe.effect :as effect]
+            [gumshoe.json :as gumshoe-json]
             [gumshoe.shell :as shell]
             [gumshoe.ssh :as ssh]
             [gumshoe.stdout :as stdout]))
@@ -30,7 +30,7 @@
   [connection & args]
   (let [output (apply ceph-stdout connection (concat args ["--format" "json"]))]
     (when-not (str/blank? output)
-      (try (json/parse-string output true) (catch Exception _ nil)))))
+      (gumshoe-json/parse-or-nil output))))
 
 (defn ceph-json-answer
   "{:ok? <the command answered> :doc <its parsed JSON> :exit .. :err ..} of
@@ -39,8 +39,7 @@
    answer."
   [connection & args]
   (let [{:keys [exit out err]} (apply shell/execute (ssh/ssh-args connection (ceph-args connection (concat ["ceph"] args ["--format" "json"]))))
-        doc (when-not (str/blank? out)
-              (try (json/parse-string out true) (catch Exception _ nil)))]
+        doc (gumshoe-json/parse-or-nil out)]
     {:ok? (and (zero? exit) (some? doc)) :doc doc :exit exit :err err}))
 
 (defn ceph-json-result
