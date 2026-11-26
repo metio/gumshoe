@@ -45,8 +45,9 @@
 
    An advisory names something worth a look that the gate does not fail on:
    a mutation book whose spec declares no :recovery, a destructive spec
-   without a guard unless :guards :require, and, under :spec-contract
-   :advise, the judgements of the mutation specs. gumshoe.mutation prints
+   without a guard unless :guards :require, an outcome glyph written by hand
+   into a printed string unless :glyphs :require (see hand-written-glyphs),
+   and, under :spec-contract :advise, the judgements of the mutation specs. gumshoe.mutation prints
    generic guidance when such a change fails after applying an effect, so
    the book works without one; verify! prints the advisories as notes and
    still passes.
@@ -77,7 +78,8 @@
             [gumshoe.flags :as flags]
             [gumshoe.mutation :as mutation]
             [gumshoe.playbook :as playbook]
-            [gumshoe.runbook :as runbook]))
+            [gumshoe.runbook :as runbook]
+            [gumshoe.theme :as theme]))
 
 ;; --- files ------------------------------------------------------------------
 
@@ -447,6 +449,79 @@
              (format "binds %s to the vector %s, but it returns the map {:namespace .. :name ..}; destructure it by key"
                      (first init) binding))))
 
+;; --- hand-written outcome glyphs ----------------------------------------------
+
+(def printing-calls
+  "The calls whose string arguments reach the terminal: the printing core
+   functions and gumshoe.stdout's printers and colour helpers, by name, through
+   any alias. A glyph literal anywhere inside such a call is drawn by hand
+   instead of by the theme."
+  #{"print" "println" "printf" "format" "str" "err-println"
+    "print-section" "print-banner" "banner" "line" "item" "note" "detail"
+    "ok" "error" "warn" "check-ok" "check-error" "print-command"
+    "red" "green" "yellow" "blue" "bold"})
+
+(defn- printing-call?
+  [form]
+  (and (seq? form)
+       (symbol? (first form))
+       (contains? printing-calls (name (first form)))))
+
+(defn- theme-namespace?
+  "Whether a file is the theme itself, the one place a glyph literal belongs."
+  [forms]
+  (= 'gumshoe.theme (second (ns-form forms))))
+
+(defn- test-file?
+  "Whether a file sits below a tests directory, where a glyph literal is the
+   expected output a test compares against."
+  [file]
+  (boolean (re-find #"(^|/)tests/" (str file))))
+
+(defn- glyphs-in
+  "The theme glyphs in the string literals anywhere inside form, in order of
+   appearance, each once."
+  [form glyphs]
+  (->> (tree-seq coll? seq form)
+       (filter string?)
+       (mapcat (fn [s] (filter #(str/includes? s %) glyphs)))
+       distinct))
+
+(defn default-glyphs
+  "The glyphs hand-written-glyphs looks for: every non-ASCII outcome glyph of
+   the built-in themes, plus the common variants (see
+   gumshoe.theme/outcome-glyphs). Themes a plugin registers are left out, so
+   the verdict does not depend on which plugins happened to load."
+  []
+  (theme/outcome-glyphs (map theme/resolve-theme [theme/default-theme theme/ascii-theme theme/plain-theme])))
+
+(defn hand-written-glyphs
+  "A glyph that marks an outcome - a tick, a cross, a warning, an hourglass, a
+   box, the info bullet - written as a literal in a string a book or library
+   prints (see printing-calls), rather than taken from the theme with
+   gumshoe.stdout/line, item or banner, or gumshoe.theme/glyph. Such a glyph
+   ignores the theme: under :ascii it still prints the emoji, and a reader
+   sees two marks for one meaning. One finding per printing call, outermost
+   call only, naming its line. The theme namespace and files below a tests
+   directory are exempt."
+  ([parsed] (hand-written-glyphs parsed (default-glyphs)))
+  ([parsed glyphs]
+   (for [{:keys [file forms]} parsed
+         :when (and forms (not (theme-namespace? forms)) (not (test-file? file)))
+         call (letfn [(outermost [form]
+                        (cond
+                          (printing-call? form) [form]
+                          (coll? form) (mapcat outermost (if (map? form) (mapcat identity form) form))
+                          :else []))]
+                (mapcat outermost forms))
+         :let [found (glyphs-in call glyphs)]
+         :when (seq found)]
+     (finding file :glyph
+              (format "line %s prints %s by hand in (%s ...); let the theme draw it with gumshoe.stdout/line or item and an outcome, or gumshoe.theme/glyph"
+                      (or (:row (meta call)) "?")
+                      (str/join " " found)
+                      (first call))))))
+
 (defn- mutation-book-call?
   [form]
   (and (harness-call? form)
@@ -790,10 +865,13 @@
    release before it has fixed or annotated its specs. The :guard findings
    (see guard-problems) are advisories unless `guards` is :require, so a
    casebook sees a destructive spec without a guard as a note until it opts
-   into failing on it. :advisories holds them, every advisory of
-   `advisories`, and the :option-order findings of option-order-findings,
-   which only change how --help reads."
-  [{:keys [books libraries license load? spec-contract guards] :as opts}]
+   into failing on it. The :glyph findings (see hand-written-glyphs) are
+   advisories too unless `glyphs` is :require, so a casebook moves its
+   hand-written marks onto the theme before the gate holds it to that.
+   :advisories holds them, every advisory of `advisories`, and the
+   :option-order findings of option-order-findings, which only change how
+   --help reads."
+  [{:keys [books libraries license load? spec-contract guards glyphs] :as opts}]
   (let [edn-books (filter edn-book? books)
         parsed-books (mapv parse (remove edn-book? books))
         parsed-libraries (mapv parse libraries)
@@ -806,7 +884,9 @@
         noted? (fn [{:keys [check]}]
                  (or (and advise? (= :spec-contract check))
                      (and (not= :require guards) (= :guard check))))
-        advised (filter noted? contract)]
+        advised (filter noted? contract)
+        hand-glyphs (hand-written-glyphs parsed)
+        glyphs-gate? (= :require glyphs)]
     {:findings (vec (concat (unparseable parsed)
                             (when-not (false? license)
                               (missing-license (concat books libraries) license))
@@ -816,10 +896,12 @@
                             (undescribed-books parsed-books)
                             (option-problems parsed-books)
                             (load-findings loaded)
-                            (remove noted? contract)))
+                            (remove noted? contract)
+                            (when glyphs-gate? hand-glyphs)))
      :advisories (vec (concat (without-recovery (filter :forms parsed-books))
                               (option-order-findings loaded)
-                              advised))}))
+                              advised
+                              (when-not glyphs-gate? hand-glyphs)))}))
 
 (defn findings
   "Every finding for the book and library files (see report, which takes the
@@ -867,8 +949,9 @@
 
    A casebook that carries no SPDX headers passes :license false, one
    whose mutation specs should be noted rather than fail it :spec-contract
-   :advise, and one that fails on a destructive spec without a guard
-   :guards :require."
+   :advise, one that fails on a destructive spec without a guard
+   :guards :require, and one that fails on a hand-written outcome glyph
+   :glyphs :require."
   [opts]
   (let [{:keys [books libraries] :as files} (files-in opts)
         {found :findings advised :advisories} (report (merge (with-library-classpath opts) files))]

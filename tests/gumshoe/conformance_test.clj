@@ -184,6 +184,11 @@
   (assert-none (conformance/map-destructured-as-vector
                 (parsed (concat all-clj-files (conformance/clj-files ["casebook-example"]))))))
 
+(deftest no-book-or-library-prints-an-outcome-glyph-by-hand
+  ;; gumshoe holds itself to what a casebook opts into with :glyphs :require
+  (assert-none (conformance/hand-written-glyphs
+                (parsed (concat all-clj-files (conformance/clj-files ["casebook-example" "examples"]))))))
+
 (deftest no-file-calls-the-deprecated-split-namespace-name
   (doseq [file (concat all-clj-files (conformance/clj-files ["casebook-example" "tests"]))
           ;; kubectl defines the alias, conformance names it to find misuse,
