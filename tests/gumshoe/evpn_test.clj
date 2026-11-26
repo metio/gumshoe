@@ -460,7 +460,7 @@
 
 (deftest a-conflict-names-its-vni-from-the-overlay-device
   (is (= [{:host "upward-cobra" :mac "02:00:0a:18:00:16" :vni 4208
-           :local-intf "one-284-0" :stale-remote-vtep stale-vtep}]
+           :local-intf "one-284-0" :remote-dev "lo.4208" :stale-remote-vtep stale-vtep}]
          (collect/fdb-conflicts conflict-fdb))))
 
 (defn- conflict-finding

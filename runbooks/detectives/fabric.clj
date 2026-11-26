@@ -22,6 +22,15 @@
    naming it, one finding per host and VTEP, whether or not a local tap
    collides with them; a count that did not answer leaves them unjudged.
 
+   Each host's VXLAN devices are listed with `ip -d -j link show type vxlan`,
+   and every VNI a host carries is read on it beside the configured ones.
+   evpn-vni-coverage reports the VNIs read beyond the configuration, and with
+   --configured-vnis-only reads only the configured ones and reports every VNI
+   a host carries beyond them as a gap that leaves its verdict incomplete.
+   A host with fdb conflicts also has its bridge ports' learning flags read
+   with `bridge -d -j link show`, so the conflict hint states the black hole
+   as fact only when the tap was read not to learn.
+
    Hosts, VNIs, gateway VTEPs and guest MAC prefixes each come from their
    option, else from env.edn's :evpn block for the current kubectl context.
    Without gateway VTEPs evpn-gateway-only-mac cannot judge: stderr says so,
@@ -38,9 +47,11 @@
    {:hosts {:desc "Comma-separated fabric hosts - env.edn's :evpn :hosts when omitted"
             :alias :H
             :coerce :string}
-    :vni {:desc "Comma-separated VNIs - env.edn's :evpn :vnis when omitted"
+    :vni {:desc "Comma-separated VNIs - env.edn's :evpn :vnis when omitted; every VNI a host's VXLAN devices carry is read too"
           :alias :n
           :coerce :string}
+    :configured-vnis-only {:desc "Read only the configured VNIs; a VNI a host carries beyond them is reported as a coverage gap instead of judged"
+                           :coerce :boolean}
     :gateway-vteps {:desc "Comma-separated gateway VTEPs, the routers' own - env.edn's :evpn :gateway-vteps when omitted; without either, evpn-gateway-only-mac cannot judge"
                     :coerce :string}
     :guest-mac-prefixes {:desc "Comma-separated MAC prefixes of guests - env.edn's :evpn :guest-mac-prefixes when omitted; without either, every MAC counts as a guest"
@@ -75,7 +86,8 @@
       (let [judged (evpn/input-evidence resolved)]
         (doseq [line (evpn-detectives/missing-input-lines judged)]
           (stdout/warn line))
-        (merge (evpn/collect-evidence! (evpn/connections hosts {:user (:user opts)}) vnis)
+        (merge (evpn/collect-evidence! (evpn/connections hosts {:user (:user opts)}) vnis
+                                       {:discover? (not (:configured-vnis-only opts))})
                judged
                {"config" (config/active-config signals)})))))
 

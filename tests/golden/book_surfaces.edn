@@ -385,7 +385,11 @@
    "  -h, --help        Show this help message"]},
  "runbooks/detectives/fabric.clj"
  {:options
-  {:gateway-vteps
+  {:configured-vnis-only
+   {:desc
+    "Read only the configured VNIs; a VNI a host carries beyond them is reported as a coverage gap instead of judged",
+    :coerce :boolean},
+   :gateway-vteps
    {:desc
     "Comma-separated gateway VTEPs, the routers' own - env.edn's :evpn :gateway-vteps when omitted; without either, evpn-gateway-only-mac cannot judge",
     :coerce :string},
@@ -410,7 +414,8 @@
     :alias :u,
     :coerce :string},
    :vni
-   {:desc "Comma-separated VNIs - env.edn's :evpn :vnis when omitted",
+   {:desc
+    "Comma-separated VNIs - env.edn's :evpn :vnis when omitted; every VNI a host's VXLAN devices carry is read too",
     :alias :n,
     :coerce :string}},
   :help
@@ -420,25 +425,30 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -H, --hosts               Comma-separated fabric hosts - env.edn's :evpn"
-   "                            :hosts when omitted"
-   "  -n, --vni                 Comma-separated VNIs - env.edn's :evpn :vnis when"
-   "                            omitted"
-   "      --gateway-vteps       Comma-separated gateway VTEPs, the routers' own -"
-   "                            env.edn's :evpn :gateway-vteps when omitted; without"
-   "                            either, evpn-gateway-only-mac cannot judge"
-   "      --guest-mac-prefixes  Comma-separated MAC prefixes of guests - env.edn's"
-   "                            :evpn :guest-mac-prefixes when omitted; without"
-   "                            either, every MAC counts as a guest"
-   "  -u, --user                The SSH user - your ssh config decides when omitted"
-   "  -o, --output              Report format: text, json, edn, or a"
-   "                            plugin-registered format (default: text)"
-   "      --dry-run             Show what would change without changing anything"
-   "      --no-color            Disable colored output (also honors the NO_COLOR env"
-   "                            var)"
-   "      --exit-codes          Exit codes: default (0/1), or detailed (2 = only"
-   "                            critical findings); env GUMSHOE_EXIT_CODES"
-   "  -h, --help                Show this help message"]},
+   "  -H, --hosts                 Comma-separated fabric hosts - env.edn's :evpn"
+   "                              :hosts when omitted"
+   "  -n, --vni                   Comma-separated VNIs - env.edn's :evpn :vnis when"
+   "                              omitted; every VNI a host's VXLAN devices carry is"
+   "                              read too"
+   "      --configured-vnis-only  Read only the configured VNIs; a VNI a host"
+   "                              carries beyond them is reported as a coverage gap"
+   "                              instead of judged"
+   "      --gateway-vteps         Comma-separated gateway VTEPs, the routers' own -"
+   "                              env.edn's :evpn :gateway-vteps when omitted;"
+   "                              without either, evpn-gateway-only-mac cannot judge"
+   "      --guest-mac-prefixes    Comma-separated MAC prefixes of guests - env.edn's"
+   "                              :evpn :guest-mac-prefixes when omitted; without"
+   "                              either, every MAC counts as a guest"
+   "  -u, --user                  The SSH user - your ssh config decides when"
+   "                              omitted"
+   "  -o, --output                Report format: text, json, edn, or a"
+   "                              plugin-registered format (default: text)"
+   "      --dry-run               Show what would change without changing anything"
+   "      --no-color              Disable colored output (also honors the NO_COLOR"
+   "                              env var)"
+   "      --exit-codes            Exit codes: default (0/1), or detailed (2 = only"
+   "                              critical findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help                  Show this help message"]},
  "runbooks/detectives/mail.clj"
  {:options
   {:dkim-selectors

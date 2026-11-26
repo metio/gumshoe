@@ -397,13 +397,16 @@
       :unread true}
      {:name "evpn-fdb-conflict",
       :description
-      "hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local and whether BGP still advertises the remote one"}
+      "hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local, whether BGP still advertises the remote one, and whether the tap learns"}
      {:name "evpn-orphan-fdb",
       :description
       "learned remote fdb rows naming a VTEP no BGP path advertises, counted per host and VTEP whether or not the host also holds the MAC on a local tap"}
      {:name "evpn-hosts",
       :description
       "hosts whose fabric state could not be read, making the scan incomplete"}
+     {:name "evpn-vni-coverage",
+      :description
+      "VNIs a host carries that the scan did not read, which leave its verdict incomplete, and VNIs read beyond the configured ones"}
      {:name "evpn-static-fdb",
       :description
       "static fdb entries, which outrank EVPN learning and go stale silently"}
@@ -415,13 +418,14 @@
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when hosts or guests are unreachable and nothing inside the cluster explains it - a guest whose MAC the fabric attributes to the wrong VTEP is up and serving, and invisible.\n── 🔌 Fabric ────────────────────────────────────────────────────────────────────\n🔶 no gateway VTEPs - pass --gateway-vteps or set :evpn :gateway-vteps in env.edn; evpn-gateway-only-mac cannot judge without them and is reported as unjudged\n🔶 no guest MAC prefixes - pass --guest-mac-prefixes or set :evpn :guest-mac-prefixes in env.edn; evpn-gateway-only-mac counts every MAC as a guest\n",
    :calls
    [[:connections ("h1" "h2") {:user nil}]
-    [:collect [:conns] (100)]
+    [:collect [:conns] (100) {:discover? true}]
     [:detectives
      ["evpn-mac-ownership"
       "evpn-gateway-only-mac"
       "evpn-fdb-conflict"
       "evpn-orphan-fdb"
       "evpn-hosts"
+      "evpn-vni-coverage"
       "evpn-static-fdb"
       "evpn-inputs"]
      {"config" {:config :active},
@@ -447,22 +451,24 @@
         :env-path [:evpn :guest-mac-prefixes],
         :source "missing"}],
       "evpn-macs" [],
+      "evpn-vni-coverage" [],
       "evpn-vtep-paths" {}}]]},
   "clean text"
   {:result true,
    :stdout
-   "  ✅ guest MACs the fabric attributes to a VTEP that is not their host's\n  ✅ hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local and whether BGP still advertises the remote one\n  ✅ learned remote fdb rows naming a VTEP no BGP path advertises, counted per host and VTEP whether or not the host also holds the MAC on a local tap\n  ✅ hosts whose fabric state could not be read, making the scan incomplete\n  ✅ static fdb entries, which outrank EVPN learning and go stale silently\n  ✅ values the scan judges against that neither an option nor env.edn supplied, and the checks that could not judge without them\n▸ 1 check read nothing on this cluster - other (evpn-gateway-only-mac); what they read is not served, not readable, or not gathered by this scan\n",
+   "  ✅ guest MACs the fabric attributes to a VTEP that is not their host's\n  ✅ hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local, whether BGP still advertises the remote one, and whether the tap learns\n  ✅ learned remote fdb rows naming a VTEP no BGP path advertises, counted per host and VTEP whether or not the host also holds the MAC on a local tap\n  ✅ hosts whose fabric state could not be read, making the scan incomplete\n  ✅ VNIs a host carries that the scan did not read, which leave its verdict incomplete, and VNIs read beyond the configured ones\n  ✅ static fdb entries, which outrank EVPN learning and go stale silently\n  ✅ values the scan judges against that neither an option nor env.edn supplied, and the checks that could not judge without them\n▸ 1 check read nothing on this cluster - other (evpn-gateway-only-mac); what they read is not served, not readable, or not gathered by this scan\n",
    :stderr
-   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when hosts or guests are unreachable and nothing inside the cluster explains it - a guest whose MAC the fabric attributes to the wrong VTEP is up and serving, and invisible.\n── 🔌 Fabric ────────────────────────────────────────────────────────────────────\n🔶 no gateway VTEPs - pass --gateway-vteps or set :evpn :gateway-vteps in env.edn; evpn-gateway-only-mac cannot judge without them and is reported as unjudged\n🔶 no guest MAC prefixes - pass --guest-mac-prefixes or set :evpn :guest-mac-prefixes in env.edn; evpn-gateway-only-mac counts every MAC as a guest\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 6 checks passed\n",
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when hosts or guests are unreachable and nothing inside the cluster explains it - a guest whose MAC the fabric attributes to the wrong VTEP is up and serving, and invisible.\n── 🔌 Fabric ────────────────────────────────────────────────────────────────────\n🔶 no gateway VTEPs - pass --gateway-vteps or set :evpn :gateway-vteps in env.edn; evpn-gateway-only-mac cannot judge without them and is reported as unjudged\n🔶 no guest MAC prefixes - pass --guest-mac-prefixes or set :evpn :guest-mac-prefixes in env.edn; evpn-gateway-only-mac counts every MAC as a guest\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 7 checks passed\n",
    :calls
    [[:connections ("h1" "h2") {:user nil}]
-    [:collect [:conns] (100)]
+    [:collect [:conns] (100) {:discover? true}]
     [:detectives
      ["evpn-mac-ownership"
       "evpn-gateway-only-mac"
       "evpn-fdb-conflict"
       "evpn-orphan-fdb"
       "evpn-hosts"
+      "evpn-vni-coverage"
       "evpn-static-fdb"
       "evpn-inputs"]
      {"config" {:config :active},
@@ -488,6 +494,7 @@
         :env-path [:evpn :guest-mac-prefixes],
         :source "missing"}],
       "evpn-macs" [],
+      "evpn-vni-coverage" [],
       "evpn-vtep-paths" {}}]]},
   "finding edn"
   {:result true,
@@ -524,13 +531,16 @@
       :unread true}
      {:name "evpn-fdb-conflict",
       :description
-      "hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local and whether BGP still advertises the remote one"}
+      "hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local, whether BGP still advertises the remote one, and whether the tap learns"}
      {:name "evpn-orphan-fdb",
       :description
       "learned remote fdb rows naming a VTEP no BGP path advertises, counted per host and VTEP whether or not the host also holds the MAC on a local tap"}
      {:name "evpn-hosts",
       :description
       "hosts whose fabric state could not be read, making the scan incomplete"}
+     {:name "evpn-vni-coverage",
+      :description
+      "VNIs a host carries that the scan did not read, which leave its verdict incomplete, and VNIs read beyond the configured ones"}
      {:name "evpn-static-fdb",
       :description
       "static fdb entries, which outrank EVPN learning and go stale silently"}
@@ -542,13 +552,14 @@
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when hosts or guests are unreachable and nothing inside the cluster explains it - a guest whose MAC the fabric attributes to the wrong VTEP is up and serving, and invisible.\n── 🔌 Fabric ────────────────────────────────────────────────────────────────────\n🔶 no gateway VTEPs - pass --gateway-vteps or set :evpn :gateway-vteps in env.edn; evpn-gateway-only-mac cannot judge without them and is reported as unjudged\n🔶 no guest MAC prefixes - pass --guest-mac-prefixes or set :evpn :guest-mac-prefixes in env.edn; evpn-gateway-only-mac counts every MAC as a guest\n",
    :calls
    [[:connections ("h1" "h2") {:user nil}]
-    [:collect [:conns] (100)]
+    [:collect [:conns] (100) {:discover? true}]
     [:detectives
      ["evpn-mac-ownership"
       "evpn-gateway-only-mac"
       "evpn-fdb-conflict"
       "evpn-orphan-fdb"
       "evpn-hosts"
+      "evpn-vni-coverage"
       "evpn-static-fdb"
       "evpn-inputs"]
      {"config" {:config :active},
@@ -574,22 +585,24 @@
         :env-path [:evpn :guest-mac-prefixes],
         :source "missing"}],
       "evpn-macs" [],
+      "evpn-vni-coverage" [],
       "evpn-vtep-paths" {}}]]},
   "finding text"
   {:result true,
    :stdout
-   "  evpn-hosts (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✅ 5 other checks came back clean: evpn-mac-ownership, evpn-fdb-conflict, evpn-orphan-fdb, evpn-static-fdb, evpn-inputs\n▸ 1 check read nothing on this cluster - other (evpn-gateway-only-mac); what they read is not served, not readable, or not gathered by this scan\n",
+   "  evpn-hosts (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✅ 6 other checks came back clean: evpn-mac-ownership, evpn-fdb-conflict, evpn-orphan-fdb, evpn-vni-coverage, evpn-static-fdb, evpn-inputs\n▸ 1 check read nothing on this cluster - other (evpn-gateway-only-mac); what they read is not served, not readable, or not gathered by this scan\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when hosts or guests are unreachable and nothing inside the cluster explains it - a guest whose MAC the fabric attributes to the wrong VTEP is up and serving, and invisible.\n── 🔌 Fabric ────────────────────────────────────────────────────────────────────\n🔶 no gateway VTEPs - pass --gateway-vteps or set :evpn :gateway-vteps in env.edn; evpn-gateway-only-mac cannot judge without them and is reported as unjudged\n🔶 no guest MAC prefixes - pass --guest-mac-prefixes or set :evpn :guest-mac-prefixes in env.edn; evpn-gateway-only-mac counts every MAC as a guest\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
    :calls
    [[:connections ("h1" "h2") {:user nil}]
-    [:collect [:conns] (100)]
+    [:collect [:conns] (100) {:discover? true}]
     [:detectives
      ["evpn-mac-ownership"
       "evpn-gateway-only-mac"
       "evpn-fdb-conflict"
       "evpn-orphan-fdb"
       "evpn-hosts"
+      "evpn-vni-coverage"
       "evpn-static-fdb"
       "evpn-inputs"]
      {"config" {:config :active},
@@ -615,6 +628,7 @@
         :env-path [:evpn :guest-mac-prefixes],
         :source "missing"}],
       "evpn-macs" [],
+      "evpn-vni-coverage" [],
       "evpn-vtep-paths" {}}]]},
   "no hosts"
   {:result false,
