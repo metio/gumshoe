@@ -40,6 +40,23 @@
       (when (and result (Double/isFinite result))
         result))))
 
+(defn at-least?
+  "Whether quantity a is at least quantity b, compared as numbers, so '1Ti'
+   is at least '1024Gi'. False when either does not parse: a value nobody
+   can read never satisfies a bound."
+  [a b]
+  (let [x (quantity->number a)
+        y (quantity->number b)]
+    (boolean (and x y (>= (double x) (double y))))))
+
+(defn same?
+  "Whether quantities a and b are the same amount, so '1Ti' and '1024Gi'
+   are. False when either does not parse."
+  [a b]
+  (let [x (quantity->number a)
+        y (quantity->number b)]
+    (boolean (and x y (== (double x) (double y))))))
+
 (defn sum
   "Sums a seq of quantities, skipping any that do not parse."
   [values]

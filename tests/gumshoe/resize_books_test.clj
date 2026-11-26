@@ -483,3 +483,87 @@
     (is (= 5 (count ((:effect spec) {}))))
     (is (nil? (recovery {:applied 2})))
     (is (str/starts-with? (recovery {:applied 3}) "Prometheus monitoring/k8s is PAUSED"))))
+
+;; --- a StatefulSet at zero replicas: every claim is kept ------------------------------
+
+(def ^:private web-at-zero
+  (-> shop
+      (assoc-in [:objects "statefulsets"] [(-> web (assoc-in [:spec :replicas] 0)
+                                               (assoc :status {:replicas 0 :readyReplicas 0}))
+                                           cache])
+      ;; a kept claim carries the StatefulSet's selector labels, as the
+      ;; claims it made from its template do
+      (update-in [:objects "persistentvolumeclaims"]
+                 (fn [claims] (mapv #(if (= "shop" (get-in % [:metadata :namespace]))
+                                       (assoc-in % [:metadata :labels] {:app "web"})
+                                       %)
+                                    claims)))
+      (assoc :resize? false)))
+
+(deftest kept-claims-that-only-requested-the-new-size-are-not-verified
+  (let [config (load-config "runbooks/kubernetes/statefulsets/enlarge_volumes.clj")
+        {:keys [result banner out mutations]} (transcript config {:state web-at-zero :argv enlarge-argv})]
+    (is (= 4 (count mutations)) "both kept claims were patched, the StatefulSet deleted and applied")
+    (is (not (true? result)) (str/join "\n" out))
+    (is (not= "DONE - applied and verified" banner) (str/join "\n" out))
+    (is (some #(str/includes? % "NOT verified") out) (str/join "\n" out))))
+
+(deftest kept-claims-the-cluster-took-up-are-verified
+  (let [config (load-config "runbooks/kubernetes/statefulsets/enlarge_volumes.clj")
+        {:keys [result banner out]} (transcript config {:state (assoc web-at-zero :resize? true) :argv enlarge-argv})]
+    (is (true? result) (str/join "\n" out))
+    (is (= "DONE - applied and verified" banner) (str/join "\n" out))))
+
+(defn- with-kept-conditions
+  "The cluster with conditions on every claim of shop/web."
+  [cluster conditions]
+  (update-in cluster [:objects "persistentvolumeclaims"]
+             (fn [claims] (mapv #(if (= "shop" (get-in % [:metadata :namespace]))
+                                   (assoc-in % [:status :conditions] conditions)
+                                   %)
+                                claims))))
+
+(defn- resizer-answers
+  "A :settle that plays the resizer: once a claim of shop/web requests the
+   new size, it gets conditions."
+  [conditions]
+  (fn [state]
+    (update-in state [:objects "persistentvolumeclaims"]
+               (fn [claims] (mapv #(if (and (= "shop" (get-in % [:metadata :namespace]))
+                                            (= "20Gi" (get-in % [:spec :resources :requests :storage])))
+                                     (assoc-in % [:status :conditions] conditions)
+                                     %)
+                                  claims)))))
+
+(def ^:private earlier-error
+  {:type "ControllerResizeError" :status "True" :lastTransitionTime "2026-11-01T00:00:00Z"
+   :message "quota exceeded (resize to 15Gi)"})
+
+(deftest kept-claims-are-judged-against-their-state-right-before-the-effect
+  (let [config (load-config "runbooks/kubernetes/statefulsets/enlarge_volumes.clj")
+        run (fn [state] (transcript config {:state state :argv enlarge-argv}))]
+    (testing "an error the claims carried before the change is no rejection"
+      (let [{:keys [result out]} (run (with-kept-conditions web-at-zero [earlier-error]))]
+        (is (false? result) (str/join "\n" out))
+        (is (not-any? #(str/includes? % "resize rejected") out) (str/join "\n" out))
+        (is (some #(str/includes? % "a ControllerResizeError: quota exceeded (resize to 15Gi) from before the change") out)
+            (str/join "\n" out))))
+    (testing "FileSystemResizePending written after the effect is the cluster taking the resize up"
+      (let [{:keys [result banner out]} (run (assoc web-at-zero :settle (resizer-answers [{:type "FileSystemResizePending" :status "True"
+                                                                                           :lastTransitionTime "2026-11-26T10:00:05Z"}])))]
+        (is (true? result) (str/join "\n" out))
+        (is (= "DONE - applied and verified" banner))))
+    (testing "an error written after the effect fails at once"
+      (let [{:keys [result out]} (run (-> web-at-zero
+                                          (with-kept-conditions [earlier-error])
+                                          (assoc :settle (resizer-answers [(assoc earlier-error :lastTransitionTime "2026-11-26T10:00:05Z"
+                                                                                  :message "quota exceeded (resize to 20Gi)")]))))]
+        (is (false? result) (str/join "\n" out))
+        (is (some #(str/includes? % "resize rejected - ControllerResizeError: quota exceeded (resize to 20Gi)") out)
+            (str/join "\n" out))))
+    (testing "a kept claim deleted while the operator confirms refuses the change"
+      (let [{:keys [result mutations out]} (transcript config {:state web-at-zero :argv enlarge-argv
+                                                               :between {:objects (:objects (without-claim web-at-zero "data-web-1"))}})]
+        (is (false? result))
+        (is (empty? mutations) (str/join "\n" out))
+        (is (some #(str/includes? % "the kept claim data-web-1 no longer exists") out) (str/join "\n" out))))))
