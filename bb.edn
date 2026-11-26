@@ -151,6 +151,7 @@
                    [gumshoe.scheduling-test]
                    [gumshoe.evpn-test]
                    [gumshoe.evpn-static-fdb-test]
+                   [gumshoe.evpn-orphan-fdb-test]
                    [gumshoe.tally-test]
                    [gumshoe.fabric-inputs-test]
                    [gumshoe.expectations-test]
@@ -450,6 +451,7 @@
                                                          'gumshoe.scheduling-test
                                                          'gumshoe.evpn-test
                                                          'gumshoe.evpn-static-fdb-test
+                                                         'gumshoe.evpn-orphan-fdb-test
                                                          'gumshoe.tally-test
                                                          'gumshoe.fabric-inputs-test
                                                          'gumshoe.expectations-test

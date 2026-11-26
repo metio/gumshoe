@@ -114,6 +114,13 @@ Cluster-wide:
 
    "dns-replication" {"serials" {"ns1.example.org" 1 "ns2.example.org" 2} "zone" "example.org"}
 
+   "evpn-orphan-fdb"
+   {"evpn-fdb" [{:host "h1" :mac "02:00:0a:18:00:20" :dev "lo.4208" :dst "10.21.2.70"
+                 :self? true :flags #{"self" "extern_learn"} :extern-learn? true
+                 :line "02:00:0a:18:00:20 dev lo.4208 dst 10.21.2.70 self extern_learn"}]
+    "evpn-macs" []
+    "evpn-vtep-paths" {["h1" 4208 "10.21.2.70"] {:read? true :paths 0}}}
+
    "expected-capabilities"
    {"config" {:capabilities [:calico :flux]}
     "capabilities" {:absent [:calico] :unanswered [:flux]}

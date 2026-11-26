@@ -322,6 +322,156 @@
              :rows (mapv (fn [row] {:row (row-text row) :seen (:seen row)}) rows)}
       (seq learned-dsts) (assoc :learned-dsts learned-dsts))))
 
+(defn- path-status
+  "Whether BGP advertises a VTEP in a VNI, from its path count: `:present`,
+  `:absent` when BGP answered with no path, `:unread` when it did not answer
+  or the count was never collected."
+  [reading]
+  (cond (not (:read? reading)) :unread
+        (pos? (:paths reading)) :present
+        :else :absent))
+
+(defn- owners-elsewhere
+  "For each [vni mac], the scanned host FRR holds the MAC on as local, keyed so
+  a host's own guests are told apart from guests that live on another host."
+  [macs]
+  (reduce (fn [acc {:keys [vni mac type host intf]}]
+            (cond-> acc
+              (= :local type) (update [vni mac] (fnil conj []) {:host host :intf intf})))
+          {}
+          macs))
+
+(defn- bridge-rows
+  "Each host's rows that send a MAC out of an overlay device through the bridge
+  without naming a destination, keyed by [host dev mac]: the rows a remote
+  entry leaves beside its `dst` row."
+  [rows]
+  (group-by (juxt :host :dev :mac)
+            (filter #(and (not (:dst %)) (:master %) (not (:static? %))
+                          (evpn/row-vni %))
+                    rows)))
+
+(defn orphan-fdb-groups
+  "The learned remote fdb rows grouped per host and VTEP, then by whether BGP
+  advertises that VTEP in each row's VNI: one group of rows BGP named no path
+  for (`:absent`), one whose path count could not be read (`:unread`). Rows
+  whose VTEP BGP advertises are left out, as are static pins, which
+  evpn-static-fdb judges.
+
+  Each group carries its distinct rows with how often one read printed each,
+  the MACs they name, the bridge rows each of those MACs has on the same
+  overlay device, the MACs this host also holds on a local tap - the collisions
+  evpn-fdb-conflict reports - and the MACs another scanned host holds as
+  local."
+  [evidence]
+  (let [rows (sightings (filter map? (get evidence "evpn-fdb")))
+        paths (get evidence "evpn-vtep-paths")
+        owned (owners-elsewhere (get evidence "evpn-macs"))
+        bridged (bridge-rows rows)
+        taps (set (for [row rows :when (and (not (:vxlan? row)) (not (:dst row)))]
+                    [(:host row) (:mac row)]))]
+    (for [{[host vtep] :key host-rows :items} (tally/tally (juxt :host :dst)
+                                                            (filter evpn/learned-remote-row? rows))
+          {status :key group :items} (tally/tally #(path-status (get paths [host (evpn/row-vni %) vtep]))
+                                                   host-rows)
+          :when (not= :present status)
+          :let [vnis (vec (distinct (map evpn/row-vni group)))
+                macs (vec (distinct (map :mac group)))]]
+      {:host host
+       :vtep vtep
+       :status status
+       :vnis vnis
+       :macs macs
+       :rows (vec group)
+       :count (reduce + (map :seen group))
+       :bridge-rows (vec (distinct (mapcat #(get bridged [host (:dev %) (:mac %)]) group)))
+       :local-tap-macs (filterv #(contains? taps [host %]) macs)
+       :owned-elsewhere (vec (for [{:keys [mac] :as row} (distinct (map #(select-keys % [:mac :dev :entry-vni]) group))
+                                   :let [vni (evpn/row-vni row)]
+                                   owner (get owned [vni mac])
+                                   :when (not= host (:host owner))]
+                               (assoc owner :mac mac :vni vni)))
+       :errors (vec (distinct (keep #(:error (get paths [host (evpn/row-vni %) vtep])) group)))})))
+
+(defn- rows-and-macs
+  [{:keys [macs] :as group}]
+  (str (count-text group) " (" (tally/counted (count macs) "MAC" "MACs") ")"))
+
+(defn- vni-text
+  [vnis]
+  (str (if (= 1 (count vnis)) "VNI " "VNIs ") (str/join ", " vnis)))
+
+(defn- orphan-finding
+  [{:keys [host vtep vnis macs rows bridge-rows local-tap-macs owned-elsewhere] n :count :as group}]
+  {:severity (if (seq owned-elsewhere) :critical :warning)
+   :component (str host "/" vtep)
+   :summary (str (rows-and-macs group) " name " vtep ", which no BGP path advertises in "
+                 (vni-text vnis))
+   :hint (str "each row tells this host to send its MAC across the fabric to " vtep
+              ", and BGP holds no path from that VTEP in " (vni-text vnis)
+              ", so frames for those MACs leave this host and arrive nowhere. The route that "
+              "installed each row is gone, so nothing reinstalls it and a local delete holds. "
+              (when (seq owned-elsewhere)
+                (str "These guests run on another scanned host and are unreachable from this one: "
+                     (str/join ", " (map #(str (:mac %) " on " (:host %)
+                                               (when (:intf %) (str " (" (:intf %) ")")))
+                                         owned-elsewhere))
+                     ". "))
+              (when (seq local-tap-macs)
+                (str (tally/counted (count local-tap-macs) "MAC" "MACs") " here also "
+                     (if (= 1 (count local-tap-macs)) "sits" "sit")
+                     " on a local tap, which evpn-fdb-conflict reports on its own: "
+                     (str/join ", " local-tap-macs) ". "))
+              "To clear them, delete on this host each `dst " vtep "` row and the bridge rows "
+              "its MAC has on the same overlay device ("
+              (tally/counted (count bridge-rows) "bridge row" "bridge rows")
+              ", which name no VTEP and are not counted above), and leave every tap row in "
+              "place: the row and delete command of each are in the finding's data")
+   :host host
+   :vtep vtep
+   :vnis vnis
+   :count n
+   :macs macs
+   :local-tap-macs local-tap-macs
+   :owned-elsewhere owned-elsewhere
+   :rows (mapv (fn [row] {:row (row-text row) :seen (:seen row) :delete (delete-command row)}) rows)
+   :bridge-rows (mapv (fn [row] {:row (row-text row) :seen (:seen row) :delete (delete-command row)})
+                      bridge-rows)})
+
+(defn- orphan-unread-finding
+  [{:keys [host vtep vnis macs errors] n :count :as group}]
+  {:severity :warning
+   :component (str host "/" vtep)
+   :summary (str "whether BGP advertises " vtep " in " (vni-text vnis) " could not be read, so "
+                 (rows-and-macs group) " naming it are unjudged")
+   :hint (str "the path count did not answer (" (str/join "; " errors) "). An absent path "
+              "has to be read before a row counts as an orphan, so these rows are neither "
+              "reported as orphans nor clean. Check `show bgp vni <vni> vtep " vtep "` on "
+              host ", which needs FRR 8.5 or later, or `show bgp l2vpn evpn route vni <vni> "
+              "vtep " vtep "` on an older FRR")
+   :host host
+   :vtep vtep
+   :vnis vnis
+   :count n
+   :macs macs
+   :errors errors})
+
+(defn detect-orphan-fdb
+  "Per host and VTEP, one finding for the learned remote fdb rows naming a VTEP
+  BGP holds no path from, whether or not the host also has a local tap for the
+  MAC, and one for the rows whose path count could not be read. A row whose
+  guest another scanned host holds as local is a guest unreachable from this
+  host, so that finding is critical; otherwise the guest may be gone, and a
+  warning says so. The collision with a local tap stays evpn-fdb-conflict's
+  critical finding, and these findings name its MACs without repeating it.
+  Without path counts at all the check is unread, so it concludes nothing."
+  [evidence]
+  (for [{:keys [status] :as group} (when (some? (get evidence "evpn-vtep-paths"))
+                                     (orphan-fdb-groups evidence))]
+    (if (= :absent status)
+      (orphan-finding group)
+      (orphan-unread-finding group))))
+
 (defn- vtep-unread-finding
   [{:keys [host vni vtep-error]}]
   {:severity :warning
@@ -447,6 +597,11 @@
     :description "hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local and whether BGP still advertises the remote one"
     :requires ["evpn-fdb"]
     :detect detect-fdb-conflicts}
+   {:name "evpn-orphan-fdb"
+    :description "learned remote fdb rows naming a VTEP no BGP path advertises, counted per host and VTEP whether or not the host also holds the MAC on a local tap"
+    :requires ["evpn-fdb" "evpn-vtep-paths"]
+    :joins ["evpn-fdb" "evpn-vtep-paths"]
+    :detect detect-orphan-fdb}
    {:name "evpn-hosts"
     :description "hosts whose fabric state could not be read, making the scan incomplete"
     :requires ["evpn-hosts"]

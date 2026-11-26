@@ -127,7 +127,7 @@
              :opts {:hosts "h1,h2" :vni "100"}
              :stubs (fn [evidence] {#'evpn/connections (recording :connections [:conns])
                                     #'evpn/collect-evidence! (recording :collect evidence)})
-             :evidence {"evpn-macs" [] "evpn-fdb" [] "evpn-hosts" []}
+             :evidence {"evpn-macs" [] "evpn-fdb" [] "evpn-vtep-paths" {} "evpn-hosts" []}
              :detective "evpn-hosts"
              :refusals {"no hosts" {:opts {:vni "100"}}
                         "no vnis" {:opts {:hosts "h1"}}}}

@@ -10,10 +10,12 @@
   cannot show a disagreement.
 
   Read-only throughout: three `show`-style commands per host, plus two per fdb
-  conflict found, and no configuration is touched. Hosts are queried in parallel and a host that cannot be reached
+  conflict found and one or two per remote VTEP a learned fdb row names, and no
+  configuration is touched. Hosts are queried in parallel and a host that cannot be reached
   becomes evidence rather than an aborted scan, because the unreachable host is
   often the symptom being investigated."
-  (:require [clojure.string :as str]
+  (:require [cheshire.core :as json]
+            [clojure.string :as str]
             [gumshoe.concurrent :as concurrent]
             [gumshoe.shell :as shell]
             [gumshoe.ssh :as ssh]))
@@ -284,6 +286,103 @@
      :local-intf (:dev tap)
      :stale-remote-vtep (:dst remote)}))
 
+;; --- remote VTEPs and the BGP paths that name them ---------------------------
+
+(defn row-vni
+  "The VNI an fdb row belongs to: its `vni` value when it prints one, else the
+  VNI its `lo.<vni>` overlay device is named after, else nil."
+  [{:keys [entry-vni dev]}]
+  (or (some-> entry-vni parse-long-or-nil)
+      (some->> dev (re-matches vxlan-dev-pattern) second parse-long-or-nil)))
+
+(defn learned-remote-row?
+  "Whether an fdb row sends a MAC across the fabric because something learned
+  it there: it names a destination VTEP and is neither a static pin, which
+  evpn-static-fdb judges, nor a permanent entry, which nobody learned."
+  [{:keys [dst state]}]
+  (boolean (and dst (not (contains? #{"static" "permanent"} state)))))
+
+(defn remote-vteps
+  "Every [host vni vtep] a learned remote fdb row names, each once, in the
+  order the rows name them: the VTEPs whose BGP paths decide whether those rows
+  are orphans."
+  [fdb]
+  (->> fdb
+       (filter map?)
+       (filter learned-remote-row?)
+       (keep (fn [row]
+               (when-let [vni (row-vni row)]
+                 [(:host row) vni (:dst row)])))
+       distinct
+       vec))
+
+(defn vtep-commands
+  "The reads that count the BGP paths naming one VTEP in one VNI. `show bgp vni
+  … vtep …` walks both of the VNI's tables, MAC-only type-2 routes included;
+  FRR before 8.5 has no such command and keeps one table per VNI, which
+  `show bgp l2vpn evpn route vni … vtep …` walks whole."
+  [connection vni vtep]
+  (let [sudo (if (:needs-sudo? connection) ["sudo"] [])]
+    {:both-tables (vec (concat sudo ["vtysh" "-c" (str "show bgp vni " vni " vtep " vtep " json")]))
+     :one-table (vec (concat sudo ["vtysh" "-c" (str "show bgp l2vpn evpn route vni " vni
+                                                     " vtep " vtep " json")]))}))
+
+(defn- unknown-command?
+  [output]
+  (str/includes? (or output "") "% Unknown command"))
+
+(defn parse-vtep-paths
+  "How many BGP paths in one VNI name a VTEP as their next hop, from the JSON
+  of either read in vtep-commands: `numPaths`, plus the MAC table's own
+  `numPaths` when the output carries a `macTable`. FRR counts only the paths
+  whose next hop is the VTEP, while its `numPrefix` counts every prefix the
+  table holds, so the prefix count says nothing here.
+
+  A count of zero is a read that found no path. Anything else - silence, an
+  unknown command, a VNI BGP does not know (FRR then prints the JSON without
+  any count), a MAC table without its count, output that is no JSON - is
+  `:read? false`, so a failed read never passes for an absent path."
+  [output]
+  (let [text (or output "")
+        parsed (try (json/parse-string text) (catch Exception _ ::unparsable))
+        paths (fn [m] (let [n (when (map? m) (get m "numPaths"))]
+                        (when (integer? n) n)))]
+    (cond
+      (str/blank? text) (unread output "no output")
+      (unknown-command? text) (assoc (unread output "unknown command") :unknown-command? true)
+      (not (map? parsed)) (unread output "unrecognised output")
+      (nil? (paths parsed)) {:read? false :error "BGP printed no path count, so it does not know this VNI"}
+      (and (contains? parsed "macTable") (nil? (paths (get parsed "macTable"))))
+      {:read? false :error "BGP printed no path count for the VNI's MAC table"}
+      :else {:read? true
+             :paths (+ (paths parsed) (or (paths (get parsed "macTable")) 0))})))
+
+(defn read-vtep-paths
+  "The BGP path count for one VTEP in one VNI over `run`. The single-table read
+  runs only when FRR answered that it does not know the two-table command,
+  because on an FRR that has it the single-table read misses MAC-only routes
+  and would report a live VTEP as advertising nothing."
+  [connection vni vtep run]
+  (let [cmds (vtep-commands connection vni vtep)
+        both (parse-vtep-paths (run connection (:both-tables cmds)))]
+    (if (:unknown-command? both)
+      (parse-vtep-paths (run connection (:one-table cmds)))
+      both)))
+
+(defn collect-vtep-paths
+  "The BGP path count of every VTEP a learned remote fdb row names, keyed by
+  [host vni vtep], read on that host in parallel. Never throws: a host that
+  does not answer leaves its counts `:read? false`."
+  [connections fdb run]
+  (let [by-host (into {} (map (juxt :host identity)) connections)]
+    (->> (for [[host vni vtep :as k] (remote-vteps fdb)
+               :let [connection (get by-host host)]
+               :when connection]
+           #(binding [shell/*timeout-ms* (or (:timeout-ms connection) 30000)]
+              [k (read-vtep-paths connection vni vtep run)]))
+         concurrent/all
+         (into {}))))
+
 (defn host-commands
   "The three read-only commands, with sudo only where it is needed: vtysh talks to
   FRR's control socket and needs it, `bridge fdb show` reads the kernel's table and
@@ -381,13 +480,17 @@
   "Fan out across every host and VNI, then flatten into the evidence a detective
   reads. Hosts are queried in parallel because a fabric scan is otherwise as slow
   as the sum of its hosts, and a partitioned fabric is when speed matters. The
-  fdb conflicts found get a second, bounded round of reads for their context."
+  fdb conflicts found get a second, bounded round of reads for their context,
+  and every remote VTEP a learned fdb row names gets its BGP paths counted."
   [connections vnis]
   (let [results (concurrent/all (for [c connections vni vnis] #(collect-host c vni)))
-        evidence (host-evidence results)]
-    (assoc evidence "evpn-fdb-context"
-           (when-let [fdb (get evidence "evpn-fdb")]
-             (collect-conflict-context connections (fdb-conflicts fdb) ssh-runner)))))
+        evidence (host-evidence results)
+        fdb (get evidence "evpn-fdb")]
+    (assoc evidence
+           "evpn-fdb-context"
+           (when fdb (collect-conflict-context connections (fdb-conflicts fdb) ssh-runner))
+           "evpn-vtep-paths"
+           (when fdb (collect-vtep-paths connections fdb ssh-runner)))))
 
 (defn connections
   "Connection maps from a host list, carrying the sudo and timeout settings the

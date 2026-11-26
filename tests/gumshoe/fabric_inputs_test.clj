@@ -47,6 +47,7 @@
                  :type :remote :vtep gateway}]
    "evpn-fdb" []
    "evpn-fdb-context" {}
+   "evpn-vtep-paths" {}
    "evpn-hosts" [{:host "host-a" :vni 4208} {:host "host-b" :vni 4208}]})
 
 (defn- env-lookup
@@ -188,7 +189,7 @@
                                     (str/includes? (get % "summary") "guest MAC prefixes"))
                               inputs-findings))))
         (testing "the checks that need neither value judge either way"
-          (doseq [check ["evpn-mac-ownership" "evpn-fdb-conflict" "evpn-hosts" "evpn-static-fdb" "evpn-inputs"]]
+          (doseq [check ["evpn-mac-ownership" "evpn-fdb-conflict" "evpn-orphan-fdb" "evpn-hosts" "evpn-static-fdb" "evpn-inputs"]]
             (is (not (unjudged? stdout check)) check))
           (is (= 1 (count (findings-of stdout "evpn-mac-ownership")))))))))
 
@@ -231,6 +232,8 @@
              "unread" true}
             {"name" "evpn-fdb-conflict"
              "description" "hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local and whether BGP still advertises the remote one"}
+            {"name" "evpn-orphan-fdb"
+             "description" "learned remote fdb rows naming a VTEP no BGP path advertises, counted per host and VTEP whether or not the host also holds the MAC on a local tap"}
             {"name" "evpn-hosts"
              "description" "hosts whose fabric state could not be read, making the scan incomplete"}
             {"name" "evpn-static-fdb"
@@ -269,8 +272,8 @@
         (is (str/includes? stdout "read nothing"))))
     (testing "the same fabric with gateway VTEPs passes every check"
       (let [{:keys [stdout stderr]} (run {:gateway-vteps gateway :guest-mac-prefixes "02:00:"})]
-        (is (= 6 (count (re-seq (re-pattern (java.util.regex.Pattern/quote (theme/glyph :success))) stdout))))
-        (is (str/includes? stderr "no issues found - 6 checks passed"))))))
+        (is (= 7 (count (re-seq (re-pattern (java.util.regex.Pattern/quote (theme/glyph :success))) stdout))))
+        (is (str/includes? stderr "no issues found - 7 checks passed"))))))
 
 (deftest a-collection-that-read-nothing-still-checked-nothing
   (testing "missing inputs add no finding when the fabric itself was not read"
