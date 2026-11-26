@@ -18,6 +18,7 @@
   (str "#!/usr/bin/env sh\n"
        "# Reproducer for: " description "\n"
        "# The exact CLI calls behind the report you just saw - review before running.\n\n"
+       (shell/replay-preamble)
        (str/join "\n" commands)
        "\n"))
 

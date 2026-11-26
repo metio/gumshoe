@@ -127,6 +127,20 @@ sessions) streams without a timeout and keeps running for as long as it needs.
 Every terminal state ends with a banner and a next step: what to install, what
 to fix, or what to run.
 
+**Your kuberc stays out of it.** Every command gumshoe starts - kubectl reads
+and changes, `auth can-i`, port-forwards, kubectl plugins, and kubectl started
+by a shell or another tool - runs with `KUBERC=off`, so kubectl ignores both
+the file `KUBERC` names and `~/.kube/kuberc`. A kuberc can alias commands and
+default flags such as delete's `--interactive`, `--force` or
+`--grace-period=0`; with it ignored, a `--dry-run` plan is the same with and
+without one, the plan you confirmed is the command that runs, and an
+unattended delete never waits on a prompt. There is no opt-out. kubectl reads
+a kuberc from 1.33 on; older versions ignore the variable. The `would run:`
+lines of a plan show the command without the variable, so run a command you
+copy from one as `KUBERC=off kubectl …` to get the same result. Reproducers and
+recordings start with `export KUBERC=off`, and a shared `upterm` shell
+inherits it.
+
 **Reproducers.** After a read-only book finishes, it writes the exact sequence
 of CLI calls it made to a throwaway shell script and copies the run command to
 your clipboard (wl-copy on Wayland, xclip/xsel on X11, pbcopy on macOS). Hand

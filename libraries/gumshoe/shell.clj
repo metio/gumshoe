@@ -17,10 +17,36 @@
    commands (run-with-output) are exempt: those are the deliberately
    long-running, interactive foreground operations - a port-forward, an ssh
    session, a shared upterm terminal - and must run until the operator ends
-   them."
+   them.
+
+   Every child starts with child-env on top of our own environment, so
+   kubectl never reads the operator's kuberc: a plan the operator confirmed is
+   the command that runs. Spawning through babashka.process anywhere else would
+   skip that; spawn through this namespace (start for a child the caller
+   manages itself)."
   (:require [babashka.process :as process]
             [clojure.java.io :as io]
             [clojure.string :as str]))
+
+(def child-env
+  "Environment every child process gets on top of ours, winning over the
+   operator's own values and over a caller's extra environment.
+
+   KUBERC=off makes kubectl skip both the file KUBERC names and
+   ~/.kube/kuberc (kubectl's pkg/kuberc LoadKuberc, from kubectl 1.33). A
+   kuberc can alias commands and default flags such as delete's
+   --interactive, --force or --grace-period=0, so with it the command a book
+   printed and the operator confirmed is not the command kubectl runs, and an
+   interactive default makes an unattended delete hang on a prompt. kubectl
+   plugins (kubectl-cnpg), and kubectl started by another tool or a shell,
+   inherit it. An older kubectl has no kuberc and ignores the variable. There
+   is no opt-out: a book's command has to mean the same on every machine."
+  {"KUBERC" "off"})
+
+(defn- child-opts
+  "opts with child-env merged over any :extra-env the caller gave."
+  [opts]
+  (update opts :extra-env merge child-env))
 
 (def ^:dynamic *timeout-ms*
   "Upper bound in milliseconds on any single captured command. The default is
@@ -72,6 +98,13 @@
     (if (or (empty? s) (re-find shell-safe s))
       (str "'" (str/replace s "'" "'\\''") "'")
       s)))
+
+(defn replay-preamble
+  "Shell lines that give a replayed recording the same child-env the run had,
+   so a reproducer an operator runs by hand is not changed by their kuberc
+   either. One export per variable, ahead of the commands."
+  []
+  (apply str (for [[k v] (sort child-env)] (str "export " k "=" (quote-token v) "\n"))))
 
 (defn- record!
   "Records the command as a line sh replays with the same argv: a jsonpath
@@ -138,7 +171,7 @@
    operator saw, and the reproducer would replay it as if it had."
   [opts args]
   (refuse-when-interrupted! args)
-  (let [proc (try (apply process/process opts args)
+  (let [proc (try (apply process/process (child-opts opts) args)
                   (catch Exception e e))]
     (if (instance? Exception proc)
       (launch-failure args proc)
@@ -162,6 +195,14 @@
             (launch-failure args e))
           (finally
             (untrack-child! proc)))))))
+
+(defn start
+  "Starts a child the caller manages itself - streams it reads, a lifetime it
+   ends - with child-env applied. Takes babashka.process's options and
+   command; throws as babashka.process does when the program can not be
+   launched, and records nothing."
+  [opts & args]
+  (apply process/process (child-opts opts) args))
 
 (defn execute
   "Runs a command capturing stdout/stderr. Returns the full process map."
@@ -192,7 +233,7 @@
   [opts args]
   (record! args)
   (try
-    (apply process/shell opts args)
+    (apply process/shell (child-opts opts) args)
     (catch Exception e
       (launch-failure args e))))
 
@@ -227,7 +268,7 @@
   (record! args)
   (try
     (not-empty (str/trim (str (:out (apply process/shell
-                                           {:out :string :err :inherit :in :inherit :continue true}
+                                           (child-opts {:out :string :err :inherit :in :inherit :continue true})
                                            args)))))
     (catch Exception _ nil)))
 
@@ -248,8 +289,8 @@
   [input & args]
   (try
     (let [proc (apply process/process
-                      {:in input :out :write :out-file discard
-                       :err :write :err-file discard :continue true}
+                      (child-opts {:in input :out :write :out-file discard
+                                   :err :write :err-file discard :continue true})
                       args)
           result (deref (future @proc) 3000 ::timeout)]
       (if (= ::timeout result)

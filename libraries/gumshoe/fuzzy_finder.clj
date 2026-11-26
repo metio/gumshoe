@@ -5,15 +5,15 @@
   "Fuzzy selection via fzf: candidates go to stdin, the selection comes back on
    stdout, and fzf draws its interface on the terminal directly. A single
    candidate is picked automatically; ESC selects nothing."
-  (:require [babashka.process :as process]
-            [clojure.java.io :as io]
+  (:require [clojure.java.io :as io]
             [clojure.string :as str]
+            [gumshoe.shell :as shell]
             [gumshoe.ui :as ui]))
 
 (defn- start
   [args]
   (try
-    (process/process args)
+    (apply shell/start {} args)
     (catch java.io.IOException e
       (throw (ex-info (str "could not start " (first args) " for the selection - is it installed and on PATH?")
                       {:command (vec args)}
