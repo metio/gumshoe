@@ -38,6 +38,9 @@
                    [gumshoe.dry-run-books-test]
                    [gumshoe.node-condition-polarity-test]
                    [gumshoe.autoscaler-unread-test]
+                   [gumshoe.blind-findings-test]
+                   [gumshoe.optional-type-discovery-test]
+                   [gumshoe.abort-exit-contract-test]
                    [gumshoe.strict-json-test]
                    [gumshoe.ceph-strict-json-test]
                    [gumshoe.restic-answer-test]
@@ -291,6 +294,9 @@
                                                          'gumshoe.dry-run-books-test
                                                          'gumshoe.node-condition-polarity-test
                                                          'gumshoe.autoscaler-unread-test
+                                                         'gumshoe.blind-findings-test
+                                                         'gumshoe.optional-type-discovery-test
+                                                         'gumshoe.abort-exit-contract-test
                                                          'gumshoe.strict-json-test
                                                          'gumshoe.ceph-strict-json-test
                                                          'gumshoe.restic-answer-test
