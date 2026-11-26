@@ -118,12 +118,18 @@ otherwise ask for:
   node, `-N` name, `-p` pick, …; `gumshoe.flags/aliases` holds the list).
   The aliases `--name` and Thanos' `--service` had before (`-r`, `-s`,
   `-m`) still parse, and print a deprecation note on stderr naming the
-  current one; write the current alias or the long flag. When a change
-  book finds nothing to change, it says so and exits 0 only when its flags
-  named no target or a read found the named object; a named object that
-  does not exist ends with `no <kind> <namespace>/<name> - not found` and
-  exit 1, and one the book cannot read on its own (no typed subject, a name
-  without its namespace) exits 1 as well.
+  current one; write the current alias or the long flag. A change book,
+  playbook or dispatcher takes a target its flags name without asking when
+  its candidates offer it, and never falls back to the picker when they do
+  not. A named target the candidates leave out exits 0 only when the
+  change's own already-done check holds for it (`skipped, already done:
+  <step>`); otherwise it exits 1: `no <kind> <namespace>/<name> - not
+  found`, the change's `refusing: <reason>` (an unhealthy cluster, a
+  running operation), `<kind> <name> is present but not eligible for this
+  change`, or, where the book cannot read the object (no typed subject, a
+  multi-pick, a name without its namespace), `not found among the
+  candidates`. With no target named, a book with nothing to change says so
+  and exits 0.
 - **Pass options only.** A book, and `./detect`, refuses any positional
   argument with exit 1 before anything runs, naming the word: babashka.cli
   stops reading options at the first one, so a `--dry-run` or `--output
@@ -269,7 +275,11 @@ and current list.
    no post-check. It still checks each step's precondition. A banner naming
    steps whose precondition does not hold, with exit code 1, means the real
    run would stop there, unless an earlier step of the same playbook creates
-   what that step needs. A `DRY RUN stopped by an unexpected error` banner
+   what that step needs. A banner ending `not rehearsed: <step>`, also with
+   exit code 1, names steps whose work is a legacy `:execute!` function:
+   nothing of them ran and the rehearsal cannot show what they would do
+   (ceph `upgrade`, db-operator `connect`, `admin_connect` and `restore`,
+   prometheus `delete_metric`); the steps after them are still shown. A `DRY RUN stopped by an unexpected error` banner
    means the rehearsal itself broke and the plans after the error were never
    shown; read the error before relying on the plan. A playbook passes its
    pauses under `--dry-run`; a

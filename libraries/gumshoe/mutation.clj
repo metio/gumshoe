@@ -1134,68 +1134,104 @@
          false)))))
 
 (defn named-but-not-offered
-  "Pure: what to do when the select offered no candidate although the flags
-   named `named`, given `presence`, what a strict read found of the object
-   the pick names (:present, :absent or :unread), or nil when the spec has
-   no typed subject to read. An object that exists is outside the
-   candidates because it needs no change, so the empty message holds; one
-   that does not exist, or that nothing could read, is never reported as
-   done. Returns {:ok message} or {:error message}."
-  [{:keys [label empty-message]} named presence]
+  "Pure: the error for `named`, the target the flags name, when the select
+   did not offer it and the run cannot go on, given `found`: :absent when a
+   strict read found no such object, :unread when the read did not answer,
+   :not-eligible when the object exists but is neither offered nor already
+   done (the candidates leave out what the change cannot act on as well as
+   what needs no change), or nil when nothing could read it. A named target
+   is never reported as done on this path, and never replaced by another
+   candidate."
+  [{:keys [label]} named found]
   (let [shown (if (string? named) named (str/join ", " named))]
-    (case presence
-      :present {:ok (or empty-message "nothing to do")}
-      :absent {:error (format "no %s %s - not found" label shown)}
-      :unread {:error (format "could not read %s %s, so whether it exists or needs no change is unknown" label shown)}
-      {:error (format "%s %s not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"
-                      label shown)})))
+    (case found
+      :absent (format "no %s %s - not found" label shown)
+      :unread (format "could not read %s %s, so whether it exists or needs no change is unknown" label shown)
+      :not-eligible (format "%s %s is present but not eligible for this change - it is not among the candidates and not already done; nothing was changed" label shown)
+      (format "%s %s not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"
+              label shown))))
 
-(defn- nothing-to-pick!
-  "The select offered no candidate. Without a target named on the command
-   line that is nothing to do; with one, the named object is read before
-   anything says it needs no change (see named-but-not-offered)."
-  [spec opts context]
+(defn- judge-named!
+  "The named target exists but the select did not offer it. It succeeds
+   only when the spec's own :done judges it already done; a refusal or an
+   unanswered read is printed as a run of the change prints it, and an
+   object that is neither done nor refused is not eligible, because the
+   filter that left it out may be one the change relies on (cnpg restart
+   offers healthy clusters only)."
+  [spec named opts]
+  (let [{:keys [done refusal unread] :as verdict} (prejudge spec named opts nil)]
+    (cond
+      (nil? verdict) false
+      done (skipped! spec done)
+      (or refusal unread) (prejudge-printed verdict)
+      :else (do (stdout/error (named-but-not-offered (:select spec) named :not-eligible)) false))))
+
+(defn- not-offered!
+  "The flags name `named`, which the select did not offer. The picker is
+   never shown, so an operator or an agent that named a target is never
+   asked to pick a different one. A spec with a :subject reads the object
+   the pick names, whatever kind its :parse derives; an object that exists
+   is judged by judge-named!. A :many pick, a select without a :subject, or
+   a :namespaced name without its namespace names no object a read can
+   find, so the run fails closed."
+  [spec named opts context]
   (let [{:keys [select]} spec
-        named (select/named-target select opts)]
-    (if-not named
-      (do (stdout/ok (or (:empty-message select) "nothing to do")) true)
-      ;; a :namespaced name without its namespace names no object a read can find
-      (let [whole? (or (not= :namespaced (:mode select))
-                       (not (str/blank? (str (get opts (:namespace-flag select))))))
-            {:keys [ref refusal]} (when (and (string? named) whole? (:type (change/pick-subject spec)))
-                                    (parse-pick spec named))]
-        (if refusal
-          (refuse! refusal)
-          (let [{:keys [ok error]} (named-but-not-offered select named
-                                                          (when ref (kubectl/presence context ref)))]
-            (if ok
-              (do (stdout/ok ok) true)
-              (do (stdout/error error) false))))))))
+        whole? (or (not= :namespaced (:mode select))
+                   (str/includes? (str named) "/"))
+        {:keys [ref refusal]} (when (and (string? named) whole? (change/pick-subject spec))
+                                (parse-pick spec named))]
+    (if refusal
+      (refuse! refusal)
+      (let [found (when (and (:type ref) (:name ref)) (kubectl/presence context ref))]
+        (if (= :present found)
+          (judge-named! spec named opts)
+          (do (stdout/error (named-but-not-offered select named found)) false))))))
+
+(defn pick!
+  "Lists the candidates of the spec's select on `context` and resolves the
+   pick, honouring the flags in opts. {:target <the pick>} when there is one
+   to run against, otherwise {:result <the run's result>} with the reason
+   printed: true when nothing is offered and the flags name nothing, or the
+   object they name is not offered and its :done judges it already done;
+   false when the candidates could not be read, the named object is not
+   offered and does not exist, could not be read, is refused or is not
+   eligible, or the operator picks nothing. A target the flags name that
+   the candidates offer is taken without asking; one they do not offer is
+   judged by not-offered! and never falls back to the picker. Every change
+   driver (run!, gumshoe.playbook, gumshoe.dispatch) picks through this."
+  [spec opts context]
+  (let [{:keys [select] :as spec} (change/normalize spec)
+        {:keys [names unread]} (select/listed select context)
+        named (when-not unread (select/named-target select opts))]
+    (cond
+      unread
+      {:result (select/unread! select unread)}
+
+      (and named (not (select/offered? select named names)))
+      {:result (not-offered! spec named opts context)}
+
+      (empty? names)
+      {:result (do (stdout/ok (or (:empty-message select) "nothing to do")) true)}
+
+      :else
+      (let [target (select/choose select names opts)]
+        (if (select/nothing-selected? (:mode select) target)
+          {:result (do (stdout/error (format "no %s selected" (:label select))) false)}
+          {:target target})))))
 
 (defn run!
-  "Selects the spec's subject (interactive, honouring the CLI flags) and runs it
-   through run-on!. Returns true when there is nothing to select (its
-   :empty-message is shown) and the flags name no target, or the target they
-   name exists and so needs no change; false when the named target does not
-   exist or could not be read, when what :connect names could not be
-   reached, the candidates could not be read, the operator picks nothing or
-   parse-pick refuses the pick, otherwise the
-   change's result. Use run! for a single confirmed step; use run-on! to compose
-   several steps against one already-picked subject."
+  "Selects the spec's subject (see pick!) and runs it through run-on!.
+   Returns pick!'s result when it yields no target (nothing to do, a named
+   target that is not offered, unreadable candidates, nothing picked), false when
+   what :connect names could not be reached or parse-pick refuses the pick,
+   otherwise the change's result. Use run! for a single confirmed step; use
+   run-on! to compose several steps against one already-picked subject."
   [spec opts announcement-data]
-  (let [{:keys [select] :as spec} (change/normalize spec)]
+  (let [spec (change/normalize spec)]
     (if-let [connection (connect spec opts)]
-      (let [{:keys [candidates target unread]} (select/resolve-target select opts (:context connection))]
-        (cond
-          unread (select/unread! select unread)
-
-          (empty? candidates)
-          (nothing-to-pick! spec opts (:context connection))
-
-          (select/nothing-selected? (:mode select) target)
-          (do (stdout/error (format "no %s selected" (:label select))) false)
-
-          :else
+      (let [{:keys [target result] :as picked} (pick! spec opts (:context connection))]
+        (if (contains? picked :result)
+          result
           (let [{:keys [ref refusal]} (parse-pick spec target)]
             (if refusal
               (refuse! refusal)

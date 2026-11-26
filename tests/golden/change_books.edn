@@ -43,12 +43,12 @@
   :unpicked
   {:result false,
    :out
-   "🔶 Node 'n9' is not a valid choice, please select one\n❌ no Node selected"}},
+   "❌ Node n9 not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"}},
  "runbooks/kubernetes/netshoot/pod.clj"
  {:no-pods
   {:result false,
    :out
-   "❌ Pod shop/web-1 not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"},
+   "❌ Pod shop/web-1 not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"},
   :permitted
   {:result true,
    :out "▸ Pod: shop/web-1",
@@ -100,7 +100,7 @@
   :unpicked
   {:result false,
    :out
-   "🔶 no Pod matches the given flags, please select from all instead\n🔶 Pod 'shop/web-9' is not a valid choice, please select one\n❌ no Pod selected"}},
+   "❌ Pod shop/web-9 not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"}},
  "tools/ceph/runbooks/archive_crashes.clj"
  {:ceph-unanswered
   {:result false,
@@ -346,7 +346,7 @@
  {:all-in
   {:result false,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n❌ OSD osd.3 not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"},
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n❌ OSD osd.3 not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"},
   :brought-in-meanwhile
   {:result true,
    :out
@@ -553,7 +553,7 @@
   :unpicked
   {:result false,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n🔶 OSD 'osd.9' is not a valid choice, please select one\n❌ no OSD selected"},
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n❌ OSD osd.9 not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"},
   :unreachable
   {:result false,
    :out

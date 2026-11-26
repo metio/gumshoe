@@ -577,20 +577,14 @@
                false))))))
 
 (defn run!
-  "Selects the subject, honouring the flags, and runs the playbook against it.
-   Returns true when there is nothing to select, false when nothing was picked."
+  "Selects the subject, honouring the flags (see gumshoe.mutation/pick!),
+   and runs the playbook against it. Returns true when there is nothing to
+   select, false when nothing was picked or the named target is not
+   offered (see gumshoe.mutation/pick!)."
   [{:keys [select] :as playbook} opts announcement-data]
-  (let [{:keys [candidates target unread]} (select/resolve-target select opts (kubectl/current-context))]
-    (cond
-      unread (select/unread! select unread)
-
-      (empty? candidates)
-      (do (stdout/ok (or (:empty-message select) "nothing to do")) true)
-
-      (select/nothing-selected? (:mode select) target)
-      (do (stdout/error (format "no %s selected" (:label select))) false)
-
-      :else
+  (let [{:keys [target result] :as picked} (mutation/pick! {:select select} opts (kubectl/current-context))]
+    (if (contains? picked :result)
+      result
       (run-on! playbook target opts announcement-data))))
 
 (defn- step-line

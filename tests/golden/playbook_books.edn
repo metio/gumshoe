@@ -403,11 +403,12 @@
     "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
     "  ✓ Nodes running different kubelet minor versions"]},
   :empty
-  {:result true,
-   :out ["✅ nothing to do"],
+  {:result false,
+   :out
+   ["❌ Node n1 not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"],
    :confirmations [],
    :writes [],
-   :banner "DONE - nothing was changed",
+   :banner "FAILED - read the messages above; nothing was changed",
    :recovery []},
   :failing-drain
   {:result false,
@@ -990,8 +991,7 @@
   :unpicked
   {:result false,
    :out
-   ["🔶 Node 'n9' is not a valid choice, please select one"
-    "❌ no Node selected"],
+   ["❌ Node n9 not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"],
    :confirmations [],
    :writes [],
    :banner "FAILED - read the messages above; nothing was changed",
@@ -1181,11 +1181,12 @@
     "volumes:   persistentvolumeclaims apps/data-podinfo-db-0, persistentvolumeclaims apps/podinfo-cache"
     "waits:     {:in-flight 300, :deletion 300, :release-ready 900, :owner-ready 900}"]},
   :empty
-  {:result true,
-   :out ["✅ nothing to do"],
+  {:result false,
+   :out
+   ["❌ HelmRelease apps/podinfo not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"],
    :confirmations [],
    :writes [],
-   :banner "DONE - nothing was changed",
+   :banner "FAILED - read the messages above; nothing was changed",
    :recovery []},
   :failing-storage-delete
   {:result false,
@@ -1650,9 +1651,7 @@
   :unpicked
   {:result false,
    :out
-   ["🔶 no HelmRelease matches the given flags, please select from all instead"
-    "🔶 HelmRelease 'apps/nope' is not a valid choice, please select one"
-    "❌ no HelmRelease selected"],
+   ["❌ HelmRelease apps/nope not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"],
    :confirmations [],
    :writes [],
    :banner "FAILED - read the messages above; nothing was changed",
