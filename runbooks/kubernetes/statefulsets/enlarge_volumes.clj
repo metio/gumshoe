@@ -5,7 +5,9 @@
   "Grows the volumes of any StatefulSet. A volumeClaimTemplate is immutable,
    so the PVCs are enlarged, the StatefulSet is deleted with its pods
    orphaned, and it is recreated with the new template - after which
-   everything matches again. The full plan is validated first, the change
+   everything matches again. The claims a StatefulSet scaled down keeps for
+   its higher ordinals are grown too, so a later scale-up mounts them at the
+   new size. The full plan is validated first, the change
    runs as an effect plan (so --dry-run shows it), the StatefulSet is pinned
    between the confirmation and the effect, a failure part-way prints what
    it left behind, and the result is verified volume by volume."
@@ -64,11 +66,12 @@
    that must stop it, read strictly."
   [context cluster namespace statefulset template-name capacity]
   (read-strictly
-   #(let [plan (storage/expansion-plan
-                {:pvc-names (storage/statefulset-pvc-names statefulset template-name)
-                 :pvcs {:items (kubectl/filter-list
-                                (kubectl/get-all context "persistentvolumeclaims")
-                                (fn [pvc] (= namespace (kubectl/namespace-of pvc))))}
+   #(let [pvcs {:items (kubectl/filter-list
+                        (kubectl/get-all context "persistentvolumeclaims")
+                        (fn [pvc] (= namespace (kubectl/namespace-of pvc))))}
+          plan (storage/expansion-plan
+                {:pvc-names (storage/statefulset-claim-names statefulset template-name pvcs)
+                 :pvcs pvcs
                  :storage-classes (kubectl/get-all context "storageclasses")
                  :capacity capacity})]
       ;; Second-level prerequisites: the book's :prerequisites already proved
@@ -78,7 +81,9 @@
       ;; the storage backend (a ceph pool's free capacity) has room for this
       ;; growth. They fail closed, so an unverifiable backend blocks the resize.
       {:plan plan
-       :problems (into (storage/expansion-problems plan)
+       :retained (set (remove (set (storage/statefulset-pvc-names statefulset template-name)) (map :pvc plan)))
+       :problems (into (into (storage/expansion-problems plan)
+                             (storage/unclaimed-template-names statefulset template-name pvcs))
                        (storage/resize-preflight-problems
                         {:context context :cluster cluster :namespace namespace :plan plan}))})))
 
@@ -123,13 +128,16 @@
 
           :else
           (if-let [template (interact/choose-one "Template" templates (:template opts))]
-            (let [{{:keys [plan problems]} :values unread :unread}
+            (let [{{:keys [plan problems retained]} :values unread :unread}
                   (planned context cluster namespace statefulset template capacity)]
               (if unread
                 (unread! unread)
                 (do (stdout/print-section "📋 Preflight")
                     (doseq [{:keys [pvc current target]} plan]
-                      (stdout/err-println (format "  plan: %s: %s -> %s" pvc current target)))
+                      (stdout/err-println (format "  plan: %s: %s -> %s%s" pvc current target
+                                                  (if (contains? retained pvc)
+                                                    " (kept from a replica that does not run now)"
+                                                    ""))))
                     (if (seq problems)
                       (do (doseq [problem problems] (stdout/error problem))
                           (stdout/err-println "Refusing: a second-level prerequisite failed - nothing was changed.")

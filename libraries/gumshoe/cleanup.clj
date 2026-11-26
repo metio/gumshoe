@@ -10,6 +10,7 @@
    the engine read again after the confirmation, and returns the reason
    the change must not run, or nil."
   (:require [clojure.string :as str]
+            [gumshoe.claims :as claims]
             [gumshoe.kubectl :as kubectl]))
 
 (defn- describe
@@ -93,14 +94,21 @@
             (-> pod :metadata :name)))))
 
 (defn claim-refusal
-  "Why the claim of ref must not be deleted, judged on the claim and the
-   pods of its namespace as read now, `pods` as kubectl/get-json-result
-   returns them: the claim no longer exists, the pods could not be read so
-   whether one uses it is unknown, or a pod uses it, named."
-  [{:keys [namespace name] :as ref} claim {:keys [ok? doc]}]
+  "Why the claim of ref must not be deleted, judged on the claim and what
+   could hold it in its namespace as read now, `reads` as
+   gumshoe.claims/read-holders returns them (type ->
+   kubectl/get-json-result): the claim no longer exists, a read did not
+   answer so whether something holds it is unknown, or what holds it, named
+   (see gumshoe.claims/holders). A pods read alone, as
+   kubectl/get-json-result returns it, leaves every other holder unread and
+   so refuses."
+  [{:keys [namespace name] :as ref} claim reads]
   (let [claim-name (describe "PersistentVolumeClaim" ref)]
     (cond
       (nil? claim) (str claim-name " no longer exists")
-      (not ok?) (format "the pods of namespace %s could not be read, so whether one uses %s is unknown" namespace claim-name)
-      :else (when-let [users (seq (pods-claiming doc namespace name))]
-              (format "%s is used by pod(s) %s" claim-name (str/join ", " users))))))
+      (claims/unread reads)
+      (format "the %s of namespace %s could not be read, so whether one uses %s is unknown"
+              (str/join ", " (claims/unread reads)) namespace claim-name)
+      :else (when-let [holders (seq (claims/holders (claims/index reads)
+                                                         (update claim :metadata merge {:namespace namespace :name name})))]
+              (format "%s is %s" claim-name (str/join "; " holders))))))

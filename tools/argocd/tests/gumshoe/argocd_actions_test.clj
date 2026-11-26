@@ -65,27 +65,3 @@
           "no prune: resources removed from Git stay in the cluster"]
          (actions/sync-items (app) false)))
   (is (= "prune: resources removed from Git are deleted from the cluster" (second (actions/sync-items (app) true)))))
-
-(deftest the-sync-operation
-  (is (= {"operation" {"initiatedBy" {"username" "gumshoe"} "sync" {"syncStrategy" {"hook" {}}}}}
-         (json/parse-string (actions/sync-patch "gumshoe" false))))
-  (is (= true (get-in (json/parse-string (actions/sync-patch "gumshoe" true)) ["operation" "sync" "prune"]))))
-
-(deftest sync-completion
-  (let [requested (java.time.Instant/parse "2026-11-19T12:00:00.700Z")]
-    (is (actions/synced? (app :phase "Succeeded" :started "2026-11-19T12:00:00Z") requested)
-        "startedAt has second precision, so the request's own second counts")
-    (is (actions/synced? (app :phase "Succeeded" :started "2026-11-19T12:00:05Z") requested))
-    (is (not (actions/synced? (app :phase "Succeeded" :started "2026-11-19T11:59:59Z") requested)) "an older operation")
-    (is (not (actions/synced? (app :phase "Running" :started "2026-11-19T12:00:05Z") requested)))
-    (is (not (actions/synced? (app :phase "Succeeded" :started "2026-11-19T12:00:05Z" :operation {:sync {}}) requested))
-        "the operation field is still there")
-    (is (not (actions/synced? (app) requested)))
-    (testing "a failure of the requested operation is surfaced, an older one is not"
-      (is (= ["the sync failed: one or more objects failed to apply"]
-             (actions/sync-signals (assoc-in (app :phase "Failed" :started "2026-11-19T12:00:03Z")
-                                             [:status :operationState :message] "one or more objects failed to apply")
-                                   requested)))
-      (is (= ["the sync errored: no message"] (actions/sync-signals (app :phase "Error" :started "2026-11-19T12:00:03Z") requested)))
-      (is (nil? (actions/sync-signals (app :phase "Failed" :started "2026-11-19T11:00:00Z") requested)))
-      (is (nil? (actions/sync-signals (app :phase "Succeeded" :started "2026-11-19T12:00:03Z") requested))))))

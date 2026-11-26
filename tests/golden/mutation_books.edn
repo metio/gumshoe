@@ -2519,7 +2519,8 @@
      :interval 10,
      :holds false}]},
   :surface
-  {:description "Deletes a PersistentVolumeClaim that no pod uses",
+  {:description
+   "Deletes a PersistentVolumeClaim nothing uses or keeps",
    :options
    {:namespace
     {:desc
@@ -2534,14 +2535,23 @@
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
-    :kubectl-can-get ["persistentvolumeclaims" "pods"],
+    :kubectl-can-get
+    ["persistentvolumeclaims"
+     "pods"
+     "statefulsets"
+     "deployments"
+     "daemonsets"
+     "replicasets"
+     "jobs"
+     "cronjobs"],
     :kubectl-can-delete ["persistentvolumeclaims"]},
    :select
    {:mode :namespaced,
     :label "PersistentVolumeClaim",
     :namespace-flag :namespace,
     :name-flag :pvc},
-   :empty-message "every PersistentVolumeClaim is in use",
+   :empty-message
+   "every PersistentVolumeClaim is used by a pod or kept by a workload or owner",
    :confirm
    {:action
     "delete a PersistentVolumeClaim - the data on the volume is lost",
@@ -2556,7 +2566,7 @@
     ""
     "Needs:"
     "  tools: kubectl, fzf"
-    "  kubectl get: persistentvolumeclaims, pods"
+    "  kubectl get: persistentvolumeclaims, pods, statefulsets, deployments, daemonsets, replicasets, jobs, cronjobs"
     "  kubectl delete: persistentvolumeclaims"],
    :candidates {:permitted ["shop/data"], :refused []}},
   :unanswered
@@ -3321,7 +3331,7 @@
      "applications.argoproj.io"
      "shop"
      "--type=merge"
-     "--patch={\"operation\":{\"initiatedBy\":{\"username\":\"gumshoe\"},\"sync\":{\"syncStrategy\":{\"hook\":{}},\"prune\":true}}}"]],
+     "--patch={\"operation\":{\"initiatedBy\":{\"username\":\"gumshoe\"},\"info\":[{\"name\":\"gumshoe-request\",\"value\":\"request-token\"}],\"sync\":{\"syncStrategy\":{\"hook\":{}},\"prune\":true}}}"]],
    :precondition {:result true, :out ""},
    :announce "Sync Application argocd/shop",
    :checks
@@ -3350,7 +3360,7 @@
      "applications.argoproj.io"
      "shop"
      "--type=merge"
-     "--patch={\"operation\":{\"initiatedBy\":{\"username\":\"gumshoe\"},\"sync\":{\"syncStrategy\":{\"hook\":{}},\"prune\":true}}}"]],
+     "--patch={\"operation\":{\"initiatedBy\":{\"username\":\"gumshoe\"},\"info\":[{\"name\":\"gumshoe-request\",\"value\":\"request-token\"}],\"sync\":{\"syncStrategy\":{\"hook\":{}},\"prune\":true}}}"]],
    :precondition
    {:result false,
     :out
@@ -3415,7 +3425,7 @@
      "applications.argoproj.io"
      "shop"
      "--type=merge"
-     "--patch={\"operation\":{\"initiatedBy\":{\"username\":\"gumshoe\"},\"sync\":{\"syncStrategy\":{\"hook\":{}},\"prune\":true}}}"]],
+     "--patch={\"operation\":{\"initiatedBy\":{\"username\":\"gumshoe\"},\"info\":[{\"name\":\"gumshoe-request\",\"value\":\"request-token\"}],\"sync\":{\"syncStrategy\":{\"hook\":{}},\"prune\":true}}}"]],
    :precondition
    {:result false,
     :out

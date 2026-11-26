@@ -12,6 +12,7 @@
    after some of its effects, says what it left behind (see `progress`)."
   (:require [cheshire.core :as json]
             [clojure.string :as str]
+            [gumshoe.claims :as claims]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.verify :as verify]
@@ -37,6 +38,43 @@
         start (or (-> statefulset :spec :ordinals :start) 0)]
     (vec (for [ordinal (range start (+ start replicas))]
            (format "%s-%s-%d" template-name (kubectl/name-of statefulset) ordinal)))))
+
+(defn statefulset-claim-names
+  "Every claim of template-name a resize of statefulset must grow: the
+   claims of its current replicas (statefulset-pvc-names), then each claim
+   of pvcs that belongs to the template at another ordinal
+   (gumshoe.claims/statefulset-claim?), in ordinal order. A StatefulSet
+   scaled down keeps those claims and mounts them again when it scales up,
+   so a resize that left them would bring those replicas back on the old
+   size."
+  [statefulset template-name pvcs]
+  (let [current (statefulset-pvc-names statefulset template-name)]
+    (into current
+          (->> (kubectl/items-of pvcs)
+               (filter #(claims/statefulset-claim? statefulset template-name %))
+               (sort-by #(claims/template-ordinal statefulset template-name (kubectl/name-of %)))
+               (map kubectl/name-of)
+               (remove (set current))))))
+
+(defn unclaimed-template-names
+  "A problem for every claim of pvcs named for an ordinal of template-name
+   outside the current replicas that carries neither the StatefulSet's
+   selector labels nor an owner reference to it. The controller would mount
+   it on a scale-up by its name, yet nothing shows it was made for this
+   StatefulSet, so the resize neither grows it nor leaves it behind
+   silently."
+  [statefulset template-name pvcs]
+  (let [current (set (statefulset-pvc-names statefulset template-name))]
+    (vec (for [claim (kubectl/items-of pvcs)
+               :let [name (kubectl/name-of claim)]
+               :when (and (= (kubectl/namespace-of statefulset) (kubectl/namespace-of claim))
+                          (not (current name))
+                          (claims/template-ordinal statefulset template-name name)
+                          (not (claims/statefulset-claim? statefulset template-name claim)))]
+           (format (str "PVC %s has the name of a claim of StatefulSet %s, which would mount it on a scale-up,"
+                        " but carries neither its selector labels nor an owner reference to it -"
+                        " label it, enlarge it by hand or delete it, then run this book again")
+                   name (kubectl/namespace-name-of statefulset))))))
 
 (defn expansion-plan
   "One entry per PVC: what changes from what to what, and whether its

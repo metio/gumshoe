@@ -1578,7 +1578,7 @@
     :coerce :string,
     :alias :p}},
   :help
-  ["Deletes a PersistentVolumeClaim that no pod uses"
+  ["Deletes a PersistentVolumeClaim nothing uses or keeps"
    ""
    "What it does:"
    "  picks one PersistentVolumeClaim by namespace and name (--namespace and --pvc, or interactively)"
@@ -1589,7 +1589,7 @@
    ""
    "Needs:"
    "  tools: kubectl, fzf"
-   "  kubectl get: persistentvolumeclaims, pods"
+   "  kubectl get: persistentvolumeclaims, pods, statefulsets, deployments, daemonsets, replicasets, jobs, cronjobs"
    "  kubectl delete: persistentvolumeclaims"
    ""
    "Usage:"
