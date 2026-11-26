@@ -86,8 +86,11 @@ the permissions of the user running it.
 `bb run runbooks/setup/init.clj` and it builds one *with* you - detecting the
 Kubernetes cluster you are on and the VPN-looking interfaces on this host,
 asking for your ceph mgr host, and writing a tidy env.edn. Or copy
-`env.edn.example` to `env.edn` and edit by hand. It lets you name your VPN
-interface and your ceph mgr hosts without touching code. When set, the
+`env.edn.example` to `env.edn` and edit by hand. The first file found is
+used: the one `GUMSHOE_ENV` points to, then `./env.edn`, then
+`$XDG_CONFIG_HOME/gumshoe/env.edn`, then `~/.config/gumshoe/env.edn`. It
+lets you name your VPN interface and your ceph mgr hosts without touching
+code. When set, the
 storage-resize books tail the ceph cluster log over SSH while they wait (gated
 on your VPN being up), so a resizer error surfaces live; on a machine with no
 `env.edn` those books simply watch the namespace events instead. A missing or
@@ -97,8 +100,9 @@ If you operate more than one environment, declare each as a named bundle under
 `:environments` and tie it to a cluster with `:select`. The active one is
 chosen by the kubectl context you are already on - so switching your context to
 staging automatically uses staging's ceph host and VPN, and production uses
-production's. Selecting the cluster selects the rest. Run the setup wizard once
-per cluster and the environments accumulate; a flat single-environment
+production's. Selecting the cluster selects the rest, and
+`GUMSHOE_ENVIRONMENT=<name>` overrides the selection. Run the setup wizard
+once per cluster and the environments accumulate; a flat single-environment
 `env.edn` still works unchanged. See `env.edn.example` for both forms.
 
 **Nothing crashes ugly, and nothing hangs forever.** The execution layer never

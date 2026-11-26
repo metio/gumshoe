@@ -167,25 +167,53 @@
                        (or (first names) ""))])
           (filter address? answers))))
 
+(defn- given?
+  [s]
+  (and (string? s) (not (str/blank? s))))
+
+(defn dkim-evidence
+  "Each selector's TXT answer keyed by selector, or nil when no selector
+   answered: nothing was read, so the DKIM check is unread instead of passing
+   on no keys. A map where some selectors answered keeps the others as nil,
+   which the check reports as unanswered."
+  [answers]
+  (when (some some? (vals answers))
+    answers))
+
 (defn collect-evidence!
   "Collects deliverability records and live protocol probes in parallel. Each
-   probe is bounded by :probe-timeout-ms (default-probe-timeout-ms)."
+   probe is bounded by :probe-timeout-ms (default-probe-timeout-ms).
+
+   What is not probed is nil in the evidence: without a domain the MX, SPF,
+   DMARC and DKIM records, and without a host the reverse DNS and the service
+   probes. The checks reading them are then unread, never clean."
   [{:keys [domain host server dkim-selectors probe-timeout-ms]
     :or {probe-timeout-ms default-probe-timeout-ms}}]
   (stdout/print-section "🔍 Evidence (dig + openssl)")
-  (stdout/err-println (format "  %s domain %s, host %s" (stdout/blue "▸") domain host))
+  (stdout/err-println (format "  %s domain %s, host %s" (stdout/blue "▸") (or domain "-") (or host "-")))
   (let [q (fn [type name] (dns/query {:server server} type name))
-        _ (stdout/err-println (format "  %s probing %d service ports on %s" (stdout/blue "▸") (count services) host))
+        domain? (given? domain)
+        host? (given? host)
+        unprobed (constantly nil)
+        _ (if host?
+            (stdout/err-println (format "  %s probing %d service ports on %s" (stdout/blue "▸") (count services) host))
+            (stdout/err-println (format "  %s no host given, so no service port and no reverse DNS is probed" (stdout/yellow "▸"))))
+        _ (when-not domain?
+            (stdout/err-println (format "  %s no domain given, so no MX, SPF, DMARC or DKIM record is queried" (stdout/yellow "▸"))))
         [mx spf dmarc ptr dkim & probes]
         (concurrent/all
-         (into [#(q "MX" domain)
-                #(q "TXT" domain)
-                #(q "TXT" (str "_dmarc." domain))
-                #(ptr-evidence server host)
-                #(into {} (map (fn [selector]
-                                 [selector (q "TXT" (format "%s._domainkey.%s" selector domain))])
-                               dkim-selectors))]
-               (map (fn [service] #(probe-service host service probe-timeout-ms)) services)))]
+         (into [(if domain? #(q "MX" domain) unprobed)
+                (if domain? #(q "TXT" domain) unprobed)
+                (if domain? #(q "TXT" (str "_dmarc." domain)) unprobed)
+                (if host? #(ptr-evidence server host) unprobed)
+                (if domain?
+                  #(dkim-evidence
+                    (into {} (map (fn [selector]
+                                    [selector (q "TXT" (format "%s._domainkey.%s" selector domain))])
+                                  dkim-selectors)))
+                  unprobed)]
+               (when host?
+                 (map (fn [service] #(probe-service host service probe-timeout-ms)) services))))]
     {:now (java.time.Instant/now)
      "domain" domain
      "host" host
@@ -194,4 +222,4 @@
      "dmarc" dmarc
      "ptr" ptr
      "dkim" dkim
-     "probes" (vec probes)}))
+     "probes" (when host? (vec probes))}))

@@ -31,6 +31,10 @@
                    [gumshoe.command-test]
                    [gumshoe.config-test]
                    [gumshoe.config-guards-test]
+                   [gumshoe.config-docs-test]
+                   [gumshoe.front-door-options-test]
+                   [gumshoe.mail-unread-test]
+                   [gumshoe.evpn-unread-test]
                    [gumshoe.cancellation-test]
                    [gumshoe.summary-test]
                    [gumshoe.theme-test]
@@ -246,6 +250,10 @@
                                                          'gumshoe.command-test
                                                          'gumshoe.config-test
                                                          'gumshoe.config-guards-test
+                                                         'gumshoe.config-docs-test
+                                                         'gumshoe.front-door-options-test
+                                                         'gumshoe.mail-unread-test
+                                                         'gumshoe.evpn-unread-test
                                                          'gumshoe.cancellation-test
                                                          'gumshoe.summary-test
                                                          'gumshoe.theme-test

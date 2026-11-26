@@ -274,6 +274,18 @@
          concurrent/all
          (into {}))))
 
+(defn host-evidence
+  "The per-host results flattened into the evidence the detectives read. The
+  MAC and fdb tables are nil when no host answered: an empty table would read
+  as a fabric without conflicts where nobody looked, so the checks over them
+  are unread instead. Once any host answered, the tables hold what the
+  answering hosts reported, and evpn-hosts names the others."
+  [results]
+  (let [answered (remove :error results)]
+    {"evpn-macs" (when (seq answered) (vec (mapcat :macs answered)))
+     "evpn-fdb" (when (seq answered) (vec (mapcat :fdb answered)))
+     "evpn-hosts" results}))
+
 (defn collect-evidence!
   "Fan out across every host and VNI, then flatten into the evidence a detective
   reads. Hosts are queried in parallel because a fabric scan is otherwise as slow
@@ -281,11 +293,10 @@
   fdb conflicts found get a second, bounded round of reads for their context."
   [connections vnis]
   (let [results (concurrent/all (for [c connections vni vnis] #(collect-host c vni)))
-        fdb (vec (mapcat :fdb results))]
-    {"evpn-macs" (vec (mapcat :macs results))
-     "evpn-fdb" fdb
-     "evpn-fdb-context" (collect-conflict-context connections (fdb-conflicts fdb) ssh-runner)
-     "evpn-hosts" results}))
+        evidence (host-evidence results)]
+    (assoc evidence "evpn-fdb-context"
+           (when-let [fdb (get evidence "evpn-fdb")]
+             (collect-conflict-context connections (fdb-conflicts fdb) ssh-runner)))))
 
 (defn connections
   "Connection maps from a host list, carrying the sudo and timeout settings the
