@@ -60,6 +60,7 @@
                    [gumshoe.summary-test]
                    [gumshoe.theme-test]
                    [gumshoe.ui-surface-test]
+                   [gumshoe.conformance-glyphs-test]
                    [gumshoe.spec-test]
                    [gumshoe.conformance-test]
                    [gumshoe.conformance-library-test]
@@ -353,6 +354,7 @@
                                                          'gumshoe.summary-test
                                                          'gumshoe.theme-test
                                                          'gumshoe.ui-surface-test
+                                                         'gumshoe.conformance-glyphs-test
                                                          'gumshoe.spec-test
                                                          'gumshoe.conformance-test
                                                          'gumshoe.conformance-library-test
