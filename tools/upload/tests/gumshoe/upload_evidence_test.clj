@@ -106,7 +106,8 @@
     :evidence {:found-nginx? true :nginx-explicit? true :nginx-body-size 67108864
                :found-php? true :upload-max 2097152 :post-max 8388608 :memory-limit 134217728}
     :unread false
-    :expected ["effective upload limit is 2M (capped by PHP upload_max_filesize)"]}
+    :expected ["effective upload limit is 2M (capped by PHP upload_max_filesize)"
+               "PHP's limits were read from the PHP CLI ('php -i'), whose values php-fpm may not apply"]}
    {:case "nginx answered without a directive, so its 1 MB default applies"
     :containers ["nginx" "php"]
     :execs (fn [] {["nginx" ["nginx" "-T"]] (answered @nginx-default)
@@ -115,6 +116,7 @@
                :found-php? true :upload-max 2097152 :post-max 8388608}
     :unread false
     :expected ["effective upload limit is 1M (capped by nginx client_max_body_size)"
+               "PHP's limits were read from the PHP CLI ('php -i'), whose values php-fpm may not apply"
                 "nginx caps uploads at 1M, below PHP's 2M - nginx rejects larger uploads with 413"]}
    {:case "no nginx container"
     :containers ["php"]
@@ -122,7 +124,8 @@
     :evidence {:found-nginx? false :nginx-explicit? nil :nginx-body-size nil
                :found-php? true :upload-max 2097152 :post-max 8388608}
     :unread false
-    :expected ["nginx's client_max_body_size was not read, so the effective upload limit is unknown - PHP alone accepts uploads up to 2M (capped by PHP upload_max_filesize)"]}
+    :expected ["nginx's client_max_body_size was not read, so the effective upload limit is unknown - PHP alone accepts uploads up to 2M (capped by PHP upload_max_filesize)"
+               "PHP's limits were read from the PHP CLI ('php -i'), whose values php-fpm may not apply"]}
    {:case "an nginx container whose nginx -T failed"
     :containers ["nginx" "php"]
     :execs (fn [] {["nginx" ["nginx" "-T"]] {:exit 1 :out "" :err @nginx-failed-stderr}
@@ -130,14 +133,16 @@
     :evidence {:found-nginx? false :nginx-explicit? nil :nginx-body-size nil
                :found-php? true :upload-max 2097152 :post-max 8388608}
     :unread false
-    :expected ["nginx's client_max_body_size was not read, so the effective upload limit is unknown - PHP alone accepts uploads up to 2M (capped by PHP upload_max_filesize)"]}
+    :expected ["nginx's client_max_body_size was not read, so the effective upload limit is unknown - PHP alone accepts uploads up to 2M (capped by PHP upload_max_filesize)"
+               "PHP's limits were read from the PHP CLI ('php -i'), whose values php-fpm may not apply"]}
    {:case "an nginx -T that printed a dump and still exited non-zero"
     :containers ["nginx" "php"]
     :execs (fn [] {["nginx" ["nginx" "-T"]] {:exit 1 :out @nginx-64m :err "command terminated with exit code 1"}
                    ["php" ["php" "-i"]] (answered @php-info)})
     :evidence {:found-nginx? false :nginx-explicit? nil :nginx-body-size nil :found-php? true}
     :unread false
-    :expected ["nginx's client_max_body_size was not read, so the effective upload limit is unknown - PHP alone accepts uploads up to 2M (capped by PHP upload_max_filesize)"]}
+    :expected ["nginx's client_max_body_size was not read, so the effective upload limit is unknown - PHP alone accepts uploads up to 2M (capped by PHP upload_max_filesize)"
+               "PHP's limits were read from the PHP CLI ('php -i'), whose values php-fpm may not apply"]}
    {:case "PHP did not answer php -i"
     :containers ["nginx"]
     :execs (fn [] {["nginx" ["nginx" "-T"]] (answered @nginx-64m)})

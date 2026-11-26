@@ -54,16 +54,60 @@
 
       nil)))
 
+(defn- sidecar-names
+  "The names of the pod's restartable init containers (native sidecars),
+   which keep running once started."
+  [pod]
+  (set (keep #(when (= "Always" (:restartPolicy %)) (:name %)) (-> pod :spec :initContainers))))
+
+(defn initializing?
+  "Whether the pod is running its init containers: its Initialized condition
+   is False and a regular init container is running. Such a pod is Pending
+   by design while that container works - waiting for a dependency, running
+   a migration - so its node is not to blame. A running native sidecar does
+   not count, since it keeps running while the next init container may be
+   the one that is stuck."
+  [pod]
+  (let [sidecars (sidecar-names pod)]
+    (boolean
+     (and (conditions/status? pod "Initialized" "False")
+          (some #(and (-> % :state :running) (not (contains? sidecars (:name %))))
+                (-> pod :status :initContainerStatuses))))))
+
+(defn- failed-init-containers
+  "The init container statuses of the pod whose current run ended in a
+   non-zero exit."
+  [pod]
+  (filter #(let [terminated (-> % :state :terminated)]
+             (and terminated (not= 0 (:exitCode terminated))))
+          (-> pod :status :initContainerStatuses)))
+
 (defn- startup-pod?
   "A pod bound to a node that has not started: Pending, or its containers are
    still being created. A container the pods detective reports by name, such
    as a crash-looping init container, is the cause already, so the pod is
-   left to it rather than blamed on the node."
+   left to it rather than blamed on the node, and so is a pod still running
+   its init containers."
   [pod]
   (and (-> pod :spec :nodeName)
        (= "Pending" (-> pod :status :phase))
        (nil? (-> pod :metadata :deletionTimestamp))
+       (not (initializing? pod))
        (not-any? pods/reported-waiting? (kubectl/container-statuses pod))))
+
+(defn- failed-init-finding
+  "The finding for a pod whose init container failed: the container is the
+   cause, so it is named rather than the node's kubelet."
+  [pod status now since]
+  (let [terminated (-> status :state :terminated)]
+    (onset/since
+     {:severity (if (older-than? now since critical-minutes) :critical :warning)
+      :component (kubectl/namespace-name-of pod)
+      :summary (format "init container %s failed (exit code %s%s)" (:name status) (:exitCode terminated)
+                       (if-let [reason (:reason terminated)] (str ", " reason) ""))
+      :hint (str/join " - " (remove str/blank? [(some-> (:message terminated) str/trim)
+                                                 (format "the pod does not start until it succeeds - kubectl logs -c %s" (:name status))]))}
+     since)))
 
 (defn- bound-at
   [pod]
@@ -105,7 +149,11 @@
                             vals)
                 since (bound-at pod)
                 node (-> pod :spec :nodeName)]
-          finding (if (seq causes)
+          finding (cond
+                    (seq (failed-init-containers pod))
+                    (map #(failed-init-finding pod % now since) (failed-init-containers pod))
+
+                    (seq causes)
                     (for [[[_ severity summary advice] event] (sort-by (comp first first) causes)]
                       (onset/since
                        {:severity (if (and (= :warning severity) (older-than? now since critical-minutes))
@@ -115,6 +163,8 @@
                        :hint (format "on node %s - %s - %s" node advice
                                      (str/replace (str (:message event)) #"\s+" " "))}
                        since))
+
+                    :else
                     (when (older-than? now since stall-minutes)
                       [(onset/since
                         {:severity (if (older-than? now since critical-minutes) :critical :warning)

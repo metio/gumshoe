@@ -178,13 +178,18 @@
 (defn node-state
   "The node's state at a failure, read without strict reads so an unanswered
    read is reported rather than thrown: {:unschedulable? .. :evictable
-   [\"ns/name\" ..]}, :evictable nil when the pods could not be read, or
-   {:unread \"why\"} when the node could not be read."
+   [\"ns/name\" ..]}, :evictable nil when the pods could not be read,
+   {:gone true} when the cluster answered that the node no longer exists (an
+   autoscaler or an operator removed it during the run), or {:unread \"why\"}
+   when the node could not be read. A failed get alone does not tell a
+   deleted node from a read that did not answer, so a presence read decides."
   [context node]
   (binding [kubectl/*strict-reads* false]
     (let [{node-ok? :ok? node-doc :doc} (kubectl/get-json-result context "nodes" node)]
       (if-not node-ok?
-        {:unread (format "the read of node %s did not answer" node)}
+        (if (= :absent (kubectl/presence context {:type "nodes" :name node}))
+          {:gone true}
+          {:unread (format "the read of node %s did not answer" node)})
         (let [{:keys [ok? doc]} (kubectl/get-json-result context "pods" "--all-namespaces"
                                                          (str "--field-selector=spec.nodeName=" node))]
           {:unschedulable? (true? (-> node-doc :spec :unschedulable))
@@ -194,8 +199,12 @@
   "What a failed maintenance run leaves on `node`, from `state` as node-state
    reads it: whether it stays cordoned, the pods a drain still evicts from
    it, and the command that brings it back into service."
-  [context node {:keys [unread unschedulable? evictable]}]
+  [context node {:keys [gone unread unschedulable? evictable]}]
   (cond
+    gone
+    (str "Node " node " no longer exists: the cluster answered that it is gone, so nothing is left to uncordon."
+         " Its pods were rescheduled elsewhere or went with it - check the workloads that ran there.")
+
     unread
     (str "The cluster did not answer (" unread "), so whether node " node " is still cordoned is unknown."
          " Read it before leaving it - a cordoned node takes no new pods: kubectl --context=" context " get node " node)

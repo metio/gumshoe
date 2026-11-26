@@ -1772,7 +1772,7 @@
    :stdout
    "  ✓ The nginx + php-fpm file-upload limit chain is coherent\n",
    :stderr
-   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a Moodle/Nextcloud upload fails at a size limit - the nginx client_max_body_size and php-fpm post/upload limits along the whole chain.\n🔶 no php container answered 'php -i' - reporting the nginx side only\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 1 check passed\n",
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a Moodle/Nextcloud upload fails at a size limit - the nginx client_max_body_size and php-fpm post/upload limits along the whole chain.\n🔶 no container answered 'php-fpm -i' or 'php -i' - reporting the nginx side only\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 1 check passed\n",
    :calls
    [[:choose-one "Namespace" ["moodle"] "moodle" nil]
     [:collect "ctx" "moodle"]

@@ -5,7 +5,9 @@
   "Pods that differ from the template their controller created them from. A
    mutating webhook or a LimitRange can change a pod on admission, so what runs
    is no longer what the manifest says: another image, other requests, another
-   environment.
+   environment. A running pod's resources can also be resized in place through
+   its resize subresource (VPA's InPlaceOrRecreate mode does this), so a
+   resource difference names that cause as well.
 
    Each pod is compared with the template at its own revision: a ReplicaSet's
    or a Job's template is the one its pods came from, a StatefulSet pod counts
@@ -120,6 +122,27 @@
    (when (and (contains? template :command) (not= (:command template) (:command pod))) ["command changed"])
    (when (and (contains? template :args) (not= (:args template) (:args pod))) ["args changed"])))
 
+(defn resource-drift?
+  "Whether any container of the pod differs from the template in its
+   resources - the one kind of difference an in-place resize also makes."
+  [template-spec pod-spec]
+  (boolean
+   (some (fn [field]
+           (some (fn [wanted]
+                   (when-let [actual (first (filter #(= (:name wanted) (:name %)) (get pod-spec field)))]
+                     (seq (resource-diffs wanted actual))))
+                 (get template-spec field)))
+         [:initContainers :containers])))
+
+(defn resize-reported?
+  "Whether the pod reports an in-place resize pending or in progress: the
+   PodResizePending or PodResizeInProgress condition, or the status.resize
+   field older clusters set instead."
+  [pod]
+  (boolean (or (not (str/blank? (str (-> pod :status :resize))))
+               (some #(and (#{"PodResizePending" "PodResizeInProgress"} (:type %)) (= "True" (:status %)))
+                     (-> pod :status :conditions)))))
+
 (defn pod-diffs
   "Every difference between a pod and the template spec it came from, each
    prefixed with its container. A template container the pod lacks is a
@@ -211,22 +234,33 @@
                       :when from
                       :let [diffs (vec (distinct (pod-diffs spec (:spec pod))))]
                       :when (seq diffs)]
-                  {:namespace (kubectl/namespace-of pod) :kind (:kind from) :name (:name from) :diffs diffs})]
+                  {:namespace (kubectl/namespace-of pod) :kind (:kind from) :name (:name from) :diffs diffs
+                   :resources? (resource-drift? spec (:spec pod))
+                   :resizing? (resize-reported? pod)})]
     (for [[[namespace kind name] pods] (group-by (juxt :namespace :kind :name) drifted)
           :let [diffs (vec (distinct (mapcat :diffs pods)))
-                n (count pods)]]
+                n (count pods)
+                resizing (count (filter :resizing? pods))]]
       {:severity :warning
        :component (str namespace "/" name)
        :subject (subject/subject kind namespace name)
        :summary "pods differ from the template they were created from"
-       :hint (format "%s %s/%s: %d pod%s, %s%s - a mutating webhook or a LimitRange changed them on admission, so what runs is not what the manifest says"
+       :hint (format "%s %s/%s: %d pod%s, %s%s - %s, so what runs is not what the manifest says%s"
                      kind namespace name n (if (= 1 n) "" "s")
                      (str/join "; " (take shown diffs))
-                     (if (> (count diffs) shown) (format " (+%d more)" (- (count diffs) shown)) ""))})))
+                     (if (> (count diffs) shown) (format " (+%d more)" (- (count diffs) shown)) "")
+                     (if (some :resources? pods)
+                       (str "a mutating webhook or a LimitRange changed them on admission, or they were resized in place"
+                            " (a pod's resize status and its containers' allocatedResources show a resize)")
+                       "a mutating webhook or a LimitRange changed them on admission")
+                     (if (pos? resizing)
+                       (format "; %d pod%s report%s a resize pending or in progress"
+                               resizing (if (= 1 resizing) "" "s") (if (= 1 resizing) "s" ""))
+                       ""))})))
 
 (def detectives
   [{:name "template-drift"
-    :description "Pods that a mutating webhook or a LimitRange changed away from their controller's template"
+    :description "Pods that a mutating webhook, a LimitRange or an in-place resize changed away from their controller's template"
     :requires template-drift-joins
     :joins template-drift-joins
     :detect detect-template-drift}])

@@ -7,7 +7,12 @@
    post_max_size, and PHP's upload_max_filesize. This finds the classic
    mismatches behind 'users can not upload files' - most often an nginx
    client_max_body_size left at its 1 MB default in front of a PHP that would
-   happily accept much more."
+   happily accept much more.
+
+   PHP's limits are php-fpm's own where it answered: its SAPI's ini with the
+   serving pool's php_value and php_admin_value applied. Limits read only
+   from the CLI's ini, or from php-fpm's ini without its pools, are
+   reported as such, since php-fpm may apply other values."
   (:require [gumshoe.size :as size]))
 
 (defn- limiter
@@ -53,8 +58,34 @@
                          (accepts "request bodies" nginx-body-size)
                          (if (false? nginx-explicit?) ", nginx's default - not set" ""))
         :hint (if (true? found-php?)
-                "upload_max_filesize and post_max_size did not parse in 'php -i' - read them in the php-fpm container"
-                "no php container answered 'php -i' - read upload_max_filesize and post_max_size in the php-fpm container")}])))
+                "upload_max_filesize and post_max_size did not parse in the phpinfo output - read them in the php-fpm container"
+                "no container answered 'php-fpm -i' or 'php -i' - read upload_max_filesize and post_max_size in the php-fpm container")}])))
+
+(defn- php-source-findings
+  "What the source of PHP's limits leaves open: values from the CLI or from
+   php-fpm's ini without its pools may not be the ones php-fpm applies, and
+   pools that disagree leave the serving pool's value unknown."
+  [{:keys [component php-source php-pools-differ?]}]
+  (concat
+   (case php-source
+     :cli
+     [{:severity :warning
+       :component component
+       :summary "PHP's limits were read from the PHP CLI ('php -i'), whose values php-fpm may not apply"
+       :hint (str "no container answered 'php-fpm -i'; the CLI and php-fpm may load different php.ini files, "
+                  "and a php-fpm pool's php_value or php_admin_value never reaches the CLI - "
+                  "read upload_max_filesize and post_max_size in the php-fpm container")}]
+     :fpm-ini
+     [{:severity :warning
+       :component component
+       :summary "php-fpm's pools were not read, so a pool's php_value or php_admin_value may override these PHP limits"
+       :hint "'php-fpm -tt' did not answer in the php-fpm container - read the pool configuration (php-fpm.d) for upload_max_filesize and post_max_size"}]
+     nil)
+   (when php-pools-differ?
+     [{:severity :warning
+       :component component
+       :summary "php-fpm's pools apply different PHP limits; the most restrictive is used"
+       :hint "which pool serves the app depends on the address nginx passes requests to (fastcgi_pass) - compare it with each pool's listen"}])))
 
 (defn analyze
   "Pure: takes the parsed evidence and returns findings. Keys are byte counts,
@@ -78,6 +109,9 @@
                        (size/human post-max))}])
 
      (one-side-read evidence)
+
+     (when (or (some? upload-max) (some? post-max))
+       (php-source-findings evidence))
 
      ;; nginx in front is stricter than PHP behind it -> 413 before PHP is even reached
      (when (size/smaller? nginx-body-size upload-max)
