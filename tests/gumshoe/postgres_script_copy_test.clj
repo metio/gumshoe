@@ -6,12 +6,14 @@
    column list, so its data rows are never read as SQL. A false refusal here
    blocks every restore of the dump, so a property checks that no COPY data,
    however full of semicolons, quotes and breaker keywords, is ever named."
-  (:require [clojure.string :as str]
+  (:require [babashka.fs :as fs]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [clojure.test.check :as tc]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
-            [gumshoe.postgres-script :as script]))
+            [gumshoe.postgres-script :as script]
+            [gumshoe.runbook :as runbook]))
 
 (defn- found [lines] (mapv :statement (script/transaction-breakers lines)))
 
@@ -102,3 +104,60 @@
   (let [result (with-redefs-fn {#'script/copy-from-stdin? (constantly false)}
                  #(tc/quick-check 300 (prop/for-all [lines gen-dump] (= [] (found lines))) :seed 17))]
     (is (not (:pass? result)) "a scanner that never recognises COPY fails the property")))
+
+(defn- refusal-of
+  "The ex-data and message transaction-breakers throws for lines, or nil."
+  [lines]
+  (try (script/transaction-breakers lines) nil
+       (catch clojure.lang.ExceptionInfo e (assoc (ex-data e) :message (ex-message e)))))
+
+(deftest an-unterminated-copy-is-refused-within-the-text-limit
+  (let [limit @#'script/text-limit
+        tail (repeat 100000 "1\tsome row data that never ends the COPY statement x")
+        refused (refusal-of (concat ["SELECT 1;" "COPY public.t (a, b, c) FROM stdin"] tail))]
+    (is (> (* 100000 52) (* 4 limit)) "sanity: the tail is several times the limit")
+    (is (true? (::script/too-long refused)) "the statement is refused, never judged safe")
+    (is (<= (:kept refused) limit) "the kept text never grows past the limit")
+    (is (= 2 (:line refused)) "the refusal names the line the statement starts on")
+    (is (= (str "the statement starting at line 2 is longer than " limit
+                " characters; cannot verify the dump runs in one transaction")
+           (:message refused)))))
+
+(deftest a-long-reindex-is-refused-too
+  (with-redefs [script/text-limit 100]
+    (is (= 1 (:line (refusal-of [(str "REINDEX (VERBOSE) TABLE " (apply str (repeat 200 "x")) ";")]))))))
+
+(deftest a-copy-just-under-the-limit-is-judged
+  (with-redefs [script/text-limit 5000]
+    (is (= [] (found [(str "COPY public.t (" (columns 200) ") FROM stdin;") "1\tx" "\\."])))
+    (is (some? (refusal-of [(str "COPY public.t (" (columns 300) ") FROM stdin;")])))))
+
+(deftest a-long-ordinary-statement-keeps-only-its-head
+  (with-redefs [script/text-limit 100]
+    (is (= [] (found [(str "INSERT INTO t VALUES ('" (apply str (repeat 500 "x")) "', " (columns 50) ");")])))))
+
+(deftest a-dump-too-long-to-judge-is-refused-by-the-restore
+  (fs/with-temp-dir [dir {}]
+    (let [file (str (fs/path dir "dump.sql"))]
+      (spit file (str "COPY public.t (a) FROM stdin\n" (str/join "\n" (repeat 30 "1\trow")) "\n"))
+      (with-redefs [script/text-limit 100]
+        (let [result (script/file-transaction-breakers file)]
+          (is (str/starts-with? (:unjudged result) "the statement starting at line 1 is longer than 100") (pr-str result))
+          (binding [runbook/*loading* true] (load-file "tools/db-operator/runbooks/restore.clj"))
+          (let [refusal ((requiring-resolve 'runbooks.db-operator.restore/transaction-refusal) file result)]
+            (is (str/includes? refusal file))
+            (is (str/includes? refusal "cannot verify the dump runs in one transaction"))
+            (is (str/includes? refusal "refusing to restore it"))))))))
+
+;; babashka does not expose OutOfMemoryError; StackOverflowError is its
+;; sibling under VirtualMachineError and takes the same path
+(deftest an-error-while-scanning-is-a-refusal-naming-the-dump
+  (fs/with-temp-dir [dir {}]
+    (let [file (str (fs/path dir "dump.sql"))]
+      (spit file "SELECT 1;\n")
+      (with-redefs [script/transaction-breakers (fn [_] (throw (StackOverflowError. "scanner recursion")))]
+        (let [result (script/file-transaction-breakers file)]
+          (is (str/includes? (:unread result) "StackOverflowError") (pr-str result))
+          (binding [runbook/*loading* true] (load-file "tools/db-operator/runbooks/restore.clj"))
+          (is (str/includes? ((requiring-resolve 'runbooks.db-operator.restore/transaction-refusal) file result)
+                             (str "could not read " file))))))))

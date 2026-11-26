@@ -49,6 +49,10 @@
     (:unread breakers)
     (format "could not read %s to check that it can be restored in one transaction - %s" file (:unread breakers))
 
+    (:unjudged breakers)
+    (format "%s: %s - refusing to restore it. A statement this long is usually a COPY or REINDEX missing its terminating semicolon; check the dump around that line."
+            file (:unjudged breakers))
+
     (seq breakers)
     (str (format "%s holds statements that cannot run inside one transaction, so a failed restore could not be rolled back - refusing to restore it:\n" file)
          (str/join "\n" (map (fn [{:keys [line statement]}] (format "  line %d: %s" line statement)) (take 10 breakers)))

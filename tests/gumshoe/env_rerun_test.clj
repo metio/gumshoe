@@ -168,3 +168,50 @@
           (is (= (config/render existing) (slurp kept)) "the previous file is kept")
           (is (str/includes? out (str "the previous env.edn is kept as " kept)) out)
           (is (= [] (filter #(str/ends-with? (str %) ".bak") (fs/list-dir dir))) "nothing is left beside env.edn"))))))
+
+(deftest an-unwritable-state-directory-refuses-the-write-and-says-why
+  (fs/with-temp-dir [dir {}]
+    (let [path (str (fs/path dir "env.edn"))
+          state (fs/create-dirs (fs/path dir "state"))
+          backups (str (fs/path state "gumshoe" "env-backups"))]
+      (spit path "{:a 0}")
+      (fs/set-posix-file-permissions state "r-xr-xr-x")
+      (try
+        (let [e (try (config/write! {:a 1} path (config/backup-path backups path (java.time.LocalDateTime/now)))
+                     nil
+                     (catch clojure.lang.ExceptionInfo e e))]
+          (is (some? e) "the write is refused")
+          (is (true? (::config/backup-refused (ex-data e))))
+          (is (= (str "could not keep a backup of env.edn in " backups ": permission denied on "
+                      (fs/path state "gumshoe")
+                      ". env.edn was not changed. Set XDG_STATE_HOME to a writable directory and run again.")
+                 (ex-message e)))
+          (is (= "{:a 0}" (slurp path)) "no backup, no write"))
+        (finally (fs/set-posix-file-permissions state "rwx------"))))))
+
+(deftest a-backup-that-cannot-be-filled-is-removed
+  (fs/with-temp-dir [dir {}]
+    (let [path (str (fs/path dir "env.edn"))
+          backup (str (fs/path dir "state" "b.edn.bak"))]
+      (spit path "{:a 0}")
+      (fs/set-posix-file-permissions path "-w-------")
+      (try
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"env.edn was not changed"
+                              (config/write! {:a 1} path backup)))
+        (is (not (fs/exists? backup)) "no empty backup is left behind")
+        (finally (fs/set-posix-file-permissions path "rw-------")))
+      (is (= "{:a 0}" (slurp path))))))
+
+(deftest init-with-an-unusable-state-directory-refuses-clearly
+  (fs/with-temp-dir [dir {}]
+    (let [path (str (fs/path dir "env.edn"))]
+      (spit path (config/render {:vpn {:interface "wg0"}}))
+      ;; run-init keeps backups in <dir>/state; a file there cannot be a directory
+      (spit (str (fs/path dir "state")) "")
+      (let [{:keys [result out]} (run-init path {"Environment name" "production" "Ceph mgr host" "mgr-1"})]
+        (is (false? result) out)
+        (is (str/includes? out (str "could not keep a backup of env.edn in " (fs/path dir "state"))) out)
+        (is (str/includes? out "env.edn was not changed") out)
+        (is (not (str/includes? out "wrote ")) out)
+        (is (not (str/includes? out "unexpected error")) out)
+        (is (= {:vpn {:interface "wg0"}} (config/load-file-safely path)))))))
