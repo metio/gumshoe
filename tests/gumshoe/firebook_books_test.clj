@@ -146,6 +146,7 @@
                              shell/execute-with-stdin (fn [stdin & argv]
                                                         (run-command (concat argv [(str "<stdin " (count (get (json/parse-string stdin true) :items)) " items>")])))
                              shell/run-with-output (fn [& argv] (:exit (run-command argv)))
+                             shell/run-attributed (fn [& argv] (:exit (run-command argv)))
                              kubectl/current-context (constantly "ctx")
                              kubectl/current-cluster (constantly "cluster")
                              interact/confirm! (fn [request]

@@ -44,6 +44,7 @@
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ cmctl renew web-tls --context=ctx --namespace=shop"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ certificate shop/web-tls was reissued (revision above 0) and is Ready"
     "    NOT verified within 0s: certificate shop/web-tls was reissued (revision above 0) and is Ready"],
@@ -277,7 +278,8 @@
   :failed-at-the-first-effect
   {:result false,
    :out
-   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"],
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=batch patch cronjob nightly --type=merge --patch={\"spec\":{\"suspend\":false}}"],
    :banner
    "FAILED at the first effect: kubectl --namespace=batch patch cronjob nightly --type=merge --patch={\"spec\":{\"suspend\":false}} - nothing was changed",
    :recovery []},
@@ -441,7 +443,8 @@
   :failed-at-the-first-effect
   {:result false,
    :out
-   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"],
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=batch create job nightly-abcde --from cronjob/nightly"],
    :banner
    "FAILED at the first effect: kubectl --namespace=batch create job nightly-abcde --from cronjob/nightly - nothing was changed",
    :recovery []},
@@ -604,6 +607,7 @@
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=batch patch cronjob nightly --type=merge --patch={\"spec\":{\"suspend\":true}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ CronJob batch/nightly is suspended"
     "    NOT verified within 0s: CronJob batch/nightly is suspended"],
@@ -1018,6 +1022,7 @@
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl replace --raw /api/v1/namespaces/stuck/finalize --filename - (with stdin)"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ namespace stuck is gone"
     "    NOT verified within 0s: namespace stuck is gone"],
@@ -1037,6 +1042,7 @@
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl replace --raw /api/v1/namespaces/stuck/finalize --filename - (with stdin)"
     "❌ Error from server (Forbidden): refused"],
    :banner
    "FAILED at the first effect: kubectl replace --raw /api/v1/namespaces/stuck/finalize --filename - (with stdin) - nothing was changed",
@@ -1202,6 +1208,7 @@
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl cordon n1"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ node n1 is unschedulable"
     "    NOT verified within 0s: node n1 is unschedulable"],
@@ -1362,6 +1369,7 @@
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=30 --timeout=300s"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ✅ verified: node n1 is unschedulable"
     "  ❌ no evictable pods remain on node n1"
@@ -1381,7 +1389,8 @@
   :failed-at-the-first-effect
   {:result false,
    :out
-   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"],
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1 --timeout=300s"],
    :banner
    "FAILED at the first effect: kubectl drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1 --timeout=300s - nothing was changed",
    :recovery []},
@@ -1654,6 +1663,7 @@
     "container  : abc123"
     "started-at : <instant>"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ ssh cp-1 -- sudo crictl stop abc123"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ kube-apiserver was replaced and answers /readyz (was abc123)"
     "    NOT verified within 0s: kube-apiserver was replaced and answers /readyz (was abc123)"],
@@ -1678,7 +1688,8 @@
     "node       : cp-1"
     "container  : abc123"
     "started-at : <instant>"
-    "── ⚡ Action ────────────────────────────────────────────────────────────────────"],
+    "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ ssh cp-1 -- sudo crictl stop abc123"],
    :banner
    "FAILED at the first effect: ssh cp-1 -- sudo crictl stop abc123 - nothing was changed",
    :recovery []},
@@ -1886,6 +1897,7 @@
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl uncordon n1"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ node n1 is schedulable"
     "    NOT verified within 0s: node n1 is schedulable"],
@@ -2163,6 +2175,7 @@
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=shop delete orders.acme.cert-manager.io web-1 --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ invalid order shop/web-1 is cleared"
     "    NOT verified within 0s: invalid order shop/web-1 is cleared"],
@@ -2322,6 +2335,7 @@
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl delete persistentvolume pv-1 --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ PersistentVolume pv-1 is gone"
     "    NOT verified within 0s: PersistentVolume pv-1 is gone"],
@@ -2472,6 +2486,7 @@
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=shop delete persistentvolumeclaim data --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ PersistentVolumeClaim shop/data is gone"
     "    NOT verified within 0s: PersistentVolumeClaim shop/data is gone"],
@@ -3120,6 +3135,7 @@
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=shop scale deployment/web --replicas=3"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ Deployment shop/web runs 3 ready replica(s)"
     "    NOT verified within 0s: Deployment shop/web runs 3 ready replica(s)"],
@@ -5000,7 +5016,9 @@
   :failed-after-applying
   {:result false,
    :out
-   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"],
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl -n flux-system patch kustomizations.kustomize.toolkit.fluxcd.io apps --type=merge --patch={\"spec\":{\"suspend\":false}}"
+    "  ▸ kubectl -n flux-system annotate kustomizations.kustomize.toolkit.fluxcd.io apps --overwrite reconcile.fluxcd.io/requestedAt=<instant>"],
    :banner
    "FAILED after 1 effect - stopped at: kubectl -n flux-system annotate kustomizations.kustomize.toolkit.fluxcd.io apps --overwrite reconcile.fluxcd.io/requestedAt=<instant> - the effects before it stay applied",
    :recovery
@@ -5303,6 +5321,7 @@
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=apps annotate jsonnetsnippets.jaas.metio.wtf site reconcile.fluxcd.io/requestedAt=<instant> --overwrite"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ JsonnetSnippet apps/site handled the reconcile request"
     "    NOT verified within 0s: JsonnetSnippet apps/site handled the reconcile request"],
@@ -5493,6 +5512,7 @@
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=apps patch jsonnetsnippets.jaas.metio.wtf site --type=merge --patch {\"spec\":{\"suspend\":false}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ JsonnetSnippet apps/site is no longer suspended"
     "    NOT verified within 0s: JsonnetSnippet apps/site is no longer suspended"],
@@ -5698,6 +5718,7 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  consumers keep serving the last published artifact while suspended"
+    "  ▸ kubectl --namespace=apps patch jsonnetsnippets.jaas.metio.wtf site --type=merge --patch {\"spec\":{\"suspend\":true}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ JsonnetSnippet apps/site reports itself suspended"
     "    NOT verified within 0s: JsonnetSnippet apps/site reports itself suspended"],
@@ -5717,7 +5738,8 @@
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "  consumers keep serving the last published artifact while suspended"],
+    "  consumers keep serving the last published artifact while suspended"
+    "  ▸ kubectl --namespace=apps patch jsonnetsnippets.jaas.metio.wtf site --type=merge --patch {\"spec\":{\"suspend\":true}}"],
    :banner
    "FAILED at the first effect: kubectl --namespace=apps patch jsonnetsnippets.jaas.metio.wtf site --type=merge --patch {\"spec\":{\"suspend\":true}} - nothing was changed",
    :recovery []},
@@ -5907,7 +5929,8 @@
   {:result false,
    :out
    ["▸ Stage held at its gate: prod"
-    "── ⚡ Action ────────────────────────────────────────────────────────────────────"],
+    "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=apps annotate stagesets.stages.metio.wtf site stages.metio.wtf/promote=prod@<instant> stages.metio.wtf/promote-revision=sha256:abc --overwrite"],
    :banner
    "FAILED at the first effect: kubectl --namespace=apps annotate stagesets.stages.metio.wtf site stages.metio.wtf/promote=prod@<instant> stages.metio.wtf/promote-revision=sha256:abc --overwrite - nothing was changed",
    :recovery
@@ -6090,6 +6113,7 @@
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=apps annotate stagesets.stages.metio.wtf site reconcile.fluxcd.io/requestedAt=<instant> stages.metio.wtf/update-now=<instant> --overwrite"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ StageSet apps/site handled the reconcile request and rolled the held update"
     "    NOT verified within 0s: StageSet apps/site handled the reconcile request and rolled the held update"],

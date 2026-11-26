@@ -235,6 +235,7 @@
                  #(with-redefs [shell/execute (partial execute cluster)
                                 shell/execute-with-stdin (fn [_ & argv] (apply execute cluster argv))
                                 shell/run-with-output (fn [& argv] (write! cluster argv))
+                                shell/run-attributed (fn [& argv] (write! cluster argv))
                                 kubectl/current-context (constantly "ctx")
                                 kubectl/current-cluster (constantly "cluster")
                                 fuzzy/select-single (constantly nil)

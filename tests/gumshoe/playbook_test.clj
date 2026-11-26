@@ -571,7 +571,8 @@
          extra))
 
 (deftest a-playbook-without-recovery-names-what-the-earlier-steps-applied
-  (with-redefs [gumshoe.shell/run-with-output (fn [& argv] (if (some #{"drain"} argv) 1 0))]
+  (with-redefs [gumshoe.shell/run-with-output (fn [& argv] (if (some #{"drain"} argv) 1 0))
+                gumshoe.shell/run-attributed (fn [& argv] (if (some #{"drain"} argv) 1 0))]
     (let [{:keys [ok? err]} (printed-outcome {:select {:mode :one} :confirm {:action "maintain"}
                                               :steps [(cmd-change "cordon") (cmd-change "drain")]})]
       (is (false? ok?))

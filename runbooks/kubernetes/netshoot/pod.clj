@@ -29,4 +29,4 @@
   :confirm {:action "attach a netshoot debug container to a running pod" :destructive? false}
   :effect (fn [{:keys [context target]}]
             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
-              (effect/plan (effect/kubectl-plugin context "netshoot" "debug" name "--namespace" namespace))))})
+              (effect/plan (effect/interactive (effect/kubectl-plugin context "netshoot" "debug" name "--namespace" namespace)))))})
