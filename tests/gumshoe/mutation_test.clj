@@ -178,7 +178,7 @@
           spec {:select {:mode :one :label "Namespace"}
                 :confirm {:action "do a thing"}
                 :derive (fn [_] {:observed :parked})
-                :effect (fn [_] [[:note "first"] [:cmd "this-binary-truly-does-not-exist-xyz"]])
+                :effect (fn [_] [[:note "first"] [:cmd "true"] [:cmd "this-binary-truly-does-not-exist-xyz"]])
                 :recovery (fn [{:keys [target observed applied]}] (format "%s is %s after %d" target (name observed) applied))}]
       (binding [*err* (java.io.StringWriter.) *out* (java.io.StringWriter.) outcome/*record* record]
         (is (false? (mutation/run-on! spec "ns-1" {} nil))))

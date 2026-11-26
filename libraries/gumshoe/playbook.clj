@@ -426,12 +426,13 @@
 
 (defn applied-effects
   "What a step applied, as gumshoe.effect/describe renders it: the first
-   `applied` effects of `plan`, which effect/run! applies in order, without
-   the notes, which change nothing."
+   `applied` effects of `plan` that may change something, which effect/run!
+   applies in order and counts; the notes change nothing and are not
+   counted."
   [plan applied]
   (->> (effect/as-plan plan)
+       (filter effect/changes-state?)
        (take applied)
-       (remove #(= :note (first %)))
        (mapv effect/describe)))
 
 (defn- left-behind-text

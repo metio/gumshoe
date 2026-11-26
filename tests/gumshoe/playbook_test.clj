@@ -16,10 +16,12 @@
             [gumshoe.steps.nodes :as nodes]))
 
 (defn- change
+  "A change whose plan names its action in a note and applies one effect, a
+   command that succeeds; a note alone changes nothing and is not counted."
   [action ran & {:as extra}]
   (merge {:select {:mode :one :label "Node"}
           :confirm {:action action}
-          :effect (fn [{:keys [target]}] (swap! ran conj [action target]) [[:note action]])}
+          :effect (fn [{:keys [target]}] (swap! ran conj [action target]) [[:note action] [:cmd "true"]])}
          extra))
 
 (defn- check
@@ -298,23 +300,36 @@
     (is (< banner-at recovery-at) "the guidance prints under the banner")
     (is (not (str/includes? err "never shown")))))
 
+(defn- noted-change
+  "A change whose plan is only a note, so it changes nothing."
+  [action]
+  {:select {:mode :one :label "Node"}
+   :confirm {:action action}
+   :effect (fn [_] [[:note action]])})
+
 (deftest a-book-without-recovery-prints-only-the-banner
-  (let [ran (atom [])
-        {:keys [err]} (printed-outcome {:select {:mode :one} :confirm {:action "maintain"}
-                                        :steps [(change "cordon" ran) (failing-change "drain")]})
+  (let [{:keys [err]} (printed-outcome {:select {:mode :one} :confirm {:action "maintain"}
+                                        :steps [(noted-change "cordon") (failing-change "drain")]})
         expected (java.io.StringWriter.)]
     (binding [*err* expected]
       (gumshoe.stdout/print-banner gumshoe.stdout/red
-                                   (str (gumshoe.theme/token :error) " FAILED after 1 effect - stopped at: "
-                                        missing-binary " - the effects before it stay applied")))
+                                   (str (gumshoe.theme/token :error) " FAILED at the first effect: "
+                                        missing-binary " - nothing was changed")))
     (is (= (str expected) err))))
 
-(deftest recovery-that-cannot-render-keeps-the-banner-and-says-so
+(deftest a-book-without-recovery-names-what-earlier-steps-left-behind
   (let [ran (atom [])
         {:keys [err]} (printed-outcome {:select {:mode :one} :confirm {:action "maintain"}
-                                        :steps [(change "cordon" ran)
+                                        :steps [(change "cordon" ran) (failing-change "drain")]})]
+    (is (str/includes? err (str "FAILED after 1 effect - stopped at: " missing-binary " - the effects before it stay applied")))
+    (is (str/includes? err "What the steps before this one left behind"))
+    (is (str/includes? err "1/2 cordon:"))))
+
+(deftest recovery-that-cannot-render-keeps-the-banner-and-says-so
+  (let [{:keys [err]} (printed-outcome {:select {:mode :one} :confirm {:action "maintain"}
+                                        :steps [(noted-change "cordon")
                                                 (failing-change "drain" :recovery (fn [_] (throw (ex-info "no cluster" {}))))]})]
-    (is (str/includes? err "FAILED after 1 effect - stopped at: "))
+    (is (str/includes? err "FAILED at the first effect: "))
     (is (str/includes? err "Recovery: the guidance for the step the run stopped at could not be rendered - no cluster"))))
 
 (deftest a-failing-check-prints-its-own-recovery

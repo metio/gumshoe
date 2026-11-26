@@ -154,12 +154,53 @@
   (or (service-port service port-name)
       (-> service :spec :ports first :port)))
 
-(defn image-counts
-  "Frequencies of every container image used by the given pods."
+(defn pod-containers
+  "Every container a pod spec declares, each with ::role: :container, :init,
+   :sidecar for a native sidecar (an init container with restartPolicy
+   Always, which runs for the pod's whole life and adds its requests to the
+   pod's) or :ephemeral for a debug container added to a running pod."
+  [pod]
+  (let [spec (:spec pod)]
+    (concat (map #(assoc % ::role :container) (:containers spec))
+            (map #(assoc % ::role (if (= "Always" (:restartPolicy %)) :sidecar :init)) (:initContainers spec))
+            (map #(assoc % ::role :ephemeral) (:ephemeralContainers spec)))))
+
+(defn image-usage
+  "Every image the given pods run, in any container, as rows
+   {:image .. :count <containers running it> :roles #{<pod-containers roles>}},
+   most used first."
   [pods-list]
-  (frequencies (for [pod (items-of pods-list)
-                     container (-> pod :spec :containers)]
-                 (:image container))))
+  (->> (for [pod (items-of pods-list)
+             container (pod-containers pod)]
+         container)
+       (group-by :image)
+       (map (fn [[image containers]]
+              {:image image :count (count containers) :roles (into (sorted-set) (map ::role) containers)}))
+       (sort-by (juxt (comp - :count) :image))))
+
+(defn image-counts
+  "Frequencies of every image the given pods run, in any of their containers."
+  [pods-list]
+  (into {} (map (juxt :image :count)) (image-usage pods-list)))
+
+(defn container-resource-rows
+  "One row per container of the given pods that can declare resources -
+   regular, init and native sidecar containers, never ephemeral ones - as
+   {:namespace :pod :container :role :memory-request :memory-limit
+    :cpu-request :cpu-limit}, a value nil when it is not set."
+  [pods-list]
+  (for [pod (items-of pods-list)
+        container (pod-containers pod)
+        :when (not= :ephemeral (::role container))
+        :let [{:keys [requests limits]} (:resources container)]]
+    {:namespace (namespace-of pod)
+     :pod (name-of pod)
+     :container (:name container)
+     :role (::role container)
+     :memory-request (:memory requests)
+     :memory-limit (:memory limits)
+     :cpu-request (:cpu requests)
+     :cpu-limit (:cpu limits)}))
 
 (defn pods-with-image-pull-back-off
   [pods-list]

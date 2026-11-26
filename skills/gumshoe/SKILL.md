@@ -145,7 +145,9 @@ otherwise ask for:
   with exit 1. A json or edn run, or one without a console, never asks to
   share its findings.
 - **Read the exit code.** `0` means success or nothing critical; `1` means a
-  critical finding, a failure, an abort, or a failed post-check.
+  critical finding, a failure, an abort after something changed, or a failed
+  post-check. The final banner agrees with it: a green `DONE` only exits 0,
+  and a `FAILED`, `NOT VERIFIED` or `DRY RUN failed` banner only exits 1.
 - **Skip the interactive front doors.** `./gumshoe`, `./detect`,
   `./investigate` and `./run` without `--list` are fzf menus for people. The
   drill-down of `./investigate` follows one object to the next by asking at
@@ -283,7 +285,11 @@ and current list.
    (ceph `upgrade`, db-operator `connect`, `admin_connect` and `restore`,
    prometheus `delete_metric`); the steps after them are still shown. A `DRY RUN stopped by an unexpected error` banner
    means the rehearsal itself broke and the plans after the error were never
-   shown; read the error before relying on the plan. A playbook passes its
+   shown, and a `DRY RUN failed` banner means it stopped before showing its
+   plan, for example because a read did not answer; read the error before
+   relying on the plan. A book that changes something without posting to
+   the changelog (etcd `check_performance`, netshoot `run`) is bannered as
+   a change too. A playbook passes its
    pauses under `--dry-run`; a
    real run without a terminal stops at the first pause with a `PAUSED`
    banner naming the `--from-segment` that continues after the human acted.
@@ -302,12 +308,17 @@ and current list.
 4. After they run it, check the outcome with the matching detective. The
    final banner says what the run did: `DONE - applied and verified` is the
    only one that promises its post-checks held (with `; skipped as already
-   done: …` naming the steps it found done), `DONE - already done, nothing
+   done: …` naming the steps it found done), `DONE - applied, NOT confirmed
+   (best effort): <check>` exits 0 but names a `:soft?` post-check that ran
+   out its time without holding, so confirm that by hand, `DONE - already done, nothing
    was changed - skipped: …` changed nothing because every change was
    already done, and the run's `recordings/…/meta.edn` lists those steps
    under `:skipped`; `DONE - applied; this book has
    no post-checks` verified nothing, and a `FAILED after N effects` banner
-   names where it stopped while the effects before it stay applied. Lines
+   names where it stopped while the effects before it stay applied. Notes
+   in a plan only print and are never counted as applied effects. A banner
+   naming `a step whose effects are unknown` means a legacy `:execute!`
+   step ran before the failure, so something may have changed. Lines
    under a failed banner headed `Recovery:` are the stopped step's guidance:
    what the half-applied state means and how to bring the system back. A
    mutation book without its own `:recovery` that fails after applying an
@@ -462,7 +473,8 @@ mostly data:
   absence (a taint gone, a resource resumed) waits for an answer and fails
   at its timeout instead of holding on the nil a failed read returns, while
   a `NotFound` answer still reads nil and confirms a deletion. A `:soft?`
-  check still turns that timeout into a warning. Reads over SSH, among them
+  check still turns that timeout into a warning, and the run's banner then
+  says the change was not confirmed instead of verified. Reads over SSH, among them
   every `gumshoe.ceph` read, ignore the binding, so a check built on them
   still has to tell a failed read from an empty one itself
   (`ceph/ceph-json-result` returns `{:ok? :doc}` for that, and

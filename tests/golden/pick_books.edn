@@ -207,8 +207,7 @@
      "--cert=/etc/kubernetes/pki/etcd/server.crt"
      "--key=/etc/kubernetes/pki/etcd/server.key"
      "get"
-     "--from-key"
-     ""
+     "/registry/b"
      "--keys-only"]
     ["kubectl"
      "--context=ctx"
@@ -277,8 +276,7 @@
      "--cert=/etc/kubernetes/pki/etcd/server.crt"
      "--key=/etc/kubernetes/pki/etcd/server.key"
      "get"
-     "--from-key"
-     ""
+     "/registry/z"
      "--keys-only"]]}},
  "runbooks/etcd/member_list.clj"
  {:empty

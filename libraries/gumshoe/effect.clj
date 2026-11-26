@@ -167,13 +167,21 @@
       (boolean (act args))
       (do (stdout/error "unknown effect:" (pr-str op)) false))))
 
+(defn changes-state?
+  "Whether running effect may change anything: every effect but a :note,
+   which only prints its text. A registered effect type counts as a change,
+   since only its own :perform knows what it does."
+  [[op]]
+  (not= :note op))
+
 (defn run!
   "Runs the whole plan in order, stopping at the first failure. Returns true
-   only when every effect succeeded."
+   only when every effect succeeded. Only effects that may change something
+   count as applied, so a plan of notes reads as nothing changed."
   [plan]
   (reduce (fn [_ effect]
             (if (perform! effect)
-              (do (outcome/applied!) true)
+              (do (when (changes-state? effect) (outcome/applied!)) true)
               (do (outcome/stopped! (describe effect)) (reduced false))))
           true
           plan))
