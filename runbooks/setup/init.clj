@@ -14,6 +14,7 @@
             [gumshoe.capabilities :as capabilities]
             [gumshoe.config :as config]
             [gumshoe.discovery :as discovery]
+            [gumshoe.flow :as flow]
             [gumshoe.inputs :as inputs]
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
@@ -149,6 +150,11 @@
           (stdout/print-section "🔶 Heads up")
           (doseq [issue issues] (stdout/warn issue)))
         (cond
+          ;; a rehearsal shows the file above and writes nothing
+          flow/*dry-run*
+          (do (stdout/err-println (str "  " (stdout/blue "would write:") " " config/primary-path))
+              true)
+
           (not (interact/confirm! {:action (if existing "update this env.edn" "write this env.edn")
                                    :target "this machine"
                                    :items [config/primary-path]}))
@@ -172,4 +178,5 @@
  {:description "Creates env.edn interactively - every question is optional"
   :prerequisites prerequisites
   :announce? false
+  :change? true
   :action init})

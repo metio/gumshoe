@@ -4,11 +4,13 @@
 (ns gumshoe.config
   "Host-specific configuration from an env.edn file, so each operator can adapt
    the books to their machine without touching code. The file is optional and
-   gitignored; a missing or broken one degrades to an empty config, never an
-   error.
+   gitignored; a missing one degrades to an empty config, never an error.
 
-   Search order (first found wins): the GUMSHOE_ENV path, ./env.edn,
-   $XDG_CONFIG_HOME/gumshoe/env.edn, ~/.config/gumshoe/env.edn.
+   Search order (the first file that exists wins): the GUMSHOE_ENV path,
+   ./env.edn, $XDG_CONFIG_HOME/gumshoe/env.edn, ~/.config/gumshoe/env.edn. A
+   file that exists but cannot be read is never skipped for the next one: it
+   is named on stderr, nothing of it applies, and the cluster allow-list
+   refuses every cluster until it is fixed (see load-first).
 
    ## Environments
 
@@ -121,21 +123,51 @@
         config (cond-> config (seq unread) (assoc ::unread-clusters unread))]
     {:config config :warnings (persistent! warnings)}))
 
+(defn- read-existing
+  "Reads the env.edn at an existing path as {:config ..} or {:problem ..}.
+   An empty file is an empty config; a file that is not EDN, not a map or not
+   readable at all is a problem. A part of the wrong shape is dropped with a
+   warning on stderr (see normalize), so the rest of the file still applies."
+  [path]
+  (try
+    (let [data (edn/read-string (slurp (str path)))]
+      (cond
+        (nil? data) {:config {}}
+        (not (map? data)) {:problem (format "the file holds %s, not a map" (pr-str data))}
+        :else (let [{:keys [config warnings]} (normalize data)]
+                (binding [*out* *err*]
+                  (doseq [warning warnings]
+                    (println (format "warning: %s: %s" path warning))))
+                {:config config})))
+    (catch Exception e
+      {:problem (str "the file is not readable EDN: " (or (ex-message e) (str e)))})))
+
 (defn load-file-safely
   "Reads and parses an env.edn path, or nil when it is missing or unreadable.
    A part of the wrong shape is dropped with a warning on stderr (see
    normalize), so the rest of the file still applies."
   [path]
   (when (and path (fs/exists? path))
-    (try
-      (let [data (edn/read-string (slurp (str path)))]
-        (when (map? data)
-          (let [{:keys [config warnings]} (normalize data)]
-            (binding [*out* *err*]
-              (doseq [warning warnings]
-                (println (format "warning: %s: %s" path warning))))
-            config)))
-      (catch Exception _ nil))))
+    (let [{:keys [config problem]} (read-existing path)]
+      (when-not problem config))))
+
+(defn load-first
+  "The config of the first of `paths` that exists, or {} when none does. The
+   first existing file wins even when it cannot be read: falling through to
+   the next file would apply another operator's allow-list and hosts without
+   a word. A file that cannot be read is named on stderr with the reason and
+   yields a config whose cluster allow-list matches no cluster, so every book
+   that checks the cluster refuses until the file is fixed."
+  [paths]
+  (if-let [path (first (filter #(and % (fs/exists? %)) paths))]
+    (let [{:keys [config problem]} (read-existing path)]
+      (if problem
+        (let [reason (format "%s: %s" path problem)]
+          (binding [*out* *err*]
+            (println (format "warning: %s - no configuration applies, and every cluster is refused until it is fixed" reason)))
+          {::unread-clusters [reason]})
+        config))
+    {}))
 
 (defn file-problems
   "Why the env.edn at path can not be rewritten from what load-file-safely
@@ -154,7 +186,7 @@
         [(str "the file is not readable EDN: " (or (ex-message e) (str e)))]))))
 
 (def ^:private loaded
-  (delay (or (some load-file-safely (search-paths)) {})))
+  (delay (load-first (search-paths))))
 
 (defn all
   []

@@ -143,11 +143,26 @@
   []
   (zero? (shell/run-with-output "gum" "confirm" "--default=false" "Proceed?")))
 
-(defn confirm!
-  "Second verification before touching a running system: states exactly what
-   is about to happen and asks for approval. Destructive actions always
-   require the literal word 'yes'; other changes use gum's yes/no picker when
-   gum is installed. Returns true only when the user approves."
+(defn rehearsing?
+  "Whether this run is a --dry-run. The harness binds gumshoe.flow/*dry-run*,
+   and flow requires this namespace, so the var is looked up at call time; a
+   run that never loaded flow cannot have bound it."
+  []
+  (boolean (some-> (resolve 'gumshoe.flow/*dry-run*) deref)))
+
+(defn- refuse-rehearsal!
+  "A confirmation reached under --dry-run belongs to a change that runs
+   outside a plan, so nothing can show it without running it. It is refused,
+   never answered yes, and the run fails."
+  [request]
+  (stdout/print-banner stdout/blue "🔍 DRY RUN - nothing will be changed")
+  (stdout/err-println (confirmation-message request))
+  (record-only! (str "confirm: " (:action request)) "refused under --dry-run")
+  (outcome/aborted! "this book does not support a dry run")
+  (stdout/error "this book does not support a dry run - nothing was run")
+  false)
+
+(defn- ask!
   [{:keys [destructive?] :as request}]
   (if destructive?
     (stdout/print-banner stdout/red "💥 DESTRUCTIVE ACTION - this cannot be undone automatically")
@@ -165,3 +180,18 @@
         (do (outcome/aborted! "declined at the confirmation")
             (stdout/error "aborted, this change was not made")
             false))))
+
+(defn confirm!
+  "Second verification before touching a running system: states exactly what
+   is about to happen and asks for approval. Destructive actions always
+   require the literal word 'yes'; other changes use gum's yes/no picker when
+   gum is installed. Returns true only when the user approves.
+
+   Under --dry-run it asks nothing and returns false, so a book whose change
+   is gated only by this confirmation never acts in a rehearsal. A change
+   that can be shown runs through gumshoe.flow/change! with an :effect plan,
+   whose dry run never reaches this function."
+  [request]
+  (if (rehearsing?)
+    (refuse-rehearsal! request)
+    (ask! request)))

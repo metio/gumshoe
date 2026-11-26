@@ -36,7 +36,10 @@
     "  would run: cmctl renew web-tls --context=ctx --namespace=shop"],
    :banner "DONE - nothing was changed",
    :recovery []},
-  :empty {:result true, :out "✅ nothing to do"},
+  :empty
+  {:result false,
+   :out
+   "❌ Certificate shop/web-tls not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"},
   :failed-after-applying
   {:result false,
    :out
@@ -430,7 +433,10 @@
     "  would run: kubectl --namespace=batch create job nightly-abcde --from cronjob/nightly"],
    :banner "DONE - nothing was changed",
    :recovery []},
-  :empty {:result true, :out "✅ nothing to do"},
+  :empty
+  {:result false,
+   :out
+   "❌ CronJob batch/nightly not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"},
   :failed-at-the-first-effect
   {:result false,
    :out
@@ -1000,7 +1006,7 @@
     "  would run: kubectl replace --raw /api/v1/namespaces/stuck/finalize --filename - (with stdin)"],
    :banner "DONE - nothing was changed",
    :recovery []},
-  :empty {:result true, :out "✅ no namespace is stuck in Terminating"},
+  :empty {:result false, :out "❌ no Namespace stuck - not found"},
   :failed-after-applying
   {:result false,
    :out
@@ -1168,7 +1174,7 @@
     "  would run: kubectl cordon n1"],
    :banner "DONE - nothing was changed",
    :recovery []},
-  :empty {:result true, :out "✅ every node is already cordoned"},
+  :empty {:result false, :out "❌ no Node n1 - not found"},
   :failed-after-applying
   {:result false,
    :out
@@ -1326,7 +1332,7 @@
     "  would run: kubectl drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1 --timeout=300s"],
    :banner "DONE - nothing was changed",
    :recovery []},
-  :empty {:result true, :out "✅ nothing to do"},
+  :empty {:result false, :out "❌ no Node n1 - not found"},
   :failed-after-applying
   {:result false,
    :out
@@ -1613,8 +1619,7 @@
    :banner "DONE - nothing was changed",
    :recovery []},
   :empty
-  {:result true,
-   :out "✅ no node carries the control-plane role label"},
+  {:result false, :out "❌ no Control-plane node cp-1 - not found"},
   :failed-after-applying
   {:result false,
    :out
@@ -1851,7 +1856,7 @@
    "✗ can not connect to cp-1\nrefusing: its precondition does not hold"}},
  "runbooks/kubernetes/nodes/uncordon.clj"
  {:absent {:stopped "refusing: node n1 no longer exists"},
-  :empty {:result true, :out "✅ no node is cordoned"},
+  :empty {:result false, :out "❌ no Node n2 - not found"},
   :failed-after-applying
   {:result false,
    :out
@@ -2123,7 +2128,10 @@
      :holds false}]}},
  "runbooks/kubernetes/orders/recreate.clj"
  {:absent {:stopped "refusing: Order shop/web-1 no longer exists"},
-  :empty {:result true, :out "✅ every ACME order is valid"},
+  :empty
+  {:result false,
+   :out
+   "❌ Order shop/web-1 not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"},
   :failed-after-applying
   {:result false,
    :out
@@ -2278,7 +2286,10 @@
     "  would run: kubectl delete persistentvolume pv-1 --wait=false"],
    :banner "DONE - nothing was changed",
    :recovery []},
-  :empty {:result true, :out "✅ no PersistentVolume is Released"},
+  :empty
+  {:result false,
+   :out
+   "❌ PersistentVolume pv-1 not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"},
   :failed-after-applying
   {:result false,
    :out
@@ -2426,7 +2437,8 @@
   {:stopped
    "refusing: PersistentVolumeClaim shop/data no longer exists"},
   :empty
-  {:result true, :out "✅ every PersistentVolumeClaim is in use"},
+  {:result false,
+   :out "❌ no PersistentVolumeClaim shop/data - not found"},
   :failed-after-applying
   {:result false,
    :out
@@ -5182,7 +5194,10 @@
      :timeout 120,
      :interval 5,
      :holds false}]},
-  :empty {:result true, :out "✅ nothing to do"},
+  :empty
+  {:result false,
+   :out
+   "❌ JsonnetSnippet apps/site not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"},
   :failed-after-applying
   {:result false,
    :out
@@ -5382,7 +5397,10 @@
      :timeout 60,
      :interval 5,
      :holds false}]},
-  :empty {:result true, :out "✅ nothing to do"},
+  :empty
+  {:result false,
+   :out
+   "❌ suspended JsonnetSnippet apps/site not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"},
   :failed-after-applying
   {:result false,
    :out
@@ -5582,7 +5600,10 @@
      :timeout 60,
      :interval 5,
      :holds false}]},
-  :empty {:result true, :out "✅ nothing to do"},
+  :empty
+  {:result false,
+   :out
+   "❌ JsonnetSnippet apps/site not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"},
   :failed-after-applying
   {:result false,
    :out
@@ -5791,7 +5812,7 @@
     "  would run: stagesetctl promote site --stage prod --namespace=apps"],
    :banner "DONE - nothing was changed",
    :recovery []},
-  :empty {:result true, :out "✅ nothing to do"},
+  :empty {:result false, :out "❌ no StageSet apps/site - not found"},
   :failed-at-the-first-effect
   {:result false,
    :out
@@ -5967,7 +5988,7 @@
    "🔶 no StageSet matches the given flags, please select from all instead\n🔶 StageSet 'apps/nope' is not a valid choice, please select one\n❌ no StageSet selected"}},
  "tools/stageset/runbooks/stageset/reconcile.clj"
  {:absent {:stopped "refusing: StageSet apps/site no longer exists"},
-  :empty {:result true, :out "✅ nothing to do"},
+  :empty {:result false, :out "❌ no StageSet apps/site - not found"},
   :failed-after-applying
   {:result false,
    :out

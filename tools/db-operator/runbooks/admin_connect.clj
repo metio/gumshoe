@@ -20,9 +20,7 @@
 (def options
   (select/options instance-select
                   {:instance {:desc "The DbInstance to connect to - interactive selection when omitted"}
-                   :port {:desc "The local port used for the port-forward - a free port when omitted"
-                          :alias :p
-                          :coerce :long}}))
+                   :port kubectl/local-port-spec}))
 
 (def prerequisites
   {:installed-tools ["kubectl" "psql" "fzf"]

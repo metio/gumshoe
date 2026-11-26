@@ -45,7 +45,10 @@
    :out
    "🔶 Node 'n9' is not a valid choice, please select one\n❌ no Node selected"}},
  "runbooks/kubernetes/netshoot/pod.clj"
- {:no-pods {:result true, :out "✅ no pod is running to debug"},
+ {:no-pods
+  {:result false,
+   :out
+   "❌ Pod shop/web-1 not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"},
   :permitted
   {:result true,
    :out "▸ Pod: shop/web-1",
@@ -341,9 +344,9 @@
    "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✗ can not connect to mgr-1"}},
  "tools/ceph/runbooks/osd_in.clj"
  {:all-in
-  {:result true,
+  {:result false,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n✅ every OSD is already in"},
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n❌ OSD osd.3 not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"},
   :brought-in-meanwhile
   {:result true,
    :out

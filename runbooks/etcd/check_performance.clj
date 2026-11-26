@@ -3,13 +3,14 @@
 
 (ns runbooks.etcd.check-performance
   "Runs an etcd performance check through one etcd pod. The check generates
-   load on the cluster, so it asks for confirmation first."
-  (:require [gumshoe.etcd :as etcd]
-            [gumshoe.interact :as interact]
+   load on the cluster, so it asks for confirmation first, and under --dry-run
+   it shows the etcdctl command without running it."
+  (:require [gumshoe.effect :as effect]
+            [gumshoe.etcd :as etcd]
+            [gumshoe.flow :as flow]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.runbook :as runbook]
-            [gumshoe.select :as select]
-            [gumshoe.stdout :as stdout]))
+            [gumshoe.select :as select]))
 
 (def workloads #{"s" "m" "l" "xl"})
 
@@ -25,25 +26,22 @@
   [opts _ctx]
   (let [context (kubectl/current-context)
         cluster (kubectl/current-cluster)
-        target (select/pick etcd/pod-select opts context)
         workload (:workload opts)]
-    (cond
-      (nil? target)
-      false
-
-      (not (interact/confirm! {:action (format "run an etcd performance check with workload '%s' - this generates load" workload)
-                               :target cluster
-                               :items [target]}))
-      false
-
-      :else
+    (if-let [target (select/pick etcd/pod-select opts context)]
       (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
-        (stdout/print-section-marker)
-        (etcd/etcdctl! context namespace name "check" "perf" (str "--load=" workload))))))
+        (flow/change!
+         {:confirmation {:action (format "run an etcd performance check with workload '%s' - this generates load" workload)
+                         :target cluster
+                         :items [target]}
+          :effect (effect/plan
+                   (apply effect/cmd (etcd/etcdctl-args context namespace name
+                                                        ["check" "perf" (str "--load=" workload)])))}))
+      false)))
 
 (runbook/execute!
  {:description "Runs an etcd performance check through one etcd pod"
   :options options
   :prerequisites etcd/pod-prerequisites
   :announce? false
+  :change? true
   :action check-performance})

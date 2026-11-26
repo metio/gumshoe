@@ -15,6 +15,7 @@
    it explicitly."
   (:require [clojure.string :as str]
             [gumshoe.command :as command]
+            [gumshoe.flow :as flow]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
@@ -67,13 +68,24 @@
 (defn start!
   "Opens a shared session in the foreground and blocks until the operator ends
    it by exiting the shell. Returns true on a clean exit, false when the session
-   is refused or upterm fails."
+   is refused or upterm fails. Under --dry-run it prints the upterm command it
+   would run and starts nothing; a refusal still refuses."
   ([users] (start! users false))
   ([users open?]
    (let [{:keys [args refused] :as plan} (host-plan users open?)]
-     (if refused
+     (cond
+       refused
        (do (stdout/error (str "refusing to share this terminal: " refused))
            false)
+
+       flow/*dry-run*
+       (do (stdout/print-banner stdout/blue "🔍 DRY RUN - nothing will be changed")
+           (when (:open? plan)
+             (stdout/warn "this session would be OPEN: anyone holding its connect string could join and type into a shell with your credentials"))
+           (stdout/err-println (str "  " (stdout/blue "would run:") " " (str/join " " args)))
+           true)
+
+       :else
        (do
          (stdout/print-section "🔗 Shared terminal (upterm)")
          (when (:open? plan)

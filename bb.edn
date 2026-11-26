@@ -35,6 +35,9 @@
                    [gumshoe.front-door-options-test]
                    [gumshoe.mail-unread-test]
                    [gumshoe.evpn-unread-test]
+                   [gumshoe.dry-run-books-test]
+                   [gumshoe.mutation-named-target-test]
+                   [gumshoe.local-port-test]
                    [gumshoe.cancellation-test]
                    [gumshoe.summary-test]
                    [gumshoe.theme-test]
@@ -254,6 +257,9 @@
                                                          'gumshoe.front-door-options-test
                                                          'gumshoe.mail-unread-test
                                                          'gumshoe.evpn-unread-test
+                                                         'gumshoe.dry-run-books-test
+                                                         'gumshoe.mutation-named-target-test
+                                                         'gumshoe.local-port-test
                                                          'gumshoe.cancellation-test
                                                          'gumshoe.summary-test
                                                          'gumshoe.theme-test

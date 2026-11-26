@@ -91,6 +91,53 @@
             (is (false? ok?))
             (is (str/includes? label ":clusters") label)))))))
 
+;; --- the first existing env.edn -----------------------------------------------------
+
+(deftest the-first-existing-env-edn-wins-even-when-it-is-broken
+  (fs/with-temp-dir [dir {}]
+    (let [broken (str (fs/path dir "env.edn"))
+          home (str (fs/path dir "home.edn"))
+          absent (str (fs/path dir "absent.edn"))]
+      (spit home "{:clusters [\"kube.home.example\"] :ceph {:mgr-hosts [\"mgr-1.home.example\"]}}")
+      (doseq [content ["{:environments {:prod " "[:not :a :map]" "#=(java.lang.System/exit 1)"]]
+        (testing content
+          (spit broken content)
+          (let [[loaded _ err] (quietly #(config/load-first [absent broken home]))]
+            (is (str/includes? err broken) "the warning names the file")
+            (is (re-find #"not readable EDN|not a map" err) "and the reason")
+            (is (str/includes? err "every cluster is refused"))
+            (is (nil? (config/resolve-value loaded nil [:ceph :mgr-hosts] nil))
+                "nothing of the next file applies")
+            (is (= [] (names (config/known-clusters loaded))))
+            (is (unread? (config/known-clusters loaded)) "the allow-list matches no cluster")
+            (with-redefs [config/all (constantly loaded)
+                          kubectl/current-cluster (constantly "kube.home.example")]
+              (let [{:keys [ok? label]} ((second (cluster-item [])))]
+                (is (false? ok?) "the cluster the next file names is refused")
+                (is (str/includes? label broken) label)))))))))
+
+(deftest a-missing-env-edn-falls-through-to-the-next
+  (fs/with-temp-dir [dir {}]
+    (let [home (str (fs/path dir "home.edn"))]
+      (spit home "{:clusters [\"kube.home.example\"]}")
+      (let [[loaded _ err] (quietly #(config/load-first [nil (str (fs/path dir "absent.edn")) home]))]
+        (is (= "" err))
+        (is (= ["kube.home.example"] (config/known-clusters loaded)))))))
+
+(deftest an-empty-env-edn-is-an-empty-config-and-shadows-the-next
+  (fs/with-temp-dir [dir {}]
+    (let [empty-file (str (fs/path dir "env.edn"))
+          home (str (fs/path dir "home.edn"))]
+      (spit empty-file "")
+      (spit home "{:clusters [\"kube.home.example\"]}")
+      (let [[loaded _ err] (quietly #(config/load-first [empty-file home]))]
+        (is (= {} loaded))
+        (is (= "" err))))))
+
+(deftest no-env-edn-at-all-is-an-empty-config
+  (fs/with-temp-dir [dir {}]
+    (is (= {} (config/load-first [(str (fs/path dir "a.edn")) (str (fs/path dir "b.edn"))])))))
+
 ;; --- :announce ----------------------------------------------------------------------
 
 (deftest announcers-of-reads-only-announcer-lists

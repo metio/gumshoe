@@ -1133,10 +1133,51 @@
          (run-connected! spec connection target ref opts announcement-data derive-cache derived on-skip)
          false)))))
 
+(defn named-but-not-offered
+  "Pure: what to do when the select offered no candidate although the flags
+   named `named`, given `presence`, what a strict read found of the object
+   the pick names (:present, :absent or :unread), or nil when the spec has
+   no typed subject to read. An object that exists is outside the
+   candidates because it needs no change, so the empty message holds; one
+   that does not exist, or that nothing could read, is never reported as
+   done. Returns {:ok message} or {:error message}."
+  [{:keys [label empty-message]} named presence]
+  (let [shown (if (string? named) named (str/join ", " named))]
+    (case presence
+      :present {:ok (or empty-message "nothing to do")}
+      :absent {:error (format "no %s %s - not found" label shown)}
+      :unread {:error (format "could not read %s %s, so whether it exists or needs no change is unknown" label shown)}
+      {:error (format "%s %s not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"
+                      label shown)})))
+
+(defn- nothing-to-pick!
+  "The select offered no candidate. Without a target named on the command
+   line that is nothing to do; with one, the named object is read before
+   anything says it needs no change (see named-but-not-offered)."
+  [spec opts context]
+  (let [{:keys [select]} spec
+        named (select/named-target select opts)]
+    (if-not named
+      (do (stdout/ok (or (:empty-message select) "nothing to do")) true)
+      ;; a :namespaced name without its namespace names no object a read can find
+      (let [whole? (or (not= :namespaced (:mode select))
+                       (not (str/blank? (str (get opts (:namespace-flag select))))))
+            {:keys [ref refusal]} (when (and (string? named) whole? (:type (change/pick-subject spec)))
+                                    (parse-pick spec named))]
+        (if refusal
+          (refuse! refusal)
+          (let [{:keys [ok error]} (named-but-not-offered select named
+                                                          (when ref (kubectl/presence context ref)))]
+            (if ok
+              (do (stdout/ok ok) true)
+              (do (stdout/error error) false))))))))
+
 (defn run!
   "Selects the spec's subject (interactive, honouring the CLI flags) and runs it
    through run-on!. Returns true when there is nothing to select (its
-   :empty-message is shown), false when what :connect names could not be
+   :empty-message is shown) and the flags name no target, or the target they
+   name exists and so needs no change; false when the named target does not
+   exist or could not be read, when what :connect names could not be
    reached, the candidates could not be read, the operator picks nothing or
    parse-pick refuses the pick, otherwise the
    change's result. Use run! for a single confirmed step; use run-on! to compose
@@ -1149,7 +1190,7 @@
           unread (select/unread! select unread)
 
           (empty? candidates)
-          (do (stdout/ok (or (:empty-message select) "nothing to do")) true)
+          (nothing-to-pick! spec opts (:context connection))
 
           (select/nothing-selected? (:mode select) target)
           (do (stdout/error (format "no %s selected" (:label select))) false)

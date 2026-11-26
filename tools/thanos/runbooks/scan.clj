@@ -27,9 +27,7 @@
           :port-name {:desc "The service port to forward"
                       :default "http"
                       :coerce :string}
-          :port {:desc "The local port used for the port-forward - a free port when omitted"
-                 :alias :p
-                 :coerce :long}}
+          :port kubectl/local-port-spec}
          detective/output-option))
 
 (def prerequisites
@@ -57,7 +55,7 @@
                                     :service name
                                     :local-port local-port
                                     :remote-port remote-port}
-          (fn [] (run (assoc opts :query-url (str "http://localhost:" local-port)))))))))
+          (fn [] (run (assoc opts :query-url (str "http://127.0.0.1:" local-port)))))))))
 
 (detective/book
  {:description "Investigates Thanos Query over a port-forward: readiness, stores, rules"
