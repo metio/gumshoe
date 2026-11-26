@@ -157,8 +157,9 @@
 (defn learning-reading
   "What the bridge says about learning on one conflict's tap, as finding
   data: `:tap-learning` and `:tap-flood` are `on` or `off` when
-  `bridge -d -j link show` printed the flag for the tap, else `unread`, with
-  `:bridge-ports-error` saying why."
+  `ip -d -j link show` printed the flag in the tap's own
+  `info_slave_data`, else `unread`, with `:bridge-ports-error` saying why. The
+  overlay device's flags never stand in for the tap's."
   [{:keys [host local-intf]} bridge-ports]
   (let [reading (get bridge-ports host)
         port (get-in reading [:ports local-intf])
@@ -202,11 +203,11 @@
   (let [out-of (str "frames the bridge forwards out of " (or remote-dev "the overlay device")
                     " go to " stale-remote-vtep)]
     (case tap-learning
-      "off" (str local-intf " has learning off, as `bridge -d -j link show` reads it, so a frame "
+      "off" (str local-intf " has learning off, as `ip -d -j link show` reads it, so a frame "
                  "from the guest does not move the bridge's entry back to the tap: " out-of
                  ", and traffic for the guest is black-holed rather than flooded")
-      "on" (str local-intf " has learning on, as `bridge -d -j link show` reads it, so a frame "
-                "from the guest can move the bridge's entry back to the tap; until it does, "
+      "on" (str local-intf " has learning on, as `ip -d -j link show` reads it, so a frame "
+                "from the guest may move the bridge's entry back to the tap; until it does, "
                 out-of ". Whether a learned frame replaces an entry EVPN installed "
                 "(extern_learn) depends on the kernel and was not read")
       (str "The bridge's learning flag for " local-intf " was not read (" bridge-ports-error

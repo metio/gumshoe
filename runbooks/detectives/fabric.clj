@@ -28,7 +28,7 @@
    --configured-vnis-only reads only the configured ones and reports every VNI
    a host carries beyond them as a gap that leaves its verdict incomplete.
    A host with fdb conflicts also has its bridge ports' learning flags read
-   with `bridge -d -j link show`, so the conflict hint states the black hole
+   from `ip -d -j link show`, so the conflict hint states the black hole
    as fact only when the tap was read not to learn.
 
    Hosts, VNIs, gateway VTEPs and guest MAC prefixes each come from their

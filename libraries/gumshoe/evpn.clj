@@ -510,10 +510,11 @@
   - one in collect-metadata (`external`) mode, which carries many VNIs - has
   `:vni nil`, because which VNIs it carries was not read. An empty list is a
   read of a host without VXLAN devices; silence or anything that is no JSON
-  list of devices is `:read? false`."
+  list of devices is `:read? false`. The parse is strict: cheshire's lazy
+  `parse-string` would throw from inside the list check, outside the try."
   [output]
   (let [text (or output "")
-        parsed (try (json/parse-string text) (catch Exception _ ::unparsable))]
+        parsed (try (json/parse-string-strict text) (catch Exception _ ::unparsable))]
     (cond
       (str/blank? text) (unread output "no output")
       (not (and (sequential? parsed) (every? map? parsed))) (unread output "unrecognised output")
@@ -586,28 +587,56 @@
 ;; --- the bridge's learning flags -----------------------------------------------
 
 (def bridge-ports-command
-  "The read that prints every bridge port's flags. With -d iproute2 prints
-  `learning` and `flood` as JSON booleans (bridge/link.c print_protinfo)."
-  ["bridge" "-d" "-j" "link" "show"])
+  "The read that prints every link's bridge port flags. With -d iproute2 puts
+  a bridge port's flags under `linkinfo.info_slave_data`, `learning` and
+  `flood` among them (ip/iplink_bridge_slave.c). One read covers every port of
+  the host, so no device name taken from a host's fdb table is ever put into a
+  remote command. `bridge -d -j link show` is not used: on iproute2-ss200127
+  (Ubuntu 20.04) it prints a detail object where a key belongs, which no JSON
+  parser accepts."
+  ["ip" "-d" "-j" "link" "show"])
+
+(defn- port-flag
+  "A bridge port flag as iproute2 prints it in JSON: a boolean, or `on`/`off`
+  where a version prints the word. Anything else is nil, so an unread flag never
+  passes for off."
+  [v]
+  (cond (boolean? v) v
+        (= "on" v) true
+        (= "off" v) false))
+
+(defn- json-error
+  [e]
+  (let [line (first (str/split-lines (or (ex-message e) "")))]
+    (str "invalid JSON: " (if (> (count line) 160) (str (subs line 0 160) "…") line))))
 
 (defn parse-bridge-ports
   "A host's bridge ports from the JSON of bridge-ports-command, keyed by
-  device: {:read? true :ports {dev {:master .. :learning .. :flood ..}}}. A
-  flag the output does not print is nil, so an unread flag never passes for
-  off. Silence or anything that is no JSON list is `:read? false`."
+  device: {:read? true :ports {dev {:master .. :learning .. :flood ..}}}. Only a
+  link carrying `linkinfo.info_slave_data` is a port, unless its
+  `info_slave_kind` names another master kind (a bond), and each port's flags
+  come from its own entry, never from another link's. A flag the output does not print is nil.
+  Silence, invalid JSON or anything that is no JSON list is `:read? false`.
+  The parse is strict, so invalid JSON fails inside the try: cheshire's
+  `parse-string` returns a top-level array lazily and would throw later."
   [output]
   (let [text (or output "")
-        parsed (try (json/parse-string text) (catch Exception _ ::unparsable))
-        flag (fn [port k] (let [v (get port k)] (when (boolean? v) v)))]
+        parsed (try (json/parse-string-strict text) (catch Exception e {::invalid e}))]
     (cond
       (str/blank? text) (unread output "no output")
+      (and (map? parsed) (::invalid parsed)) {:read? false :error (json-error (::invalid parsed))}
       (not (and (sequential? parsed) (every? map? parsed))) (unread output "unrecognised output")
       :else {:read? true
-             :ports (into {} (for [port parsed :when (get port "ifname")]
-                               [(get port "ifname")
-                                {:master (get port "master")
-                                 :learning (flag port "learning")
-                                 :flood (flag port "flood")}]))})))
+             :ports (into {} (for [link parsed
+                                   :let [info (get link "linkinfo")
+                                         data (get info "info_slave_data")]
+                                   :when (and (get link "ifname")
+                                              (contains? #{nil "bridge"} (get info "info_slave_kind"))
+                                              (map? data))]
+                               [(get link "ifname")
+                                {:master (get link "master")
+                                 :learning (port-flag (get data "learning"))
+                                 :flood (port-flag (get data "flood"))}]))})))
 
 (defn collect-bridge-ports
   "The bridge ports of each host, keyed by host, read in parallel. Never
