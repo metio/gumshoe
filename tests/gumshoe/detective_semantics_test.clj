@@ -269,8 +269,16 @@
 (defn- answering [result]
   (fn [& argv] (assoc result :argv argv)))
 
+(def ^:private group-not-found
+  {:exit 1 :out "" :err "Error from server (NotFound): the server could not find the requested resource"})
+
+(defn- raw-read? [argv] (some #{"--raw"} argv))
+
 (deftest an-optional-type-answers-empty-where-it-is-not-served
-  (with-redefs [shell/execute (answering {:exit 1 :out "" :err "error: the server doesn't have a resource type \"networkpolicies\""})]
+  (with-redefs [shell/execute (fn [& argv]
+                                (if (raw-read? argv)
+                                  group-not-found
+                                  {:exit 1 :out "" :err "error: the server doesn't have a resource type \"networkpolicies\""}))]
     (is (= {:items []} (kubectl/get-all-optional "ctx" network/calico-policy-type))))
   (with-redefs [shell/execute (answering {:exit 1 :out "" :err "Unable to connect to the server: dial tcp: i/o timeout"})]
     (is (nil? (kubectl/get-all-optional "ctx" network/calico-policy-type))))
@@ -280,11 +288,16 @@
 (deftest the-calico-types-read-through-the-optional-collector
   (let [seen (atom [])]
     (with-redefs [shell/execute (fn [& argv] (swap! seen conj (vec argv))
-                                  {:exit 1 :out "" :err "error: the server doesn't have a resource type"})]
+                                  (if (raw-read? argv)
+                                    group-not-found
+                                    {:exit 1 :out "" :err "error: the server doesn't have a resource type"}))]
       (doseq [type network/calico-policy-types]
         (is (= {:items []} ((registry/collector-for type) "ctx" type)) type)))
-    (is (= 2 (count @seen)))
-    (is (every? #(some #{"get"} %) @seen))))
+    (is (every? #(some #{"get"} %) @seen))
+    (is (= (set network/calico-policy-types)
+           (set (keep #(some (set network/calico-policy-types) %) (remove raw-read? @seen))))
+        "one list read per Calico type")
+    (is (= 2 (count (remove raw-read? @seen))))))
 
 ;; --- csi attachments: attaching takes time, detaching can fail -----------------------
 
