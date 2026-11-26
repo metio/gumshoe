@@ -81,6 +81,36 @@
     (is (false? (charm/confirmed? (play charm/list-update (charm/list-state charm/confirm-choices)
                                         (typed :down :ctrl+c)))))))
 
+(def ^:private destructive-options
+  {:prompt "Proceed?" :affirmative "Yes, delete 34 fdb rows" :negative "No" :default false :destructive? true})
+
+(deftest a-labelled-confirmation-starts-on-the-negative
+  (let [choices (charm/option-choices destructive-options)]
+    (is (= ["No" "Yes, delete 34 fdb rows"] choices))
+    (is (false? (charm/chose-affirmative? choices (play charm/list-update (charm/list-state choices)
+                                                        (typed :enter)))))))
+
+(deftest a-labelled-confirmation-approves-only-the-affirmative
+  (let [choices (charm/option-choices destructive-options)]
+    (is (true? (charm/chose-affirmative? choices (play charm/list-update (charm/list-state choices)
+                                                       (typed :down :enter)))))
+    (is (false? (charm/chose-affirmative? choices (play charm/list-update (charm/list-state choices)
+                                                        (typed :down :escape)))))
+    (is (false? (charm/chose-affirmative? choices (play charm/list-update (charm/list-state choices)
+                                                        (typed :down :ctrl+c)))))))
+
+(deftest labels-that-cannot-be-told-apart-give-no-choices
+  (doseq [options [{:affirmative "No" :negative "No"}
+                   {:affirmative " Yes " :negative "Yes"}
+                   {:affirmative "" :negative "No"}
+                   {:affirmative "Yes, delete" :negative nil}
+                   {}]]
+    (is (nil? (charm/option-choices options)) (pr-str options))
+    (is (false? (charm/confirm options)) "declines without starting a picker")))
+
+(deftest the-backend-declares-the-options-contract
+  (is (true? (get-in @@#'gumshoe.ui/providers [:charm :confirm-options?]))))
+
 (deftest a-pick-returns-the-value-under-the-cursor
   (let [state (charm/list-state ["a" "b" "c"])]
     (is (= "a" (charm/picked (play charm/list-update state (typed :enter)))))

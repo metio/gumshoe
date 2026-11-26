@@ -16,7 +16,9 @@ agent, run the read-only books (detectives and scans) freely with
 `--output json`, and prepare every change with `--dry-run`. The change itself
 runs only after a human confirms it at their own terminal, because every
 change asks for approval on standard input and a destructive one asks for
-the typed word `yes`. Never pipe an answer into that prompt; give the human the command
+the typed word `yes` (or, where the estate's env.edn sets `:confirmations
+{:destructive :picker}`, a picker that starts on No and names the consequence).
+Never pipe an answer into that prompt; give the human the command
 instead.
 
 ## Kinds of books

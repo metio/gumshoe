@@ -30,6 +30,9 @@ monorepo's `bb test` classpath. Its programs' states and update functions are
 pure, and `bb test` in `tools/ui-charm` runs them against the pinned charm.clj
 release without a terminal; the loop that drives them, `program/run`, still
 needs a real terminal to check. A confirmation starts on "no", so a bare Enter
-declines, as the built-in `gum confirm --default=false` does. Space marks
+declines, as the built-in `gum confirm --default=false` does. The backend
+declares `:confirm-options?`, so with `:confirmations {:destructive :picker}`
+in `env.edn` it also asks for destructive actions, offering the negative label
+first and the consequence gumshoe names as the affirmative one. Space marks
 values in a multi-select. Fuzzy-filtering (fzf's incremental match) is a
 follow-up; the first cut is a scrollable select.

@@ -16,6 +16,7 @@
             [charm.components.text-input :as text-input]
             [charm.message :as msg]
             [charm.program :as program]
+            [clojure.string :as str]
             [gumshoe.plugin :as plugin]))
 
 ;; --- the Elm loop, shared by every primitive ---
@@ -164,16 +165,43 @@
   [state]
   (= "yes" (picked state)))
 
+(defn option-choices
+  "Pure: the choices of a confirmation given gumshoe's options map, the
+   negative first so the cursor starts on it, or nil when either label is
+   blank or both read the same, since the operator could then not tell which
+   one approves."
+  [{:keys [affirmative negative]}]
+  (let [yes (some-> affirmative str str/trim)
+        no (some-> negative str str/trim)]
+    (when (and (not (str/blank? yes)) (not (str/blank? no)) (not= yes no))
+      [no yes])))
+
+(defn chose-affirmative?
+  "Whether a final confirmation state over `choices` approves: only the
+   affirmative option, chosen explicitly, does."
+  [choices state]
+  (boolean (and choices (= (second choices) (picked state)))))
+
 (defn confirm
-  "A yes/no picker. Returns true only for an explicit yes."
-  []
-  (confirmed? (run-until-enter (list-state confirm-choices)
-                               list-update
-                               #(header "Proceed?" (clist/list-view %)))))
+  "A yes/no picker starting on no. Returns true only for an explicit yes.
+   Given gumshoe's options map, it offers the map's negative and affirmative
+   labels instead, still starting on the negative, and declines without
+   asking when the labels cannot be told apart."
+  ([]
+   (confirmed? (run-until-enter (list-state confirm-choices)
+                                list-update
+                                #(header "Proceed?" (clist/list-view %)))))
+  ([{:keys [prompt] :as options}]
+   (if-let [choices (option-choices options)]
+     (chose-affirmative? choices (run-until-enter (list-state choices)
+                                                  list-update
+                                                  #(header (or prompt "Proceed?") (clist/list-view %))))
+     false)))
 
 (plugin/provide!
  {:ui {:name :charm
        :select-one select-one
        :select-multi select-multi
        :ask-text ask-text
-       :confirm confirm}})
+       :confirm confirm
+       :confirm-options? true}})

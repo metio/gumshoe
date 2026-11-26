@@ -211,10 +211,18 @@ Every book behaves the same way:
   names those steps and the exit code is 1.
 - Changes to a running system are verified twice: first you select or provide
   the item, then the book states exactly what it is about to do and asks for
-  approval. Destructive actions get an unmissable red banner and always require
-  a literal typed `yes`; other changes use
+  approval. Destructive actions get an unmissable red banner and require a
+  literal typed `yes`; other changes use
   [gum](https://github.com/charmbracelet/gum)'s yes/no picker when gum is
-  installed.
+  installed, or the yes/no of the UI backend `env.edn :ui` selects. An estate
+  can opt destructive actions in to the picker with `:confirmations
+  {:destructive :picker}` at the top level of `env.edn`: the picker then starts
+  on No and its affirmative option names the consequence (`Yes, delete 34 fdb
+  rows`), and the red banner stays. The typed `yes` remains wherever no picker
+  can honour that: away from a terminal, without gum or a UI backend, with a
+  UI backend that does not declare `:confirm-options?`, or for a confirmation
+  that names no action. A book cannot change this setting, and it is read from
+  the top level only, never per environment.
 - Every change ends with a **post-check**: the book waits until the intended
   state actually holds (node unschedulable, PVC gone, HelmRelease Ready, dump
   complete, ...) and fails loudly if it cannot verify the result. "Probably
@@ -627,6 +635,12 @@ unifying convenience.
 - **Themes** - how output looks. `:default` (emoji + colour), `:ascii` (no
   emoji, for logs/CI), and `:plain` (no colour) are built in; a plugin registers
   more with `(theme/register! { … })`. Selected by `env.edn :theme`.
+- **UI backends** - a plugin's `:ui` map replaces fzf and gum for picks,
+  prompts and confirmations, selected by `env.edn :ui`. A backend that sets
+  `:confirm-options? true` receives `{:prompt :affirmative :negative :default
+  false :destructive?}` in its `:confirm`, must start on the negative option,
+  and returns true only for the affirmative one; only such a backend is
+  offered destructive actions under `:confirmations {:destructive :picker}`.
 - **Execution hooks** - `(hooks/register-post-hook! (fn [ctx] …))` observes
   every finished book (outcome, recording path) to push a metric or forward the
   audit trail; `(hooks/register-pre-hook! (fn [ctx] …))` is a global gate that
