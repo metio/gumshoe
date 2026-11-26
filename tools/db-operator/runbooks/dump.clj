@@ -26,9 +26,7 @@
           :alias :r
           :require true
           :coerce :string}
-   :port {:desc "The local port used for the port-forward - a free port when omitted"
-          :alias :p
-          :coerce :long}})
+   :port kubectl/local-port-spec})
 
 (def prerequisites
   {:installed-tools ["kubectl" "pg_dump" "fzf"]

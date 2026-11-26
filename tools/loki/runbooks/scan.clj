@@ -25,9 +25,7 @@
           :port-name {:desc "The distributor service port to forward for the ring check"
                       :default "http-metrics"
                       :coerce :string}
-          :port {:desc "The local port used for the port-forward - a free port when omitted"
-                 :alias :p
-                 :coerce :long}}
+          :port kubectl/local-port-spec}
          detective/output-option))
 
 (def prerequisites
@@ -75,7 +73,7 @@
                                         :service (kubectl/name-of service)
                                         :local-port local-port
                                         :remote-port (kubectl/service-port-or-first service (:port-name opts))}
-              (fn [] (run (assoc opts :ring-url (str "http://localhost:" local-port))))))
+              (fn [] (run (assoc opts :ring-url (str "http://127.0.0.1:" local-port))))))
           (run opts))))))
 
 (defn- collect

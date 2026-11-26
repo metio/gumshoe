@@ -35,9 +35,7 @@
                    :port-name {:desc "The service port serving the Prometheus API"
                                :default prometheus/default-port-name
                                :coerce :string}
-                   :port {:desc "The local port used for the port-forward - a free port when omitted"
-                          :alias :p
-                          :coerce :long}
+                   :port kubectl/local-port-spec
                    :delete-timeout {:desc "Seconds the delete_series call may take - a large TSDB can need minutes"
                                     :default 600
                                     :coerce :long}}))

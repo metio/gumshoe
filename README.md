@@ -93,8 +93,13 @@ lets you name your VPN interface and your ceph mgr hosts without touching
 code. When set, the
 storage-resize books tail the ceph cluster log over SSH while they wait (gated
 on your VPN being up), so a resizer error surfaces live; on a machine with no
-`env.edn` those books simply watch the namespace events instead. A missing or
-broken file degrades to no config, never an error.
+`env.edn` those books simply watch the namespace events instead. A missing
+file means no config, never an error. The first env.edn that exists is the
+one read (`GUMSHOE_ENV`, then `./env.edn`, `$XDG_CONFIG_HOME/gumshoe/env.edn`
+and `~/.config/gumshoe/env.edn`), even when it is broken: a file that does not
+read as an EDN map is named on stderr with the parse error, nothing of it
+applies, and the "suitable Kubernetes cluster" prerequisite refuses every
+cluster until it is fixed.
 
 If you operate more than one environment, declare each as a named bundle under
 `:environments` and tie it to a cluster with `:select`. The active one is

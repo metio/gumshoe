@@ -156,7 +156,7 @@
                                   #'kubectl/service-port-or-first (constantly 3100)
                                   #'loki/collect-workloads! (recording :collect-workloads (dissoc evidence "rings" "url"))
                                   #'loki/collect-rings! (recording :collect-rings (select-keys evidence ["rings" "url"]))})
-           :evidence {"namespace" "loki" "workloads" [] "rings" {} "url" "http://localhost:13100"}
+           :evidence {"namespace" "loki" "workloads" [] "rings" {} "url" "http://127.0.0.1:13100"}
            :detective "loki-components"
            :refusals {"no namespace" {:opts {:selector "x"}
                                       :stubs {#'kubectl/get-selected (recording :get-selected {:items []})
@@ -205,7 +205,7 @@
                                     #'kubectl/service-port-or-first (constantly 9090)
                                     #'kubectl/with-port-forward (fn [spec f] (swap! calls conj [:port-forward spec]) (f))
                                     #'thanos/collect-evidence! (recording :collect evidence)})
-             :evidence {"url" "http://localhost:19090" "ready" true "stores" [] "rules" []}
+             :evidence {"url" "http://127.0.0.1:19090" "ready" true "stores" [] "rules" []}
              :detective "thanos-stores"
              :refusals {"no service" {:stubs {#'interact/choose-namespaced (recording :choose nil)}}
                         "candidates unanswered" {:stubs (candidate-reads kubectl-unanswered [#'kubectl/get-selected #'interact/choose-namespaced #'kubectl/find-item])}

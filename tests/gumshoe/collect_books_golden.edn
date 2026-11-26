@@ -763,12 +763,12 @@
      {:context "ctx",
       :namespace "loki",
       :selector "app.kubernetes.io/name=loki"}]
-    [:collect-rings "http://localhost:13100"]
+    [:collect-rings "http://127.0.0.1:13100"]
     [:detectives
      ["loki-mode" "loki-components" "loki-health" "loki-rings"]
      {"namespace" "loki",
       "rings" {},
-      "url" "http://localhost:13100",
+      "url" "http://127.0.0.1:13100",
       "workloads" []}]]},
   "clean text"
   {:result true,
@@ -788,12 +788,12 @@
      {:context "ctx",
       :namespace "loki",
       :selector "app.kubernetes.io/name=loki"}]
-    [:collect-rings "http://localhost:13100"]
+    [:collect-rings "http://127.0.0.1:13100"]
     [:detectives
      ["loki-mode" "loki-components" "loki-health" "loki-rings"]
      {"namespace" "loki",
       "rings" {},
-      "url" "http://localhost:13100",
+      "url" "http://127.0.0.1:13100",
       "workloads" []}]]},
   "finding edn"
   {:result true,
@@ -830,12 +830,12 @@
      {:context "ctx",
       :namespace "loki",
       :selector "app.kubernetes.io/name=loki"}]
-    [:collect-rings "http://localhost:13100"]
+    [:collect-rings "http://127.0.0.1:13100"]
     [:detectives
      ["loki-mode" "loki-components" "loki-health" "loki-rings"]
      {"namespace" "loki",
       "rings" {},
-      "url" "http://localhost:13100",
+      "url" "http://127.0.0.1:13100",
       "workloads" []}]]},
   "finding text"
   {:result true,
@@ -855,12 +855,12 @@
      {:context "ctx",
       :namespace "loki",
       :selector "app.kubernetes.io/name=loki"}]
-    [:collect-rings "http://localhost:13100"]
+    [:collect-rings "http://127.0.0.1:13100"]
     [:detectives
      ["loki-mode" "loki-components" "loki-health" "loki-rings"]
      {"namespace" "loki",
       "rings" {},
-      "url" "http://localhost:13100",
+      "url" "http://127.0.0.1:13100",
       "workloads" []}]]},
   "no candidates"
   {:result false,
@@ -1547,13 +1547,13 @@
       :service "thanos-query",
       :local-port 19090,
       :remote-port 9090}]
-    [:collect "http://localhost:19090"]
+    [:collect "http://127.0.0.1:19090"]
     [:detectives
      ["thanos-readiness" "thanos-stores" "thanos-rules"]
      {"ready" true,
       "rules" [],
       "stores" [],
-      "url" "http://localhost:19090"}]]},
+      "url" "http://127.0.0.1:19090"}]]},
   "clean text"
   {:result true,
    :stdout
@@ -1572,13 +1572,13 @@
       :service "thanos-query",
       :local-port 19090,
       :remote-port 9090}]
-    [:collect "http://localhost:19090"]
+    [:collect "http://127.0.0.1:19090"]
     [:detectives
      ["thanos-readiness" "thanos-stores" "thanos-rules"]
      {"ready" true,
       "rules" [],
       "stores" [],
-      "url" "http://localhost:19090"}]]},
+      "url" "http://127.0.0.1:19090"}]]},
   "finding edn"
   {:result true,
    :stdout
@@ -1609,13 +1609,13 @@
       :service "thanos-query",
       :local-port 19090,
       :remote-port 9090}]
-    [:collect "http://localhost:19090"]
+    [:collect "http://127.0.0.1:19090"]
     [:detectives
      ["thanos-readiness" "thanos-stores" "thanos-rules"]
      {"ready" true,
       "rules" [],
       "stores" [],
-      "url" "http://localhost:19090"}]]},
+      "url" "http://127.0.0.1:19090"}]]},
   "finding text"
   {:result true,
    :stdout
@@ -1634,13 +1634,13 @@
       :service "thanos-query",
       :local-port 19090,
       :remote-port 9090}]
-    [:collect "http://localhost:19090"]
+    [:collect "http://127.0.0.1:19090"]
     [:detectives
      ["thanos-readiness" "thanos-stores" "thanos-rules"]
      {"ready" true,
       "rules" [],
       "stores" [],
-      "url" "http://localhost:19090"}]]},
+      "url" "http://127.0.0.1:19090"}]]},
   "no candidates"
   {:result false,
    :stdout "",

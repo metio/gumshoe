@@ -118,7 +118,12 @@ otherwise ask for:
   node, `-N` name, `-p` pick, …; `gumshoe.flags/aliases` holds the list).
   The aliases `--name` and Thanos' `--service` had before (`-r`, `-s`,
   `-m`) still parse, and print a deprecation note on stderr naming the
-  current one; write the current alias or the long flag.
+  current one; write the current alias or the long flag. When a change
+  book finds nothing to change, it says so and exits 0 only when its flags
+  named no target or a read found the named object; a named object that
+  does not exist ends with `no <kind> <namespace>/<name> - not found` and
+  exit 1, and one the book cannot read on its own (no typed subject, a name
+  without its namespace) exits 1 as well.
 - **Pass options only.** A book, and `./detect`, refuses any positional
   argument with exit 1 before anything runs, naming the word: babashka.cli
   stops reading options at the first one, so a `--dry-run` or `--output
@@ -305,7 +310,10 @@ and current list.
    run.
 
 A book whose change cannot be expressed as a plan says under `--dry-run` that
-it does not support a dry run, and runs nothing. Interactive sessions
+it does not support a dry run, runs nothing and exits 1: a confirmation
+reached under `--dry-run` is refused, never answered. The etcd performance
+check, the setup wizard and `share` print what they would run or write
+instead and exit 0. Interactive sessions
 (`netshoot`, `psql` connections, `upterm` sharing) are for the human
 entirely. `runbooks/collaborate/share.clj` refuses to share a terminal unless
 `--with <github-user>` names who may join or the human passes `--open`; never
@@ -321,8 +329,14 @@ With breto, `eval "$(breto env)"` puts every tool a book needs on `PATH`.
 `env.edn` (optional, gitignored, built by `bb run runbooks/setup/init.clj`)
 holds per-host settings: environments selected by kubectl context, ceph mgr
 hosts, VPN interfaces, the secrets provider (`:gopass`, `:pass`, `:passage`,
-`:pasejo` or a `:command`), announcers, plugins, and the theme. A missing or
-broken file means no configuration and never an error. A part of the wrong
+`:pasejo` or a `:command`), announcers, plugins, and the theme. A missing
+file means no configuration and never an error. The first env.edn that exists
+in the search order (`GUMSHOE_ENV`, `./env.edn`,
+`$XDG_CONFIG_HOME/gumshoe/env.edn`, `~/.config/gumshoe/env.edn`) is the one
+read, even when it is broken: a file that does not read as an EDN map is
+named on stderr with the parse error, nothing of it applies, and the
+"suitable Kubernetes cluster" prerequisite refuses every cluster until it is
+fixed. A part of the wrong
 shape (`:environments` or `:defaults` that is not a map, a `:select` that is
 not a map, `:plugins` that is neither a namespace nor a list of them) is ignored with a warning on
 stderr naming it, and the rest of the file still applies. A part that could

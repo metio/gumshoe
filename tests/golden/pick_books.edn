@@ -9,29 +9,28 @@
    :commands []},
   :picked
   {:result true,
-   :out
-   ["▸ etcd pod: kube-system/etcd-cp-2"
-    "────────────────────────────────────────────────────────────────────────────────"
-    "  🔶 You are about to change a running system"
-    "────────────────────────────────────────────────────────────────────────────────"
-    "This will run an etcd performance check with workload 'm' - this generates load on 'cluster':"
-    "  - kube-system/etcd-cp-2"
-    "────────────────────────────────────────────────────────────────────────────────"],
-   :commands
-   [["gum" "confirm" "--default=false" "Proceed?"]
-    ["kubectl"
-     "--context=ctx"
-     "--namespace=kube-system"
-     "exec"
-     "etcd-cp-2"
-     "--"
-     "etcdctl"
-     "--cacert=/etc/kubernetes/pki/etcd/ca.crt"
-     "--cert=/etc/kubernetes/pki/etcd/server.crt"
-     "--key=/etc/kubernetes/pki/etcd/server.key"
-     "check"
-     "perf"
-     "--load=m"]]},
+   :out ["▸ etcd pod: kube-system/etcd-cp-2"],
+   :commands [],
+   :change
+   {:action
+    "run an etcd performance check with workload 'm' - this generates load",
+    :target "cluster",
+    :items ["kube-system/etcd-cp-2"],
+    :plan
+    [[:cmd
+      "kubectl"
+      "--context=ctx"
+      "--namespace=kube-system"
+      "exec"
+      "etcd-cp-2"
+      "--"
+      "etcdctl"
+      "--cacert=/etc/kubernetes/pki/etcd/ca.crt"
+      "--cert=/etc/kubernetes/pki/etcd/server.crt"
+      "--key=/etc/kubernetes/pki/etcd/server.key"
+      "check"
+      "perf"
+      "--load=m"]]}},
   :surface
   {:description "Runs an etcd performance check through one etcd pod",
    :options
@@ -602,9 +601,10 @@
      :alias :i},
     :port
     {:desc
-     "The local port used for the port-forward - a free port when omitted",
+     "The local port used for the port-forward (1-65535) - a free port when omitted",
      :alias :p,
-     :coerce :long}},
+     :coerce :long,
+     :validate {:pred :fn, :ex-msg :fn}}},
    :prerequisites
    {:installed-tools ["kubectl" "psql" "fzf"],
     :cluster-capabilities [],
@@ -714,9 +714,10 @@
      :coerce :string},
     :port
     {:desc
-     "The local port used for the port-forward - a free port when omitted",
+     "The local port used for the port-forward (1-65535) - a free port when omitted",
      :alias :p,
-     :coerce :long},
+     :coerce :long,
+     :validate {:pred :fn, :ex-msg :fn}},
     :delete-timeout
     {:desc
      "Seconds the delete_series call may take - a large TSDB can need minutes",

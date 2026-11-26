@@ -65,6 +65,22 @@
   (stdout/error (format "could not list the %s candidates - %s" label reason))
   false)
 
+(defn named-target
+  "Pure: the target the select's flags name in opts, or nil when they name
+   none: the flag's value for :one, the flag's values for :many, and for
+   :namespaced \"namespace/name\" when both flags are given or the bare name
+   when only the name flag is."
+  [{:keys [mode flag namespace-flag name-flag]} opts]
+  (let [given (fn [k] (let [v (get opts k)] (when-not (str/blank? (str v)) (str v))))]
+    (case mode
+      :one (given flag)
+      :many (not-empty (vec (remove str/blank? (map str (get opts flag)))))
+      :namespaced (when-let [name (given name-flag)]
+                    (if-let [namespace (given namespace-flag)]
+                      (str namespace "/" name)
+                      name))
+      nil)))
+
 (defn resolve-target
   "Runs the candidate query and the interactive pick for a select spec, returning
    {:candidates <names> :target <the pick, or nil/[] when nothing was chosen>},

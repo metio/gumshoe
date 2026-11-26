@@ -717,16 +717,27 @@
   (read-json "kubectl" (str "--context=" context) (str "--namespace=" namespace) request-timeout
              "get" type name "--output=json"))
 
+(defn presence
+  "Whether the object a ref {:type :namespace :name} names exists, read
+   strictly: :present, :absent when the read answered and found no such
+   object, or :unread when it did not answer, which the plain getters report
+   as the same nil as NotFound. namespace is nil for a cluster-scoped type."
+  [context {:keys [type namespace name]}]
+  (let [{:keys [exit out]} (apply shell/execute "kubectl" (str "--context=" context) request-timeout
+                                  (concat (when namespace [(str "--namespace=" namespace)])
+                                          ["get" type name "--ignore-not-found" "--output=name"]))]
+    (cond
+      (not (zero? exit)) :unread
+      (str/blank? out) :absent
+      :else :present)))
+
 (defn confirmed-gone?
   "True ONLY when a read answered and found no such object - the fail-safe way
    to verify a deletion. A failed or unreachable read returns false, where the
    plain getters return the same nil for a failure as for NotFound. namespace
    is nil for a cluster-scoped type."
   [context namespace type name]
-  (let [{:keys [exit out]} (apply shell/execute "kubectl" (str "--context=" context) request-timeout
-                                  (concat (when namespace [(str "--namespace=" namespace)])
-                                          ["get" type name "--ignore-not-found" "--output=name"]))]
-    (and (zero? exit) (str/blank? out))))
+  (= :absent (presence context {:type type :namespace namespace :name name})))
 
 (defn pods-on-node
   [context node]
@@ -815,17 +826,53 @@
 (defn- port-bindable?
   "Whether this process could bind port on 127.0.0.1 right now. A program
    holding the port without accepting connections is caught here, where a
-   connection attempt would miss it."
+   connection attempt would miss it. Only a BindException means the port is
+   held; any other failure is thrown as itself, so it is never reported as
+   an occupied port."
   [port]
   (try
     (with-open [_socket (java.net.ServerSocket. (int port) 1 (java.net.InetAddress/getByName "127.0.0.1"))]
       true)
-    (catch Exception _ false)))
+    (catch java.net.BindException _ false)))
+
+(defn valid-local-port?
+  "Whether port can be a local port to forward to: 1 to 65535. Port 0 asks
+   the kernel for any port, which kubectl would choose and report on its
+   own, so it is refused as well; leaving --port out picks a free port."
+  [port]
+  (and (int? port) (<= 1 port 65535)))
+
+(defn local-port-message
+  "The refusal for a local port outside 1-65535."
+  [port]
+  (format "--port must be between 1 and 65535, got %s - leave it out to use a free port" (pr-str port)))
+
+(def local-port-spec
+  "The spec of the --port option of a book that forwards a service to a
+   local port, refusing a port outside 1-65535 as the arguments are parsed."
+  {:desc "The local port used for the port-forward (1-65535) - a free port when omitted"
+   :alias :p
+   :coerce :long
+   :validate {:pred valid-local-port?
+              :ex-msg (fn [{:keys [value]}] (local-port-message value))}})
 
 (defn local-port-taken?
   "Whether anything holds port on 127.0.0.1: a listener or a bind."
   [port]
   (or (port-open? port) (not (port-bindable? port))))
+
+(defn local-port-problem
+  "Why with-port-forward may not use port, or nil: a port outside 1-65535,
+   one something already holds, or a check that failed for another reason,
+   named as itself."
+  [port]
+  (if-not (valid-local-port? port)
+    (local-port-message port)
+    (try
+      (when (local-port-taken? port)
+        (format "local port %d is already in use - pick another with --port" port))
+      (catch Exception e
+        (format "local port %d could not be checked: %s" port (or (ex-message e) (str e)))))))
 
 (defn free-local-port
   "A port on 127.0.0.1 nothing holds right now, chosen by the kernel from the
@@ -888,10 +935,61 @@
   "How long kubectl port-forward may take to report its listener bound."
   30000)
 
+(defn- forward-and-run
+  "with-port-forward once local-port passed its checks."
+  [context namespace service local-port remote-port f]
+  (let [forward (try
+                  ;; babashka.process takes the options first and the
+                  ;; command as separate strings; a vector after the
+                  ;; options would be run as one program named "[kubectl".
+                  ;; Tracked, so a SIGTERM that halts the JVM before the
+                  ;; finally below runs still takes the forward down
+                  ;; instead of leaving it holding local-port.
+                  (shell/track-child!
+                   (apply process/process {:out :stream :err :inherit}
+                          ["kubectl" (str "--context=" context) (str "--namespace=" namespace)
+                           "port-forward" (str "service/" service)
+                           (str local-port ":" remote-port)]))
+                  (catch Exception e
+                    (stdout/error (format "could not start kubectl port-forward: %s" (ex-message e)))
+                    nil))]
+    (if (nil? forward)
+      false
+      (try
+        (let [bound (promise)
+              deadline (+ (System/currentTimeMillis) *forward-start-ms*)]
+          (watch-forward-output forward local-port bound)
+          (loop []
+            (cond
+              (not (process/alive? forward))
+              (do (stdout/error (format "kubectl port-forward to service/%s exited before the port opened" service))
+                  false)
+
+              (and (= :bound (deref bound 0 nil)) (port-open? local-port) (process/alive? forward))
+              (let [result (binding [*port-forward* forward] (f))]
+                (if (process/alive? forward)
+                  result
+                  (do (stdout/error (format (str "kubectl port-forward to service/%s exited while it was in use;"
+                                                 " what went through local port %d afterwards may have reached another program")
+                                            service local-port))
+                      false)))
+
+              (> (System/currentTimeMillis) deadline)
+              (do (stdout/error (format "port-forward to service/%s did not report 127.0.0.1:%d bound within %d seconds"
+                                        service local-port (quot *forward-start-ms* 1000)))
+                  false)
+
+              :else (do (Thread/sleep 100)
+                        (recur)))))
+        (finally
+          (process/destroy-tree forward)
+          (shell/untrack-child! forward))))))
+
 (defn with-port-forward
   "Runs f while the service's remote-port is forwarded to local-port, then
    tears the forward down no matter what f does. f runs only against our own
-   forward: a local-port already taken is refused before kubectl starts, f
+   forward: a local-port outside 1-65535 or already taken is refused before
+   kubectl starts, f
    starts only once kubectl itself reported 127.0.0.1:local-port bound and is
    still running, and a forward that exited while f ran turns f's result into
    a failure, since its port may by then belong to another program. A step
@@ -904,57 +1002,10 @@
     (nil? local-port)
     (do (stdout/error "no local port to forward to - pass one with --port") false)
 
-    (local-port-taken? local-port)
-    (do (stdout/error (format "local port %d is already in use - pick another with --port" local-port))
-        false)
-
     :else
-    (let [forward (try
-                    ;; babashka.process takes the options first and the
-                    ;; command as separate strings; a vector after the
-                    ;; options would be run as one program named "[kubectl".
-                    ;; Tracked, so a SIGTERM that halts the JVM before the
-                    ;; finally below runs still takes the forward down
-                    ;; instead of leaving it holding local-port.
-                    (shell/track-child!
-                     (apply process/process {:out :stream :err :inherit}
-                            ["kubectl" (str "--context=" context) (str "--namespace=" namespace)
-                             "port-forward" (str "service/" service)
-                             (str local-port ":" remote-port)]))
-                    (catch Exception e
-                      (stdout/error (format "could not start kubectl port-forward: %s" (ex-message e)))
-                      nil))]
-      (if (nil? forward)
-        false
-        (try
-          (let [bound (promise)
-                deadline (+ (System/currentTimeMillis) *forward-start-ms*)]
-            (watch-forward-output forward local-port bound)
-            (loop []
-              (cond
-                (not (process/alive? forward))
-                (do (stdout/error (format "kubectl port-forward to service/%s exited before the port opened" service))
-                    false)
-
-                (and (= :bound (deref bound 0 nil)) (port-open? local-port) (process/alive? forward))
-                (let [result (binding [*port-forward* forward] (f))]
-                  (if (process/alive? forward)
-                    result
-                    (do (stdout/error (format (str "kubectl port-forward to service/%s exited while it was in use;"
-                                                   " what went through local port %d afterwards may have reached another program")
-                                              service local-port))
-                        false)))
-
-                (> (System/currentTimeMillis) deadline)
-                (do (stdout/error (format "port-forward to service/%s did not report 127.0.0.1:%d bound within %d seconds"
-                                          service local-port (quot *forward-start-ms* 1000)))
-                    false)
-
-                :else (do (Thread/sleep 100)
-                          (recur)))))
-          (finally
-            (process/destroy-tree forward)
-            (shell/untrack-child! forward)))))))
+    (if-let [problem (local-port-problem local-port)]
+      (do (stdout/error problem) false)
+      (forward-and-run context namespace service local-port remote-port f))))
 
 (defn unused-pvc-candidates
   "Namespace/name of every PersistentVolumeClaim no pod refers to, for a book

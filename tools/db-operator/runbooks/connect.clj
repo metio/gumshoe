@@ -20,9 +20,7 @@
    :ingress {:desc "A public ingress host, used to look up the namespace"
              :alias :i
              :coerce :string}
-   :port {:desc "The local port used for the port-forward - a free port when omitted"
-          :alias :p
-          :coerce :long}})
+   :port kubectl/local-port-spec})
 
 (def prerequisites
   {:installed-tools ["kubectl" "psql" "fzf"]
