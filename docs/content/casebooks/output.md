@@ -238,8 +238,9 @@ ignores. Other tools log warnings as klog lines (`W1126 10:15:30.123456 …]`).
   beneath it, and the warnings its command wrote follow it two levels in,
   marked `:finding`. stdout and every other stderr line are not held back, so
   a long drain stays visibly alive and a failed effect shows its full error.
-- A post-check prints the warnings its reads wrote once, under its
-  `verified:` or `NOT verified:` line, however many attempts it took.
+- A post-check shows the warnings its reads wrote once, however many
+  attempts it took: under its row in the post-check task list, or under its
+  `verified:` or `NOT verified:` line when it runs on its own.
 - An investigation prints, after its evidence list, each warning named by
   the read that provoked it: `🔶 endpoints: Warning: v1 Endpoints is
   deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice`.

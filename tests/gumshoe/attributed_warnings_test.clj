@@ -14,6 +14,7 @@
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
+            [gumshoe.progress :as progress]
             [gumshoe.render :as render]
             [gumshoe.runbook :as runbook]
             [gumshoe.shell :as shell]
@@ -211,6 +212,38 @@ esac
       (is (under? lines "verified: the endpoints are listed"
                   "🔶 Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice")
           (str/join "\n" lines)))))
+
+(def ^:private endpoints-check
+  {:description "the endpoints are listed" :timeout 1
+   :check (fn [] (some? (kubectl/get-json "c" "endpoints")))})
+
+(def ^:private endpoints-warning
+  "Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice")
+
+(deftest a-post-check-row-carries-its-read-warning-in-a-plain-task-list
+  (with-fake-kubectl
+    (let [{:keys [value lines]} (stderr-of #(verify/all [endpoints-check]))]
+      (is (true? value))
+      (is (= ["  ✅ verified: the endpoints are listed"
+              (str "    🔶 " endpoints-warning)]
+             lines)))))
+
+(deftest a-post-check-row-carries-its-read-warning-in-a-live-task-list
+  ;; the live board buffers what a step prints and draws it under the step's
+  ;; row, so the warning is part of the row and not printed around the board
+  (with-fake-kubectl
+    (let [err (java.io.StringWriter.)
+          results (binding [*err* err]
+                    (progress/run-steps [{:label "the endpoints are listed"
+                                          :run #(verify/eventually endpoints-check)}]
+                                        {:live? true}))
+          lines (->> (str/split-lines (render/strip-colors (str err)))
+                     (map #(str/replace % #"\r|\u001b\[[0-9]*[AJ]" ""))
+                     (remove str/blank?)
+                     vec)]
+      (is (true? (:ok? (first results))))
+      (is (= ["  ✅ the endpoints are listed" (str "    🔶 " endpoints-warning)] lines)
+          (pr-str (str err))))))
 
 (deftest a-post-check-read-without-warnings-shows-only-its-verdict
   (with-fake-kubectl

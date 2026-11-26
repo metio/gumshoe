@@ -337,7 +337,7 @@ and current list.
    runs, and a warning its command wrote (`Warning: …` from a deprecated API
    or a Warn-mode admission policy) follows that line, two levels in and
    marked as a finding; a post-check shows the warnings of its reads under
-   its `verified:` line, and an investigation names each warning by the
+   its row in the post-check list, and an investigation names each warning by the
    evidence read that produced it (`🔶 endpoints: Warning: …`). The
    final banner says what the run did: `DONE - applied and verified` is the
    only one that promises its post-checks held (with `; skipped as already
