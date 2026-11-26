@@ -1163,6 +1163,51 @@
   "How long kubectl port-forward may take to report its listener bound."
   30000)
 
+(def ^:dynamic *forward-exit-ms*
+  "How long a stopped kubectl port-forward may take to exit and release its
+   local port before the port counts as still held by that forward."
+  10000)
+
+(defonce ^:private lingering-forwards
+  ;; local port -> our kubectl port-forward that was stopped but had not
+  ;; exited within *forward-exit-ms*, so a later forward on the same port
+  ;; can tell our own leftover apart from another program.
+  (atom {}))
+
+(defn- exited-within?
+  "Whether forward's process exited, waiting at most ms for it."
+  [forward ms]
+  (.waitFor ^Process (:proc forward) (long ms) java.util.concurrent.TimeUnit/MILLISECONDS))
+
+(defn- stop-forward!
+  "Takes forward down and waits for it to exit, so the next forward on
+   local-port can bind it at once: kubectl releases the port only when it
+   exits, and destroy-tree only signals it. A forward still running after
+   *forward-exit-ms* is remembered as holding local-port and stays tracked,
+   so the JVM's shutdown still takes it down."
+  [forward resource local-port]
+  (process/destroy-tree forward)
+  (if (exited-within? forward *forward-exit-ms*)
+    (do (swap! lingering-forwards (fn [m] (if (identical? forward (get m local-port)) (dissoc m local-port) m)))
+        (shell/untrack-child! forward))
+    (do (swap! lingering-forwards assoc local-port forward)
+        (stdout/error (format (str "kubectl port-forward to %s did not exit within %d seconds of being stopped;"
+                                   " local port %d is still held by our own forward")
+                              resource (quot *forward-exit-ms* 1000) local-port)))))
+
+(defn- own-forward-problem
+  "Why local-port cannot be used yet because our own earlier forward still
+   holds it, or nil. That forward gets another *forward-exit-ms* to exit."
+  [local-port]
+  (when-let [forward (get @lingering-forwards local-port)]
+    (if (exited-within? forward *forward-exit-ms*)
+      (do (swap! lingering-forwards dissoc local-port)
+          (shell/untrack-child! forward)
+          nil)
+      (format (str "local port %d is still held by our own earlier kubectl port-forward, which has not exited"
+                   " since it was stopped - leave --port out to use a free port")
+              local-port))))
+
 (defn- forward-and-run
   "with-port-forward once local-port passed its checks."
   [context namespace resource local-port remote-port f]
@@ -1210,8 +1255,7 @@
               :else (do (Thread/sleep 100)
                         (recur)))))
         (finally
-          (process/destroy-tree forward)
-          (shell/untrack-child! forward))))))
+          (stop-forward! forward resource local-port))))))
 
 (defn with-port-forward
   "Runs f while the service's remote-port is forwarded to local-port, then
@@ -1222,6 +1266,10 @@
    still running, and a forward that exited while f ran turns f's result into
    a failure, since its port may by then belong to another program. A step
    inside f that talks to the port repeatedly checks port-forward-alive?.
+   The forward has exited and released local-port when with-port-forward
+   returns, so the next call may reuse the port; one that does not exit
+   within *forward-exit-ms* is reported, and a later call on its port is
+   refused as held by our own forward.
 
    The forward goes to :service, through whichever pod kubectl picks behind
    it, or to the one :pod when that is given."
@@ -1235,7 +1283,8 @@
       (do (stdout/error "no local port to forward to - pass one with --port") false)
 
       :else
-      (if-let [problem (local-port-problem local-port)]
+      (if-let [problem (or (when (valid-local-port? local-port) (own-forward-problem local-port))
+                           (local-port-problem local-port))]
         (do (stdout/error problem) false)
         (forward-and-run context namespace resource local-port remote-port f)))))
 

@@ -71,22 +71,64 @@
     (is (= ["REMOVES :dns :zone"] (config/change-items (config/changes {:dns {:zone "z"}} {}))))
     (is (= [] (config/change-items (config/changes before before))))))
 
-(deftest a-write-keeps-the-previous-file
-  (fs/with-temp-dir [dir {}]
-    (let [path (str (fs/path dir "env.edn"))]
-      (testing "a first write has nothing to keep"
-        (is (= {:path path :backup nil} (config/write! {:vpn {:interface "wg0"}} path))))
-      (let [before (slurp path)
-            {:keys [backup]} (config/write! {:vpn {:interface "wg1"}} path)]
-        (is (some? backup))
-        (is (str/starts-with? backup (str path ".")))
-        (is (str/ends-with? backup ".bak"))
-        (is (= before (slurp backup)) "the backup holds the file as it was")
-        (is (= {:vpn {:interface "wg1"}} (edn/read-string (slurp path))))))))
+(defn- mode [path] (fs/posix->str (fs/posix-file-permissions path)))
 
-(deftest the-backup-is-named-after-the-time
-  (is (= "env.edn.20261126-093005.bak"
-         (config/backup-path "env.edn" (java.time.LocalDateTime/of 2026 11 26 9 30 5)))))
+(deftest a-write-keeps-the-previous-file-outside-the-working-tree
+  (fs/with-temp-dir [dir {}]
+    (fs/with-temp-dir [state {}]
+      (let [path (str (fs/path dir "env.edn"))
+            backups (str (fs/path state "gumshoe" "env-backups"))
+            backup-at #(config/backup-path backups path (java.time.LocalDateTime/now))]
+        (testing "a first write has nothing to keep"
+          (is (= {:path path :backup nil} (config/write! {:vpn {:interface "wg0"}} path (backup-at)))))
+        (let [before (slurp path)
+              {:keys [backup]} (config/write! {:vpn {:interface "wg1"}} path (backup-at))]
+          (is (some? backup))
+          (is (not (str/starts-with? (str (fs/canonicalize backup)) (str (fs/canonicalize dir))))
+              "the backup is not in the env.edn's directory")
+          (is (= (str (fs/canonicalize backups)) (str (fs/canonicalize (fs/parent backup)))))
+          (is (= before (slurp backup)) "the backup holds the file as it was")
+          (is (= "rw-------" (mode backup)))
+          (is (= "rwx------" (mode backups)))
+          (is (= [] (filter #(str/includes? (str (fs/file-name %)) ".bak") (fs/list-dir dir)))
+              "nothing is left beside env.edn")
+          (is (= {:vpn {:interface "wg1"}} (edn/read-string (slurp path)))))))))
+
+(deftest a-backup-never-overwrites-another
+  (fs/with-temp-dir [dir {}]
+    (let [path (str (fs/path dir "env.edn"))
+          backup (str (fs/path dir "state" "b.edn.bak"))]
+      (spit path "{}")
+      (config/write! {:a 1} path backup)
+      (is (thrown? Exception (config/write! {:a 2} path backup)))
+      (is (= {:a 1} (edn/read-string (slurp path))) "a failed backup writes nothing")
+      (is (= "{}" (slurp backup))))))
+
+(deftest a-loose-backup-directory-is-tightened
+  (fs/with-temp-dir [dir {}]
+    (let [path (str (fs/path dir "env.edn"))
+          backups (fs/create-dirs (fs/path dir "state"))]
+      (fs/set-posix-file-permissions backups "rwxr-xr-x")
+      (spit path "{}")
+      (config/write! {:a 1} path (str (fs/path backups "x.edn.bak")))
+      (is (= "rwx------" (mode backups))))))
+
+(deftest the-backup-is-named-after-the-path-and-the-time
+  (let [at (java.time.LocalDateTime/of 2026 11 26 9 30 5 123000000)
+        a (config/backup-path "/state" "/cases/one/env.edn" at)
+        b (config/backup-path "/state" "/cases/two/env.edn" at)]
+    (is (re-matches #"/state/[0-9a-f]{16}-20261126-093005-123\.edn\.bak" a) a)
+    (is (not= a b) "different casebooks never collide")
+    (is (= a (config/backup-path "/state" "/cases/one/../one/env.edn" at)) "the path is compared normalised")
+    (is (= (subs a 0 24) (subs (config/backup-path "/state" "/cases/one/env.edn" (.plusSeconds at 1)) 0 24))
+        "every backup of one env.edn shares its prefix")))
+
+(deftest backups-live-in-the-xdg-state-directory
+  (is (= "/xdg/state/gumshoe/env-backups" (config/backup-dir "/xdg/state" "/home/u")))
+  (is (= "/home/u/.local/state/gumshoe/env-backups" (config/backup-dir nil "/home/u")))
+  (is (= "/home/u/.local/state/gumshoe/env-backups" (config/backup-dir "" "/home/u")))
+  (is (= "/home/u/.local/state/gumshoe/env-backups" (config/backup-dir "relative/state" "/home/u"))
+      "a relative XDG_STATE_HOME is ignored, as the XDG spec says"))
 
 (defn- run-init
   "What setup/init writes to path and confirms, run whole with every
@@ -96,6 +138,7 @@
         config (binding [runbook/*loading* true] (load-file "runbooks/setup/init.clj"))
         out (java.io.StringWriter.)]
     (with-redefs [config/primary-path path
+                  config/backup-dir (constantly (str (fs/path (fs/parent path) "state")))
                   config/active-environment (constantly :production)
                   kubectl/current-cluster (constantly "prod")
                   capabilities/detect-answers (constantly {:present [] :unanswered []})
@@ -116,7 +159,12 @@
       (let [{:keys [result confirmed out]} (run-init path {"Environment name" "production" "Ceph mgr host" "mgr-1"})
             written (config/load-file-safely path)]
         (is (true? result) out)
-        (is (= [path "adds :environments :production :ceph :mgr-hosts"] (:items confirmed)))
-        (is (= (assoc-in existing [:environments :production :ceph :mgr-hosts] ["mgr-1"]) written))
-        (is (= 1 (count (filter #(str/ends-with? (str %) ".bak") (fs/list-dir dir)))) "the previous file is kept")
-        (is (str/includes? out "the previous env.edn is kept as"))))))
+        (let [[kept] (fs/list-dir (fs/path dir "state"))
+              kept (str kept)]
+          (is (= [path "adds :environments :production :ceph :mgr-hosts" (str "keeps the current file as " kept)]
+                 (:items confirmed))
+              "the confirmation names where the backup goes")
+          (is (= (assoc-in existing [:environments :production :ceph :mgr-hosts] ["mgr-1"]) written))
+          (is (= (config/render existing) (slurp kept)) "the previous file is kept")
+          (is (str/includes? out (str "the previous env.edn is kept as " kept)) out)
+          (is (= [] (filter #(str/ends-with? (str %) ".bak") (fs/list-dir dir))) "nothing is left beside env.edn"))))))

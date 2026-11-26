@@ -100,6 +100,7 @@
                                 :local-port local-port
                                 :remote-port port}
       (fn []
+        (record! :reached? true)
         (stdout/print-section (format "🗑  %s" pod))
         (when (delete-series! local-port metric (:delete-timeout opts))
           (record! :deleted? true)
@@ -118,11 +119,14 @@
             held))))))
 
 (defn report-lines
-  "One line per pod of a deletion's results, saying what it did."
+  "One line per pod of a deletion's results, saying what it did. A pod whose
+   port-forward never started was not asked anything, so its line says that
+   and nothing about its series."
   [results]
-  (for [{:keys [pod deleted? verified? confirmed?]} results]
+  (for [{:keys [pod reached? deleted? verified? confirmed?]} results]
     (format "  %s: %s" pod
             (cond
+              (not reached?) "NOT deleted - no port-forward to it started (see the error above), so it was not asked"
               (not deleted?) "NOT deleted - the metric is still there"
               confirmed? "deleted, no series left"
               verified? "deleted, NOT confirmed (best effort) - its series API still listed the metric"
@@ -131,11 +135,14 @@
 (defn failure-guidance
   "The recovery printed when not every pod deleted the metric."
   [metric results]
-  (let [kept (map :pod (remove :deleted? results))]
+  (let [kept (map :pod (filter #(and (:reached? %) (not (:deleted? %))) results))
+        unreached (map :pod (remove :reached? results))]
     (str (format "Metric '%s' was deleted on %d of %d Prometheus pods." metric
                  (count (filter :deleted? results)) (count results))
          (when (seq kept)
            (format "\nPod(s) %s still hold it, and queries load-balanced across the replicas keep returning it." (str/join ", " kept)))
+         (when (seq unreached)
+           (format "\nPod(s) %s could not be reached through a port-forward, so the delete never ran there." (str/join ", " unreached)))
          "\nFix the cause named above and run the book again: deleting on a pod that has nothing left is harmless.")))
 
 (defn- delete-metric

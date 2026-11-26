@@ -10,7 +10,8 @@
    automatically whenever you switch to that cluster. Run it once per cluster
    and the environments accumulate - staging keeps production's settings and
    vice versa."
-  (:require [clojure.string :as str]
+  (:require [babashka.fs :as fs]
+            [clojure.string :as str]
             [gumshoe.capabilities :as capabilities]
             [gumshoe.config :as config]
             [gumshoe.discovery :as discovery]
@@ -137,7 +138,9 @@
                      :ceph-mgr-host (interact/ask-text "Ceph mgr host"
                                                        "Ceph mgr/admin host (Enter to skip):")
                      :inputs (ask-inputs existing active discovered)})
-        merged (config/merge-answers (or existing {}) new-config)]
+        merged (config/merge-answers (or existing {}) new-config)
+        ;; named before the confirmation, so it and the result agree
+        backup (config/backup-path config/primary-path (java.time.LocalDateTime/now))]
     (stdout/print-section "📝 env.edn")
     (if (empty? new-config)
       (do (stdout/ok "everything was skipped - nothing to write, all defaults apply")
@@ -157,8 +160,10 @@
 
           (not (interact/confirm! {:action (if existing "update this env.edn" "write this env.edn")
                                    :target "this machine"
-                                   :items (into [config/primary-path]
-                                                (config/change-items (config/changes existing merged)))}))
+                                   :items (cond-> (into [config/primary-path]
+                                                        (config/change-items (config/changes existing merged)))
+                                            (fs/exists? config/primary-path)
+                                            (conj (str "keeps the current file as " backup)))}))
           false
 
           ;; the file may have been edited while the questions were open
@@ -166,7 +171,7 @@
           (refuse-to-rewrite config/primary-path (config/file-problems config/primary-path))
 
           :else
-          (let [{:keys [path backup]} (config/write! merged)]
+          (let [{:keys [path backup]} (config/write! merged config/primary-path backup)]
             (stdout/ok (format "wrote %s" path))
             (when backup
               (stdout/ok (format "the previous env.edn is kept as %s" backup)))

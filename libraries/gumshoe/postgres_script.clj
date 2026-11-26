@@ -20,14 +20,26 @@
    BEGIN ATOMIC ... END body of a SQL-standard function, whose semicolons do
    not end the CREATE statement. It reads a line sequence lazily and keeps
    only the first characters of each statement, so a dump of any size is
-   judged in one pass without being held in memory."
+   judged in one pass without being held in memory. The few statements whose
+   judgement depends on words past their opening (COPY ... FROM stdin, whose
+   column list has no length bound, and REINDEX ... CONCURRENTLY) keep their
+   complete code text up to the terminating semicolon instead."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]))
 
 (def ^:private head-limit
   "Characters of a statement kept to judge it by. The opening keywords are
-   all a judgement needs."
+   all most judgements need; `full-text-openers` names the exceptions."
   200)
+
+(def ^:private full-text-openers
+  "First words of the statements judged on their complete code text, because
+   the words that decide them may sit past head-limit: pg_dump writes a
+   table's whole column list between COPY and FROM stdin, and CONCURRENTLY
+   may follow a long REINDEX option list. Mistaking a COPY for an ordinary
+   statement makes its data rows read as SQL, which refuses a sound dump or
+   hides a real breaker."
+  #{"copy" "reindex"})
 
 (def breakers
   "Statement openings that cannot run inside the transaction psql
@@ -93,12 +105,34 @@
       (let [joined (str head s)]
         (subs joined 0 (min head-limit (count joined)))))))
 
+(defn- add
+  "state with s appended to the statement's head and, for a statement judged
+   on its complete text, to that text."
+  [state s]
+  (cond-> (update state :head grow s)
+    (:text state) (update :text conj s)))
+
+(defn- open-text
+  "state keeping the statement's complete text from here on when word is its
+   first word and one of full-text-openers."
+  [state word lower]
+  (if (and (= "" (:head state)) (full-text-openers lower))
+    (assoc state :text [])
+    state))
+
+(defn- statement-text
+  "The text a statement is judged by: its complete code text when it was
+   kept, its head otherwise."
+  [{:keys [head text]}]
+  (if text (apply str text) head))
+
 (defn- end-statement
   [{:keys [head line-no stmt-line] :as state}]
-  (let [found (when head (breaker head))]
-    (cond-> (assoc state :start? true :head nil :depth 0 :stmt-line nil)
+  (let [text (when head (statement-text state))
+        found (when text (breaker text))]
+    (cond-> (assoc state :start? true :head nil :text nil :depth 0 :stmt-line nil)
       found (update :found conj {:line (or stmt-line line-no) :statement found})
-      (and head (copy-from-stdin? head)) (assoc :copy-pending? true))))
+      (and text (copy-from-stdin? text)) (assoc :copy-pending? true))))
 
 (defn- word-at
   "The identifier word starting at i, or nil."
@@ -132,23 +166,23 @@
                 (cond
                   (= \; c)
                   (if (pos? (:depth state))
-                    (recur (update state :head grow ";") (inc i))
+                    (recur (add state ";") (inc i))
                     (recur (end-statement state) (inc i)))
 
                   (= \' c)
                   (let [e? (and (pos? i) (#{\E \e} (.charAt line (dec i)))
                                 (not (ident-char? (when (> i 1) (.charAt line (- i 2))))))]
-                    (recur (-> state (update :head grow "'") (assoc :mode (if e? :esquote :squote))) (inc i)))
+                    (recur (-> state (add "'") (assoc :mode (if e? :esquote :squote))) (inc i)))
 
                   (= \" c)
-                  (recur (-> state (update :head grow "\"") (assoc :mode :dquote)) (inc i))
+                  (recur (-> state (add "\"") (assoc :mode :dquote)) (inc i))
 
                   (and (= \$ c) (not (ident-char? (when (pos? i) (.charAt line (dec i))))))
                   (let [m (re-matcher dollar-tag line)]
                     (if (and (.find m (int i)) (= i (.start m)))
-                      (recur (-> state (update :head grow (.group m)) (assoc :mode :dollar :tag (.group m)))
+                      (recur (-> state (add (.group m)) (assoc :mode :dollar :tag (.group m)))
                              (.end m))
-                      (recur (update state :head grow "$") (inc i))))
+                      (recur (add state "$") (inc i))))
 
                   (Character/isLetter c)
                   (if-let [word (word-at line i)]
@@ -157,11 +191,12 @@
                           state (cond
                                   (and routine (#{"begin" "case"} lower)) (update state :depth inc)
                                   (and routine (= "end" lower) (pos? (:depth state))) (update state :depth dec)
-                                  :else state)]
-                      (recur (update state :head grow word) (+ i (count word))))
-                    (recur (update state :head grow (str c)) (inc i)))
+                                  :else state)
+                          state (open-text state word lower)]
+                      (recur (add state word) (+ i (count word))))
+                    (recur (add state (str c)) (inc i)))
 
-                  :else (recur (update state :head grow (str c)) (inc i)))))
+                  :else (recur (add state (str c)) (inc i)))))
 
             :squote
             (let [j (.indexOf line "'" (int i))]
@@ -212,7 +247,7 @@
 
       :else
       (let [state (scan-code state line 0)
-            state (if (:head state) (update state :head grow " ") state)]
+            state (if (:head state) (add state " ") state)]
         (if (:copy-pending? state)
           (assoc state :copy-pending? false :mode :copy)
           state)))))

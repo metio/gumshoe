@@ -195,6 +195,7 @@
                    [gumshoe.certificate-expiry-test]
                    [gumshoe.db-operator-status-test]
                    [gumshoe.postgres-restore-transaction-test]
+                   [gumshoe.postgres-script-copy-test]
                    [gumshoe.verify-unobservable-test]
                    [gumshoe.stageset-promote-gate-test]
                    [gumshoe.tools.jaas-reconcile-suspended-test]
@@ -220,6 +221,7 @@
                    [gumshoe.http-test]
                    [gumshoe.port-forward-test]
                    [gumshoe.port-forward-ownership-test]
+                   [gumshoe.port-forward-reuse-test]
                    [gumshoe.nested-cancellation-test]
                    [gumshoe.bounded-waits-test]
                    [gumshoe.ipfamily-test]
@@ -483,6 +485,7 @@
                                                          'gumshoe.certificate-expiry-test
                                                          'gumshoe.db-operator-status-test
                                                          'gumshoe.postgres-restore-transaction-test
+                                                         'gumshoe.postgres-script-copy-test
                                                          'gumshoe.verify-unobservable-test
                                                          'gumshoe.stageset-promote-gate-test
                                                          'gumshoe.tools.jaas-reconcile-suspended-test
@@ -508,6 +511,7 @@
                                                          'gumshoe.http-test
                                                          'gumshoe.port-forward-test
                                                          'gumshoe.port-forward-ownership-test
+                                                         'gumshoe.port-forward-reuse-test
                                                          'gumshoe.nested-cancellation-test
                                                          'gumshoe.bounded-waits-test
                                                          'gumshoe.ipfamily-test

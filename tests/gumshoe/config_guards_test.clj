@@ -234,6 +234,7 @@
           init (wizard)]
       (spit file "{:announce [{:type :webhook :url \"u\"}] :clusters [\"kube.prod\"]}")
       (with-redefs [config/primary-path file
+                    config/backup-dir (constantly (str (fs/path dir "state")))
                     interact/ask-text (fn [title & _] (when (= "Ceph mgr host" title) "mgr-1.example.org"))
                     interact/choose-one (fn [& _] nil)
                     interact/confirm! (fn [& _] true)
@@ -243,4 +244,5 @@
           (is (true? result))
           (is (= ["mgr-1.example.org"] (get-in written [:ceph :mgr-hosts])))
           (is (= [{:type :webhook :url "u"}] (:announce written)) "the sections it did not ask about are kept")
-          (is (= ["kube.prod"] (:clusters written))))))))
+          (is (= ["kube.prod"] (:clusters written)))
+          (is (= 1 (count (fs/list-dir (fs/path dir "state")))) "the previous file is kept in the state directory"))))))

@@ -144,19 +144,20 @@
 (defn delete-on-every-pod!
   "Deletes from every target in turn and reports each: `on-pod!` is
    (fn [target record!] -> truthy) and runs the deletion and its post-check
-   on one pod, calling (record! k v) as each is known: :deleted? when the
+   on one pod, calling (record! k v) as each is known: :reached? once a
+   port-forward to the pod runs, :deleted? when the
    pod accepted the deletion, :verified? with the post-check's verdict (a
    best-effort check that ran out its time counts, as verify/all counts it)
    and :confirmed? when the pod answered that no series is left. A pod whose
    forward fails part-way so still reports what it did, and an on-pod! that
    returns falsy is not verified whatever it recorded. Returns
-   {:results [{:pod :deleted? :verified? :confirmed?}] :ok? <every pod
+   {:results [{:pod :reached? :deleted? :verified? :confirmed?}] :ok? <every pod
    deleted and verified>}. Each pod is tried even after one fails: the
    operator confirmed the deletion on all of them, and the report names
    which ones kept the metric."
   [targets on-pod!]
   (let [results (mapv (fn [{:keys [pod] :as target}]
-                        (let [seen (atom {:pod pod :deleted? false :verified? false :confirmed? false})
+                        (let [seen (atom {:pod pod :reached? false :deleted? false :verified? false :confirmed? false})
                               finished (on-pod! target (fn [k v] (swap! seen assoc k v)))]
                           (cond-> @seen (not finished) (assoc :verified? false))))
                       targets)]
