@@ -13,7 +13,10 @@
    fake executable that runs nothing, and the invocation is logged. The fake
    answers a kubectl get with one generic object, so a book gets past its
    selection and as far as its change. An HTTP request and a file write are
-   logged instead of sent or written, and every confirmation is answered yes
+   logged instead of sent or written - babashka.http-client's calls too,
+   which the announcers and the pad post through - and one webhook announcer
+   is configured, so an announcement made outside the change hook shows as a
+   POST. Every confirmation is answered yes
    by whatever asks it - the typed word, gum or a UI backend - so a book
    relying on the operator to decline would act here.
 
@@ -21,10 +24,12 @@
    names; anything else, including a program the list does not know, fails
    the test with the book and the command."
   (:require [babashka.fs :as fs]
+            [babashka.http-client :as http-client]
             [babashka.process :as process]
             [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [gumshoe.announce :as announce]
             [gumshoe.book-surfaces-test :as surfaces]
             [gumshoe.command :as command]
             [gumshoe.flow :as flow]
@@ -165,8 +170,16 @@
 ;; --- what counts as a read ----------------------------------------------------------------
 
 (def ^:private kubectl-reads
-  #{"get" "describe" "logs" "top" "version" "config" "auth" "api-resources" "api-versions"
+  #{"get" "describe" "logs" "top" "version" "api-resources" "api-versions"
     "explain" "cluster-info" "events" "wait" "port-forward"})
+
+(def ^:private kubectl-sub-reads
+  "Verbs that read only with some of their sub-verbs: `auth reconcile`
+   writes RBAC objects, and every `config` sub-verb that is not listed here
+   (use-context, set-context, set-credentials, delete-context, unset,
+   rename-context, ...) rewrites the operator's kubeconfig."
+  {"auth" #{"can-i" "whoami"}
+   "config" #{"view" "current-context" "get-contexts" "get-clusters" "get-users"}})
 
 (defn- verb
   "The first argument that is neither a flag nor a flag's value."
@@ -190,12 +203,51 @@
    ["orch" "ls"] ["orch" "ps"] ["orch" "status"] ["orch" "host" "ls"] ["orch" "upgrade" "status"]
    ["mon" "dump"] ["mon" "stat"] ["pg" "stat"] ["pg" "dump"] ["fs" "status"] ["fs" "ls"]])
 
-(defn- sql-reads?
-  "A psql call whose every -c statement only reads."
+(def ^:private side-effecting-functions
+  "Functions a SELECT can call that change something: they end other
+   sessions, reload or change settings, advance sequences, take advisory
+   locks, delete large objects or run a statement elsewhere."
+  ["pg_terminate_backend" "pg_cancel_backend" "pg_reload_conf" "set_config" "nextval" "setval"
+   "pg_advisory_lock" "pg_advisory_xact_lock" "pg_try_advisory_lock" "pg_try_advisory_xact_lock"
+   "lo_unlink" "lo_import" "lo_export" "dblink_exec" "dblink" "pg_drop_replication_slot"
+   "pg_create_logical_replication_slot" "pg_create_physical_replication_slot"
+   "pg_switch_wal" "pg_rotate_logfile" "pg_promote" "pg_file_write" "pg_stat_reset"])
+
+(def ^:private side-effecting-call
+  (re-pattern (str "(?i)\\b(" (str/join "|" side-effecting-functions) ")\\s*\\(")))
+
+(defn sql-read?
+  "Whether one psql -c statement only reads. It must be a single statement
+   (a semicolon is allowed only at its end, so `SELECT 1; DROP TABLE x`
+   fails, and so does a semicolon inside a string, which errs on the side of
+   an act), start with SELECT, SHOW or EXPLAIN, and stay a read: no EXPLAIN
+   ANALYZE, which runs the statement, no SELECT INTO, which creates a table,
+   no row locks, and no call of a function that changes something."
+  [statement]
+  (let [statement (str/replace (str/trim (str statement)) #";\s*$" "")]
+    (boolean
+     (and (not (str/includes? statement ";"))
+          (re-find #"(?i)^(select|show|explain)\b" statement)
+          (not (re-find #"(?is)^explain\b.*\banaly[sz]e\b" statement))
+          (not (re-find #"(?i)\binto\b" statement))
+          (not (re-find #"(?i)\bfor\s+(update|no\s+key\s+update|share|key\s+share)\b" statement))
+          (not (re-find side-effecting-call statement))))))
+
+(defn- sql-statements
+  "The statements a psql call passes with -c, --command or --command=."
   [args]
-  (let [statements (keep (fn [[flag statement]] (when (= "-c" flag) statement)) (partition-all 2 1 args))]
+  (concat (keep (fn [[flag statement]] (when (#{"-c" "--command"} flag) statement))
+                (partition-all 2 1 args))
+          (keep #(when (str/starts-with? % "--command=") (subs % 10)) args)))
+
+(defn- sql-reads?
+  "A psql call that runs only -c statements, each a read. One that reads a
+   script (-f, --file) or its input runs statements nobody listed here."
+  [args]
+  (let [statements (sql-statements args)]
     (and (seq statements)
-         (every? #(re-find #"(?i)^\s*(show|select)\b" %) statements))))
+         (not-any? #(or (#{"-f" "--file"} %) (str/starts-with? % "--file=")) args)
+         (every? sql-read? statements))))
 
 (def ^:private remote-reads
   "Commands a book may run inside a pod or on a host over SSH during a dry
@@ -216,18 +268,27 @@
   [[program & args]]
   (boolean (when-let [read? (remote-reads program)] (read? args))))
 
-(defn- server-dry-run?
-  "kubectl's own dry run, which the API server evaluates and never persists."
+(defn- before-dashes
+  "The arguments kubectl reads itself: everything after `--` belongs to the
+   program it runs in a pod."
   [args]
-  (boolean (some #{"--dry-run=server" "--dry-run=client"} args)))
+  (take-while #(not= "--" %) args))
+
+(defn- server-dry-run?
+  "kubectl's own dry run, which the API server evaluates and never persists.
+   Only kubectl's own arguments count, so a --dry-run=client handed to the
+   remote program after `--` makes nothing a dry run."
+  [args]
+  (boolean (some #{"--dry-run=server" "--dry-run=client"} (before-dashes args))))
 
 (defn- kubectl-read?
   [args]
-  (let [v (verb args)]
+  (let [[v sub] (positionals (cons ::start args) ::start)]
     (cond
-      (server-dry-run? args) true
       (= "exec" v) (remote-read? (after-dashes args))
-      (= "rollout" v) (= "status" (second (positionals (cons ::start args) ::start)))
+      (server-dry-run? args) true
+      (= "rollout" v) (= "status" sub)
+      (kubectl-sub-reads v) (contains? (kubectl-sub-reads v) sub)
       :else (contains? kubectl-reads v))))
 
 (defn- ssh-read?
@@ -305,18 +366,59 @@
 (def ^:private yes-forever
   (apply str (repeat 200 "yes\n")))
 
-(defn run-dry!
-  "Runs the book at `path` under --dry-run and returns everything it tried,
-   with its result."
-  [path]
+(def ^:private fake-announcer
+  "The announcer every dry run is configured with, so an announcement shows
+   as a POST to it in the log."
+  {:type :webhook :url "http://127.0.0.1:9/dry-run-announcements"})
+
+(defn- logged-http-client
+  "A replacement for a babashka.http-client function that logs the request
+   instead of sending it. method is the function's own method, or nil for
+   request, which carries it in its options."
+  [method]
+  (fn [& args]
+    (let [opts (if (map? (first args)) (first args) (second args))
+          url (if (map? (first args)) (or (:uri opts) (:url opts)) (first args))]
+      (log! {:http {:method (or method (:method opts) :get) :url (str url)}})
+      {:status 599 :body "" :headers {}})))
+
+(defn- with-dry-run-fakes
+  "Calls f with every program, HTTP client, file write and announcer of the
+   run replaced as run-dry! describes."
+  [fake f]
+  (let [process-fn process/process
+        shell-fn process/shell
+        eventually verify/eventually]
+    (with-redefs [process/process (faked process-fn fake)
+                  process/shell (faked shell-fn fake)
+                  command/installed? (constantly true)
+                  ui/backend (fn [kind] (when (= :confirm kind) (constantly true)))
+                  fuzzy/select-single (fn [_ values & _] (first values))
+                  fuzzy/select-multi (fn [_ values] (some-> (first values) vector))
+                  http/request (fn [method url _]
+                                 (log! {:http {:method method :url url}})
+                                 {:reachable false :error "offline: dry-run harness"})
+                  http-client/request (logged-http-client nil)
+                  http-client/get (logged-http-client :get)
+                  http-client/head (logged-http-client :head)
+                  http-client/post (logged-http-client :post)
+                  http-client/put (logged-http-client :put)
+                  http-client/patch (logged-http-client :patch)
+                  http-client/delete (logged-http-client :delete)
+                  announce/announcers-of (constantly {:announcers [fake-announcer]})
+                  spit (fn [f & _] (log! {:write (str f)}))
+                  verify/eventually #(eventually (assoc % :timeout 0))]
+      (f))))
+
+(defn run-config-dry!
+  "Runs a book's config, as a book file returns it while loading, under
+   --dry-run and returns everything it tried, with its result. `book` names
+   it in the result."
+  [book config]
   (let [fake (fake-executable!)
-        config (load-config path)
         options (:options config {})
         argv (argv-for options)
         log (atom [])
-        process-fn process/process
-        shell-fn process/shell
-        eventually verify/eventually
         out (java.io.StringWriter.)
         err (java.io.StringWriter.)
         record (outcome/fresh)
@@ -327,24 +429,23 @@
                          *in* (java.io.BufferedReader. (java.io.StringReader. yes-forever))
                          *out* out
                          *err* err]
-                 (with-redefs [process/process (faked process-fn fake)
-                               process/shell (faked shell-fn fake)
-                               command/installed? (constantly true)
-                               ui/backend (fn [kind] (when (= :confirm kind) (constantly true)))
-                               fuzzy/select-single (fn [_ values & _] (first values))
-                               fuzzy/select-multi (fn [_ values] (some-> (first values) vector))
-                               http/request (fn [method url _]
-                                              (log! {:http {:method method :url url}})
-                                              {:reachable false :error "offline: dry-run harness"})
-                               spit (fn [f & _] (log! {:write (str f)}))
-                               verify/eventually #(eventually (assoc % :timeout 0))]
-                   (try
-                     ((:action config) (:opts (runbook/arguments options argv)) {})
-                     (catch Throwable e (str "threw: " (ex-message e))))))]
-    {:book path :argv argv :result result :tried @log
+                 (with-dry-run-fakes
+                   fake
+                   (fn []
+                     (try
+                       ((:action config) (:opts (runbook/arguments options argv)) {})
+                       (catch Throwable e (str "threw: " (ex-message e)))))))]
+    {:book book :argv argv :result result :tried @log
      :record @record :output (str out err)}))
 
-(defn- acts
+(defn run-dry!
+  "Runs the book at `path` under --dry-run and returns everything it tried,
+   with its result."
+  [path]
+  (run-config-dry! path (load-config path)))
+
+(defn acts
+  "What a run tried that is not a read."
   [run]
   (filterv act? (:tried run)))
 

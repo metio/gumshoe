@@ -42,6 +42,13 @@
       (== n (Math/floor n)) (str (long n))
       :else (format "%.1f" n))))
 
+(defn- resource-name
+  "A limit's resource as spec.limits spells it. kubectl JSON is read with
+   keyword keys, so \"nvidia.com/gpu\" arrives as :nvidia.com/gpu, and name
+   would keep only \"gpu\" - a key the operator cannot find in spec.limits."
+  [resource]
+  (if (keyword? resource) (subs (str resource) 1) (str resource)))
+
 (defn reached-limits
   "The resources a NodePool uses at least as much of as its limits allow, as
    [resource used limit] triples."
@@ -52,7 +59,7 @@
                       u (quantity/quantity->number used-value)
                       l (quantity/quantity->number limit)]
                 :when (and u l (>= u l))]
-            [(name resource) used-value limit]))))
+            [(resource-name resource) used-value limit]))))
 
 (defn nodepool-findings
   [nodepool]

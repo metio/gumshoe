@@ -36,6 +36,14 @@
                    [gumshoe.mail-unread-test]
                    [gumshoe.evpn-unread-test]
                    [gumshoe.dry-run-books-test]
+                   [gumshoe.node-condition-polarity-test]
+                   [gumshoe.autoscaler-unread-test]
+                   [gumshoe.strict-json-test]
+                   [gumshoe.ceph-strict-json-test]
+                   [gumshoe.restic-answer-test]
+                   [gumshoe.karpenter-limit-names-test]
+                   [gumshoe.local-port-permission-test]
+                   [gumshoe.dry-run-allow-list-test]
                    [gumshoe.mutation-named-target-test]
                    [gumshoe.local-port-test]
                    [gumshoe.cancellation-test]
@@ -261,6 +269,14 @@
                                                          'gumshoe.mail-unread-test
                                                          'gumshoe.evpn-unread-test
                                                          'gumshoe.dry-run-books-test
+                                                         'gumshoe.node-condition-polarity-test
+                                                         'gumshoe.autoscaler-unread-test
+                                                         'gumshoe.strict-json-test
+                                                         'gumshoe.ceph-strict-json-test
+                                                         'gumshoe.restic-answer-test
+                                                         'gumshoe.karpenter-limit-names-test
+                                                         'gumshoe.local-port-permission-test
+                                                         'gumshoe.dry-run-allow-list-test
                                                          'gumshoe.mutation-named-target-test
                                                          'gumshoe.local-port-test
                                                          'gumshoe.cancellation-test

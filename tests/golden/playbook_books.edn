@@ -315,7 +315,7 @@
     "        hint: node drains will block on the pods this budget covers"
     "0 critical, 1 warning, 0 info"
     "✓ 2 other checks came back clean: hpas, hpa-failures"
-    "  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
+    "  ✓ Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
     "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
     "  ✓ Nodes running different kubelet minor versions"]},
   :declined
@@ -399,7 +399,7 @@
     "        hint: node drains will block on the pods this budget covers"
     "0 critical, 1 warning, 0 info"
     "✓ 2 other checks came back clean: hpas, hpa-failures"
-    "  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
+    "  ✓ Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
     "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
     "  ✓ Nodes running different kubelet minor versions"]},
   :empty
@@ -489,7 +489,7 @@
    :banner "DONE - applied and verified",
    :recovery [],
    :stdout
-   ["  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
+   ["  ✓ Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
     "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
     "  ✓ Nodes running different kubelet minor versions"]},
   :from-segment-9
@@ -603,7 +603,7 @@
     "        hint: node drains will block on the pods this budget covers"
     "0 critical, 1 warning, 0 info"
     "✓ 2 other checks came back clean: hpas, hpa-failures"
-    "  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
+    "  ✓ Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
     "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
     "  ✓ Nodes running different kubelet minor versions"]},
   :resumed-after-cordon
@@ -664,7 +664,7 @@
     "        hint: node drains will block on the pods this budget covers"
     "0 critical, 1 warning, 0 info"
     "✓ 2 other checks came back clean: hpas, hpa-failures"
-    "  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
+    "  ✓ Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
     "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
     "  ✓ Nodes running different kubelet minor versions"]},
   :resumed-after-drain
@@ -720,7 +720,7 @@
     "        hint: node drains will block on the pods this budget covers"
     "0 critical, 1 warning, 0 info"
     "✓ 2 other checks came back clean: hpas, hpa-failures"
-    "  ✓ Node health: readiness, every active node condition (pressures, NetworkUnavailable, node-problem-detector), cordoned nodes"
+    "  ✓ Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
     "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
     "  ✓ Nodes running different kubelet minor versions"]},
   :resumed-after-drain-dry-run

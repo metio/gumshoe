@@ -5,10 +5,11 @@
   "Probing HTTP APIs. A fetch never throws and never hangs: a connection
    failure, or a body that does not arrive in time, becomes an unreachable
    result, so detectives judge a map instead of handling exceptions. JSON
-   bodies are parsed opportunistically."
+   bodies are parsed opportunistically: :json is nil unless the whole body is
+   one complete JSON value."
   (:require [babashka.http-client :as http]
-            [cheshire.core :as json]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [gumshoe.json :as gumshoe-json])
   (:import [java.io ByteArrayOutputStream InputStream]
            [java.nio.charset StandardCharsets]))
 
@@ -92,7 +93,7 @@
           {:reachable true
            :status status
            :body (:body read)
-           :json (try (json/parse-string (:body read) true) (catch Exception _ nil))}))
+           :json (gumshoe-json/parse-or-nil (:body read))}))
       (catch Exception e
         (keep-interrupt! e)
         {:reachable false :error (message-of e)}))))

@@ -175,6 +175,12 @@
 (register-collector! "cluster-autoscaler-status"
                      (fn [context _key]
                        (kubectl/get-namespaced-resource context "kube-system" "configmaps" "cluster-autoscaler-status")))
+;; The same ConfigMap's status parsed, nil when it is in a format the check
+;; does not read, so the check counts as unread there instead of passed.
+(register-collector! autoscaler/parsed-status-key
+                     (fn [context _key]
+                       (autoscaler/parse-status
+                        (kubectl/get-namespaced-resource context "kube-system" "configmaps" "cluster-autoscaler-status"))))
 (register! :platform autoscaler/detectives)
 (register! :platform csr/detectives)
 ;; The :upgrade scope gathers what decides whether the next upgrade goes

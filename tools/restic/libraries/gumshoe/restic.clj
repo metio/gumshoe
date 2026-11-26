@@ -6,9 +6,9 @@
    directly, so the detective judges whether backups are actually landing -
    not merely whether a backup job exists. The repository password travels via
    the RESTIC_PASSWORD environment variable, never in process arguments."
-  (:require [cheshire.core :as json]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [gumshoe.concurrent :as concurrent]
+            [gumshoe.json :as json]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
@@ -34,15 +34,32 @@
 ;; ---------------------------------------------------------------------------
 ;; querying repositories
 
+(def unreadable-output-error
+  "Why a repository whose restic answered output that is not a snapshot list
+   counts as unread."
+  "restic answered output that is not a snapshot list")
+
+(defn snapshots-answer
+  "What a `restic snapshots --json` run says about its repository:
+   {:reachable true :snapshots [..]} when it exited cleanly with a JSON array
+   of snapshots, else {:reachable false :error ..}. An answer that does not
+   parse as a whole array never reads as an empty repository: nothing in it
+   was read, so it says nothing about what the repository holds."
+  [{:keys [exit out err]}]
+  (if (zero? exit)
+    ;; restic before 0.11.0 printed null for a repository without snapshots
+    ;; (restic issue 2979); every later release prints [].
+    (let [snapshots (if (= "null" (str/trim (str out))) [] (json/parse-or-nil out))]
+      (if (and (vector? snapshots) (every? map? snapshots))
+        {:reachable true :snapshots snapshots}
+        {:reachable false :error unreadable-output-error}))
+    {:reachable false
+     :error (-> (or err "") str/trim str/split-lines last)}))
+
 (defn- snapshots-of
   [repository password]
-  (let [result (shell/execute-env {"RESTIC_PASSWORD" password}
-                                  "restic" "-r" repository "snapshots" "--json" "--no-lock")]
-    (if (zero? (:exit result))
-      {:reachable true
-       :snapshots (try (json/parse-string (:out result) true) (catch Exception _ []))}
-      {:reachable false
-       :error (-> (or (:err result) "") str/trim str/split-lines last)})))
+  (snapshots-answer (shell/execute-env {"RESTIC_PASSWORD" password}
+                                       "restic" "-r" repository "snapshots" "--json" "--no-lock")))
 
 (defn collect-evidence!
   "Queries every repository. thresholds are the staleness limits in days."
