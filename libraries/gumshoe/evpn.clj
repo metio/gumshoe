@@ -9,11 +9,13 @@
   gathered per host and kept per host - asking one host, or asking a router,
   cannot show a disagreement.
 
-  Read-only throughout: three `show`-style commands per host, plus two per fdb
-  conflict found and one or two per remote VTEP a learned fdb row names, and no
-  configuration is touched. Hosts are queried in parallel and a host that cannot be reached
-  becomes evidence rather than an aborted scan, because the unreachable host is
-  often the symptom being investigated."
+  Read-only throughout: one listing of the VXLAN devices per host, three
+  `show`-style commands per host and VNI, plus two per fdb conflict found, one
+  listing of the bridge ports per host with a conflict, and one or two per
+  remote VTEP a learned fdb row names, and no configuration is touched. Hosts
+  are queried in parallel and a host that cannot be reached becomes evidence
+  rather than an aborted scan, because the unreachable host is often the
+  symptom being investigated."
   (:require [cheshire.core :as json]
             [clojure.string :as str]
             [gumshoe.concurrent :as concurrent]
@@ -212,6 +214,13 @@
   [host output]
   (vec (keep #(fdb-row host %) (str/split-lines (or output "")))))
 
+(defn table-overlay-vnis
+  "The VNIs of every `lo.<vni>` overlay device one host's `bridge fdb show`
+  names, sorted. It reads whatever the table holds, the VNIs a scan was not
+  asked about included."
+  [host output]
+  (vec (sort (distinct (keep (comp overlay-vni :dev) (parse-fdb-table host output))))))
+
 (def ^:private interval-patterns
   "The three shapes FRR's frrtime_to_interval prints an age in: under a day,
   under a week, and weeks."
@@ -305,6 +314,7 @@
      :mac mac
      :vni (some->> (:dev remote) (re-matches vxlan-dev-pattern) second parse-long-or-nil)
      :local-intf (:dev tap)
+     :remote-dev (:dev remote)
      :stale-remote-vtep (:dst remote)}))
 
 ;; --- remote VTEPs and the BGP paths that name them ---------------------------
@@ -454,7 +464,8 @@
                       :vni vni
                       :host-vtep host-vtep
                       :macs (vec (parse-macs vni host host-vtep (:macs out)))
-                      :fdb (vec (parse-fdb vni host (:fdb out)))}
+                      :fdb (vec (parse-fdb vni host (:fdb out)))
+                      :overlay-vnis (table-overlay-vnis host (:fdb out))}
                (nil? host-vtep)
                (assoc :vtep-error
                       (str "no local VTEP address in the output of '"
@@ -485,6 +496,133 @@
          concurrent/all
          (into {}))))
 
+;; --- the VNIs a host carries -------------------------------------------------
+
+(def vxlan-links-command
+  "The read that lists a host's VXLAN devices with their VNIs. It needs no
+  sudo, and its JSON carries each device's VNI as `linkinfo.info_data.id`
+  (iproute2 ip/iplink_vxlan.c), whatever the device is named."
+  ["ip" "-d" "-j" "link" "show" "type" "vxlan"])
+
+(defn parse-vxlan-links
+  "A host's VXLAN devices from the JSON of vxlan-links-command, as
+  {:read? true :devices [{:dev .. :vni ..}]}. A device that prints no `id`
+  - one in collect-metadata (`external`) mode, which carries many VNIs - has
+  `:vni nil`, because which VNIs it carries was not read. An empty list is a
+  read of a host without VXLAN devices; silence or anything that is no JSON
+  list of devices is `:read? false`."
+  [output]
+  (let [text (or output "")
+        parsed (try (json/parse-string text) (catch Exception _ ::unparsable))]
+    (cond
+      (str/blank? text) (unread output "no output")
+      (not (and (sequential? parsed) (every? map? parsed))) (unread output "unrecognised output")
+      :else {:read? true
+             :devices (vec (for [link parsed
+                                 :let [id (get-in link ["linkinfo" "info_data" "id"])]]
+                             {:dev (get link "ifname")
+                              :vni (when (integer? id) id)}))})))
+
+(defn collect-vxlan-links
+  "Every host's VXLAN devices keyed by host, read in parallel. Never throws: a
+  host that does not answer reads `:read? false`."
+  [connections run]
+  (->> (for [connection connections]
+         #(binding [shell/*timeout-ms* (or (:timeout-ms connection) 30000)]
+            [(:host connection)
+             (parse-vxlan-links (try (run connection vxlan-links-command)
+                                     (catch Exception _ nil)))]))
+       concurrent/all
+       (into {})))
+
+(defn carried-vnis
+  "The VNIs a host's VXLAN devices carry, sorted, from its parsed links."
+  [links]
+  (vec (sort (distinct (keep :vni (:devices links))))))
+
+(defn scan-plan
+  "Every [connection vni] a scan reads: each configured VNI on every host and,
+  when `discover?`, every VNI a host's VXLAN devices carry on that host."
+  [connections configured links discover?]
+  (vec (for [connection connections
+             vni (distinct (concat configured
+                                   (when discover? (carried-vnis (get links (:host connection))))))]
+         [connection vni])))
+
+(defn vni-coverage
+  "Per host, which VNIs it carries and which the scan judged.
+
+  `:carried` are the VNIs its VXLAN devices list, `:named` the VNIs of the
+  `lo.<vni>` devices its fdb table names (the naming is this fabric's, so it
+  only backs the device list up), `:scanned` the VNIs the scan read on it,
+  `:discovered` those scanned only because the host carries them, and
+  `:uncovered` the VNIs it carries or names that no read judged. A device
+  that lists no VNI goes under `:unlisted`, and a device list that did not
+  answer under `:links-error`; either leaves what the host carries partly
+  unknown. `:answered?` is false when no read of the host answered, which
+  evpn-hosts already reports."
+  [connections configured links results]
+  (let [by-host (group-by :host results)
+        configured (set configured)]
+    (vec (for [{:keys [host]} connections
+               :let [host-links (get links host)
+                     host-results (get by-host host)
+                     answered (remove :error host-results)
+                     scanned (set (map :vni host-results))
+                     carried (carried-vnis host-links)
+                     named (vec (sort (distinct (mapcat :overlay-vnis answered))))
+                     unlisted (vec (keep #(when (nil? (:vni %)) (:dev %)) (:devices host-links)))]]
+           (cond-> {:host host
+                    :answered? (boolean (seq answered))
+                    :configured (vec (sort configured))
+                    :carried carried
+                    :named named
+                    :scanned (vec (sort scanned))
+                    :discovered (vec (sort (remove configured scanned)))
+                    :uncovered (vec (sort (remove scanned (distinct (concat carried named)))))}
+             (seq unlisted) (assoc :unlisted unlisted)
+             (not (:read? host-links)) (assoc :links-error (or (:error host-links) "not collected")))))))
+
+;; --- the bridge's learning flags -----------------------------------------------
+
+(def bridge-ports-command
+  "The read that prints every bridge port's flags. With -d iproute2 prints
+  `learning` and `flood` as JSON booleans (bridge/link.c print_protinfo)."
+  ["bridge" "-d" "-j" "link" "show"])
+
+(defn parse-bridge-ports
+  "A host's bridge ports from the JSON of bridge-ports-command, keyed by
+  device: {:read? true :ports {dev {:master .. :learning .. :flood ..}}}. A
+  flag the output does not print is nil, so an unread flag never passes for
+  off. Silence or anything that is no JSON list is `:read? false`."
+  [output]
+  (let [text (or output "")
+        parsed (try (json/parse-string text) (catch Exception _ ::unparsable))
+        flag (fn [port k] (let [v (get port k)] (when (boolean? v) v)))]
+    (cond
+      (str/blank? text) (unread output "no output")
+      (not (and (sequential? parsed) (every? map? parsed))) (unread output "unrecognised output")
+      :else {:read? true
+             :ports (into {} (for [port parsed :when (get port "ifname")]
+                               [(get port "ifname")
+                                {:master (get port "master")
+                                 :learning (flag port "learning")
+                                 :flood (flag port "flood")}]))})))
+
+(defn collect-bridge-ports
+  "The bridge ports of each host, keyed by host, read in parallel. Never
+  throws: a host that does not answer reads `:read? false`."
+  [connections hosts run]
+  (let [by-host (into {} (map (juxt :host identity)) connections)]
+    (->> (for [host (distinct hosts)
+               :let [connection (get by-host host)]
+               :when connection]
+           #(binding [shell/*timeout-ms* (or (:timeout-ms connection) 30000)]
+              [host (parse-bridge-ports (try (run connection bridge-ports-command)
+                                             (catch Exception _ nil)))]))
+         concurrent/all
+         (into {}))))
+
 (defn host-evidence
   "The per-host results flattened into the evidence the detectives read. The
   MAC and fdb tables are nil when no host answered: an empty table would read
@@ -500,18 +638,34 @@
 (defn collect-evidence!
   "Fan out across every host and VNI, then flatten into the evidence a detective
   reads. Hosts are queried in parallel because a fabric scan is otherwise as slow
-  as the sum of its hosts, and a partitioned fabric is when speed matters. The
-  fdb conflicts found get a second, bounded round of reads for their context,
-  and every remote VTEP a learned fdb row names gets its BGP paths counted."
-  [connections vnis]
-  (let [results (concurrent/all (for [c connections vni vnis] #(collect-host c vni)))
-        evidence (host-evidence results)
-        fdb (get evidence "evpn-fdb")]
-    (assoc evidence
-           "evpn-fdb-context"
-           (when fdb (collect-conflict-context connections (fdb-conflicts fdb) ssh-runner))
-           "evpn-vtep-paths"
-           (when fdb (collect-vtep-paths connections fdb ssh-runner)))))
+  as the sum of its hosts, and a partitioned fabric is when speed matters.
+
+  Each host's VXLAN devices are listed first. With `:discover?` (the default)
+  every VNI a host carries is read on it beside the configured ones, so a
+  device the configuration misses is still judged; without it only the
+  configured VNIs are read. Either way \"evpn-vni-coverage\" records per host
+  what it carries and what was judged, so a VNI nobody read is reported
+  rather than counted clean.
+
+  The fdb conflicts found get a second, bounded round of reads for their
+  context and their host's bridge port flags, and every remote VTEP a learned
+  fdb row names gets its BGP paths counted."
+  ([connections vnis] (collect-evidence! connections vnis {}))
+  ([connections vnis {:keys [discover?] :or {discover? true}}]
+   (let [links (collect-vxlan-links connections ssh-runner)
+         results (concurrent/all (for [[c vni] (scan-plan connections vnis links discover?)]
+                                   #(collect-host c vni)))
+         evidence (host-evidence results)
+         fdb (get evidence "evpn-fdb")
+         conflicts (when fdb (fdb-conflicts fdb))]
+     (assoc evidence
+            "evpn-vni-coverage" (vni-coverage connections vnis links results)
+            "evpn-fdb-context"
+            (when fdb (collect-conflict-context connections conflicts ssh-runner))
+            "evpn-bridge-ports"
+            (when fdb (collect-bridge-ports connections (map :host conflicts) ssh-runner))
+            "evpn-vtep-paths"
+            (when fdb (collect-vtep-paths connections fdb ssh-runner))))))
 
 (defn connections
   "Connection maps from a host list, carrying the sudo and timeout settings the

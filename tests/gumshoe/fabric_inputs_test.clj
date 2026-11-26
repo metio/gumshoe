@@ -48,6 +48,7 @@
    "evpn-fdb" []
    "evpn-fdb-context" {}
    "evpn-vtep-paths" {}
+   "evpn-vni-coverage" []
    "evpn-hosts" [{:host "host-a" :vni 4208} {:host "host-b" :vni 4208}]})
 
 (defn- env-lookup
@@ -78,7 +79,7 @@
                              #'config/env-value (env-lookup env)
                              #'config/active-config (constantly env)
                              #'evpn/connections (fn [hosts _] (vec hosts))
-                             #'evpn/collect-evidence! (fn [_ _] collected)
+                             #'evpn/collect-evidence! (fn [& _] collected)
                              #'detective/run-detectives (fn [ds evidence]
                                                           (reset! handed evidence)
                                                           (run-detectives ds evidence))}
@@ -231,11 +232,13 @@
              "description" "guest MACs no scanned host owns that every VTEP reaches through a gateway VTEP"
              "unread" true}
             {"name" "evpn-fdb-conflict"
-             "description" "hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local and whether BGP still advertises the remote one"}
+             "description" "hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local, whether BGP still advertises the remote one, and whether the tap learns"}
             {"name" "evpn-orphan-fdb"
              "description" "learned remote fdb rows naming a VTEP no BGP path advertises, counted per host and VTEP whether or not the host also holds the MAC on a local tap"}
             {"name" "evpn-hosts"
              "description" "hosts whose fabric state could not be read, making the scan incomplete"}
+            {"name" "evpn-vni-coverage"
+             "description" "VNIs a host carries that the scan did not read, which leave its verdict incomplete, and VNIs read beyond the configured ones"}
             {"name" "evpn-static-fdb"
              "description" "static fdb entries, which outrank EVPN learning and go stale silently"}
             {"name" "evpn-inputs"
@@ -272,8 +275,8 @@
         (is (str/includes? stdout "read nothing"))))
     (testing "the same fabric with gateway VTEPs passes every check"
       (let [{:keys [stdout stderr]} (run {:gateway-vteps gateway :guest-mac-prefixes "02:00:"})]
-        (is (= 7 (count (re-seq (re-pattern (java.util.regex.Pattern/quote (theme/glyph :success))) stdout))))
-        (is (str/includes? stderr "no issues found - 7 checks passed"))))))
+        (is (= 8 (count (re-seq (re-pattern (java.util.regex.Pattern/quote (theme/glyph :success))) stdout))))
+        (is (str/includes? stderr "no issues found - 8 checks passed"))))))
 
 (deftest a-collection-that-read-nothing-still-checked-nothing
   (testing "missing inputs add no finding when the fabric itself was not read"

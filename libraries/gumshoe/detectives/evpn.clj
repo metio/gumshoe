@@ -154,6 +154,23 @@
       (not (:read? mac-detail)) (assoc :frr-mac-error (:error mac-detail))
       (not (:read? bgp-route)) (assoc :bgp-route-error (:error bgp-route)))))
 
+(defn learning-reading
+  "What the bridge says about learning on one conflict's tap, as finding
+  data: `:tap-learning` and `:tap-flood` are `on` or `off` when
+  `bridge -d -j link show` printed the flag for the tap, else `unread`, with
+  `:bridge-ports-error` saying why."
+  [{:keys [host local-intf]} bridge-ports]
+  (let [reading (get bridge-ports host)
+        port (get-in reading [:ports local-intf])
+        flag (fn [v] (case v true "on" false "off" "unread"))
+        error (cond (nil? reading) "not collected"
+                    (not (:read? reading)) (:error reading)
+                    (nil? port) (str local-intf " is not listed among the bridge ports")
+                    (nil? (:learning port)) (str "no learning flag was printed for " local-intf))]
+    (cond-> {:tap-learning (if error "unread" (flag (:learning port)))
+             :tap-flood (if (and port (:read? reading)) (flag (:flood port)) "unread")}
+      error (assoc :bridge-ports-error error))))
+
 (defn- reading-hint
   [{:keys [stale-remote-vtep]} {:keys [frr-mac frr-mac-error local-uptime bgp-route
                                        bgp-route-error bgp-next-hops]}]
@@ -161,37 +178,64 @@
          "local" (str "FRR has held the MAC as local for "
                       (or local-uptime "an uptime it did not print") ". ")
          "unread" (str "FRR's view of the MAC could not be read (" frr-mac-error
-                       "), so how long it has been local is unknown. ")
+                       "), so whether and how long FRR has held it as local is unknown. ")
          (str "FRR holds the MAC as " frr-mac ", not local, so it has no local uptime. "))
        (case bgp-route
          "absent" (str "No BGP path names " stale-remote-vtep
                        (when (seq bgp-next-hops)
                          (str " (paths name " (str/join ", " bgp-next-hops) ")"))
                        ", so this is an orphan: the route that installed the entry is "
-                       "gone and a local delete holds. A migrated guest leaves two stale "
-                       "rows, the dst self row and a vlan-tagged master row, so check "
-                       "every row for the MAC before deleting. ")
+                       "gone and a local delete holds. A migrated guest leaves a dst self "
+                       "row and bridge rows on the overlay device, so check every row for "
+                       "the MAC before deleting. ")
          "present" (str "A BGP path from " stale-remote-vtep " still stands behind the "
                         "entry, so this is a live misadvertisement: a local delete is "
                         "relearned until whatever advertises it stops. ")
          (str "BGP could not be read (" bgp-route-error "), so whether a route stands "
               "behind the entry is unknown. "))))
 
+(defn- consequence-hint
+  "What the two rows mean for the guest's traffic. Only the learning flag
+  read from the bridge is stated as fact; without it the black hole is what
+  follows if the tap does not learn."
+  [{:keys [local-intf remote-dev stale-remote-vtep]} {:keys [tap-learning bridge-ports-error]}]
+  (let [out-of (str "frames the bridge forwards out of " (or remote-dev "the overlay device")
+                    " go to " stale-remote-vtep)]
+    (case tap-learning
+      "off" (str local-intf " has learning off, as `bridge -d -j link show` reads it, so a frame "
+                 "from the guest does not move the bridge's entry back to the tap: " out-of
+                 ", and traffic for the guest is black-holed rather than flooded")
+      "on" (str local-intf " has learning on, as `bridge -d -j link show` reads it, so a frame "
+                "from the guest can move the bridge's entry back to the tap; until it does, "
+                out-of ". Whether a learned frame replaces an entry EVPN installed "
+                "(extern_learn) depends on the kernel and was not read")
+      (str "The bridge's learning flag for " local-intf " was not read (" bridge-ports-error
+           "). If " local-intf " does not learn (nolearning), a frame from the guest does not "
+           "move the bridge's entry back to the tap, " out-of
+           ", and traffic for the guest is black-holed rather than flooded"))))
+
 (defn detect-fdb-conflicts
+  "One critical finding per host holding both a tap row and a remote row for
+  one MAC. The rows are read evidence of a conflicting forwarding state, so
+  the severity does not wait on FRR's view or the bridge's flags; those only
+  say how long it has lasted, whether a delete holds, and whether the bridge
+  can repair it by learning. The hint states as fact only what was read."
   [evidence]
-  (let [context (get evidence "evpn-fdb-context")]
-    (for [{:keys [host mac vni local-intf stale-remote-vtep] :as conflict}
+  (let [context (get evidence "evpn-fdb-context")
+        ports (get evidence "evpn-bridge-ports")]
+    (for [{:keys [host mac vni local-intf remote-dev stale-remote-vtep] :as conflict}
           (evpn/fdb-conflicts (get evidence "evpn-fdb"))
-          :let [reading (conflict-reading conflict (get context [host vni mac]))]]
+          :let [reading (merge (conflict-reading conflict (get context [host vni mac]))
+                               (learning-reading conflict ports))]]
       (merge
        {:severity :critical
         :component (str host "/" mac)
         :summary (str "host holds both a local tap entry (" local-intf
                       ") and a remote entry (dst " stale-remote-vtep ") for one MAC")
-        :hint (str (reading-hint conflict reading)
-                   "The host owns this MAC and is simultaneously told to send its "
-                   "traffic across the fabric. Traffic for the guest is black-holed "
-                   "rather than flooded, because a nolearning bridge has no fallback")
+        :hint (str "Both fdb rows were read: " mac " on the tap " local-intf " and on "
+                   (or remote-dev "an overlay device") " with dst " stale-remote-vtep ". "
+                   (reading-hint conflict reading)
+                   (consequence-hint conflict reading))
         :host host
         :mac mac
         :vni vni
@@ -514,6 +558,74 @@
                      "result"))})
      (map vtep-unread-finding (filter #(and (not (:error %)) (:vtep-error %)) hosts)))))
 
+(defn- where-carried
+  [{:keys [carried named]} vnis]
+  (let [listed (filter (set carried) vnis)
+        only-named (remove (set carried) vnis)]
+    (str/join " and " (concat (when (seq listed)
+                                [(str "its VXLAN devices list " (vni-text listed))])
+                              (when (seq only-named)
+                                [(str "its fdb table names lo." (str/join ", lo." only-named))])))))
+
+(defn detect-vni-coverage
+  "Per host, the VNIs it carries that no read judged, and what it carries
+  that could not be listed. A VNI nobody read leaves every check over the fdb
+  and MAC tables silent for it, and that silence would read as a clean host,
+  so it is a warning saying the host's verdict is incomplete. VNIs read only
+  because the host carries them, beyond the configured ones, are info: they
+  were judged, and the configuration does not declare them. A host no read
+  answered is left to evpn-hosts."
+  [evidence]
+  (mapcat
+   (fn [{:keys [host answered? configured uncovered discovered unlisted links-error] :as coverage}]
+     (when answered?
+       (concat
+        (when (seq uncovered)
+          [{:severity :warning
+            :component host
+            :summary (str "host carries " (vni-text uncovered) " that the scan did not cover, "
+                          "so its verdict is incomplete")
+            :hint (str (where-carried coverage uncovered) ", and no check read them: orphan rows, "
+                       "collisions and pins there are unseen rather than absent. Add "
+                       (if (= 1 (count uncovered)) "it" "them") " to --vni or :evpn :vnis "
+                       "in env.edn, or leave out --configured-vnis-only so the scan reads every "
+                       "VNI a host carries")
+            :host host
+            :uncovered uncovered
+            :configured configured}])
+        (when links-error
+          [{:severity :warning
+            :component host
+            :summary (str "host's VXLAN devices could not be listed (" links-error
+                          "), so VNIs it carries beyond the scanned ones are unjudged")
+            :hint (str "`ip -d -j link show type vxlan` lists every VXLAN device with its VNI. "
+                       "Without it only the configured VNIs and the lo.<vni> devices the fdb "
+                       "table names were checked for coverage, which misses a device named any "
+                       "other way")
+            :host host}])
+        (when (seq unlisted)
+          [{:severity :warning
+            :component host
+            :summary (str "host's VXLAN " (if (= 1 (count unlisted)) "device " "devices ")
+                          (str/join ", " unlisted) " list no VNI, so the VNIs "
+                          (if (= 1 (count unlisted)) "it carries" "they carry") " are unjudged")
+            :hint (str "a VXLAN device in collect-metadata (external) mode carries many VNIs and "
+                       "prints no id. Name the VNIs it carries with --vni or :evpn :vnis in "
+                       "env.edn so the scan reads them")
+            :host host
+            :unlisted unlisted}])
+        (when (seq discovered)
+          [{:severity :info
+            :component host
+            :summary (str "host carries " (vni-text discovered) " that the configuration does "
+                          "not list; the scan read " (if (= 1 (count discovered)) "it" "them")
+                          " because it reads every VNI a host carries")
+            :hint (str "add " (if (= 1 (count discovered)) "it" "them") " to :evpn :vnis in "
+                       "env.edn so the declared fabric matches the hosts")
+            :host host
+            :discovered discovered}]))))
+   (get evidence "evpn-vni-coverage")))
+
 (declare detectives)
 
 (def ^:private input-wording
@@ -597,7 +709,7 @@
     :judges ["evpn-gateway-vteps"]
     :detect detect-gateway-only-macs}
    {:name "evpn-fdb-conflict"
-    :description "hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local and whether BGP still advertises the remote one"
+    :description "hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local, whether BGP still advertises the remote one, and whether the tap learns"
     :requires ["evpn-fdb"]
     :detect detect-fdb-conflicts}
    {:name "evpn-orphan-fdb"
@@ -609,6 +721,10 @@
     :description "hosts whose fabric state could not be read, making the scan incomplete"
     :requires ["evpn-hosts"]
     :detect detect-host-problems}
+   {:name "evpn-vni-coverage"
+    :description "VNIs a host carries that the scan did not read, which leave its verdict incomplete, and VNIs read beyond the configured ones"
+    :requires ["evpn-vni-coverage"]
+    :detect detect-vni-coverage}
    {:name "evpn-static-fdb"
     :description "static fdb entries, which outrank EVPN learning and go stale silently"
     :requires ["evpn-fdb"]
