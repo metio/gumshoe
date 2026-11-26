@@ -111,6 +111,33 @@
       (format "%s is not among the healthy instances, so promoting it may lose data or fail" instance)
       :else nil)))
 
+(def ^:private transition-phases
+  "The Cluster phases CloudNativePG writes while the primary changes."
+  #{"Switchover in progress" "Failing over"})
+
+(defn console-promote-refusal
+  "Why the console must not promote instance in cluster, or nil. It differs
+   from switchover-refusal in one point: an unhealthy standby may be
+   promoted, since the console is where an operator recovers a cluster whose
+   healthy instances are gone. It refuses the current primary and the
+   target primary, where the cnpg plugin changes nothing and exits 0, a
+   fenced instance, a fence annotation it cannot read, a cluster reporting
+   no current primary, and any change of primary already under way (the
+   phase says so, or targetPrimary differs from currentPrimary), which the
+   plugin would cancel or redirect."
+  [cluster instance]
+  (let [{:keys [currentPrimary targetPrimary phase]} (:status cluster)]
+    (cond
+      (nil? cluster) "the cluster no longer exists"
+      (str/blank? currentPrimary) "the cluster reports no current primary"
+      (= instance currentPrimary) (format "%s is the primary already" instance)
+      (or (not= currentPrimary targetPrimary) (contains? transition-phases phase))
+      (format "a change of primary is under way already (%s, target primary %s) - wait until it completes"
+              (or phase "no phase") (or targetPrimary "none"))
+      (nil? (fenced cluster)) (format "the %s annotation is not a JSON list of names - fix it by hand" fence-annotation)
+      (fenced? cluster instance) (format "%s is fenced and cannot be promoted" instance)
+      :else nil)))
+
 (defn switchover-picks
   "Every healthy, unfenced replica of every cluster, as a pick."
   [clusters]

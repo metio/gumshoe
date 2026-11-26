@@ -194,6 +194,14 @@
                    [gumshoe.tools.jaas-observed-test]
                    [gumshoe.certificate-expiry-test]
                    [gumshoe.db-operator-status-test]
+                   [gumshoe.postgres-restore-transaction-test]
+                   [gumshoe.verify-unobservable-test]
+                   [gumshoe.stageset-promote-gate-test]
+                   [gumshoe.tools.jaas-reconcile-suspended-test]
+                   [gumshoe.prometheus-delete-every-pod-test]
+                   [gumshoe.cnpg.console-promote-test]
+                   [gumshoe.cnpg.reload-unobservable-test]
+                   [gumshoe.tools.flux-storage-owner-rights-test]
                    [gumshoe.monitoring-test]
                    [gumshoe.calico-test]
                    [gumshoe.flows-test]
@@ -473,6 +481,14 @@
                                                          'gumshoe.tools.jaas-observed-test
                                                          'gumshoe.certificate-expiry-test
                                                          'gumshoe.db-operator-status-test
+                                                         'gumshoe.postgres-restore-transaction-test
+                                                         'gumshoe.verify-unobservable-test
+                                                         'gumshoe.stageset-promote-gate-test
+                                                         'gumshoe.tools.jaas-reconcile-suspended-test
+                                                         'gumshoe.prometheus-delete-every-pod-test
+                                                         'gumshoe.cnpg.console-promote-test
+                                                         'gumshoe.cnpg.reload-unobservable-test
+                                                         'gumshoe.tools.flux-storage-owner-rights-test
                                                          'gumshoe.monitoring-test
                                                          'gumshoe.calico-test
                                                          'gumshoe.flows-test

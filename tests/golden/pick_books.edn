@@ -680,14 +680,17 @@
    :out ["▸ Prometheus: monitoring/prometheus"],
    :commands [],
    :change
-   {:action "delete every series of metric 'up' from the TSDB",
-    :target "monitoring/prometheus (cluster)",
-    :items ["up"],
+   {:action
+    "delete every series of metric 'up' from each of the 2 pod(s) of Prometheus monitoring/k8s - every replica and shard",
+    :target "monitoring/k8s (cluster)",
+    :items
+    ["delete up on pod prometheus-k8s-0"
+     "delete up on pod prometheus-k8s-1"],
     :announce
-    ["cluster" "Delete metric up from monitoring/prometheus"]}},
+    ["cluster" "Delete metric up from Prometheus monitoring/k8s"]}},
   :surface
   {:description
-   "Deletes every series of a metric from a Prometheus TSDB",
+   "Deletes every series of a metric from every replica and shard of a Prometheus",
    :options
    {:namespace
     {:desc
@@ -703,6 +706,10 @@
     {:desc "The metric to delete",
      :alias :m,
      :require true,
+     :coerce :string},
+    :prometheus
+    {:desc
+     "The Prometheus resource whose pods the metric is deleted from - interactive selection among those in the service's namespace when omitted",
      :coerce :string},
     :selector
     {:desc "Label selector used to find Prometheus services",
@@ -727,7 +734,8 @@
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
-    :kubectl-can-get ["services"]},
+    :kubectl-can-get
+    ["services" "pods" "prometheuses.monitoring.coreos.com"]},
    :announce? true,
    :parsed
    {:selector "operated-prometheus=true",

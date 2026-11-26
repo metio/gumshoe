@@ -60,7 +60,7 @@
      (let [resource (kubectl/get-namespaced-resource context namespace prometheus-type name)
            plan (prometheus/resize-plan {:pods (prometheus/pods-of context namespace name)
                                          :volume-name (prometheus/volume-name-of resource)
-                                         :pvcs (kubectl/get-all context "persistentvolumeclaims")
+                                         :pvcs (kubectl/get-namespaced context namespace "persistentvolumeclaims")
                                          :storage-classes (kubectl/get-all context "storageclasses")
                                          :capacity capacity})]
        ;; the storage-provider preflights (a ceph pool's free capacity) fail

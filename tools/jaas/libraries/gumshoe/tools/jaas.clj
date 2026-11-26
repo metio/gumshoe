@@ -88,6 +88,19 @@
   [snippet]
   (and (= "Suspended" (reason-of snippet)) (observed? snippet)))
 
+(defn reconcile-refusal
+  "Why the snippet named target must not be asked to reconcile, judged on the
+   snippet as read now: it no longer exists, or it is suspended - its spec
+   says so, or the operator reports it (suspended?). The operator
+   acknowledges a reconcile request on a suspended snippet without
+   evaluating it, so the request would look handled while nothing ran."
+  [target snippet]
+  (cond
+    (nil? snippet) (format "JsonnetSnippet %s no longer exists" target)
+    (or (true? (-> snippet :spec :suspend)) (suspended? snippet))
+    (format "JsonnetSnippet %s is suspended - resume it first (jaas/resume); a suspended snippet acknowledges the request without evaluating" target)
+    :else nil))
+
 (defn- snippet-subject
   [snippet]
   (subject/subject "JsonnetSnippet" (kubectl/namespace-of snippet) (kubectl/name-of snippet)))

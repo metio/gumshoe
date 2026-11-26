@@ -2946,7 +2946,7 @@
    "Needs:"
    "  tools: kubectl, fzf"
    "  kubectl get: helmreleases.helm.toolkit.fluxcd.io, kustomizations.kustomize.toolkit.fluxcd.io, persistentvolumeclaims, deployments, statefulsets, daemonsets, jobs, cronjobs"
-   "  kubectl patch: kustomizations.kustomize.toolkit.fluxcd.io, helmreleases.helm.toolkit.fluxcd.io"
+   "  kubectl patch: helmreleases.helm.toolkit.fluxcd.io"
    "  kubectl delete: deployments, statefulsets, daemonsets, jobs, cronjobs, persistentvolumeclaims, secrets"
    "  cluster capabilities: flux"
    ""
@@ -3224,6 +3224,7 @@
    "What it does:"
    "  picks one JsonnetSnippet by namespace and name (--namespace and --name, or interactively)"
    "  asks to confirm: request a JsonnetSnippet re-evaluation"
+   "  checks again right before acting that what was confirmed still holds"
    "  announces the change to the changelog"
    "  verifies the result before it reports success"
    ""
@@ -3639,6 +3640,10 @@
    {:desc "The service port serving the Prometheus API",
     :default "web",
     :coerce :string},
+   :prometheus
+   {:desc
+    "The Prometheus resource whose pods the metric is deleted from - interactive selection among those in the service's namespace when omitted",
+    :coerce :string},
    :selector
    {:desc "Label selector used to find Prometheus services",
     :alias :l,
@@ -3650,7 +3655,7 @@
     :coerce :string,
     :alias :s}},
   :help
-  ["Deletes every series of a metric from a Prometheus TSDB"
+  ["Deletes every series of a metric from every replica and shard of a Prometheus"
    ""
    "Usage:"
    "  bb <runbook> [options]"
@@ -3661,6 +3666,9 @@
    "  -s, --service         The name of the Prometheus service - interactive"
    "                        selection when omitted"
    "  -m, --metric          The metric to delete (required)"
+   "      --prometheus      The Prometheus resource whose pods the metric is deleted"
+   "                        from - interactive selection among those in the"
+   "                        service's namespace when omitted"
    "  -l, --selector        Label selector used to find Prometheus services"
    "                        (default: operated-prometheus=true)"
    "      --port-name       The service port serving the Prometheus API (default:"
@@ -3991,7 +3999,7 @@
    ""
    "What it does:"
    "  picks one StageSet by namespace and name (--namespace and --name, or interactively)"
-   "  asks to confirm: promote a StageSet stage"
+   "  asks to confirm: promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate"
    "  checks again right before acting that what was confirmed still holds"
    "  announces the change to the changelog"
    "  verifies the result before it reports success"

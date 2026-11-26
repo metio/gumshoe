@@ -120,6 +120,17 @@
         true
         (do (stdout/error (format "pg_dump failed:\n%s" (:err result))) false)))))
 
+(defn restore-args
+  "The psql arguments that replay the plain dump in file: in one
+   transaction, stopping at the first error, so a failed replay is rolled
+   back whole and leaves the database as it was. Without the transaction
+   psql commits each statement on its own, and a dump written with --clean
+   drops every object before it recreates them, so an error part-way would
+   leave objects dropped. No psqlrc is read, since one could turn
+   ON_ERROR_STOP or AUTOCOMMIT back."
+  [file]
+  ["--no-psqlrc" "--single-transaction" "--set" "ON_ERROR_STOP=on" "--file" (str file)])
+
 (def dump-header
   "The comment pg_dump opens a plain dump with."
   "-- PostgreSQL database dump")

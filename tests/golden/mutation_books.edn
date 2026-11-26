@@ -4002,9 +4002,15 @@
    :precondition {:result true, :out ""},
    :announce "Reload db/pg",
    :checks
-   [{:description "db/pg took the reload and is healthy",
+   [{:description
+     "the reload request on db/pg carries this run's stamp and the cluster is healthy",
      :timeout 600,
      :interval 10,
+     :holds false}
+    {:description
+     "the operator reconciled db/pg after the reload request",
+     :timeout 0,
+     :interval 1,
      :holds false}]},
   :refused
   {:stopped
@@ -4030,9 +4036,15 @@
     "refusing: its spec changed after the confirmation (generation 1, now 2)"},
    :announce "Reload db/pg",
    :checks
-   [{:description "db/pg took the reload and is healthy",
+   [{:description
+     "the reload request on db/pg carries this run's stamp and the cluster is healthy",
      :timeout 600,
      :interval 10,
+     :holds false}
+    {:description
+     "the operator reconciled db/pg after the reload request",
+     :timeout 0,
+     :interval 1,
      :holds false}]},
   :surface
   {:description
@@ -4086,9 +4098,15 @@
     "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
    :announce "Reload db/pg",
    :checks
-   [{:description "db/pg took the reload and is healthy",
+   [{:description
+     "the reload request on db/pg carries this run's stamp and the cluster is healthy",
      :timeout 600,
      :interval 10,
+     :holds false}
+    {:description
+     "the operator reconciled db/pg after the reload request",
+     :timeout 0,
+     :interval 1,
      :holds false}]}},
  "tools/cnpg/runbooks/restart.clj"
  {:absent {:stopped "refusing: the cluster no longer exists"},
@@ -5267,31 +5285,9 @@
      :holds false}]}},
  "tools/jaas/runbooks/jaas/reconcile.clj"
  {:absent
-  {:action "request a JsonnetSnippet re-evaluation",
-   :destructive? false,
-   :items ["apps/site"],
-   :step "request a JsonnetSnippet re-evaluation",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=apps"
-     "annotate"
-     "jsonnetsnippets.jaas.metio.wtf"
-     "site"
-     "reconcile.fluxcd.io/requestedAt=<instant>"
-     "--overwrite"]],
-   :precondition nil,
-   :announce "Reconcile JsonnetSnippet apps/site",
-   :checks
-   [{:description
-     "JsonnetSnippet apps/site handled the reconcile request",
-     :timeout 120,
-     :interval 5,
-     :holds false}]},
+  {:stopped "refusing: JsonnetSnippet apps/site no longer exists"},
   :empty
-  {:result false,
-   :out
-   "❌ JsonnetSnippet apps/site not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"},
+  {:result false, :out "❌ no JsonnetSnippet apps/site - not found"},
   :failed-after-applying
   {:result false,
    :out
@@ -5327,7 +5323,7 @@
      "site"
      "reconcile.fluxcd.io/requestedAt=<instant>"
      "--overwrite"]],
-   :precondition nil,
+   :precondition {:result true, :out ""},
    :announce "Reconcile JsonnetSnippet apps/site",
    :checks
    [{:description
@@ -5350,27 +5346,8 @@
      "reconcile.fluxcd.io/requestedAt=<instant>"
      "--overwrite"]]},
   :refused
-  {:action "request a JsonnetSnippet re-evaluation",
-   :destructive? false,
-   :items ["apps/site"],
-   :step "request a JsonnetSnippet re-evaluation",
-   :plan
-   [[:kubectl
-     "ctx"
-     "--namespace=apps"
-     "annotate"
-     "jsonnetsnippets.jaas.metio.wtf"
-     "site"
-     "reconcile.fluxcd.io/requestedAt=<instant>"
-     "--overwrite"]],
-   :precondition nil,
-   :announce "Reconcile JsonnetSnippet apps/site",
-   :checks
-   [{:description
-     "JsonnetSnippet apps/site handled the reconcile request",
-     :timeout 120,
-     :interval 5,
-     :holds false}]},
+  {:stopped
+   "refusing: JsonnetSnippet apps/site is suspended - resume it first (jaas/resume); a suspended snippet acknowledges the request without evaluating"},
   :spec-changed
   {:action "request a JsonnetSnippet re-evaluation",
    :destructive? false,
@@ -5385,7 +5362,10 @@
      "site"
      "reconcile.fluxcd.io/requestedAt=<instant>"
      "--overwrite"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out
+    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
    :announce "Reconcile JsonnetSnippet apps/site",
    :checks
    [{:description
@@ -5425,6 +5405,7 @@
    ["What it does:"
     "  picks one JsonnetSnippet by namespace and name (--namespace and --name, or interactively)"
     "  asks to confirm: request a JsonnetSnippet re-evaluation"
+    "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
     "  verifies the result before it reports success"
     ""
@@ -5433,7 +5414,7 @@
     "  kubectl get: jsonnetsnippets.jaas.metio.wtf"
     "  kubectl patch: jsonnetsnippets.jaas.metio.wtf"
     "  cluster capabilities: jaas"],
-   :candidates {:permitted ["apps/site"], :refused ["apps/site"]}},
+   :candidates {:permitted ["apps/site"], :refused []}},
   :unanswered
   {:action "request a JsonnetSnippet re-evaluation",
    :destructive? false,
@@ -5448,7 +5429,10 @@
      "site"
      "reconcile.fluxcd.io/requestedAt=<instant>"
      "--overwrite"]],
-   :precondition nil,
+   :precondition
+   {:result false,
+    :out
+    "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
    :announce "Reconcile JsonnetSnippet apps/site",
    :checks
    [{:description
@@ -5465,9 +5449,7 @@
    :out
    "▸ JsonnetSnippet: site\nrefusing: the pick \"site\" does not name a JsonnetSnippet"},
   :unpicked
-  {:result false,
-   :out
-   "❌ JsonnetSnippet apps/nope not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"}},
+  {:result false, :out "❌ no JsonnetSnippet apps/nope - not found"}},
  "tools/jaas/runbooks/jaas/resume.clj"
  {:absent
   {:action "resume a JsonnetSnippet",
@@ -5897,11 +5879,11 @@
   :dry-run
   {:result true,
    :out
-   ["▸ Stage: prod"
+   ["▸ Stage held at its gate: prod"
     "────────────────────────────────────────────────────────────────────────────────"
     "  🔍 DRY RUN - nothing will be changed"
     "────────────────────────────────────────────────────────────────────────────────"
-    "This will promote a StageSet stage on 'cluster':"
+    "This will promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate on 'cluster':"
     "  - apps/site"
     "  would run: stagesetctl promote site --stage prod --namespace=apps"],
    :banner "DONE - nothing was changed",
@@ -5910,11 +5892,13 @@
   :failed-at-the-first-effect
   {:result false,
    :out
-   ["▸ Stage: prod"
+   ["▸ Stage held at its gate: prod"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"],
    :banner
    "FAILED at the first effect: stagesetctl promote site --stage prod --namespace=apps - nothing was changed",
-   :recovery []},
+   :recovery
+   ["Recovery:"
+    "  StageSet apps/site carries no promote annotation, so nothing is left armed."]},
   :invalid
   {:stopped "refusing: the pick \"site\" does not name a StageSet"},
   :permitted
@@ -5926,8 +5910,9 @@
      :holds false}],
    :destructive? false,
    :announce "Promote stage prod of StageSet apps/site",
-   :out "▸ Stage: prod",
-   :action "promote a StageSet stage",
+   :out "▸ Stage held at its gate: prod",
+   :action
+   "promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate",
    :items ["apps/site"],
    :plan
    [[:cmd
@@ -5937,12 +5922,14 @@
      "--stage"
      "prod"
      "--namespace=apps"]],
-   :step "promote a StageSet stage",
+   :step
+   "promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate",
    :precondition {:result true, :out ""}},
   :picked
   {:result true,
-   :out "▸ StageSet: apps/site\n▸ Stage: prod",
-   :action "promote a StageSet stage",
+   :out "▸ StageSet: apps/site\n▸ Stage held at its gate: prod",
+   :action
+   "promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate",
    :items ["apps/site"],
    :plan
    [[:cmd
@@ -5953,27 +5940,8 @@
      "prod"
      "--namespace=apps"]]},
   :refused
-  {:checks
-   [{:description
-     "stage prod of StageSet apps/site acted on the promotion",
-     :timeout 300,
-     :interval 5,
-     :holds false}],
-   :destructive? false,
-   :announce "Promote stage prod of StageSet apps/site",
-   :out "▸ Stage: prod",
-   :action "promote a StageSet stage",
-   :items ["apps/site"],
-   :plan
-   [[:cmd
-     "stagesetctl"
-     "promote"
-     "site"
-     "--stage"
-     "prod"
-     "--namespace=apps"]],
-   :step "promote a StageSet stage",
-   :precondition {:result true, :out ""}},
+  {:stopped
+   "refusing: StageSet apps/site: stage prod is not held at its promotion gate (phase Promoted)"},
   :spec-changed
   {:checks
    [{:description
@@ -5983,8 +5951,9 @@
      :holds false}],
    :destructive? false,
    :announce "Promote stage prod of StageSet apps/site",
-   :out "▸ Stage: prod",
-   :action "promote a StageSet stage",
+   :out "▸ Stage held at its gate: prod",
+   :action
+   "promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate",
    :items ["apps/site"],
    :plan
    [[:cmd
@@ -5994,11 +5963,12 @@
      "--stage"
      "prod"
      "--namespace=apps"]],
-   :step "promote a StageSet stage",
+   :step
+   "promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate",
    :precondition
    {:result false,
     :out
-    "refusing: its spec changed after the confirmation (generation 1, now 2)"}},
+    "refusing: StageSet apps/site: the controller has not observed the StageSet's current spec yet"}},
   :surface
   {:description
    "Manually promotes a held StageSet stage via stagesetctl",
@@ -6026,11 +5996,14 @@
     :namespace-flag :namespace,
     :name-flag :name},
    :empty-message nil,
-   :confirm {:action "promote a StageSet stage", :destructive? false},
+   :confirm
+   {:action
+    "promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate",
+    :destructive? false},
    :details
    ["What it does:"
     "  picks one StageSet by namespace and name (--namespace and --name, or interactively)"
-    "  asks to confirm: promote a StageSet stage"
+    "  asks to confirm: promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate"
     "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
     "  verifies the result before it reports success"
@@ -6049,8 +6022,9 @@
      :holds false}],
    :destructive? false,
    :announce "Promote stage prod of StageSet apps/site",
-   :out "▸ Stage: prod",
-   :action "promote a StageSet stage",
+   :out "▸ Stage held at its gate: prod",
+   :action
+   "promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate",
    :items ["apps/site"],
    :plan
    [[:cmd
@@ -6060,7 +6034,8 @@
      "--stage"
      "prod"
      "--namespace=apps"]],
-   :step "promote a StageSet stage",
+   :step
+   "promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate",
    :precondition
    {:result false,
     :out
@@ -6071,7 +6046,7 @@
    "❌ could not list the StageSet candidates - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
   :unknown-stage
   {:stopped
-   "🔶 Stage 'qa' is not a valid choice, please select one\nrefusing: StageSet apps/site declares no stage qa, only dev, prod"},
+   "🔶 Stage held at its gate 'qa' is not a valid choice, please select one\nrefusing: StageSet apps/site declares no stage qa, only dev, prod"},
   :unparsable-pick
   {:result false,
    :out

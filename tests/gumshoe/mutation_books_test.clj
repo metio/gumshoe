@@ -534,6 +534,20 @@
    :spec {:stages [{:name "dev"} {:name "prod"}]}
    :status (ready status)})
 
+(defn- held-stageset
+  "StageSet apps/site whose stage prod stands in promotion phase `phase` at
+   the revision the rollout is on, with the Ready condition a held gate
+   writes."
+  [phase]
+  {:metadata (meta-of "apps" "site")
+   :spec {:stages [{:name "dev" :sourceRef {:name "site"}}
+                   {:name "prod" :sourceRef {:name "site"} :promotion {:requireManualPromotion true}}]}
+   :status {:observedGeneration 1
+            :conditions [{:type "Ready" :status "False" :reason "AwaitingPromotion"}]
+            :lastAttemptedRevisions {:apps/site "sha256:abc"}
+            :stages [{:name "dev" :appliedRevision "sha256:abc"}
+                     {:name "prod" :appliedRevision "sha256:abc" :promotionState {:phase phase}}]}})
+
 (defn- standard
   "The scenarios every book runs: permitted, refused, absent, a spec change and
    an unanswered read between confirmation and precondition, and a pick that
@@ -804,9 +818,9 @@
 
    "tools/stageset/runbooks/stageset/promote.clj"
    (assoc (standard {:target "apps/site" :invalid "site" :opts {:stage "prod"}
-                     :permitted [[stageset-type (stageset "True")]]
-                     :refused [[stageset-type (stageset "False")]]})
-          :unknown-stage {:objects [[stageset-type (stageset "True")]] :target "apps/site" :opts {:stage "qa"}})
+                     :permitted [[stageset-type (held-stageset "AwaitingManual")]]
+                     :refused [[stageset-type (held-stageset "Promoted")]]})
+          :unknown-stage {:objects [[stageset-type (held-stageset "AwaitingManual")]] :target "apps/site" :opts {:stage "qa"}})
 
    "tools/stageset/runbooks/stageset/reconcile.clj"
    (standard {:target "apps/site" :invalid "site" :opts {:update-now true}
@@ -892,7 +906,7 @@
 
    "tools/stageset/runbooks/stageset/promote.clj"
    (with-unparsable-pick
-    (pick-scenarios [[stageset-type (stageset "True")]] {:namespace "apps" :name "site" :stage "prod"} {:namespace "apps" :name "nope" :stage "prod"})
+    (pick-scenarios [[stageset-type (held-stageset "AwaitingManual")]] {:namespace "apps" :name "site" :stage "prod"} {:namespace "apps" :name "nope" :stage "prod"})
     "site")
 
    "tools/stageset/runbooks/stageset/reconcile.clj"
@@ -990,8 +1004,8 @@
    {:failed-after-applying {:objects [[snippet-type (snippet true "Suspended")]] :target "apps/site"}}
 
    "tools/stageset/runbooks/stageset/promote.clj"
-   {:failed-at-the-first-effect {:objects [[stageset-type (stageset "True")]] :target "apps/site" :opts {:stage "prod"} :fail-at 1}
-    :dry-run {:objects [[stageset-type (stageset "True")]] :target "apps/site" :opts {:stage "prod"} :dry-run? true}}
+   {:failed-at-the-first-effect {:objects [[stageset-type (held-stageset "AwaitingManual")]] :target "apps/site" :opts {:stage "prod"} :fail-at 1}
+    :dry-run {:objects [[stageset-type (held-stageset "AwaitingManual")]] :target "apps/site" :opts {:stage "prod"} :dry-run? true}}
 
    "tools/stageset/runbooks/stageset/reconcile.clj"
    {:failed-after-applying {:objects [[stageset-type (stageset "False")]] :target "apps/site" :opts {:update-now true}}}})
@@ -1198,8 +1212,8 @@
 
 (deftest stageset-promote-refuses-a-stage-the-stageset-does-not-declare
   (let [path "tools/stageset/runbooks/stageset/promote.clj"
-        start [[stageset-type (stageset "True")]]
-        stageless [[stageset-type (assoc-in (stageset "True") [:spec :stages] [])]]
+        start [[stageset-type (held-stageset "AwaitingManual")]]
+        stageless [[stageset-type (-> (held-stageset "AwaitingManual") (assoc-in [:spec :stages] []) (assoc-in [:status :stages] []))]]
         no-nil? (fn [{:keys [plan]}] (not-any? #(some nil? %) plan))]
     (let [verdict (judged path {:objects start :target "apps/site" :opts {:stage "qa"}})]
       (is (refused-before-asking? verdict #"refusing: .*stage"))

@@ -4,7 +4,9 @@
 (ns runbooks.jaas.reconcile
   "Requests an immediate re-evaluation of a JsonnetSnippet by stamping the
    reconcile.fluxcd.io/requestedAt annotation - the trigger `flux reconcile`
-   uses, which JaaS honours on its own kinds."
+   uses, which JaaS honours on its own kinds. A suspended snippet is neither
+   offered nor accepted: the operator acknowledges the token without
+   evaluating it, so the post-check would pass on nothing."
   (:require [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
@@ -13,8 +15,11 @@
             [gumshoe.tools.jaas :as jaas]))
 
 (defn snippets
+  "The snippets a reconcile request is offered for: every one not suspended."
   [context]
-  (kubectl/namespaces-names (kubectl/get-all context jaas/jsonnetsnippet-type)))
+  (->> (kubectl/items-of (kubectl/get-all context jaas/jsonnetsnippet-type))
+       (remove #(jaas/reconcile-refusal (kubectl/namespace-name-of %) %))
+       (mapv kubectl/namespace-name-of)))
 
 (defn handled-check
   "The operator writes the token it acted on to status.lastHandledReconcileAt, so
@@ -41,6 +46,8 @@
                   :kubectl-can-get [jaas/jsonnetsnippet-type]
                   :kubectl-can-patch [jaas/jsonnetsnippet-type]}
   :select selection
+  :subject {:type jaas/jsonnetsnippet-type}
+  :refusal (fn [{:keys [target object]}] (jaas/reconcile-refusal target object))
   ;; The token is a value, computed once, so the effect that stamps it and the
   ;; post-check that waits for it are looking at the same value.
   :values {:token (fn [_] (str (java.time.Instant/now)))}

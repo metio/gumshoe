@@ -143,6 +143,18 @@
                     (stdout/warn (str "while waiting — " signal)))
                   (recur (into seen fresh))))))))))
 
+(defn unobservable
+  "A post-check for an outcome nothing records, so it cannot be verified:
+   it is :soft? and never holds, so the run ends successful and its banner
+   says NOT confirmed with `description`, and `why` is printed beside it.
+   Declare one beside the checks that can be observed, instead of a check
+   that passes on the change's own write and so claims what it never saw."
+  [description why]
+  {:description description
+   :soft? true :timeout 0 :interval 1
+   :check (constantly false)
+   :detail (constantly why)})
+
 (defn all
   "Runs every post-check in order; all of them must hold. A :soft? check that
    times out still counts as held, and is recorded as unconfirmed, so the

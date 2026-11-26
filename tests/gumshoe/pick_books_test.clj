@@ -164,7 +164,15 @@
 
 (def ^:private prometheus-service
   (assoc (object "monitoring" "prometheus")
-         :spec {:ports [{:name "http-web" :port 9090}]}))
+         :spec {:selector {:app.kubernetes.io/name "prometheus"}
+                :ports [{:name "http-web" :port 9090 :targetPort "web"}]}))
+
+(defn- prometheus-pod
+  [name]
+  (-> (object "monitoring" name)
+      (assoc-in [:metadata :labels] {:app.kubernetes.io/name "prometheus" :app.kubernetes.io/instance "k8s"})
+      (assoc :spec {:containers [{:name "prometheus" :ports [{:name "web" :containerPort 9090}]}]}
+             :status {:phase "Running" :conditions [{:type "Ready" :status "True"}]})))
 
 (def books
   {"runbooks/etcd/check_performance.clj"
@@ -231,7 +239,9 @@
 
    "tools/prometheus/runbooks/delete_metric.clj"
    {:argv ["--metric" "up" "--namespace" "monitoring" "--service" "prometheus"]
-    :scenarios (scenarios {"services" [prometheus-service]}
+    :scenarios (scenarios {"services" [prometheus-service]
+                           "prometheuses.monitoring.coreos.com" [(object "monitoring" "k8s")]
+                           "pods" [(prometheus-pod "prometheus-k8s-0") (prometheus-pod "prometheus-k8s-1")]}
                           {:metric "up" :namespace "monitoring" :service "prometheus"
                            :selector "app.kubernetes.io/name=prometheus" :port-name "http-web" :port 19090}
                           {:metric "up" :namespace "monitoring" :service "nope"

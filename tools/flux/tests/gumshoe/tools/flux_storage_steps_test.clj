@@ -75,7 +75,7 @@
    {:title "⏸  Suspend the owner (Kustomization or ResourceSet) that renders the HelmRelease"
     :keys #{:title :prerequisites :confirm :values :recovery :refusal :items :effect :verify}
     :values [:observed]
-    :prerequisites {:kubectl-can-patch [kustomization]}
+    :prerequisites {}
     :confirm {:action "suspend the owner that renders the HelmRelease" :destructive? false}}
    {:title "⏸  Suspend the HelmRelease and wait for a running action to finish"
     :keys #{:title :prerequisites :confirm :values :recovery :subjects :refusal :items :effect :verify}
@@ -105,7 +105,7 @@
    {:title "▶  Resume the owner (Kustomization or ResourceSet)"
     :keys #{:title :prerequisites :confirm :values :recovery :refusal :items :effect :verify}
     :values [:observed :timestamp]
-    :prerequisites {:kubectl-can-patch [kustomization]}
+    :prerequisites {}
     :confirm {:action "resume the owner that renders the HelmRelease" :destructive? false}}])
 
 (deftest every-step-keeps-its-title-prerequisites-and-confirmation
