@@ -238,6 +238,8 @@
                    [gumshoe.argocd-sync-token-test]
                    [gumshoe.claims-test]
                    [gumshoe.statefulset-retained-claims-test]
+                   [gumshoe.retained-claims-check-test]
+                   [gumshoe.playbook-named-target-test]
                    [gumshoe.karpenter-test]
                    [gumshoe.strimzi-test]
                    [gumshoe.kueue-test]
@@ -471,6 +473,8 @@
                                                          'gumshoe.argocd-sync-token-test
                                                          'gumshoe.claims-test
                                                          'gumshoe.statefulset-retained-claims-test
+                                                         'gumshoe.retained-claims-check-test
+                                                         'gumshoe.playbook-named-target-test
                                                          'gumshoe.karpenter-test
                                                          'gumshoe.strimzi-test
                                                          'gumshoe.kueue-test

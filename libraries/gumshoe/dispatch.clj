@@ -10,6 +10,8 @@
    Spec:
      {:description \"...\"
       :select   {..}                          ; picks the subject, see gumshoe.select
+      :subject  {..}                          ; optional, reads a named target
+      :done     (fn [ctx] -> bool)            ; optional, a named target is done
       :classify (fn [ctx target] -> key)      ; nil when the subject can not say
       :routes   {key {:playbook {..}          ; a playbook spec, or one mutation spec
                       :note \"...\"}}          ; optional, shown before it runs
@@ -22,9 +24,16 @@
    once the subject named that route. It checks every route's prerequisites
    before it picks, since the route is not known until then. The chosen
    playbook runs in this process against the picked subject, from its leading
-   checks and its one confirmation."
+   checks and its one confirmation.
+
+   A target the flags name that the select does not offer is judged by
+   gumshoe.mutation/pick! with gumshoe.playbook/pick-spec of the
+   dispatcher: :subject reads it, so the run says whether it is absent or
+   present, and :done judges whether it needs no route at all. Without
+   them the run fails closed with the generic message."
   (:refer-clojure :exclude [run!])
   (:require [clojure.string :as str]
+            [gumshoe.change :as change]
             [gumshoe.flags :as flags]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
@@ -95,10 +104,12 @@
 
 (defn run!
   "Picks the subject, honouring the flags (see gumshoe.mutation/pick!), and
-   runs its route. Returns true when there is nothing to pick, false when
-   nothing was picked or the named target is not offered."
-  [{:keys [select] :as dispatcher} opts announcement-data]
-  (let [{:keys [target result] :as picked} (mutation/pick! {:select select} opts (kubectl/current-context))]
+   runs its route. Returns true when there is nothing to pick or the named
+   target is not offered and the dispatcher's :done judges it done, false
+   when nothing was picked or the named target is not offered and not
+   done."
+  [dispatcher opts announcement-data]
+  (let [{:keys [target result] :as picked} (mutation/pick! (playbook/pick-spec dispatcher) opts (kubectl/current-context))]
     (if (contains? picked :result)
       result
       (run-on! dispatcher target opts announcement-data))))
@@ -124,6 +135,7 @@
 (defn book
   "Builds and runs a dispatcher from its spec."
   [{:keys [description] :as dispatcher}]
+  (change/normalize (playbook/pick-spec dispatcher))
   (runbook/execute!
    {:description description
     :options (flags/merge-ordered (all-options dispatcher) segment-option)

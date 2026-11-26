@@ -22,11 +22,24 @@
       :options       {..}   ; joined with the steps' options, winning on conflict
       :prerequisites {..}   ; joined with the steps' prerequisites
       :select        {..}   ; picks the subject once, see gumshoe.select
+      :subject       {..}   ; optional, reads a named target, see below
+      :done          (fn [ctx] -> bool)   ; optional, see below
       :confirm       {:action \"...\" :destructive? false}
       :recovery      \"...\" or (fn [ctx] -> string)   ; optional, see below
       :steps         [..]}
 
    Each step receives {:context :cluster :target :opts :announcement-data}.
+
+   A target the flags name that the select does not offer is judged as
+   gumshoe.mutation/pick! judges it, with pick-spec: :subject, the typed
+   subject of a change spec (e.g. {:type \"namespaces\"}), reads it, so the
+   run says whether it is absent or present; without one, the :subject of
+   the first change step that picks through the playbook's select reads it.
+   :done, a function of the context that read made ({:context :cluster
+   :target :opts :ref :object ..}), judges whether the whole playbook
+   already took effect on it; when it holds the run succeeds with nothing
+   changed, otherwise the present target is not eligible. A playbook that
+   declares neither fails closed with the generic message.
 
    :recovery is what the operator reads under the FAILED banner when the run
    stops at that step: what the steps before it left behind and how to bring
@@ -576,13 +589,39 @@
                       (run-steps! later ctx waits-first? playbook)))
                false))))))
 
+(defn- step-subject
+  "The :pick entry of the first change step among steps that picks through
+   the enclosing select (it has no :select of its own) and declares one."
+  [steps]
+  (some (fn [step]
+          (when (and (map? step) (= :change (kind step)) (nil? (:select step)))
+            (change/pick-subject (change/normalize step))))
+        steps))
+
+(defn pick-spec
+  "The spec gumshoe.mutation/pick! picks the subject of a playbook or a
+   dispatcher by: its :select; its :subject, else the :subject of the
+   first change step that picks through that select, so a named target
+   the candidates leave out is read and reported absent or present; its
+   :done, which judges such a target already done; and its :title, else
+   the action it confirms, else its description, which a skip names. A
+   value with neither :subject nor :done picks by its :select alone."
+  [{:keys [select subject done title confirm description steps]}]
+  (let [from-step (when-not subject (step-subject steps))]
+    (cond-> {:select select :title (or title (:action confirm) description)}
+      subject (assoc :subject subject)
+      from-step (assoc :subjects [from-step])
+      done (assoc :done done))))
+
 (defn run!
-  "Selects the subject, honouring the flags (see gumshoe.mutation/pick!),
-   and runs the playbook against it. Returns true when there is nothing to
-   select, false when nothing was picked or the named target is not
-   offered (see gumshoe.mutation/pick!)."
-  [{:keys [select] :as playbook} opts announcement-data]
-  (let [{:keys [target result] :as picked} (mutation/pick! {:select select} opts (kubectl/current-context))]
+  "Selects the subject, honouring the flags (see gumshoe.mutation/pick!,
+   which judges a named target by pick-spec), and runs the playbook
+   against it. Returns true when there is nothing to select or the named
+   target is not offered and the playbook's :done judges it already done,
+   false when nothing was picked or the named target is not offered and
+   not done (see gumshoe.mutation/pick!)."
+  [playbook opts announcement-data]
+  (let [{:keys [target result] :as picked} (mutation/pick! (pick-spec playbook) opts (kubectl/current-context))]
     (if (contains? picked :result)
       result
       (run-on! playbook target opts announcement-data))))
@@ -628,8 +667,10 @@
 
 (defn book
   "Builds and runs a playbook from its spec, with the options and prerequisites
-   derived from its steps."
+   derived from its steps. A :subject or :done change/normalize refuses
+   fails the book as it loads."
   [{:keys [description steps] :as playbook}]
+  (change/normalize (pick-spec playbook))
   (runbook/execute!
    {:description description
     :options (cond-> (all-options playbook)

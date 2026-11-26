@@ -7,7 +7,9 @@
    orphaned, and it is recreated with the new template - after which
    everything matches again. The claims a StatefulSet scaled down keeps for
    its higher ordinals are grown too, so a later scale-up mounts them at the
-   new size. The full plan is validated first, the change
+   new size; they are verified as accepted, since a claim no pod mounts
+   may finish growing only when a pod mounts it. The full plan is
+   validated first, the change
    runs as an effect plan (so --dry-run shows it), the StatefulSet is pinned
    between the confirmation and the effect, a failure part-way prints what
    it left behind, and the result is verified volume by volume."
@@ -92,7 +94,7 @@
    StatefulSet is the change's subject: read again right before the
    confirmation, so the manifest applied again is the one confirmed, and
    pinned, so it is refused when the StatefulSet changed meanwhile."
-  [{:keys [context cluster target template capacity plan applied-before]}]
+  [{:keys [context cluster target template capacity plan retained applied-before]}]
   (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
         steps (fn [object] (storage/statefulset-resize-steps context object template capacity plan))]
     {:title "enlarge volumes"
@@ -104,7 +106,7 @@
      :items (fn [_] (map :pvc plan))
      :announce (fn [_] (format "Enlarge volumes of StatefulSet %s to %s" target capacity))
      :effect (fn [{:keys [object]}] (storage/plan-of (steps object)))
-     :verify (fn [_] (storage/statefulset-checks context cluster namespace name template capacity plan))
+     :verify (fn [_] (storage/statefulset-checks context cluster namespace name template capacity plan retained))
      :recovery (fn [{:keys [object applied]}]
                  (storage/statefulset-recovery {:context context :target target}
                                                (steps object)
@@ -144,6 +146,7 @@
                           false)
                       (mutation/run-on! (change {:context context :cluster cluster :target target
                                                  :template template :capacity capacity :plan plan
+                                                 :retained retained
                                                  :applied-before (outcome/applied-count)})
                                         target opts announcement-data)))))
             (do (stdout/error "no volume claim template selected") false))))
