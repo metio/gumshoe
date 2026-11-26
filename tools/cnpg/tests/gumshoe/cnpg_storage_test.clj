@@ -33,7 +33,7 @@
     (is (= "cloudnative-pg-cluster-general/cloudnative-pg-cluster-general-1"
            (:component finding)))
     (is (re-find #"asks for 40.0GiB and this volume requests 20.0GiB" (:summary finding)))
-    (is (re-find #"does not enlarge a volume" (:hint finding)))))
+    (is (re-find #"its patch failed" (:hint finding)))))
 
 (deftest every-volume-short-of-the-spec-is-reported-test
   (is (= 3 (count (findings (pvc "cloudnative-pg-cluster-general-1" "20Gi" "20Gi")

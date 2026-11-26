@@ -22,7 +22,7 @@
   (is (= 10737418240.0 (retention/parse-size "10GB")))
   (is (= 1048576.0 (retention/parse-size "1MB")))
   (is (= 1024.0 (retention/parse-size "1kB")))
-  (is (= 1024.0 (retention/parse-size "1KB")))
+  (is (nil? (retention/parse-size "1KB")) "postgres compares unit names case-sensitively")
   (is (= 2097152.0 (retention/parse-size "2"))
       "a bare number for this setting is megabytes"))
 
@@ -51,7 +51,7 @@
 
 (deftest a-cap-worth-half-the-volume-or-more-is-no-floor-test
   (let [finding (first (findings (cluster "a" "40Gi" {:max_slot_wal_keep_size "30GB"})))]
-    (is (re-find #"30.0GiB of a 40.0GiB volume, which is no floor" (:summary finding)))))
+    (is (re-find #"30.0GiB of a 40.0GiB storage volume, which is no floor" (:summary finding)))))
 
 (deftest an-unparseable-cap-is-reported-rather-than-assumed-safe-test
   (let [finding (first (findings (cluster "a" "40Gi" {:max_slot_wal_keep_size "10Gi"})))]

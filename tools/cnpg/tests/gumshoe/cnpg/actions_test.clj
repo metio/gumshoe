@@ -166,9 +166,9 @@
   (is (= "it is not suspended" (actions/suspend-refusal (scheduled :suspend false) false)))
   (is (= "the ScheduledBackup no longer exists" (actions/suspend-refusal nil true)))
   (is (= ["suspend ScheduledBackup db/nightly - no backup of cluster pg starts on its schedule 0 0 3 * * * until it is resumed"
-          "the cluster's newest recovery point ages from now on; WAL archiving continues"]
-         (actions/suspend-items (scheduled) true)))
+          "cluster pg archives WAL, so its newest recovery point keeps advancing; its newest base backup ages from now on, and a restore replays more WAL the older it gets"]
+         (actions/suspend-items (scheduled) true {:spec {:backup {:barmanObjectStore {:destinationPath "s3://b"}}}})))
   (is (= ["resume ScheduledBackup db/nightly - backups of cluster pg start again on its schedule 0 0 3 * * *"]
-         (actions/suspend-items (scheduled :suspend true) false)))
+         (actions/suspend-items (scheduled :suspend true) false nil)))
   (is (= "{\"spec\":{\"suspend\":true}}" (actions/suspend-patch true)))
   (is (= "{\"spec\":{\"suspend\":false}}" (actions/suspend-patch false))))

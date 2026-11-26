@@ -8,6 +8,10 @@
   (:require [clojure.string :as str]))
 
 (defn detect-unresolved-hostnames
+  "A critical finding for a host only when both its A and AAAA queries
+   answered with no records. An answer is nil when its query got none, and a
+   host whose one query did not answer while the other found nothing is
+   unread: the record may sit behind the query that was lost."
   [evidence]
   (let [server (get evidence "server")
         resolved (get evidence "resolved")]
@@ -22,11 +26,19 @@
                    :summary (format "%s did not answer the query" server)
                    :hint "the DNS server was unreachable - rerun once it answers"}]
 
-                 (and (empty? a) (empty? aaaa))
+                 (and (some? a) (some? aaaa) (empty? a) (empty? aaaa))
                  [{:severity :critical
                    :component host
                    :summary (format "hostname does not resolve (declared by %s)" source)
                    :hint "external-dns has not synced this record - check its logs and annotations"}]
+
+                 (and (empty? a) (empty? aaaa))
+                 (let [[lost answered] (if (nil? a) ["A" "AAAA"] ["AAAA" "A"])]
+                   [{:severity :warning
+                     :component host
+                     :summary (format "%s did not answer the %s query, and the %s query found no records"
+                                      server lost answered)
+                     :hint (format "whether the hostname resolves is unknown until the %s query answers - rerun" lost)}])
 
                  :else
                  []))))))

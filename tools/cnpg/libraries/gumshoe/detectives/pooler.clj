@@ -65,12 +65,34 @@
   (format "kubectl -n %s rollout restart deployment/%s"
           (kubectl/namespace-of pooler) (kubectl/name-of pooler)))
 
-(defn- without-resources?
+(defn resource-gap
+  "What a pod's containers leave unset, as :best-effort (no container sets
+   requests or limits, so the pod is BestEffort), :requests (a container sets
+   neither, while another does, so the pod is Burstable), :limits (every
+   container has requests and one lacks limits, also Burstable) or nil. A
+   container's limits stand in for its requests when it sets no requests, as
+   Kubernetes defaults them so."
   [pod]
-  (some (fn [container]
-          (let [resources (:resources container)]
-            (or (empty? (:requests resources)) (empty? (:limits resources)))))
-        (-> pod :spec :containers)))
+  (let [containers (-> pod :spec :containers)
+        requested? #(or (seq (-> % :resources :requests)) (seq (-> % :resources :limits)))
+        limited? #(seq (-> % :resources :limits))]
+    (cond
+      (empty? containers) nil
+      (not-any? requested? containers) :best-effort
+      (not-every? requested? containers) :requests
+      (not-every? limited? containers) :limits)))
+
+(def ^:private resource-gap-findings
+  {:best-effort {:summary "pods run without resource requests or limits"
+                 :hint (str "BestEffort QoS, the first to be evicted under node pressure - "
+                            "set requests and limits on the Pooler's template")}
+   :requests {:summary "pods have a container without resource requests"
+              :hint (str "Burstable QoS, and the container is scheduled as if it needed "
+                         "nothing - set its requests on the Pooler's template")}
+   :limits {:summary "pods run without resource limits"
+            :hint (str "Burstable QoS, evicted after BestEffort pods; leaving limits out can "
+                       "be deliberate (no CPU throttling) - set them on the Pooler's template "
+                       "if PgBouncer should be bounded")}})
 
 (defn- healthy?
   "A cluster in its healthy phase with every instance ready. While a cluster is
@@ -150,22 +172,24 @@
                   "up intermittently - check the EndpointSlice, not pod readiness")})))
 
 (defn detect-poolers-without-resources
-  "Pooler pods with a container missing requests or limits. The operator's
-   generated pod template carries none unless the Pooler spec sets them, which
-   leaves PgBouncer in BestEffort QoS, first to be evicted under node pressure.
-   Nothing is judged when a joined read did not answer."
+  "Pooler pods with a container missing requests or limits, named by the QoS
+   class that leaves them in. The operator's generated pod template carries
+   none unless the Pooler spec sets them, which leaves PgBouncer BestEffort,
+   first to be evicted under node pressure; a template with requests and no
+   limits is Burstable. One finding per pooler, for the widest gap among its
+   pods. Nothing is judged when a joined read did not answer."
   [evidence]
   (let [pods (kubectl/items-of (get evidence "pods"))]
     (for [pooler (when (evidence/joined? evidence pooler-pod-joins)
                    (kubectl/items-of (get evidence pooler-type)))
-          :let [unbounded (filter without-resources?
-                                  (pooler-pods pods (kubectl/namespace-of pooler)
-                                               (kubectl/name-of pooler)))]
-          :when (seq unbounded)]
-      {:severity :info
-       :component (kubectl/namespace-name-of pooler)
-       :summary "pods run without resource requests or limits"
-       :hint "BestEffort QoS - set them on the Pooler's template"})))
+          :let [gaps (set (keep resource-gap
+                                (pooler-pods pods (kubectl/namespace-of pooler)
+                                             (kubectl/name-of pooler))))
+                gap (some gaps [:best-effort :requests :limits])]
+          :when gap]
+      (merge {:severity :info
+              :component (kubectl/namespace-name-of pooler)}
+             (resource-gap-findings gap)))))
 
 ;; --- a Service that resolves to nothing ---------------------------------------
 

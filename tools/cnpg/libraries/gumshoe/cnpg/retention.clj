@@ -20,18 +20,19 @@
 
 (def ^:private unit-factors
   {"" 1048576.0 ;; postgres reads a bare number for this setting as megabytes
-   "b" 1.0 "kb" 1024.0 "mb" 1048576.0 "gb" 1073741824.0 "tb" 1.099511627776E12})
+   "B" 1.0 "kB" 1024.0 "MB" 1048576.0 "GB" 1073741824.0 "TB" 1.099511627776E12})
 
 (defn parse-size
   "A postgres size setting as bytes, :unbounded for -1, or nil when it does not
-   parse. The units are postgres's own (kB, MB, GB, TB), which are binary and
-   spelled unlike a Kubernetes quantity's."
+   parse. The units are postgres's own (B, kB, MB, GB, TB), binary and
+   case-sensitive as postgres reads them, so `10gb` or a Kubernetes quantity
+   like `10Gi` is a value postgres refuses and parses to nil here."
   [value]
-  (let [text (str/lower-case (str/trim (str value)))]
+  (let [text (str/trim (str value))]
     (cond
       (str/blank? text) nil
       (= "-1" text) :unbounded
-      :else (when-let [[_ number unit] (re-matches #"(\d+(?:\.\d+)?)\s*([a-z]*)" text)]
+      :else (when-let [[_ number unit] (re-matches #"(\d+(?:\.\d+)?)\s*([A-Za-z]*)" text)]
               (when-let [factor (get unit-factors unit)]
                 (* (Double/parseDouble number) factor))))))
 
@@ -41,9 +42,18 @@
   [cluster]
   (parse-size (get-in cluster [:spec :postgresql :parameters (keyword parameter)])))
 
+(defn wal-volume
+  "The volume pg_wal lives on and therefore the one an abandoned slot fills:
+   walStorage when the cluster declares it, the data volume otherwise. As
+   {:section :walStorage|:storage :bytes}."
+  [cluster]
+  (let [section (if (get-in cluster [:spec :walStorage]) :walStorage :storage)]
+    {:section section
+     :bytes (quantity/quantity->number (get-in cluster [:spec section :size]))}))
+
 (defn volume-bytes
   [cluster]
-  (quantity/quantity->number (get-in cluster [:spec :storage :size])))
+  (:bytes (wal-volume cluster)))
 
 (def share-of-volume
   "How much of a volume a cap may promise and still be a floor. A cap the size
@@ -64,14 +74,14 @@
   [cluster]
   (let [raw (get-in cluster [:spec :postgresql :parameters (keyword parameter)])
         cap (cap-of cluster)
-        volume (volume-bytes cluster)]
+        {volume :bytes section :section} (wal-volume cluster)]
     (cond
       (nil? raw) {:state :unset}
       (= :unbounded cap) {:state :unbounded :raw (str raw)}
       (nil? cap) {:state :unknown :raw (str raw)}
       (and volume (> cap (* share-of-volume volume)))
-      {:state :oversized :raw (str raw) :cap cap :volume volume}
-      :else {:state :bounded :raw (str raw) :cap cap :volume volume})))
+      {:state :oversized :raw (str raw) :cap cap :volume volume :section section}
+      :else {:state :bounded :raw (str raw) :cap cap :volume volume :section section})))
 
 (defn exposed?
   [assessment]

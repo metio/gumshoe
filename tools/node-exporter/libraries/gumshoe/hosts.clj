@@ -85,6 +85,17 @@
             :boot-time (when boot (str (Instant/ofEpochSecond boot)))
             :up (when (some? up) (pos? up))}))))
 
+(def answer-keys
+  "The evidence key per query whose facts a check judges: true when that
+   query answered, nil when it failed, so a check joining it is unread
+   rather than judging facts nobody read."
+  {:up "up-answered" :cores "cores-answered" :memory "memory-answered"})
+
+(defn answered
+  "{evidence-key true-or-nil} for the queries of answer-keys."
+  [answers]
+  (into {} (for [[q k] answer-keys] [k (when (:ok (get answers q)) true)])))
+
 (defn failures
   "{query-name error} of the answers that failed."
   [answers]

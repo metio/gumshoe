@@ -17,7 +17,7 @@
           retention/parameter))
 
 (defn- finding
-  [cluster {:keys [state raw cap volume]}]
+  [cluster {:keys [state raw cap volume section]}]
   (merge
    {:severity :warning
     :component (kubectl/namespace-name-of cluster)}
@@ -27,10 +27,11 @@
                         "postgres rather than slowing it: " fix)}
      :unbounded {:summary (format "%s is -1, so slot retention is unbounded" retention/parameter)
                  :hint (str "-1 is the default and means no limit: " fix)}
-     :oversized {:summary (format "%s is %s of a %s volume, which is no floor"
+     :oversized {:summary (format "%s is %s of a %s %s volume, which is no floor"
                                   retention/parameter
                                   (retention/describe-bytes cap)
-                                  (retention/describe-bytes volume))
+                                  (retention/describe-bytes volume)
+                                  (name section))
                  :hint (str "a cap this large invalidates no slot before the volume fills: " fix)}
      :unknown {:summary (format "%s is set to %s, which does not parse as a size"
                                 retention/parameter raw)

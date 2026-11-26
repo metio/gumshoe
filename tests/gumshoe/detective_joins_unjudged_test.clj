@@ -455,14 +455,16 @@
         (is (empty? ((:detect check) answered)))))))
 
 (deftest without-the-guard-only-a-silent-check-keeps-the-property
-  ;; pins what each guard holds back: a :partial or :false-finding check
-  ;; reports on a missing joined read once its guard is disabled, so the
-  ;; property fails; a :silent check reports nothing either way, so its
-  ;; :joins alone keeps it from passing
+  ;; pins what each guard holds back: a :partial or :false-finding check's
+  ;; detect function reports on a missing joined read once its guard is
+  ;; disabled, so the property fails; a :silent check reports nothing either
+  ;; way, so its :joins alone keeps it from passing
   (with-redefs [evidence/joined? (constantly true)]
     (doseq [{:keys [unguarded] :as case} cases]
       (testing (str (label case) " " unguarded)
-        (is (= (= :silent unguarded) (boolean (property-holds? [case]))))))))
+        (is (= (= :silent unguarded)
+               (boolean (:pass? (tc/quick-check trials (joins/no-missing-joined-read-detects [case])
+                                                :seed seed)))))))))
 
 (deftest the-generated-evidence-is-not-vacuous
   ;; the same generator with every read answered reaches findings for every

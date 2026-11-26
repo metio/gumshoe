@@ -54,8 +54,12 @@
   (is (= {:missing ["w4"] :unexpected ["w3"]}
          (hosts/compare-hosts ["W1" "w2" "w4"] (hosts/rows "node" answers)))))
 
-(defn- run [evidence]
-  (let [checked (detective/mark-unread detectives/detectives evidence)]
+(defn- run
+  "The detectives over evidence whose queries all answered, unless the
+   evidence itself says otherwise."
+  [evidence]
+  (let [evidence (merge (zipmap (vals hosts/answer-keys) (repeat true)) evidence)
+        checked (detective/mark-unread detectives/detectives evidence)]
     {:checked checked :findings (detective/run-detectives checked evidence)}))
 
 (defn- summaries [findings] (set (map (juxt :component :summary) findings)))

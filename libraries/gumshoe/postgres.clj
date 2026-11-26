@@ -179,9 +179,11 @@
    type, and repeats on every row the total over all rows, the settings that
    decide the connection ceiling, whether the transaction was read-only and
    whether the server is a standby. The total lets the parser refuse an answer
-   that lost rows. reserved_connections exists from PostgreSQL 16 and reads
+   that lost rows. Our own session is left out: it holds a slot only while we
+   read, and counting it would report a cluster one slot below its ceiling as
+   at it. reserved_connections exists from PostgreSQL 16 and reads
    as 0 before."
-  "SELECT coalesce(host(client_addr), '') AS client_addr, usename, application_name, state, backend_type, count(*) AS backends, sum(count(*)) OVER () AS total, current_setting('max_connections') AS max_connections, current_setting('superuser_reserved_connections') AS superuser_reserved_connections, coalesce(current_setting('reserved_connections', true), '0') AS reserved_connections, current_setting('transaction_read_only') AS read_only, pg_is_in_recovery() AS in_recovery FROM pg_stat_activity GROUP BY 1, 2, 3, 4, 5 ORDER BY 6 DESC, 1, 2, 3, 4, 5")
+  "SELECT coalesce(host(client_addr), '') AS client_addr, usename, application_name, state, backend_type, count(*) AS backends, sum(count(*)) OVER () AS total, current_setting('max_connections') AS max_connections, current_setting('superuser_reserved_connections') AS superuser_reserved_connections, coalesce(current_setting('reserved_connections', true), '0') AS reserved_connections, current_setting('transaction_read_only') AS read_only, pg_is_in_recovery() AS in_recovery FROM pg_stat_activity WHERE pid <> pg_backend_pid() GROUP BY 1, 2, 3, 4, 5 ORDER BY 6 DESC, 1, 2, 3, 4, 5")
 
 (def ^:private read-only-session
   "The connection string: the postgres database, every transaction read-only
