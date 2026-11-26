@@ -70,26 +70,117 @@ The older names keep working and print exactly the same:
 
 ## Task lists
 
-`gumshoe.progress` draws a live task list that repaints in place on a
-terminal and prints each row once anywhere else:
+`gumshoe.progress` draws a live task list: on a terminal each row repaints
+in place as its work runs and settles; anywhere else each row prints once,
+when it settles. A mutation book's post-checks and the prerequisites of
+every book run through it, and a book with its own `:action` renders its
+phases with the same calls.
+
+### Steps one after another
+
+`run-steps` takes a list of steps, runs them in order and returns one result
+per step:
 
 ```clojure
 (require '[gumshoe.progress :as progress])
 
-;; steps one after another; stops at the first failure unless told not to
-(progress/checklist [["kubectl installed" #(command/installed? "kubectl")]
-                     ["helm installed" #(command/installed? "helm")]]
-                    {:stop-on-failure? false})
+(progress/run-steps
+ [{:label "database restored" :run #(restored? ctx)}
+  {:label "ingress switched"  :run #(switched? ctx)}]
+ {:stop-on-failure? false})
+;; => [{:label "database restored" :status :done :ok? true :value true}
+;;     {:label "ingress switched" :status :failed :ok? false :value false}]
+```
 
-;; tasks running in parallel; returns their values in order
+What `:run` returns decides how its row ends:
+
+| `:run` returns or throws | Row | `:ok?` |
+|---|---|---|
+| `true`, or any other truthy value that is not a map | `:done` | yes |
+| `false` or `nil` | `:failure` | no |
+| `{:ok? true :value v :label "…"}` | `:done`, label replaced | yes |
+| `{:ok? false :reason "…"}` | `:failure`, reason underneath | no |
+| `{:unread? true :reason "…"}` | `:not-yet`, reason underneath | no |
+| `{:skipped? true}` | `:skipped` | yes |
+| a map without `:ok?` | `:failure` | no |
+| a throw | `:failure` with its message | no |
+| a throw from a read that did not answer | `:not-yet`, "could not read: …" | no |
+
+A step is drawn `:done` only when it said so. One that could not read its
+answer, threw, or returned a map that names no verdict never is. By default
+the first step that is not ok stops the rest, which stay `:not-yet` and come
+back with `:status :pending`; `{:stop-on-failure? false}` runs every step.
+`checklist` is the same list for `[label thunk]` pairs, answering only
+whether every step held.
+
+### Phases that are not a static list
+
+A book that discovers its phases as it goes, or runs some of them in
+parallel, opens a board and drives the rows itself. This is the shape of a
+status report that reads its answer through about 48 kubectl calls in four
+phases:
+
+```clojure
+(progress/with-board [board]
+  (let [phases [["database restored" database-reads]
+                ["secrets copied" secret-reads]
+                ["deployment adopted" deployment-reads]
+                ["ingress switched" ingress-reads]]]
+    (mapv (fn [[label reads]]
+            (progress/run! board label
+                           (fn []
+                             (let [answers (vec (map-indexed
+                                                 (fn [i read]
+                                                   (progress/status! (format "%d of %d reads" (inc i) (count reads)))
+                                                   (read))
+                                                 reads))]
+                               (cond
+                                 (some nil? answers) {:unread? true :reason "a read did not answer"}
+                                 (every? true? answers) {:ok? true}
+                                 :else {:ok? false})))))
+          phases)))
+```
+
+- `(progress/add! board label)` adds a row, not yet started, and returns its
+  index; `(progress/run! board label-or-index thunk)` runs work as that row
+  and settles it with what the work returned or threw.
+- `(progress/start! board i)` and `(progress/settle! board i returned)` do
+  the same in two calls, for work that does not fit one function.
+- `(progress/status! "12 of 48 reads")` replaces the running row's status
+  line. Off a terminal it prints the line at once, so a log still shows the
+  wait as it happens. Outside a list it prints an `:in-progress` item.
+- `with-board` returns what its body returned. When the body ends, normally
+  or by a throw, every row is printed for good, rows never started as
+  `:not-yet`.
+
+### Printing inside a step
+
+What a step prints on stderr while the list is open is kept and drawn under
+its row, so a repaint never overwrites it; on a terminal the last lines show
+while the step runs. A step's result on stdout still goes to stdout when
+stdout is a pipe or a file, so `--output json | jq` keeps working. A list or
+spinner started inside a step prints plain lines into that step's text.
+
+A step must not run a child process that writes to the terminal directly
+(an effect streaming its output): that output bypasses the list and the next
+repaint overwrites it.
+
+### Parallel tasks
+
+`watch-futures!` animates a set of tasks running at once and returns their
+values in order once all are done:
+
+```clojure
 (progress/watch-futures! [["pods" (future (read-pods))]
                           ["events" (future (read-events))]])
 ```
 
-A pending row shows the `:not-yet` mark, a running one the theme's spinner,
-a finished one `:done`, and a failed one `:failure`. A step's thunk may
-return `{:ok? true :label "kubectl (v1.36)"}` to replace its label with what
-it found.
+### Output off a terminal
+
+When stderr is not a terminal, or `NO_COLOR` or `--no-color` is set, a list
+writes plain lines: no cursor movement and no colour, also in what its
+steps printed. Pass `{:live? false}` to `run-steps` or `with-board` to ask
+for plain lines anyway.
 
 ## Tables and commands
 

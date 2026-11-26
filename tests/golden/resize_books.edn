@@ -333,9 +333,9 @@
     "  ▸ kubectl --namespace=shop wait --for=delete statefulset/web --timeout=120s"
     "  ▸ kubectl apply --filename - (with stdin)"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: all 2 PVCs report capacity 20Gi"
-    "✅ verified: StatefulSet shop/web exists again with the new template"
-    "✅ verified: every pod of the StatefulSet is Running"],
+    "  ✅ verified: all 2 PVCs report capacity 20Gi"
+    "  ✅ verified: StatefulSet shop/web exists again with the new template"
+    "  ✅ verified: every pod of the StatefulSet is Running"],
    :result true,
    :banner "DONE - applied and verified",
    :recovery [],
@@ -515,9 +515,10 @@
     "  ▸ kubectl --namespace=shop wait --for=delete statefulset/web --timeout=120s"
     "  ▸ kubectl apply --filename - (with stdin)"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: all 2 PVCs report capacity 20Gi"
-    "✅ verified: StatefulSet shop/web exists again with the new template"
-    "❌ NOT verified within 0s: every pod of the StatefulSet is Running"],
+    "  ✅ verified: all 2 PVCs report capacity 20Gi"
+    "  ✅ verified: StatefulSet shop/web exists again with the new template"
+    "  ❌ every pod of the StatefulSet is Running"
+    "    NOT verified within 0s: every pod of the StatefulSet is Running"],
    :result false,
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
@@ -751,10 +752,11 @@
     "  ▸ kubectl --namespace=shop wait --for=delete statefulset/web --timeout=120s"
     "  ▸ kubectl apply --filename - (with stdin)"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "🔶 could not confirm within 0s (best effort): all 2 PVCs report capacity 20Gi"
-    "🔶 the operation itself reported no error - confirm by hand if in doubt"
-    "✅ verified: StatefulSet shop/web exists again with the new template"
-    "✅ verified: every pod of the StatefulSet is Running"],
+    "  🔶 all 2 PVCs report capacity 20Gi"
+    "    could not confirm within 0s (best effort): all 2 PVCs report capacity 20Gi"
+    "    the operation itself reported no error - confirm by hand if in doubt"
+    "  ✅ verified: StatefulSet shop/web exists again with the new template"
+    "  ✅ verified: every pod of the StatefulSet is Running"],
    :result true,
    :banner
    "DONE - applied, NOT confirmed (best effort): all 2 PVCs report capacity 20Gi",
@@ -1151,9 +1153,11 @@
     "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
     "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: all 2 PVCs report capacity 20Gi"
-    "❌ NOT verified within 0s: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
-    "❌ NOT verified within 0s: every Prometheus pod is Running again under its StatefulSet"],
+    "  ✅ verified: all 2 PVCs report capacity 20Gi"
+    "  ❌ the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
+    "    NOT verified within 0s: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
+    "  ❌ every Prometheus pod is Running again under its StatefulSet"
+    "    NOT verified within 0s: every Prometheus pod is Running again under its StatefulSet"],
    :result false,
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
@@ -1293,9 +1297,10 @@
     "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
     "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: all 2 PVCs report capacity 20Gi"
-    "✅ verified: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
-    "❌ NOT verified within 0s: every Prometheus pod is Running again under its StatefulSet"],
+    "  ✅ verified: all 2 PVCs report capacity 20Gi"
+    "  ✅ verified: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
+    "  ❌ every Prometheus pod is Running again under its StatefulSet"
+    "    NOT verified within 0s: every Prometheus pod is Running again under its StatefulSet"],
    :result false,
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
@@ -1411,9 +1416,10 @@
     "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
     "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: all 2 PVCs report capacity 20Gi"
-    "❌ NOT verified within 0s: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
-    "✅ verified: every Prometheus pod is Running again under its StatefulSet"],
+    "  ✅ verified: all 2 PVCs report capacity 20Gi"
+    "  ❌ the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
+    "    NOT verified within 0s: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
+    "  ✅ verified: every Prometheus pod is Running again under its StatefulSet"],
    :result false,
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
@@ -1519,10 +1525,11 @@
     "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
     "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "🔶 could not confirm within 0s (best effort): all 2 PVCs report capacity 20Gi"
-    "🔶 the operation itself reported no error - confirm by hand if in doubt"
-    "✅ verified: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
-    "✅ verified: every Prometheus pod is Running again under its StatefulSet"],
+    "  🔶 all 2 PVCs report capacity 20Gi"
+    "    could not confirm within 0s (best effort): all 2 PVCs report capacity 20Gi"
+    "    the operation itself reported no error - confirm by hand if in doubt"
+    "  ✅ verified: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
+    "  ✅ verified: every Prometheus pod is Running again under its StatefulSet"],
    :result true,
    :banner
    "DONE - applied, NOT confirmed (best effort): all 2 PVCs report capacity 20Gi",
@@ -1622,9 +1629,9 @@
     "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
     "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: all 2 PVCs report capacity 20Gi"
-    "✅ verified: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
-    "✅ verified: every Prometheus pod is Running again under its StatefulSet"],
+    "  ✅ verified: all 2 PVCs report capacity 20Gi"
+    "  ✅ verified: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
+    "  ✅ verified: every Prometheus pod is Running again under its StatefulSet"],
    :result true,
    :banner "DONE - applied and verified",
    :recovery [],

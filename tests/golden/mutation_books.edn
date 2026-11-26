@@ -46,7 +46,8 @@
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ cmctl renew web-tls --context=ctx --namespace=shop"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: certificate shop/web-tls was reissued (revision above 0) and is Ready"],
+    "  ❌ certificate shop/web-tls was reissued (revision above 0) and is Ready"
+    "    NOT verified within 0s: certificate shop/web-tls was reissued (revision above 0) and is Ready"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -608,7 +609,8 @@
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ kubectl --namespace=batch patch cronjob nightly --type=merge --patch={\"spec\":{\"suspend\":true}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: CronJob batch/nightly is suspended"],
+    "  ❌ CronJob batch/nightly is suspended"
+    "    NOT verified within 0s: CronJob batch/nightly is suspended"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -1022,7 +1024,8 @@
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ kubectl replace --raw /api/v1/namespaces/stuck/finalize --filename - (with stdin)"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: namespace stuck is gone"],
+    "  ❌ namespace stuck is gone"
+    "    NOT verified within 0s: namespace stuck is gone"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -1207,7 +1210,8 @@
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ kubectl cordon n1"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: node n1 is unschedulable"],
+    "  ❌ node n1 is unschedulable"
+    "    NOT verified within 0s: node n1 is unschedulable"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -1367,8 +1371,9 @@
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ kubectl drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=30 --timeout=300s"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: node n1 is unschedulable"
-    "❌ NOT verified within 0s: no evictable pods remain on node n1"],
+    "  ✅ verified: node n1 is unschedulable"
+    "  ❌ no evictable pods remain on node n1"
+    "    NOT verified within 0s: no evictable pods remain on node n1"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -1660,7 +1665,8 @@
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ ssh cp-1 -- sudo crictl stop abc123"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: kube-apiserver was replaced and answers /readyz (was abc123)"],
+    "  ❌ kube-apiserver was replaced and answers /readyz (was abc123)"
+    "    NOT verified within 0s: kube-apiserver was replaced and answers /readyz (was abc123)"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -1893,7 +1899,8 @@
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ kubectl uncordon n1"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: node n1 is schedulable"],
+    "  ❌ node n1 is schedulable"
+    "    NOT verified within 0s: node n1 is schedulable"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -2170,7 +2177,8 @@
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ kubectl --namespace=shop delete orders.acme.cert-manager.io web-1 --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: invalid order shop/web-1 is cleared"],
+    "  ❌ invalid order shop/web-1 is cleared"
+    "    NOT verified within 0s: invalid order shop/web-1 is cleared"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -2329,7 +2337,8 @@
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ kubectl delete persistentvolume pv-1 --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: PersistentVolume pv-1 is gone"],
+    "  ❌ PersistentVolume pv-1 is gone"
+    "    NOT verified within 0s: PersistentVolume pv-1 is gone"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -2479,7 +2488,8 @@
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ kubectl --namespace=shop delete persistentvolumeclaim data --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: PersistentVolumeClaim shop/data is gone"],
+    "  ❌ PersistentVolumeClaim shop/data is gone"
+    "    NOT verified within 0s: PersistentVolumeClaim shop/data is gone"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -3127,7 +3137,8 @@
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ kubectl --namespace=shop scale deployment/web --replicas=3"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: Deployment shop/web runs 3 ready replica(s)"],
+    "  ❌ Deployment shop/web runs 3 ready replica(s)"
+    "    NOT verified within 0s: Deployment shop/web runs 3 ready replica(s)"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -5312,7 +5323,8 @@
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ kubectl --namespace=apps annotate jsonnetsnippets.jaas.metio.wtf site reconcile.fluxcd.io/requestedAt=<instant> --overwrite"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: JsonnetSnippet apps/site handled the reconcile request"],
+    "  ❌ JsonnetSnippet apps/site handled the reconcile request"
+    "    NOT verified within 0s: JsonnetSnippet apps/site handled the reconcile request"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -5502,7 +5514,8 @@
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ kubectl --namespace=apps patch jsonnetsnippets.jaas.metio.wtf site --type=merge --patch {\"spec\":{\"suspend\":false}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: JsonnetSnippet apps/site is no longer suspended"],
+    "  ❌ JsonnetSnippet apps/site is no longer suspended"
+    "    NOT verified within 0s: JsonnetSnippet apps/site is no longer suspended"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -5707,7 +5720,8 @@
     "  consumers keep serving the last published artifact while suspended"
     "  ▸ kubectl --namespace=apps patch jsonnetsnippets.jaas.metio.wtf site --type=merge --patch {\"spec\":{\"suspend\":true}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: JsonnetSnippet apps/site reports itself suspended"],
+    "  ❌ JsonnetSnippet apps/site reports itself suspended"
+    "    NOT verified within 0s: JsonnetSnippet apps/site reports itself suspended"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
@@ -6085,7 +6099,8 @@
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ kubectl --namespace=apps annotate stagesets.stages.metio.wtf site reconcile.fluxcd.io/requestedAt=<instant> stages.metio.wtf/update-now=<instant> --overwrite"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: StageSet apps/site handled the reconcile request and rolled the held update"],
+    "  ❌ StageSet apps/site handled the reconcile request and rolled the held update"
+    "    NOT verified within 0s: StageSet apps/site handled the reconcile request and rolled the held update"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery

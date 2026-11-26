@@ -20,7 +20,7 @@
      (banner :failure \"text\")           a full-width banner
      (print-table cols rows)             an aligned table
      (print-command \"kubectl\" ...)       the echo of a command about to run
-     gumshoe.progress/checklist          a live task list
+     gumshoe.progress/run-steps          a live task list of a book's own steps
 
    ok, error, warn, check-ok and check-error are the names lines had before
    outcomes were named; each prints the same as its `line`/`item` outcome.
@@ -251,11 +251,18 @@
                 (not no-color?)
                 (not no-color-flag?))))
 
+(def ^:dynamic *in-task-list*
+  "True while a gumshoe.progress task list collects what its steps print. A
+   spinner writing carriage returns there would land in a step's text, so
+   with-spinner prints its message once instead."
+  false)
+
 (defn- stderr-live?
   []
-  (animate? {:stderr-terminal? (terminal? 2)
+  (and (not *in-task-list*)
+       (animate? {:stderr-terminal? (terminal? 2)
              :no-color? (not (str/blank? (System/getenv "NO_COLOR")))
-             :no-color-flag? @no-color-flag?}))
+             :no-color-flag? @no-color-flag?})))
 
 (defn with-spinner
   "Runs thunk while animating a spinner with the message on stderr, so a slow

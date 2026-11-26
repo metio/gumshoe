@@ -160,7 +160,8 @@
     "  ▸ ssh mgr-1 -- ceph crash archive 2026-11-24T10:00:00.000000Z_1a2b"
     "  ▸ ssh mgr-1 -- ceph crash archive 2026-11-24T11:00:00.000000Z_3c4d"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the 2 confirmed crash report(s) are archived"],
+    "  ❌ the 2 confirmed crash report(s) are archived"
+    "    NOT verified within 0s: the 2 confirmed crash report(s) are archived"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery []},
@@ -410,7 +411,8 @@
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ ssh mgr-1 -- ceph osd in 3"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: osd.3 is marked in"],
+    "  ❌ osd.3 is marked in"
+    "    NOT verified within 0s: osd.3 is marked in"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
