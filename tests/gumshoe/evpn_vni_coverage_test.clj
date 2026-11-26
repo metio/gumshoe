@@ -63,6 +63,35 @@
      {:ifindex (+ 100 vni) :ifname (str "lo." vni)
       :linkinfo {:info_kind "vxlan" :info_data {:id vni :local "10.21.2.71" :port 4789}}})))
 
+(defn- ip-links
+  "What `ip -d -j link show` prints for these links: each bridge port's flags
+  in its own `linkinfo.info_slave_data`, as iproute2 prints them. A link
+  without `:slave` is no bridge port."
+  [links]
+  (json/generate-string
+   (for [{:keys [ifname master kind slave-kind slave]} links]
+     (cond-> {:ifindex 7 :ifname ifname :flags ["BROADCAST" "MULTICAST" "UP" "LOWER_UP"] :mtu 1500}
+       master (assoc :master master)
+       slave (assoc :linkinfo {:info_kind (or kind "tun")
+                               :info_slave_kind (or slave-kind "bridge")
+                               :info_slave_data slave})))))
+
+(defn- port
+  "A tap or overlay device enslaved to br4200 with these flags."
+  [ifname flags]
+  {:ifname ifname :master "br4200" :kind (if (str/starts-with? ifname "lo.") "vxlan" "tun")
+   :slave (merge {:state "forwarding" :priority 32 :cost 100 :hairpin false :guard false
+                  :root_block false :fastleave false :proxy_arp false :proxy_arp_wifi false
+                  :mcast_flood true :neigh_suppress false :isolated false}
+                 flags)})
+
+(def ^:private bridge-detail-json
+  "What `bridge -d -j link show` printed on an infra.run staging hypervisor on
+  2026-11-26 (Ubuntu 20.04.6, iproute2-ss200127), the flags list filled in:
+  the `-d` detail object stands where a key belongs, so it is no JSON."
+  (str "[{\"ifindex\":7,\"ifname\":\"docker0\",\"flags\":[\"NO-CARRIER\",\"BROADCAST\",\"MULTICAST\",\"UP\"],"
+       "\"mtu\":1500,\"master\":\"docker0\",{\"ifname\":\"docker0\",\"vlans\":[]}}]"))
+
 (def ^:private fabric
   {emu {:links (links-json carried) :fdb (table emu 25)}
    cobra {:links (links-json carried) :fdb (table cobra 9)}})
@@ -81,7 +110,7 @@
       (= line "exit 0") (ok "")
       (= line "ip -d -j link show type vxlan") (ok links)
       (= line "bridge fdb show") (ok fdb)
-      (= line "bridge -d -j link show") (ok ports)
+      (= line "ip -d -j link show") (ok ports)
       (re-find #"^vtysh -c show evpn vni \d+$" line) (ok " Local VTEP IP: 10.21.2.71\n")
       (re-find #"^vtysh -c show evpn mac vni \d+$" line) (ok "02:00:0a:18:00:13 local one-278-0 1/0\n")
       (re-find #"^vtysh -c show bgp vni \d+ vtep \S+ json$" line)
@@ -222,16 +251,40 @@
   (testing "silence or another shape is unread"
     (is (false? (:read? (evpn/parse-vxlan-links ""))))
     (is (false? (:read? (evpn/parse-vxlan-links "Object \"link\" is unknown, try \"ip help\".\n"))))
-    (is (false? (:read? (evpn/parse-vxlan-links "{\"ifname\":\"lo.4200\"}"))))))
+    (is (false? (:read? (evpn/parse-vxlan-links "{\"ifname\":\"lo.4200\"}")))))
+  (testing "a list that is no JSON is unread, never a crash"
+    (is (false? (:read? (evpn/parse-vxlan-links bridge-detail-json))))))
 
 (deftest parsing-the-bridge-ports
-  (is (= {:read? true :ports {"one-301-0" {:master "br4200" :learning false :flood true}
-                              "lo.4200" {:master "br4200" :learning nil :flood nil}}}
-         (evpn/parse-bridge-ports
-          (str "[{\"ifname\":\"one-301-0\",\"master\":\"br4200\",\"learning\":false,\"flood\":true},"
-               "{\"ifname\":\"lo.4200\",\"master\":\"br4200\"}]"))))
+  (testing "each port's flags come from its own info_slave_data"
+    (is (= {:read? true :ports {"one-140-0" {:master "br4200" :learning true :flood true}
+                                "lo.4200" {:master "br4200" :learning false :flood true}
+                                "one-301-0" {:master "br4200" :learning nil :flood nil}}}
+           (evpn/parse-bridge-ports
+            (ip-links [{:ifname "eno1"}
+                       (port "one-140-0" {:learning true :flood true})
+                       (port "lo.4200" {:learning false :flood true})
+                       {:ifname "one-301-0" :master "br4200" :slave {:state "forwarding"}}
+                       {:ifname "eno2" :master "bond0" :kind "device" :slave-kind "bond"
+                        :slave {:state "ACTIVE" :learning true}}])))))
+  (testing "a version printing on/off words reads the same"
+    (is (= {:master "br4200" :learning false :flood true}
+           (get-in (evpn/parse-bridge-ports (ip-links [(port "one-301-0" {:learning "off" :flood "on"})]))
+                   [:ports "one-301-0"]))))
+  (testing "a flag in neither form is unread, never off"
+    (is (nil? (get-in (evpn/parse-bridge-ports (ip-links [(port "one-301-0" {:learning 0})]))
+                      [:ports "one-301-0" :learning]))))
+  (testing "flags outside info_slave_data are not the port's"
+    (is (= {} (:ports (evpn/parse-bridge-ports
+                       "[{\"ifname\":\"one-301-0\",\"master\":\"br4200\",\"learning\":false}]")))))
   (is (false? (:read? (evpn/parse-bridge-ports ""))))
   (is (false? (:read? (evpn/parse-bridge-ports "not json")))))
+
+(deftest invalid-json-is-unread-with-the-parser-error
+  (let [r (evpn/parse-bridge-ports bridge-detail-json)]
+    (is (false? (:read? r)))
+    (is (str/starts-with? (:error r) "invalid JSON: "))
+    (is (<= (count (:error r)) (+ (count "invalid JSON: ") 161)))))
 
 ;; --- the book passes the choice through ------------------------------------------------
 
@@ -317,8 +370,8 @@
 (defn- ports
   [learning]
   {emu (evpn/parse-bridge-ports
-        (json/generate-string [{:ifname "one-301-0" :master "br4200" :learning learning :flood true}
-                               {:ifname "lo.4200" :master "br4200" :learning false :flood true}]))})
+        (ip-links [(port "one-301-0" {:learning learning :flood true})
+                   (port "lo.4200" {:learning false :flood true})]))})
 
 (defn- conflict
   [frr learning]
@@ -344,13 +397,13 @@
        "stands behind the entry is unknown. "))
 
 (def ^:private learning-off
-  (str "one-301-0 has learning off, as `bridge -d -j link show` reads it, so a frame from the guest "
+  (str "one-301-0 has learning off, as `ip -d -j link show` reads it, so a frame from the guest "
        "does not move the bridge's entry back to the tap: frames the bridge forwards out of lo.4200 "
        "go to 10.21.2.70, and traffic for the guest is black-holed rather than flooded"))
 
 (def ^:private learning-on
-  (str "one-301-0 has learning on, as `bridge -d -j link show` reads it, so a frame from the guest "
-       "can move the bridge's entry back to the tap; until it does, frames the bridge forwards out "
+  (str "one-301-0 has learning on, as `ip -d -j link show` reads it, so a frame from the guest "
+       "may move the bridge's entry back to the tap; until it does, frames the bridge forwards out "
        "of lo.4200 go to 10.21.2.70. Whether a learned frame replaces an entry EVPN installed "
        "(extern_learn) depends on the kernel and was not read"))
 
@@ -381,7 +434,7 @@
 (deftest a-tap-the-bridge-does-not-list-is-unread
   (let [f (first (evpn-detectives/detect-fdb-conflicts
                   {"evpn-fdb" collision-fdb
-                   "evpn-bridge-ports" {emu (evpn/parse-bridge-ports "[{\"ifname\":\"lo.4200\",\"learning\":false}]")}}))]
+                   "evpn-bridge-ports" {emu (evpn/parse-bridge-ports (ip-links [(port "lo.4200" {:learning false :flood true})]))}}))]
     (is (= "unread" (:tap-learning f)))
     (is (= "one-301-0 is not listed among the bridge ports" (:bridge-ports-error f)))))
 
@@ -389,12 +442,58 @@
   (let [hosts {emu {:links (links-json carried)
                     :fdb (str (table emu 2) "\n" (str/join "\n" (concat (learned guest 4200 dead)
                                                                        [(str guest " dev one-301-0 master br4200")])))
-                    :ports (json/generate-string [{:ifname "one-301-0" :master "br4200" :learning false :flood false}])}
+                    :ports (ip-links [(port "one-301-0" {:learning false :flood false})])}
                cobra {:links (links-json carried) :fdb (table cobra 2)}}
         {:keys [evidence seen]} (collect hosts configured {})
-        asked (set (for [[host command] seen :when (= ["bridge" "-d" "-j" "link" "show"] command)] host))
+        asked (set (for [[host command] seen :when (= ["ip" "-d" "-j" "link" "show"] command)] host))
         f (first (findings evidence "evpn-fdb-conflict"))]
     (is (= #{emu} asked))
     (is (= "off" (:tap-learning f)))
     (is (= "off" (:tap-flood f)))
     (is (str/ends-with? (:hint f) "traffic for the guest is black-holed rather than flooded"))))
+
+(defn- conflict-on
+  "The collision finding when emu's links read as `ports-output`."
+  [ports-output]
+  (first (evpn-detectives/detect-fdb-conflicts
+          {"evpn-fdb" collision-fdb
+           "evpn-bridge-ports" {emu (evpn/parse-bridge-ports ports-output)}})))
+
+(deftest the-tap-flag-is-the-taps-never-the-overlay-devices
+  (testing "tap learning on, lo.4200 learning off"
+    (let [f (conflict-on (ip-links [(port "lo.4200" {:learning false :flood false})
+                                    (port "one-301-0" {:learning true :flood true})]))]
+      (is (= "on" (:tap-learning f)))
+      (is (= "on" (:tap-flood f)))
+      (is (str/includes? (:hint f) "one-301-0 has learning on"))
+      (is (not (str/includes? (:hint f) "learning off")))))
+  (testing "tap learning off, lo.4200 learning on"
+    (let [f (conflict-on (ip-links [(port "lo.4200" {:learning true :flood true})
+                                    (port "one-301-0" {:learning false :flood true})]))]
+      (is (= "off" (:tap-learning f)))
+      (is (str/includes? (:hint f) "one-301-0 has learning off")))))
+
+(deftest the-staging-reading-states-no-black-hole
+  (let [f (conflict-on (ip-links [(port "one-301-0" {:learning true :flood true})
+                                  (port "lo.4200" {:learning false :flood true})]))]
+    (is (= :critical (:severity f)))
+    (is (= ["on" "on"] [(:tap-learning f) (:tap-flood f)]))
+    (is (not (re-find #"(?i)black-hol" (:hint f))))
+    (is (str/includes? (:hint f) "may move the bridge's entry back to the tap"))
+    (is (str/includes? (:hint f) "depends on the kernel and was not read"))))
+
+(deftest the-bridge-detail-json-reads-as-unread
+  (let [f (conflict-on bridge-detail-json)]
+    (is (= :critical (:severity f)))
+    (is (= ["unread" "unread"] [(:tap-learning f) (:tap-flood f)]))
+    (is (str/starts-with? (:bridge-ports-error f) "invalid JSON: "))
+    (is (str/includes? (:hint f) "If one-301-0 does not learn (nolearning)"))))
+
+(deftest a-host-answering-with-invalid-json-is-unread-in-a-scan
+  (let [hosts {emu {:links (links-json carried)
+                    :fdb (str/join "\n" (concat (learned guest 4200 dead)
+                                                [(str guest " dev one-301-0 master br4200")]))
+                    :ports bridge-detail-json}}
+        f (first (findings (:evidence (collect hosts configured {})) "evpn-fdb-conflict"))]
+    (is (= "unread" (:tap-learning f)))
+    (is (str/starts-with? (:bridge-ports-error f) "invalid JSON: "))))
