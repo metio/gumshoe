@@ -13,6 +13,7 @@
   Evidence is per host, so a disagreement between two hosts about the same MAC
   is visible without asking a router anything."
   (:require [clojure.string :as str]
+            [gumshoe.catalog :as catalog]
             [gumshoe.evpn :as evpn]
             [gumshoe.tally :as tally]))
 
@@ -422,11 +423,13 @@
                      (if (= 1 (count local-tap-macs)) "sits" "sit")
                      " on a local tap, which evpn-fdb-conflict reports on its own: "
                      (str/join ", " local-tap-macs) ". "))
-              "To clear them, delete on this host each `dst " vtep "` row and the bridge rows "
-              "its MAC has on the same overlay device ("
+              "`" (catalog/run-command "runbooks/fabric/clear_orphan_fdb.clj") " --vtep " vtep
+              " --hosts " host "` clears them after one confirmation, or leave out --hosts to "
+              "clear every fabric host naming " vtep ". It deletes each `dst " vtep "` row and the "
+              "bridge rows its MAC has on the same overlay device ("
               (tally/counted (count bridge-rows) "bridge row" "bridge rows")
-              ", which name no VTEP and are not counted above), and leave every tap row in "
-              "place: the row and delete command of each are in the finding's data")
+              ", which name no VTEP and are not counted above), and leaves every tap row and "
+              "static pin in place: the row and delete command of each are in the finding's data")
    :host host
    :vtep vtep
    :vnis vnis

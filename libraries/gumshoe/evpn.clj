@@ -147,6 +147,30 @@
           :else
           (recur more (update row :flags conj token)))))))
 
+(defn fdb-row
+  "One row of `bridge fdb show` on host as the checks read it, with no VNI
+  read attached, or nil for a line that does not start with a MAC or names no
+  device."
+  [host line]
+  (let [{:keys [mac values flags state]} (parse-fdb-line line)
+        dev (get values "dev")]
+    (when (and mac dev)
+      {:host host
+       :mac mac
+       :dev dev
+       :dst (get values "dst")
+       :vlan (get values "vlan")
+       :entry-vni (get values "vni")
+       :port (get values "port")
+       :via (get values "via")
+       :master (get values "master")
+       :self? (contains? flags "self")
+       :state state
+       :flags flags
+       :line (str/trim line)
+       :static? (= "static" state)
+       :extern-learn? (contains? flags "extern_learn")})))
+
 (defn parse-fdb
   "Rows of `bridge fdb show`, kept only for this VNI: its own VXLAN device and the
   guest taps.
@@ -167,29 +191,26 @@
   [vni host output]
   (let [vxlan-dev (str "lo." vni)]
     (for [line (str/split-lines (or output ""))
-          :let [{:keys [mac values flags state]} (parse-fdb-line line)
-                dev (get values "dev")
+          :let [{:keys [dev] :as row} (fdb-row host line)
                 other-overlay? (and dev
                                     (re-matches vxlan-dev-pattern dev)
                                     (not= dev vxlan-dev))]
-          :when (and mac dev (not other-overlay?))]
-      {:host host
-       :mac mac
-       :dev dev
-       :dst (get values "dst")
-       :vlan (get values "vlan")
-       :entry-vni (get values "vni")
-       :port (get values "port")
-       :via (get values "via")
-       :master (get values "master")
-       :self? (contains? flags "self")
-       :state state
-       :flags flags
-       :line (str/trim line)
-       :read-vni vni
-       :vxlan? (= dev vxlan-dev)
-       :static? (= "static" state)
-       :extern-learn? (contains? flags "extern_learn")})))
+          :when (and row (not other-overlay?))]
+      (assoc row
+             :read-vni vni
+             :vxlan? (= dev vxlan-dev)))))
+
+(defn overlay-vni
+  "The VNI an `lo.<vni>` overlay device is named after, or nil for any other
+  device, a guest tap or a bridge among them."
+  [dev]
+  (some->> dev (re-matches vxlan-dev-pattern) second parse-long-or-nil))
+
+(defn parse-fdb-table
+  "Every row of one host's `bridge fdb show`, whatever device or VNI it
+  belongs to, in the order the table printed them."
+  [host output]
+  (vec (keep #(fdb-row host %) (str/split-lines (or output "")))))
 
 (def ^:private interval-patterns
   "The three shapes FRR's frrtime_to_interval prints an age in: under a day,
