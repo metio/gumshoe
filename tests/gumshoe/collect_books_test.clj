@@ -178,8 +178,10 @@
                            :username "u" :password "p"}
                     :stubs (fn [evidence] {#'hosts/read! (recording :collect :answers)
                                            #'hosts/rows (constantly (get evidence "hosts"))
-                                           #'hosts/failures (constantly (get evidence "failed"))})
-                    :evidence {"source" "https://prometheus.example.org" "hosts" node-exporter-rows "failed" []}
+                                           #'hosts/failures (constantly (get evidence "failed"))
+                                           #'hosts/answered (constantly (select-keys evidence (vals hosts/answer-keys)))})
+                    :evidence {"source" "https://prometheus.example.org" "hosts" node-exporter-rows "failed" []
+                               "up-answered" true "cores-answered" true "memory-answered" true}
                     :detective "host-facts-complete"}
    "opennebula" {:path "tools/opennebula/runbooks/scan.clj"
                  :opts {:frontend "one.example.org"}

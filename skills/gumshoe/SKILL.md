@@ -191,8 +191,8 @@ and outcome; the path is printed after the final banner.
   nothing, for example because the cluster does not serve that CRD or RBAC
   refused the read, or because the scope it judges selected no subjects, or
   because one of the reads it joins did not answer, so an empty finding list
-  from it proves nothing. Say so when you report a
-  clean result.
+  from it proves nothing; its only findings are ones naming a read that did
+  not answer. Say so when you report a clean result.
 - A book that judges against values from its options or env.edn names a
   missing one on stderr. The fabric detective without gateway VTEPs marks
   `evpn-gateway-only-mac` `unread`, adds an `evpn-inputs` warning naming it,
@@ -230,7 +230,7 @@ The detectives compose from one domain to the whole cluster:
 | `runbooks/detectives/security.clj`, `rbac.clj` | RBAC, pod security, network segmentation |
 | `runbooks/detectives/posture.clj` | probes, image tags, replicas, PDBs, deprecated APIs, template drift |
 | `runbooks/detectives/databases.clj` | CloudNativePG and db-operator; a CNPG Pooler declaring instances whose Service resolves to no ready EndpointSlice address is critical (`cnpg-pooler-endpoints`, component the Pooler), and the check is unread when the Pooler, Service or EndpointSlice read did not answer; it never execs into a pod |
-| `tools/cnpg/runbooks/scan.clj` | the databases scope plus the opt-in `cnpg-connections`: a CNPG cluster whose client backends reach `max_connections` less the superuser-reserved and reserved slots is critical (component the Cluster), naming the holders split into Running pods, addresses no Running pod holds and the local socket. It reads `pg_stat_activity` with one constant read-only `psql` statement through `kubectl exec` into the primary's `postgres` container, so this book alone needs `create` on `pods/exec` and declares it as a prerequisite; a cluster it could not read is a warning naming why (exec denied or unanswered, no primary, answered from recovery), and the check is unread when no cluster was read or the Cluster, pod or connection read did not answer |
+| `tools/cnpg/runbooks/scan.clj` | the databases scope plus the opt-in `cnpg-connections`: a CNPG cluster whose client backends reach `max_connections` less the superuser-reserved and reserved slots is critical (component the Cluster), naming the holders split into Running pods, addresses no Running pod holds and the local socket. It reads `pg_stat_activity` with one constant read-only `psql` statement through `kubectl exec` into the primary's `postgres` container, so this book alone needs `create` on `pods/exec` and declares it as a prerequisite; a cluster it could not read is a warning naming why (exec denied or unanswered, no primary, answered from recovery outside a replica cluster), and the check is unread when no cluster was read or the Cluster, pod or connection read did not answer |
 | `runbooks/detectives/observability.clj` | Prometheus, Alertmanager, ThanosRuler |
 | `runbooks/detectives/dns.clj` | nameservers, SOA replication, answer consistency |
 | `runbooks/detectives/mail.clj` | MX, SPF, DKIM, DMARC, rDNS, live SMTP/POP3/IMAP with TLS; without `--host` the services and rDNS checks are unread and no port is probed, without `--domain` the record checks are, and `mail-dkim` is unread when no selector answered |
@@ -392,9 +392,13 @@ mostly data:
   empty; a check that joins several reads (a Pooler to its Service and the
   Service's EndpointSlices) names them as `:joins` and is unread when any
   one of them is nil, so a read that did not answer never reads as an empty
-  side of the join. An unread check still runs, so its `:detect` returns
-  nothing unless `(gumshoe.evidence/joined? evidence reads)` holds; name the
-  reads once in a var and use it for `:joins`, `:requires` and that guard.
+  side of the join. The engine keeps no finding of an unread check except
+  those its `:detect` marks `:reports-unread true` - findings that say which
+  read did not answer and why - and a crash; the marker is removed from the
+  report. Guard `:detect` anyway, returning nothing unless
+  `(gumshoe.evidence/joined? evidence reads)` holds, so it is correct when
+  called directly; name the reads once in a var and use it for `:joins`,
+  `:requires` and that guard.
   Join every read whose absence would turn an object into a missing one or
   leave part of what the check covers unjudged (a kind of binding, a kind
   of owner), and leave out a read judged only when it answered, one that

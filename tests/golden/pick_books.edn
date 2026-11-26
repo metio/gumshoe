@@ -533,6 +533,7 @@
    [["kubectl"
      "--context=ctx"
      "--namespace=db"
+     "--request-timeout=30s"
      "exec"
      "pg-1"
      "-c"
@@ -540,6 +541,8 @@
      "--"
      "psql"
      "-At"
+     "-v"
+     "ON_ERROR_STOP=1"
      "-c"
      "select rolname || '|' || md5(rolpassword) from pg_authid\n    where rolcanlogin and rolpassword is not null order by rolname"]]},
   :surface

@@ -4214,7 +4214,9 @@
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
-    :kubectl-can-get ["scheduledbackups.postgresql.cnpg.io"],
+    :kubectl-can-get
+    ["scheduledbackups.postgresql.cnpg.io"
+     "clusters.postgresql.cnpg.io"],
     :kubectl-can-patch ["scheduledbackups.postgresql.cnpg.io"]},
    :select
    {:mode :one, :label "ScheduledBackup", :flag :scheduled-backup},
@@ -4231,7 +4233,7 @@
     ""
     "Needs:"
     "  tools: kubectl, fzf"
-    "  kubectl get: scheduledbackups.postgresql.cnpg.io"
+    "  kubectl get: scheduledbackups.postgresql.cnpg.io, clusters.postgresql.cnpg.io"
     "  kubectl patch: scheduledbackups.postgresql.cnpg.io"],
    :candidates
    {:mixed ["alpha/a" "zeta/b"],
@@ -4271,7 +4273,7 @@
    :destructive? false,
    :items
    ["suspend ScheduledBackup db/nightly - no backup of cluster pg starts on its schedule 0 0 3 * * * until it is resumed"
-    "the cluster's newest recovery point ages from now on; WAL archiving continues"],
+    "cluster pg was not found, so whether it archives WAL is unknown - without archiving, its newest backup is its newest recovery point and ages from now on"],
    :step "suspend scheduled backups",
    :plan
    [[:kubectl
@@ -4297,7 +4299,7 @@
    :destructive? false,
    :items
    ["suspend ScheduledBackup db/nightly - no backup of cluster pg starts on its schedule 0 0 3 * * * until it is resumed"
-    "the cluster's newest recovery point ages from now on; WAL archiving continues"],
+    "cluster pg was not found, so whether it archives WAL is unknown - without archiving, its newest backup is its newest recovery point and ages from now on"],
    :step "suspend scheduled backups",
    :plan
    [[:kubectl
@@ -4329,7 +4331,9 @@
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
-    :kubectl-can-get ["scheduledbackups.postgresql.cnpg.io"],
+    :kubectl-can-get
+    ["scheduledbackups.postgresql.cnpg.io"
+     "clusters.postgresql.cnpg.io"],
     :kubectl-can-patch ["scheduledbackups.postgresql.cnpg.io"]},
    :select
    {:mode :one, :label "ScheduledBackup", :flag :scheduled-backup},
@@ -4346,7 +4350,7 @@
     ""
     "Needs:"
     "  tools: kubectl, fzf"
-    "  kubectl get: scheduledbackups.postgresql.cnpg.io"
+    "  kubectl get: scheduledbackups.postgresql.cnpg.io, clusters.postgresql.cnpg.io"
     "  kubectl patch: scheduledbackups.postgresql.cnpg.io"],
    :candidates
    {:mixed ["alpha/a" "zeta/b"],
@@ -4357,7 +4361,7 @@
    :destructive? false,
    :items
    ["suspend ScheduledBackup db/nightly - no backup of cluster pg starts on its schedule 0 0 3 * * * until it is resumed"
-    "the cluster's newest recovery point ages from now on; WAL archiving continues"],
+    "cluster pg was not found, so whether it archives WAL is unknown - without archiving, its newest backup is its newest recovery point and ages from now on"],
    :step "suspend scheduled backups",
    :plan
    [[:kubectl

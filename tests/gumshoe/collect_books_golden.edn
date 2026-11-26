@@ -1229,7 +1229,8 @@
       "host-facts-complete"
       "declared-hosts-report"
       "reporting-hosts-declared"]
-     {"failed" [],
+     {"cores-answered" true,
+      "failed" [],
       "hosts"
       [{:host "w1",
         :cores 4,
@@ -1238,7 +1239,9 @@
         :os "Debian",
         :os-version "12",
         :up true}],
-      "source" "https://prometheus.example.org"}]]},
+      "memory-answered" true,
+      "source" "https://prometheus.example.org",
+      "up-answered" true}]]},
   "clean text"
   {:result true,
    :stdout
@@ -1257,7 +1260,8 @@
       "host-facts-complete"
       "declared-hosts-report"
       "reporting-hosts-declared"]
-     {"failed" [],
+     {"cores-answered" true,
+      "failed" [],
       "hosts"
       [{:host "w1",
         :cores 4,
@@ -1266,7 +1270,9 @@
         :os "Debian",
         :os-version "12",
         :up true}],
-      "source" "https://prometheus.example.org"}]]},
+      "memory-answered" true,
+      "source" "https://prometheus.example.org",
+      "up-answered" true}]]},
   "finding edn"
   {:result true,
    :stdout
@@ -1312,7 +1318,8 @@
       "host-facts-complete"
       "declared-hosts-report"
       "reporting-hosts-declared"]
-     {"failed" [],
+     {"cores-answered" true,
+      "failed" [],
       "hosts"
       [{:host "w1",
         :cores 4,
@@ -1321,7 +1328,9 @@
         :os "Debian",
         :os-version "12",
         :up true}],
-      "source" "https://prometheus.example.org"}]]},
+      "memory-answered" true,
+      "source" "https://prometheus.example.org",
+      "up-answered" true}]]},
   "finding text"
   {:result true,
    :stdout
@@ -1340,7 +1349,8 @@
       "host-facts-complete"
       "declared-hosts-report"
       "reporting-hosts-declared"]
-     {"failed" [],
+     {"cores-answered" true,
+      "failed" [],
       "hosts"
       [{:host "w1",
         :cores 4,
@@ -1349,7 +1359,9 @@
         :os "Debian",
         :os-version "12",
         :up true}],
-      "source" "https://prometheus.example.org"}]]}},
+      "memory-answered" true,
+      "source" "https://prometheus.example.org",
+      "up-answered" true}]]}},
  "opennebula"
  {"clean edn"
   {:result true,
