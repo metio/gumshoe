@@ -562,17 +562,73 @@
   [context type]
   (get-json context type "--all-namespaces"))
 
+(defn- not-found?
+  [err]
+  (boolean (re-find #"\(NotFound\)" (str err))))
+
+(defn- discovery-documents
+  "The parsed discovery documents of the results, or nil unless every one of
+   them exited cleanly and parsed: a version that did not answer may be the
+   one serving the type."
+  [results]
+  (let [docs (map #(when (zero? (:exit %)) (parse-json (:out %))) results)]
+    (when (and (seq results) (every? map? docs))
+      docs)))
+
+(defn unserved-in-discovery?
+  "Pure: whether discovery answered in full that a resource type is not
+   served. group-result is the `kubectl get --raw /apis/<group>` result, or
+   nil for the core group; version-results are the results of reading each
+   version's resource list (`/apis/<group>/<version>`, or `/api/v1` for the
+   core group). A group the API server answers NotFound for is not served.
+   A group it lists is judged by its versions' resource lists, and only when
+   every one of them answered: an aggregated API whose server is down still
+   has its group listed by the kube-apiserver, while its versions answer 503.
+   Anything else - a failed read, a type a version lists after all - is not
+   a confirmed absence."
+  [plural group-result version-results]
+  (cond
+    (and group-result (not (zero? (:exit group-result)))) (not-found? (:err group-result))
+    :else (boolean
+           (when-let [docs (discovery-documents version-results)]
+             (not-any? #(= plural (:name %)) (mapcat :resources docs))))))
+
+(defn- raw-result
+  [context path]
+  (execute-read ["kubectl" (str "--context=" context) request-timeout "get" "--raw" path]))
+
+(defn type-unserved?
+  "Whether the API server's discovery answers in full that type (plural or
+   plural.group) is not served. A kubectl get reports a type it finds no
+   mapping for as \"doesn't have a resource type\" both when the type is
+   not served and when discovery of its group failed and kubectl carried on
+   with what it did read, so that message alone never proves an absence."
+  [context type]
+  (let [[plural group] (str/split type #"\." 2)]
+    (if (str/blank? group)
+      (unserved-in-discovery? plural nil [(raw-result context "/api/v1")])
+      (let [group-result (raw-result context (str "/apis/" group))
+            versions (when (zero? (:exit group-result))
+                       (keep :version (:versions (parse-json (:out group-result)))))]
+        (unserved-in-discovery? plural group-result
+                                (map #(raw-result context (str "/apis/" group "/" %)) versions))))))
+
 (defn get-all-optional
   "Every object of a resource type the cluster may not serve, in every
    namespace: the parsed list, an empty list when the server answered that it
-   has no such type, or nil when the read did not answer. A check over a type
-   only some clusters serve (a CRD) can then join the read, so a failed read
-   is unread while a cluster without the type answers that nothing exists."
+   has no such type and its discovery confirms the type is not served, or nil
+   when the read did not answer. A check over a type only some clusters serve
+   (a CRD, an aggregated API) can then join the read, so a failed read - a
+   failed discovery of the type's group included - is unread while a cluster
+   without the type answers that nothing exists."
   [context type]
   (try
     (let [{:keys [ok? doc]} (binding [*strict-reads* true]
                               (get-json-result context type "--all-namespaces"))]
-      (if ok? doc {:items []}))
+      (cond
+        ok? doc
+        (type-unserved? context type) {:items []}
+        :else nil))
     (catch clojure.lang.ExceptionInfo e
       (when-not (::unread (ex-data e))
         (throw e)))))

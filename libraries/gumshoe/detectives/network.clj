@@ -22,8 +22,10 @@
 
 (def calico-policy-types
   "Calico's policy types. They are served only where Calico runs, so their
-   collector answers an empty list on a cluster without them and nil when
-   the read fails (registered in gumshoe.detectives.registry)."
+   collector answers an empty list on a cluster whose discovery confirms it
+   does not serve them, and nil when the read fails or discovery of
+   projectcalico.org failed - an aggregated Calico API server that is down
+   (kubectl/get-all-optional, registered in gumshoe.detectives.registry)."
   [global-policy-type calico-policy-type])
 
 (def unprotected-namespace-joins

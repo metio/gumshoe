@@ -142,8 +142,9 @@
 ;; [context key]; the key is fixed here, so it is ignored.
 (register-collector! "api-resources" (fn [context _key] (apiversions/advertised-versions context)))
 ;; Calico's v3 policy types are served only where Calico runs. Their reads
-;; answer with an empty list on a cluster without them and stay nil when they
-;; fail, so the network checks can join them.
+;; answer with an empty list on a cluster whose discovery confirms it does not
+;; serve them and stay nil when they or that discovery fail, so the network
+;; checks can join them.
 (doseq [type network/calico-policy-types]
   (register-collector! type (fn [context key] (kubectl/get-all-optional context key))))
 ;; Secrets are read by name only, so no detective holds what they contain.
