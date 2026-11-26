@@ -26,4 +26,4 @@
   :select selection
   :confirm {:action "start a privileged netshoot debug pod on a node" :destructive? false}
   :effect (fn [{:keys [context target]}]
-            (effect/plan (effect/kubectl-plugin context "netshoot" "debug" (str "node/" target))))})
+            (effect/plan (effect/interactive (effect/kubectl-plugin context "netshoot" "debug" (str "node/" target)))))})

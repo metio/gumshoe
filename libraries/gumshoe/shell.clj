@@ -23,10 +23,17 @@
    kubectl never reads the operator's kuberc: a plan the operator confirmed is
    the command that runs. Spawning through babashka.process anywhere else would
    skip that; spawn through this namespace (start for a child the caller
-   manages itself)."
+   manages itself).
+
+   A warning a child writes to stderr belongs to the step that ran it. Inside
+   collecting-warnings every captured command hands its warnings
+   (gumshoe.child-output) to the collection, and run-attributed holds them
+   back from its live stderr, so the caller shows them under its own line
+   once the step is done."
   (:require [babashka.process :as process]
             [clojure.java.io :as io]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [gumshoe.child-output :as child-output]))
 
 (def child-env
   "Environment every child process gets on top of ours, winning over the
@@ -47,6 +54,31 @@
   "opts with child-env merged over any :extra-env the caller gave."
   [opts]
   (update opts :extra-env merge child-env))
+
+(def ^:dynamic *warnings*
+  "nil, or an atom holding a vector of the warning lines the children started
+   inside the current collecting-warnings wrote. Futures convey the binding,
+   so a read issued concurrently for the step is collected for it too."
+  nil)
+
+(defn collecting-warnings
+  "Calls f and returns {:value <what f returned> :warnings [<line> ...]}: the
+   warnings every child started during f wrote, once each, in the order they
+   arrived. A collection nested inside another keeps its warnings to itself,
+   so each is shown under the innermost step that provoked it and only there."
+  [f]
+  (let [collected (atom [])
+        value (binding [*warnings* collected] (f))]
+    {:value value :warnings (into [] (distinct) @collected)}))
+
+(defn- note-warnings!
+  "Adds the warnings of a captured child's stderr to the collection, when one
+   is bound. Outside any collection they stay in the result's :err as before."
+  [err]
+  (when-let [collected *warnings*]
+    (when (string? err)
+      (when-let [found (seq (:warnings (child-output/split-stderr err)))]
+        (swap! collected into found)))))
 
 (def ^:dynamic *timeout-ms*
   "Upper bound in milliseconds on any single captured command. The default is
@@ -184,8 +216,8 @@
               (if (= ::timeout result)
                 (do (process/destroy-tree proc)
                     (timeout-failure args ms))
-                result))
-            @proc)
+                (doto result (-> :err note-warnings!))))
+            (doto @proc (-> :err note-warnings!)))
           (catch InterruptedException e
             (destroy-quietly proc)
             (.interrupt (Thread/currentThread))
@@ -258,6 +290,101 @@
    must not appear in the process arguments."
   [env & args]
   (stream {:continue true :extra-env env} args))
+
+;; --- streaming with attributed warnings ------------------------------------
+
+(defn- line-break? [c] (or (= c \newline) (= c \return)))
+
+(defn relay-stderr
+  "Copies a child's stderr from reader to out as it arrives, holding back the
+   lines child-output names warnings when hold? is true, and returns those
+   lines. Every other line is written character by character as soon as its
+   beginning can no longer be a warning (child-output/line-start), so a
+   progress line or a prompt without a line ending shows at once; only a
+   line that begins like a warning waits for its end. A held line that turns
+   out not to be a warning is written then. Returns at the end of the stream."
+  [^java.io.Reader reader ^java.io.Writer out hold?]
+  (let [buf (char-array 4096)
+        pending (StringBuilder.)
+        warnings (transient [])
+        emit! (fn [^CharSequence s] (.write out (str s)))]
+    (loop [mode (if hold? :deciding :pass)]
+      (let [n (.read reader buf)]
+        (if (neg? n)
+          (do (when (pos? (.length pending))
+                (let [held (str pending)]
+                  (if (and (= mode :hold) (child-output/warning-line? held))
+                    (conj! warnings (child-output/warning-text held))
+                    (emit! held))))
+              (.flush out)
+              (persistent! warnings))
+          (let [mode (loop [i 0 mode mode]
+                       (if (= i n)
+                         mode
+                         (let [c (aget buf i)]
+                           (recur
+                            (inc i)
+                            (case mode
+                              :pass (do (.write out (int c))
+                                        (if (and hold? (line-break? c)) :deciding :pass))
+                              :hold (if (= c \newline)
+                                      (let [held (str pending)]
+                                        (.setLength pending 0)
+                                        (if (child-output/warning-line? held)
+                                          (conj! warnings (child-output/warning-text held))
+                                          (emit! (str held c)))
+                                        :deciding)
+                                      (do (.append pending c) :hold))
+                              :deciding (if (line-break? c)
+                                          (do (emit! (str pending c))
+                                              (.setLength pending 0)
+                                              :deciding)
+                                          (do (.append pending c)
+                                              (case (child-output/line-start (str pending))
+                                                :warning :hold
+                                                :undecided :deciding
+                                                :other (do (emit! pending)
+                                                           (.setLength pending 0)
+                                                           :pass)))))))))]
+            (.flush out)
+            (recur mode)))))))
+
+(defn run-attributed
+  "Runs a command as run-with-output does - stdin and stdout stay the
+   terminal's, it is never bounded, and it returns the exit code - except
+   that its stderr is relayed through relay-stderr. Inside
+   collecting-warnings the warning lines are held back and collected for the
+   caller to show under its step; everything else on stderr, a failure's
+   full message included, still reaches our stderr live. Outside a
+   collection nothing is held back.
+
+   A child that needs stderr to be a terminal - an interactive shell, a
+   prompt drawn on stderr - must run through run-with-output instead."
+  [& args]
+  (refuse-when-interrupted! args)
+  (let [collected *warnings*
+        out *err*
+        proc (try (apply process/process (child-opts {:in :inherit :out :inherit :continue true}) args)
+                  (catch Exception e e))]
+    (if (instance? Exception proc)
+      (let [{:keys [exit err]} (launch-failure args proc)]
+        (binding [*out* *err*] (println err))
+        exit)
+      (do
+        (record! args)
+        (track-child! proc)
+        (try
+          (let [relay (future (relay-stderr (io/reader (:err proc) :encoding "UTF-8") out (some? collected)))
+                exit (:exit @proc)
+                found @relay]
+            (when (and collected (seq found)) (swap! collected into found))
+            exit)
+          (catch InterruptedException e
+            (destroy-quietly proc)
+            (.interrupt (Thread/currentThread))
+            (throw e))
+          (finally
+            (untrack-child! proc)))))))
 
 (defn capture-line
   "Runs an interactive prompt tool - gum, which renders its widget to stderr and

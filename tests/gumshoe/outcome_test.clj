@@ -93,7 +93,8 @@
          (banner {:changes? true :outcome :error} {:applied 3}))))
 
 (deftest the-effect-interpreter-records-what-it-applied-and-where-it-stopped
-  (with-redefs [gumshoe.shell/run-with-output (fn [& args] (if (some #{"fail"} args) 1 0))]
+  (with-redefs [gumshoe.shell/run-with-output (fn [& args] (if (some #{"fail"} args) 1 0))
+                gumshoe.shell/run-attributed (fn [& args] (if (some #{"fail"} args) 1 0))]
     (is (= {:applied 2 :stopped "echo fail"}
            (recorded #(effect/run! [[:cmd "echo" "a"] [:cmd "echo" "b"] [:cmd "echo" "fail"] [:cmd "echo" "c"]]))))))
 

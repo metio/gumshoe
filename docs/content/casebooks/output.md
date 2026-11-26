@@ -135,6 +135,52 @@ colour setting, and a book can compose one rendered line inside another:
 `stdout/context` is the context of the current run: the active theme, and
 whether colour is on.
 
+## Warnings from child commands
+
+A warning a command writes to stderr is shown under the step that ran it.
+kubectl prints an API server warning as `Warning: <message>`: a deprecated
+API version, a Warn-mode admission policy, the DaemonSet pods a drain
+ignores. Other tools log warnings as klog lines (`W1126 10:15:30.123456 …]`).
+
+- Each effect of a plan that changes something gets its own line,
+  `▸ kubectl label ingress web …`, before it runs. Its output streams live
+  beneath it, and the warnings its command wrote follow it two levels in,
+  marked `:finding`. stdout and every other stderr line are not held back, so
+  a long drain stays visibly alive and a failed effect shows its full error.
+- A post-check prints the warnings its reads wrote once, under its
+  `verified:` or `NOT verified:` line, however many attempts it took.
+- An investigation prints, after its evidence list, each warning named by
+  the read that provoked it: `🔶 endpoints: Warning: v1 Endpoints is
+  deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice`.
+
+Your own step gets the same treatment by running its work inside
+`shell/collecting-warnings`. Every command the work runs through
+`gumshoe.shell`, from any thread it starts, hands its warnings to the
+collection, and the step prints them where they belong:
+
+```clojure
+(let [{:keys [value warnings]} (shell/collecting-warnings #(read-the-ingresses context))]
+  (stdout/line (if value :success :failure) "ingresses read")
+  (stdout/child-warnings warnings)
+  value)
+```
+
+`gumshoe.child-output/split-stderr` splits a captured stderr into its
+warnings and everything else, for a book that captures a command itself.
+
+An effect that hands the terminal to the operator, such as an interactive
+shell, is wrapped in `effect/interactive`. It keeps stdin, stdout and
+stderr on the terminal, so its prompts work, and its warnings are not
+collected:
+
+```clojure
+(effect/plan (effect/interactive (effect/kubectl-plugin context "netshoot" "debug" (str "node/" node))))
+```
+
+gumshoe does not pass kubectl's `--warnings-as-errors`. kubectl applies that
+flag after the request has run, so a change that tripped a Warn-mode policy
+would be applied and still reported as failed.
+
 ## Your own theme
 
 A theme sets only what it changes; everything else comes from the default.

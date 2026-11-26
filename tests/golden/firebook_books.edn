@@ -24,6 +24,7 @@
    :record {:applied 1, :verified true},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ ssh hv1 -- sudo sh -c out=$(bridge fdb show dev lo.4208) || exit 1; printf '%s\\n' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "✅ verified: the fire is out: the evpn-static-fdb detective no longer reports it"]},
   :extinguish-already-out
@@ -48,6 +49,7 @@
    :record {:applied 1, :verified true},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ ssh hv1 -- sudo sh -c out=$(bridge fdb show dev lo.4208) || exit 1; printf '%s\\n' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "✅ verified: the fire is out: the evpn-static-fdb detective no longer reports it"]},
   :extinguish-dry-run
@@ -91,6 +93,7 @@
      "the drill's static entry 02:00:cb:00:71:01 may still be in hv1's table on lo.4208.\nCheck:  ssh hv1 -- bridge fdb show dev lo.4208\nRemove: ssh hv1 -- sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ ssh hv1 -- sudo sh -c out=$(bridge fdb show dev lo.4208) || exit 1; printf '%s\\n' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "❌ NOT verified within 0s: the fire is out: the evpn-static-fdb detective no longer reports it - the last read did not answer: the evpn-static-fdb detective reads only an empty evpn-fdb, and an empty reading never shows the fire is out"]},
   :extinguish-fdb-unread
@@ -112,7 +115,8 @@
     {:text
      "the drill's static entry 02:00:cb:00:71:01 may still be in hv1's table on lo.4208.\nCheck:  ssh hv1 -- bridge fdb show dev lo.4208\nRemove: ssh hv1 -- sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"}},
    :out
-   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"]},
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ ssh hv1 -- sudo sh -c out=$(bridge fdb show dev lo.4208) || exit 1; printf '%s\\n' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208"]},
   :extinguish-still-burning
   {:result false,
    :confirmations
@@ -140,6 +144,7 @@
      "the drill's static entry 02:00:cb:00:71:01 may still be in hv1's table on lo.4208.\nCheck:  ssh hv1 -- bridge fdb show dev lo.4208\nRemove: ssh hv1 -- sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ ssh hv1 -- sudo sh -c out=$(bridge fdb show dev lo.4208) || exit 1; printf '%s\\n' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "❌ NOT verified within 0s: the fire is out: the evpn-static-fdb detective no longer reports it"]},
   :extinguish-unanswered
@@ -161,7 +166,8 @@
     {:text
      "the drill's static entry 02:00:cb:00:71:01 may still be in hv1's table on lo.4208.\nCheck:  ssh hv1 -- bridge fdb show dev lo.4208\nRemove: ssh hv1 -- sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"}},
    :out
-   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"]},
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ ssh hv1 -- sudo sh -c out=$(bridge fdb show dev lo.4208) || exit 1; printf '%s\\n' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208"]},
   :extinguish-unpin-fails
   {:result false,
    :confirmations
@@ -181,7 +187,8 @@
     {:text
      "the drill's static entry 02:00:cb:00:71:01 may still be in hv1's table on lo.4208.\nCheck:  ssh hv1 -- bridge fdb show dev lo.4208\nRemove: ssh hv1 -- sudo bridge fdb del 02:00:cb:00:71:01 dev lo.4208"}},
    :out
-   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"]},
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ ssh hv1 -- sudo sh -c out=$(bridge fdb show dev lo.4208) || exit 1; printf '%s\\n' \"$out\" | grep -qiF 02:00:cb:00:71:01 || exit 0; exec bridge fdb del 02:00:cb:00:71:01 dev lo.4208"]},
   :ignite
   {:result true,
    :confirmations
@@ -205,6 +212,7 @@
    :record {:applied 1, :verified true},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ ssh hv1 -- sudo bridge fdb replace 02:00:cb:00:71:01 dev lo.4208 dst 192.0.2.1 self static"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "✅ verified: the fire is burning: the evpn-static-fdb detective reports it"
     "🔶 the fire is lit - find it with 'bb run runbooks/detectives/fabric.clj --vni 4208', and put it out with --extinguish"]},
@@ -260,7 +268,8 @@
     {:text
      "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out
-   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"]},
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ ssh hv1 -- sudo bridge fdb replace 02:00:cb:00:71:01 dev lo.4208 dst 192.0.2.1 self static"]},
   :ignite-unanswered
   {:result false,
    :confirmations
@@ -286,6 +295,7 @@
      "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ ssh hv1 -- sudo bridge fdb replace 02:00:cb:00:71:01 dev lo.4208 dst 192.0.2.1 self static"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "❌ NOT verified within 0s: the fire is burning: the evpn-static-fdb detective reports it - the last read did not answer: hv1: host is not reachable over ssh"]},
   :ignite-unseen
@@ -316,6 +326,7 @@
      "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ ssh hv1 -- sudo bridge fdb replace 02:00:cb:00:71:01 dev lo.4208 dst 192.0.2.1 self static"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "❌ NOT verified within 0s: the fire is burning: the evpn-static-fdb detective reports it"]},
   :surface
@@ -367,6 +378,7 @@
    :record {:applied 1, :verified true},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "✅ verified: the fire-drill namespace is gone"
     "✅ verified: the fire is out: the pods, stuck-pods detectives no longer report it"]},
@@ -391,7 +403,8 @@
     {:text
      "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
    :out
-   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"]},
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --wait=false"]},
   :extinguish-dry-run
   {:result true,
    :confirmations [],
@@ -448,6 +461,7 @@
      "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "❌ NOT verified within 0s: the fire-drill namespace is gone"
     "❌ NOT verified within 0s: the fire is out: the pods, stuck-pods detectives no longer report it"]},
@@ -482,6 +496,7 @@
    :record {:applied 1, :verified true},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl apply --filename - (with stdin)"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "✅ verified: the fire is burning: the pods, stuck-pods detectives report it"
     "✅ fire started in namespace fire-drill"
@@ -510,6 +525,7 @@
      "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl apply --filename - (with stdin)"
     "❌ Error from server (Forbidden): refused"]},
   :ignite-declined
   {:result false,
@@ -591,6 +607,7 @@
      "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl apply --filename - (with stdin)"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "❌ NOT verified within 0s: the fire is burning: the pods, stuck-pods detectives report it"]},
   :surface
@@ -633,6 +650,7 @@
    :record {:applied 1, :verified true},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "✅ verified: the fire-drill namespace is gone"
     "✅ verified: the fire is out: the pods, stuck-pods detectives no longer report it"]},
@@ -657,7 +675,8 @@
     {:text
      "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
    :out
-   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"]},
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --wait=false"]},
   :extinguish-dry-run
   {:result true,
    :confirmations [],
@@ -714,6 +733,7 @@
      "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "❌ NOT verified within 0s: the fire-drill namespace is gone"
     "❌ NOT verified within 0s: the fire is out: the pods, stuck-pods detectives no longer report it"]},
@@ -749,6 +769,7 @@
    :record {:applied 1, :verified true},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl apply --filename - (with stdin)"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "✅ verified: the fire is burning: the pods, stuck-pods detectives report it"
     "✅ fire started in namespace fire-drill"
@@ -778,6 +799,7 @@
      "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl apply --filename - (with stdin)"
     "❌ Error from server (Forbidden): refused"]},
   :ignite-declined
   {:result false,
@@ -861,6 +883,7 @@
      "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl apply --filename - (with stdin)"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "❌ NOT verified within 0s: the fire is burning: the pods, stuck-pods detectives report it"]},
   :surface
@@ -906,6 +929,7 @@
    :record {:applied 1, :verified true},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "✅ verified: the fire-drill namespace is gone"
     "✅ verified: the fire is out: the storage detective no longer reports it"]},
@@ -930,7 +954,8 @@
     {:text
      "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
    :out
-   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"]},
+   ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --wait=false"]},
   :extinguish-dry-run
   {:result true,
    :confirmations [],
@@ -990,6 +1015,7 @@
      "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "❌ NOT verified within 0s: the fire-drill namespace is gone"
     "❌ NOT verified within 0s: the fire is out: the storage detective no longer reports it"]},
@@ -1028,6 +1054,7 @@
    :record {:applied 1, :verified true},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl apply --filename - (with stdin)"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "✅ verified: the fire is burning: the storage detective reports it"
     "✅ fire started in namespace fire-drill"
@@ -1057,6 +1084,7 @@
      "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl apply --filename - (with stdin)"
     "❌ Error from server (Forbidden): refused"]},
   :ignite-declined
   {:result false,
@@ -1143,6 +1171,7 @@
      "the drill may be lit, partly or fully, even though this run did not prove it.\nPut it out with this firebook's --extinguish before you leave."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl apply --filename - (with stdin)"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "❌ NOT verified within 0s: the fire is burning: the storage detective reports it"]},
   :surface

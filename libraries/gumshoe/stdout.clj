@@ -341,6 +341,12 @@
   [& parts]
   (err-println (render/detail (context) (str/join " " parts))))
 
+(defn child-warnings
+  "Prints the warnings a step's child commands wrote under the step's line
+   (render/warning-lines); nothing when there are none."
+  [warnings]
+  (run! err-println (render/warning-lines (context) warnings)))
+
 (defn ok
   "A success line: (line :success ...)."
   [& parts]

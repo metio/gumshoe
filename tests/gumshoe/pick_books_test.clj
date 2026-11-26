@@ -102,6 +102,7 @@
     (with-redefs [shell/execute (fn [& argv] (answer state commands (vec argv)))
                   shell/execute-with-stdin (fn [_ & argv] (answer state commands (vec argv)))
                   shell/run-with-output (fn [& argv] (swap! commands conj (vec argv)) 0)
+                  shell/run-attributed (fn [& argv] (swap! commands conj (vec argv)) 0)
                   kubectl/current-context (constantly "ctx")
                   kubectl/current-cluster (constantly "cluster")
                   kubectl/with-port-forward (fn [spec f] (swap! commands conj [:port-forward spec]) (f))

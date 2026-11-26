@@ -157,6 +157,8 @@
    ["── 🔌 Connection ────────────────────────────────────────────────────────────────"
     "  ✅ can connect to mgr-1"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ ssh mgr-1 -- ceph crash archive 2026-11-24T10:00:00.000000Z_1a2b"
+    "  ▸ ssh mgr-1 -- ceph crash archive 2026-11-24T11:00:00.000000Z_3c4d"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "❌ NOT verified within 0s: the 2 confirmed crash report(s) are archived"],
    :banner
@@ -406,6 +408,7 @@
     "  ✅ can connect to mgr-1"
     "▸ OSD: osd.3"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ ssh mgr-1 -- ceph osd in 3"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "❌ NOT verified within 0s: osd.3 is marked in"],
    :banner

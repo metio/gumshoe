@@ -13,6 +13,7 @@
    Constructors below keep the data tidy; interpreters at the bottom give it
    meaning."
   (:require [clojure.string :as str]
+            [gumshoe.child-output :as child-output]
             [gumshoe.outcome :as outcome]
             [gumshoe.shell :as shell]
             [gumshoe.ssh :as ssh]
@@ -84,6 +85,20 @@
     (and (sequential? x) (every? effect? x)) x
     :else nil))
 
+(defn interactive
+  "effect, marked as one that needs the terminal for itself: an interactive
+   shell, a session the operator types into. It runs with stdin, stdout and
+   stderr left on the terminal, so its prompt and its own rendering work, and
+   its warnings are not shown under its line. Every other effect relays
+   stderr and shows the warnings its child wrote under the effect's line."
+  [effect]
+  (vary-meta effect assoc ::interactive true))
+
+(defn interactive?
+  "Whether effect was marked with interactive."
+  [effect]
+  (boolean (::interactive (meta effect))))
+
 ;; ---------------------------------------------------------------------------
 ;; custom effect verbs - a plugin seam
 
@@ -142,30 +157,47 @@
 ;; ---------------------------------------------------------------------------
 ;; interpreters
 
+(defn- stream-fn
+  "The shell function an effect's child runs through: run-with-output for an
+   interactive effect, which keeps the terminal, run-attributed otherwise."
+  [effect]
+  (if (interactive? effect) shell/run-with-output shell/run-attributed))
+
+(defn- kubectl-stdin-failure!
+  "Prints a failed kubectl-stdin effect's stderr in full: its warnings are
+   collected for the effect's line like any other child's, so what is printed
+   here is everything else, or the exit code when nothing else was written."
+  [{:keys [exit err]}]
+  (let [other (:other (child-output/split-stderr err))]
+    (stdout/error (if (seq other)
+                    (str/join "\n" other)
+                    (format "kubectl exited %s" exit)))))
+
 (defn- perform!
   "Runs one effect, streaming output. Returns true on a clean result."
-  [[op & args]]
-  (case op
-    :kubectl (let [[context & kargs] args]
-               (zero? (apply shell/run-with-output "kubectl" (str "--context=" context) kargs)))
-    :kubectl-plugin (let [[context plugin & pargs] args]
-                      (zero? (apply shell/run-with-output "kubectl" (kubectl-plugin-args context plugin pargs))))
-    :kubectl-stdin (let [[context stdin & kargs] args
-                         result (apply shell/execute-with-stdin stdin
-                                       "kubectl" (str "--context=" context) kargs)]
-                     (when-not (str/blank? (:out result)) (println (:out result)))
-                     (if (zero? (:exit result))
-                       true
-                       (do (stdout/error (:err result)) false)))
-    ;; assembled by ssh/ssh-args rather than spelled again here, so an option
-    ;; added for the read-only path cannot go missing on the mutating one
-    :ssh (let [[connection & command] args]
-           (zero? (apply shell/run-with-output (ssh/ssh-args connection command))))
-    :cmd (zero? (apply shell/run-with-output args))
-    :note (do (stdout/err-println (str "  " (first args))) true)
-    (if-let [act (:perform (get @effect-types op))]
-      (boolean (act args))
-      (do (stdout/error "unknown effect:" (pr-str op)) false))))
+  [[op & args :as effect]]
+  (let [run (stream-fn effect)]
+    (case op
+      :kubectl (let [[context & kargs] args]
+                 (zero? (apply run "kubectl" (str "--context=" context) kargs)))
+      :kubectl-plugin (let [[context plugin & pargs] args]
+                        (zero? (apply run "kubectl" (kubectl-plugin-args context plugin pargs))))
+      :kubectl-stdin (let [[context stdin & kargs] args
+                           result (apply shell/execute-with-stdin stdin
+                                         "kubectl" (str "--context=" context) kargs)]
+                       (when-not (str/blank? (:out result)) (println (:out result)))
+                       (if (zero? (:exit result))
+                         true
+                         (do (kubectl-stdin-failure! result) false)))
+      ;; assembled by ssh/ssh-args rather than spelled again here, so an option
+      ;; added for the read-only path cannot go missing on the mutating one
+      :ssh (let [[connection & command] args]
+             (zero? (apply run (ssh/ssh-args connection command))))
+      :cmd (zero? (apply run args))
+      :note (do (stdout/err-println (str "  " (first args))) true)
+      (if-let [act (:perform (get @effect-types op))]
+        (boolean (act args))
+        (do (stdout/error "unknown effect:" (pr-str op)) false)))))
 
 (defn changes-state?
   "Whether running effect may change anything: every effect but a :note,
@@ -174,13 +206,27 @@
   [[op]]
   (not= :note op))
 
+(defn- perform-attributed!
+  "Runs one effect under its own line: the line names the effect before it
+   runs, so its live output reads as its own, and the warnings its children
+   wrote follow once it is done, a failed effect's included. A note is only
+   its text, and an interactive effect, whose terminal stays its own, is
+   named and left alone."
+  [effect]
+  (if-not (changes-state? effect)
+    (perform! effect)
+    (do (stdout/item :info (describe effect))
+        (let [{:keys [value warnings]} (shell/collecting-warnings #(perform! effect))]
+          (stdout/child-warnings warnings)
+          value))))
+
 (defn run!
   "Runs the whole plan in order, stopping at the first failure. Returns true
    only when every effect succeeded. Only effects that may change something
    count as applied, so a plan of notes reads as nothing changed."
   [plan]
   (reduce (fn [_ effect]
-            (if (perform! effect)
+            (if (perform-attributed! effect)
               (do (when (changes-state? effect) (outcome/applied!)) true)
               (do (outcome/stopped! (describe effect)) (reduced false))))
           true

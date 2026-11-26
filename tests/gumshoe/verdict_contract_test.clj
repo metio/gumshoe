@@ -214,7 +214,8 @@
 (defn- run-plan
   "The record effect/run! leaves for plan, with every command exiting with exit."
   [plan exit]
-  (with-redefs [shell/run-with-output (fn [& _] exit)]
+  (with-redefs [shell/run-with-output (fn [& _] exit)
+                shell/run-attributed (fn [& _] exit)]
     (recorded #(effect/run! plan))))
 
 (deftest a-note-is-never-an-applied-effect

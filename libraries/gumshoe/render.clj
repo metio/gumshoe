@@ -102,6 +102,12 @@
   [_ctx text]
   (str "  " text))
 
+(defn warning-lines
+  "The lines showing the warnings a step's child commands wrote, two levels
+   in under the step's own line, each marked as a finding."
+  [ctx warnings]
+  (mapv #(detail ctx (item ctx :finding %)) warnings))
+
 (defn rule
   "A full-width horizontal rule."
   [{:keys [theme width]}]

@@ -159,6 +159,7 @@
       (with-redefs [shell/execute (fn [& argv] (answer state (vec argv)))
                     shell/exit-code-of (fn [& argv] (:exit (answer state (vec argv))))
                     shell/run-with-output (constantly 0)
+                    shell/run-attributed (constantly 0)
                     kubectl/current-context (constantly "ctx")
                     kubectl/current-cluster (constantly "cluster")
                     interact/confirm! (constantly true)
