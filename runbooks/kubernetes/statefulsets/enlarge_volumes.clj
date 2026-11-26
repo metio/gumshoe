@@ -117,9 +117,13 @@
      :effect (fn [{:keys [object]}] (storage/plan-of (steps object)))
      :verify (fn [_] (storage/statefulset-checks context cluster namespace name template capacity plan retained baseline))
      :recovery (fn [{:keys [object applied]}]
-                 (storage/statefulset-recovery {:context context :target target}
-                                               (steps object)
-                                               (- (or applied 0) applied-before)))}))
+                 (let [steps (steps object)
+                       applied (- (or applied 0) applied-before)]
+                   (storage/statefulset-recovery
+                    {:context context :target target
+                     :state (when (#{:delete :gone} (:stage (:stopped (storage/progress steps applied))))
+                              (storage/statefulset-state context namespace name))}
+                    steps applied)))}))
 
 (defn- enlarge
   [opts {:keys [announcement-data]}]

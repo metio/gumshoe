@@ -8,6 +8,7 @@
    The reads that fetch it (candidates, read-dependents, dry-run) sit apart
    at the end, so the book and its gumshoe.dsl form read the same way."
   (:require [clojure.string :as str]
+            [gumshoe.cleanup :as cleanup]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.pick :as pick]
             [gumshoe.shell :as shell]))
@@ -135,10 +136,13 @@
 (def ^:private evidence-types ["pods" "jobs" "ingresses" "deployments" "statefulsets" "daemonsets" "cronjobs"])
 
 (defn read-dependents
-  "dependents of the object a ref names, over what its namespace holds now."
-  [context {:keys [namespace] :as ref}]
-  (dependents ref (into {} (for [type evidence-types]
-                             [type (kubectl/get-namespaced context namespace type)]))))
+  "dependents of the object a ref names, over what its namespace holds now.
+   A claim's lines also say what deleting it does to its volume, since under
+   the Delete reclaim policy the volume and its data go with it."
+  [context {:keys [namespace type name] :as ref}]
+  (cond-> (vec (dependents ref (into {} (for [t evidence-types]
+                                          [t (kubectl/get-namespaced context namespace t)]))))
+    (= "persistentvolumeclaims" type) (conj (cleanup/read-claim-volume-line context namespace name))))
 
 (defn dry-run
   "A server-side dry run of deleting the object a ref names: admission

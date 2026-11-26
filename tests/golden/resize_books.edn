@@ -56,7 +56,7 @@
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "Error from server (Forbidden): deleting statefulsets is denied"],
    :banner
-   "FAILED after 2 effects - stopped at: kubectl --namespace=shop delete statefulset web --cascade=orphan - the effects before it stay applied",
+   "FAILED after 2 effects - stopped at: kubectl --namespace=shop delete statefulset web --cascade=orphan --wait=false --request-timeout=30s - the effects before it stay applied",
    :recovery
    ["Recovery:"
     "  StatefulSet shop/web could not be deleted: it still exists with its old volume claim template,"
@@ -101,7 +101,9 @@
       "delete"
       "statefulset"
       "web"
-      "--cascade=orphan"],
+      "--cascade=orphan"
+      "--wait=false"
+      "--request-timeout=30s"],
      :exit 1}],
    :stdout
    ["persistentvolumeclaims/data-web-0 patched"
@@ -125,6 +127,83 @@
      :target "cluster",
      :items ("data-web-0" "data-web-1"),
      :destructive? true}]},
+  :deletion-stalls
+  {:result false,
+   :out
+   ["▸ StatefulSet: shop/web"
+    "▸ Template: data"
+    "── 📋 Preflight ─────────────────────────────────────────────────────────────────"
+    "  plan: data-web-0: 10Gi -> 20Gi"
+    "  plan: data-web-1: 10Gi -> 20Gi"
+    "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "error: timed out waiting for the condition on statefulsets/web"],
+   :banner
+   "FAILED after 3 effects - stopped at: kubectl --namespace=shop wait --for=delete statefulset/web --timeout=120s - the effects before it stay applied",
+   :recovery
+   ["Recovery:"
+    "  StatefulSet shop/web IS BEING DELETED: the API server accepted the delete, and the garbage collector"
+    "  has not removed it yet. Its pods were orphaned: they keep running, but nothing replaces a pod that stops."
+    "  It was not recreated, and running this book again will not find it once it is gone."
+    "  Enlarged, and they stay so - a claim cannot shrink, so this cannot be undone:"
+    "    data-web-0"
+    "    data-web-1"
+    "  Check that kube-controller-manager runs; once the StatefulSet is gone, re-apply it with the new volume claim template:"
+    "    kubectl --context=ctx apply --filename - <<'EOF'"
+    "    {\"apiVersion\":\"apps/v1\",\"kind\":\"StatefulSet\",\"metadata\":{\"labels\":{\"app\":\"web\"},\"name\":\"web\",\"annotations\":{\"team\":\"shop\"},\"namespace\":\"shop\"},\"spec\":{\"replicas\":2,\"selector\":{\"matchLabels\":{\"app\":\"web\"}},\"volumeClaimTemplates\":[{\"metadata\":{\"name\":\"data\"},\"spec\":{\"storageClassName\":\"fast\",\"accessModes\":[\"ReadWriteOnce\"],\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}},{\"metadata\":{\"name\":\"logs\"},\"spec\":{\"storageClassName\":\"slow\",\"accessModes\":[\"ReadWriteOnce\"],\"resources\":{\"requests\":{\"storage\":\"1Gi\"}}}}]}}"
+    "    EOF"],
+   :confirmations
+   [{:action
+     "enlarge the volumes of StatefulSet shop/web to 20Gi - the StatefulSet is deleted (pods orphaned) and recreated",
+     :target "cluster",
+     :items ("data-web-0" "data-web-1"),
+     :destructive? true}],
+   :announced
+   [["cluster" "Enlarge volumes of StatefulSet shop/web to 20Gi"]],
+   :mutations
+   [{:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=shop"
+      "patch"
+      "persistentvolumeclaims"
+      "data-web-0"
+      "--type=merge"
+      "--patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=shop"
+      "patch"
+      "persistentvolumeclaims"
+      "data-web-1"
+      "--type=merge"
+      "--patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=shop"
+      "delete"
+      "statefulset"
+      "web"
+      "--cascade=orphan"
+      "--wait=false"
+      "--request-timeout=30s"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=shop"
+      "wait"
+      "--for=delete"
+      "statefulset/web"
+      "--timeout=120s"],
+     :exit 1}],
+   :stdout
+   ["persistentvolumeclaims/data-web-0 patched"
+    "persistentvolumeclaims/data-web-1 patched"
+    "statefulsets deleted"]},
   :dry-run
   {:result true,
    :out
@@ -141,7 +220,8 @@
     "  - data-web-1"
     "  would run: kubectl --namespace=shop patch persistentvolumeclaims data-web-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "  would run: kubectl --namespace=shop patch persistentvolumeclaims data-web-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
-    "  would run: kubectl --namespace=shop delete statefulset web --cascade=orphan"
+    "  would run: kubectl --namespace=shop delete statefulset web --cascade=orphan --wait=false --request-timeout=30s"
+    "  would run: kubectl --namespace=shop wait --for=delete statefulset/web --timeout=120s"
     "  would run: kubectl apply --filename - (with stdin)"],
    :banner "DRY RUN - nothing was changed, this was a rehearsal",
    :recovery []},
@@ -174,7 +254,18 @@
       "delete"
       "statefulset"
       "web"
-      "--cascade=orphan"],
+      "--cascade=orphan"
+      "--wait=false"
+      "--request-timeout=30s"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=shop"
+      "wait"
+      "--for=delete"
+      "statefulset/web"
+      "--timeout=120s"],
      :exit 0}
     {:argv ["kubectl" "--context=ctx" "apply" "--filename" "-"],
      :exit 0,
@@ -339,7 +430,18 @@
       "delete"
       "statefulset"
       "web"
-      "--cascade=orphan"],
+      "--cascade=orphan"
+      "--wait=false"
+      "--request-timeout=30s"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=shop"
+      "wait"
+      "--for=delete"
+      "statefulset/web"
+      "--timeout=120s"],
      :exit 0}
     {:argv ["kubectl" "--context=ctx" "apply" "--filename" "-"],
      :exit 0,
@@ -436,7 +538,7 @@
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "❌ Error from server (Forbidden): applying statefulsets web is denied"],
    :banner
-   "FAILED after 3 effects - stopped at: kubectl apply --filename - (with stdin) - the effects before it stay applied",
+   "FAILED after 4 effects - stopped at: kubectl apply --filename - (with stdin) - the effects before it stay applied",
    :recovery
    ["Recovery:"
     "  THE STATEFULSET shop/web IS DELETED and could not be recreated. Its pods were orphaned:"
@@ -484,7 +586,18 @@
       "delete"
       "statefulset"
       "web"
-      "--cascade=orphan"],
+      "--cascade=orphan"
+      "--wait=false"
+      "--request-timeout=30s"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=shop"
+      "wait"
+      "--for=delete"
+      "statefulset/web"
+      "--timeout=120s"],
      :exit 0}
     {:argv ["kubectl" "--context=ctx" "apply" "--filename" "-"],
      :exit 1,
@@ -543,7 +656,18 @@
       "delete"
       "statefulset"
       "web"
-      "--cascade=orphan"],
+      "--cascade=orphan"
+      "--wait=false"
+      "--request-timeout=30s"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=shop"
+      "wait"
+      "--for=delete"
+      "statefulset/web"
+      "--timeout=120s"],
      :exit 0}
     {:argv ["kubectl" "--context=ctx" "apply" "--filename" "-"],
      :exit 0,

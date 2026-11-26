@@ -552,7 +552,12 @@ mostly data:
   `:subjects`/`:pin` ref) and the pin compares uid and spec instead,
   refusing as "its spec changed after the confirmation: taints"
   (`gumshoe.steps.nodes/node-subject`; the values are in
-  `gumshoe.change/comparisons`, and an unknown one is refused). Metadata is
+  `gumshoe.change/comparisons`, and an unknown one is refused). A type whose
+  CRD declares no status subresource, such as an Argo CD Application, raises
+  its generation on every status write, so it is listed in
+  `gumshoe.change/types-without-status-subresource` and compared by spec
+  whatever it declares; `:compare :spec` does the same for a type not
+  listed there (`gumshoe.change/comparison` decides). Metadata is
   outside `:spec`, so judge a label the change needs in `:refusal`, which
   sees the object read again, or name it with `:facts`.
   A change whose subject is no single object, such as a Helm release kept
@@ -910,9 +915,15 @@ mostly data:
   form: on a busy cluster the cluster-wide listing can outrun the 30s
   request timeout, and it needs list rights on every namespace's Secrets.
   Both honour `kubectl/*strict-reads*`. The `:kubectl-can-*` prerequisites
-  always check a right across every namespace, so a book whose namespace is
-  known only once it reads the cluster leaves that read's resource out of
-  them and lets the read itself refuse before any effect;
+  (`get`, `create`, `update`, `patch`, `delete`, `exec`) always check a right
+  across every namespace, so a book whose namespace is known only once it
+  reads the cluster leaves that read's resource out of them and asks
+  `(kubectl/missing-rights context namespace [[verb resource] …])` in its
+  `:refusal` instead, as helm/rollback does for its release Secrets. A
+  resource may name the subresource the effect writes through, which RBAC
+  authorises apart from its resource: `:kubectl-can-create ["pods/eviction"]`
+  for a drain, `:kubectl-can-patch ["deployments/scale"]` for `kubectl
+  scale`, `:kubectl-can-update ["namespaces/finalize"]`;
 - a `namespace/name` target splits with `(kubectl/namespace-name-map
   target)`, which returns the map `{:namespace … :name …}`, so a book
   destructures it by key, `(let [{:keys [namespace name]} …])`. A vector

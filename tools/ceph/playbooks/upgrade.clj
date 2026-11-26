@@ -8,7 +8,8 @@
       status that could not be read
    2. backup - capture config, osd/fs/crush/auth dumps to LOCAL files, so the
       safety net does not live on the cluster being changed; refuse to proceed
-      if any backup comes back empty
+      if any backup comes back empty; a rehearsal (--dry-run) lists the files
+      it would write and writes none
    3. start - ceph orch upgrade start (after confirmation)
    4. watch - poll the upgrade status until it finishes
    5. verify - every daemon reports the target version and the cluster reports
@@ -96,6 +97,31 @@
                             true))))
                   backup-commands))))
 
+(defn rehearsed-backups
+  "The lines a rehearsal prints instead of taking the backups: the directory
+   and every file it would write, each with the ceph command that fills it.
+   A rehearsal writes nothing, and auth-export would put every cephx key on
+   local disk."
+  [directory]
+  (cons (str "would create " directory " (owner-only)")
+        (for [[name args] backup-commands]
+          (format "would write %s from: ceph %s%s"
+                  (str (fs/path directory (str name ".txt")))
+                  (str/join " " args)
+                  (if (secret-backups name) " (holds every cephx key)" "")))))
+
+(defn backup!
+  "Takes the backups into directory, or under flow/*dry-run* prints what it
+   would write and writes nothing. Returns true when the run may go on."
+  [connection directory]
+  (if flow/*dry-run*
+    (do (doseq [line (rehearsed-backups directory)]
+          (stdout/err-println (str "  " (stdout/blue "rehearsal:") " " line)))
+        true)
+    (when (take-backups! connection directory)
+      (stdout/ok (format "backups saved locally to %s" directory))
+      true)))
+
 (defn- watch-upgrade!
   [connection timeout]
   (loop [elapsed 0]
@@ -182,14 +208,12 @@
           (do
             (stdout/print-section "2/5 💾 Backup")
             (let [directory (str (fs/path "ceph-backups" (str host "-" (timestamp))))]
-              (if-not (take-backups! connection directory)
+              (if-not (backup! connection directory)
                 false
-                (do
-                  (stdout/ok (format "backups saved locally to %s" directory))
-                  (let [upgraded (start-upgrade! connection host announcement-data opts)]
-                    (if (and upgraded (not (str/blank? (:require-osd-release opts))))
-                      (ratchet-osd-release! connection host announcement-data (:require-osd-release opts))
-                      upgraded)))))))))))
+                (let [upgraded (start-upgrade! connection host announcement-data opts)]
+                  (if (and upgraded (not (str/blank? (:require-osd-release opts))))
+                    (ratchet-osd-release! connection host announcement-data (:require-osd-release opts))
+                    upgraded))))))))))
 
 (runbook/execute!
  {:description "Playbook: upgrade a cephadm-managed ceph cluster to a target version"

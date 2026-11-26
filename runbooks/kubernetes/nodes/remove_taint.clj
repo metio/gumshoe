@@ -4,7 +4,9 @@
 (ns runbooks.kubernetes.nodes.remove-taint
   "Removes a single taint from a single node. Two-step selection (node, then
    one of its taints) keeps this hand-written, but the mutation is an :effect
-   plan, so it dry-runs and its plan is tested."
+   plan, so it dry-runs and its plan is tested. The taints the node lifecycle
+   controller owns are never offered, and one named with --taint is refused
+   with what removes it for good (see gumshoe.taints)."
   (:require [gumshoe.effect :as effect]
             [gumshoe.flow :as flow]
             [gumshoe.interact :as interact]
@@ -12,6 +14,7 @@
             [gumshoe.announce :as announce]
             [gumshoe.runbook :as runbook]
             [gumshoe.stdout :as stdout]
+            [gumshoe.taints :as taints]
             [gumshoe.verify :as verify]))
 
 (def options
@@ -45,16 +48,27 @@
   (let [context (kubectl/current-context)
         cluster (kubectl/current-cluster)
         {nodes :doc :keys [unread]} (kubectl/read-all context "nodes")
-        tainted (kubectl/nodes-with-taints nodes)
-        node (when-not unread (interact/choose-one "Node" tainted (:node opts)))
+        named-remedy (taints/remedy (:taint opts))
+        tainted (taints/nodes-with-removable-taints nodes)
+        node (when-not (or unread named-remedy) (interact/choose-one "Node" tainted (:node opts)))
         taint (when node
-                (interact/choose-one "Taint" (kubectl/taints-of (kubectl/find-item nodes node)) (:taint opts)))]
+                (interact/choose-one "Taint" (taints/removable (kubectl/find-item nodes node)) (:taint opts)))]
     (cond
       unread
       (do (stdout/error (str "could not read the nodes of the cluster - " unread)) false)
 
+      named-remedy
+      (do (stdout/error (str "refusing: " named-remedy)) false)
+
       (empty? tainted)
-      (do (stdout/ok "no node has any taints") true)
+      (let [owned (for [node-name (kubectl/nodes-with-taints nodes)
+                        taint (kubectl/taints-of (kubectl/find-item nodes node-name))]
+                    (format "%s: %s" node-name (taints/remedy taint)))]
+        (if (seq owned)
+          (do (stdout/ok "no node carries a taint that can be removed by hand")
+              (doseq [line owned] (stdout/err-println (str "  " line)))
+              true)
+          (do (stdout/ok "no node has any taints") true)))
 
       (nil? node)
       (do (stdout/error "no node selected") false)

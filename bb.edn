@@ -24,6 +24,13 @@
                    [gumshoe.main-test]
                    [gumshoe.ceph-test]
                    [gumshoe.ceph-upgrade-backups-test]
+                   [gumshoe.ceph-upgrade-rehearsal-test]
+                   [gumshoe.subresource-prerequisites-test]
+                   [gumshoe.env-rerun-test]
+                   [gumshoe.status-subresource-pin-test]
+                   [gumshoe.statefulset-orphan-delete-test]
+                   [gumshoe.claim-volume-line-test]
+                   [gumshoe.controller-taints-test]
                    [gumshoe.certificate-renew-test]
                    [gumshoe.files-test]
                    [gumshoe.read-all-books-test]
@@ -305,6 +312,13 @@
                                                          'gumshoe.main-test
                                                          'gumshoe.ceph-test
                                                          'gumshoe.ceph-upgrade-backups-test
+                                                         'gumshoe.ceph-upgrade-rehearsal-test
+                                                         'gumshoe.subresource-prerequisites-test
+                                                         'gumshoe.env-rerun-test
+                                                         'gumshoe.status-subresource-pin-test
+                                                         'gumshoe.statefulset-orphan-delete-test
+                                                         'gumshoe.claim-volume-line-test
+                                                         'gumshoe.controller-taints-test
                                                          'gumshoe.certificate-renew-test
                                                          'gumshoe.files-test
                                                          'gumshoe.read-all-books-test

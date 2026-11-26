@@ -891,7 +891,8 @@
    :items
    ["roll Helm release shop/web back from revision 2 (deployed) to revision 1 (superseded)"
     "helm records the rollback as revision 3; its status says the manifests were applied, not that the pods are ready"
-    "the release's source (Git, a pipeline) still holds the newer chart or values and will upgrade it again"],
+    "the release's source (Git, a pipeline) still holds the newer chart or values and will upgrade it again"
+    "helm writes every object of the release as the operator running it: a right missing for one of them fails the rollback part-way"],
    :step "roll a Helm release back",
    :plan
    [[:cmd
@@ -917,7 +918,8 @@
    :items
    ["roll Helm release shop/web back from revision 2 (deployed) to revision 1 (superseded)"
     "helm records the rollback as revision 3; its status says the manifests were applied, not that the pods are ready"
-    "the release's source (Git, a pipeline) still holds the newer chart or values and will upgrade it again"],
+    "the release's source (Git, a pipeline) still holds the newer chart or values and will upgrade it again"
+    "helm writes every object of the release as the operator running it: a right missing for one of them fails the rollback part-way"],
    :step "roll a Helm release back",
    :plan
    [[:cmd
@@ -973,7 +975,8 @@
    :items
    ["roll Helm release shop/web back from revision 2 (deployed) to revision 1 (superseded)"
     "helm records the rollback as revision 3; its status says the manifests were applied, not that the pods are ready"
-    "the release's source (Git, a pipeline) still holds the newer chart or values and will upgrade it again"],
+    "the release's source (Git, a pipeline) still holds the newer chart or values and will upgrade it again"
+    "helm writes every object of the release as the operator running it: a right missing for one of them fails the rollback part-way"],
    :step "roll a Helm release back",
    :plan
    [[:cmd
@@ -1123,7 +1126,8 @@
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
-    :kubectl-can-get ["namespaces"]},
+    :kubectl-can-get ["namespaces"],
+    :kubectl-can-update ["namespaces/finalize"]},
    :select {:mode :one, :label "Namespace", :flag :namespace},
    :empty-message "no namespace is stuck in Terminating",
    :confirm
@@ -1140,7 +1144,8 @@
     ""
     "Needs:"
     "  tools: kubectl, fzf"
-    "  kubectl get: namespaces"],
+    "  kubectl get: namespaces"
+    "  kubectl replace (update): namespaces/finalize"],
    :candidates {:permitted ["stuck"], :refused []}},
   :unanswered
   {:action
@@ -1238,7 +1243,8 @@
    :plan [[:kubectl "ctx" "cordon" "n1"]],
    :precondition
    {:result false,
-    :out "refusing: its spec changed after the confirmation"},
+    :out
+    "refusing: its spec changed after the confirmation: changedWhileConfirming"},
    :announce "Cordon node n1",
    :checks
    [{:description "node n1 is unschedulable",
@@ -1461,7 +1467,8 @@
      "--timeout=300s"]],
    :precondition
    {:result false,
-    :out "refusing: its spec changed after the confirmation"},
+    :out
+    "refusing: its spec changed after the confirmation: changedWhileConfirming"},
    :announce "Drain node n1",
    :checks
    [{:description "node n1 is unschedulable",
@@ -1521,9 +1528,9 @@
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
-    :kubectl-can-get ["nodes" "pods"],
+    :kubectl-can-get ["nodes" "pods" "daemonsets"],
     :kubectl-can-patch ["nodes"],
-    :kubectl-can-delete ["pods"]},
+    :kubectl-can-create ["pods/eviction"]},
    :select {:mode :one, :label "Node", :flag :node},
    :empty-message nil,
    :confirm
@@ -1541,9 +1548,9 @@
     ""
     "Needs:"
     "  tools: kubectl, fzf"
-    "  kubectl get: nodes, pods"
-    "  kubectl patch: nodes"
-    "  kubectl delete: pods"],
+    "  kubectl get: nodes, pods, daemonsets"
+    "  kubectl create: pods/eviction"
+    "  kubectl patch: nodes"],
    :candidates {:permitted ["n1"], :refused ["n1"]}},
   :tainted
   {:action
@@ -1733,7 +1740,7 @@
    :precondition
    {:result false,
     :out
-    "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n────────────────────────────────────────────────────────────────────────────────\nnode       : cp-1\ncontainer  : abc123\nstarted-at : <instant>\nrefusing: its spec changed after the confirmation"},
+    "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n────────────────────────────────────────────────────────────────────────────────\nnode       : cp-1\ncontainer  : abc123\nstarted-at : <instant>\nrefusing: its spec changed after the confirmation: changedWhileConfirming"},
    :announce "Restart kube-apiserver on cp-1",
    :checks
    [{:description
@@ -1917,7 +1924,8 @@
    :plan [[:kubectl "ctx" "uncordon" "n1"]],
    :precondition
    {:result false,
-    :out "refusing: its spec changed after the confirmation"},
+    :out
+    "refusing: its spec changed after the confirmation: changedWhileConfirming"},
    :announce "Uncordon node n1",
    :checks
    [{:description "node n1 is schedulable",
@@ -2476,7 +2484,9 @@
   {:action
    "delete a PersistentVolumeClaim - the data on the volume is lost",
    :destructive? true,
-   :items ["shop/data"],
+   :items
+   ["delete shop/data"
+    "the claim is bound to no volume, so no data is deleted with it"],
    :step
    "delete a PersistentVolumeClaim - the data on the volume is lost",
    :plan
@@ -2499,7 +2509,9 @@
    :out "▸ PersistentVolumeClaim: shop/data",
    :action
    "delete a PersistentVolumeClaim - the data on the volume is lost",
-   :items ["shop/data"],
+   :items
+   ["delete shop/data"
+    "the claim is bound to no volume, so no data is deleted with it"],
    :plan
    [[:kubectl
      "ctx"
@@ -2515,7 +2527,9 @@
   {:action
    "delete a PersistentVolumeClaim - the data on the volume is lost",
    :destructive? true,
-   :items ["shop/data"],
+   :items
+   ["delete shop/data"
+    "the claim is bound to no volume, so no data is deleted with it"],
    :step
    "delete a PersistentVolumeClaim - the data on the volume is lost",
    :plan
@@ -2591,7 +2605,9 @@
   {:action
    "delete a PersistentVolumeClaim - the data on the volume is lost",
    :destructive? true,
-   :items ["shop/data"],
+   :items
+   ["delete shop/data"
+    "the claim is bound to no volume, so no data is deleted with it"],
    :step
    "delete a PersistentVolumeClaim - the data on the volume is lost",
    :plan
@@ -3170,7 +3186,7 @@
     :cluster-capabilities [],
     :kubectl-can-get
     ["deployments" "statefulsets" "horizontalpodautoscalers"],
-    :kubectl-can-patch ["deployments" "statefulsets"]},
+    :kubectl-can-patch ["deployments/scale" "statefulsets/scale"]},
    :select {:mode :one, :label "Workload", :flag :pick},
    :empty-message "no Deployment or StatefulSet to scale",
    :confirm {:action "scale a workload", :destructive? false},
@@ -3186,7 +3202,7 @@
     "Needs:"
     "  tools: kubectl, fzf"
     "  kubectl get: deployments, statefulsets, horizontalpodautoscalers"
-    "  kubectl patch: deployments, statefulsets"],
+    "  kubectl patch: deployments/scale, statefulsets/scale"],
    :candidates
    {:permitted ["Deployment shop/web"],
     :refused ["Deployment shop/web"]}},
@@ -3261,7 +3277,30 @@
    :precondition
    {:result false,
     :out
-    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
+    "refusing: its spec changed after the confirmation: changedWhileConfirming"},
+   :announce "Refresh Application argocd/shop",
+   :checks
+   [{:description "the controller refreshed argocd/shop",
+     :timeout 300,
+     :interval 5,
+     :holds true}]},
+  :status-written
+  {:action "refresh an Application",
+   :destructive? false,
+   :items
+   ["refresh Application argocd/shop - the controller compares it with https://git.example/shop.git@main again, regenerating its manifests instead of reading the manifest cache"
+    "a refresh changes nothing in the cluster; an automated sync may follow when it finds a difference"],
+   :step "refresh an Application",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=argocd"
+     "annotate"
+     "applications.argoproj.io"
+     "shop"
+     "--overwrite"
+     "argocd.argoproj.io/refresh=hard"]],
+   :precondition {:result true, :out ""},
    :announce "Refresh Application argocd/shop",
    :checks
    [{:description "the controller refreshed argocd/shop",
@@ -3382,7 +3421,33 @@
    :precondition
    {:result false,
     :out
-    "refusing: its spec changed after the confirmation (generation 1, now 2)"},
+    "refusing: its spec changed after the confirmation: changedWhileConfirming"},
+   :announce "Sync Application argocd/shop",
+   :checks
+   [{:description "argocd/shop synced",
+     :timeout 900,
+     :interval 10,
+     :holds false,
+     :abort nil}]},
+  :status-written
+  {:action
+   "sync an Application - the cluster is changed to match its source",
+   :destructive? true,
+   :items
+   ["sync Application argocd/shop to https://git.example/shop.git@main (currently OutOfSync, Healthy)"
+    "prune: resources removed from Git are deleted from the cluster"],
+   :step
+   "sync an Application - the cluster is changed to match its source",
+   :plan
+   [[:kubectl
+     "ctx"
+     "--namespace=argocd"
+     "patch"
+     "applications.argoproj.io"
+     "shop"
+     "--type=merge"
+     "--patch={\"operation\":{\"initiatedBy\":{\"username\":\"gumshoe\"},\"info\":[{\"name\":\"gumshoe-request\",\"value\":\"request-token\"}],\"sync\":{\"syncStrategy\":{\"hook\":{}},\"prune\":true}}}"]],
+   :precondition {:result true, :out ""},
    :announce "Sync Application argocd/shop",
    :checks
    [{:description "argocd/shop synced",

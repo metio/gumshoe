@@ -18,7 +18,7 @@
  :prerequisites {:installed-tools ["kubectl" "fzf"]
                  :cluster-capabilities []
                  :kubectl-can-get ["deployments" "statefulsets" "horizontalpodautoscalers"]
-                 :kubectl-can-patch ["deployments" "statefulsets"]}
+                 :kubectl-can-patch ["deployments/scale" "statefulsets/scale"]}
  :reads {:hpas [:list "horizontalpodautoscalers" {:namespace [:ref :namespace]}]}
  :values {:replicas [:opt :replicas]}
  :state {:holds [:call :gumshoe.workloads/scaled? [:object] [:value :replicas]]

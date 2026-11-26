@@ -364,14 +364,54 @@
       ;; no environment name - a flat config, so the cluster selector is moot
       :else (dissoc body :select))))
 
+(defn deep-merge
+  "b merged into a: maps are merged key by key at every depth, and any other
+   value of b - a string, a vector, a map replacing a non-map - wins."
+  [a b]
+  (if (and (map? a) (map? b))
+    (merge-with deep-merge a b)
+    b))
+
 (defn merge-answers
   "Merges a new environment body (from from-answers) into an existing config,
    so running the wizard once per environment accumulates them rather than
-   overwriting. New values win on conflict."
+   overwriting. The merge is deep: the wizard asks only for what the config
+   does not set yet, so a run naming an environment again holds only the new
+   answers, and every value it did not ask about must stay. A new value wins
+   where both set one."
   [existing new-config]
-  (if (contains? new-config :environments)
-    (update existing :environments merge (:environments new-config))
-    (merge existing new-config)))
+  (deep-merge existing new-config))
+
+(defn- leaf-paths
+  "The path of every value in m that is not itself a non-empty map, to its
+   value."
+  [m]
+  (into {} (mapcat (fn [[k v]]
+                     (if (and (map? v) (seq v))
+                       (map (fn [[path leaf]] [(into [k] path) leaf]) (leaf-paths v))
+                       [[[k] v]]))
+                   m)))
+
+(defn changes
+  "What writing after over before changes, as {:added [path ..] :changed
+   [path ..] :removed [path ..]}, each a sorted vector of the key paths of
+   the values that differ."
+  [before after]
+  (let [b (leaf-paths (or before {}))
+        a (leaf-paths (or after {}))
+        sorted #(vec (sort-by pr-str %))]
+    {:added (sorted (remove #(contains? b %) (keys a)))
+     :changed (sorted (filter #(and (contains? b %) (not= (b %) (a %))) (keys a)))
+     :removed (sorted (remove #(contains? a %) (keys b)))}))
+
+(defn change-items
+  "The confirmation lines naming each value a write adds, changes or
+   removes, as changes reports them."
+  [{:keys [added changed removed]}]
+  (let [line (fn [verb path] (str verb " " (str/join " " (map pr-str path))))]
+    (concat (map (partial line "adds") added)
+            (map (partial line "changes") changed)
+            (map (partial line "REMOVES") removed))))
 
 (defn render
   "Pretty EDN for an env.edn map, with the license header."
@@ -384,11 +424,25 @@
        (with-out-str (pprint/pprint (dissoc config ::unread-clusters)))))
 ;; REUSE-IgnoreEnd
 
+(defn backup-path
+  "Where the env.edn at path is kept before it is rewritten at instant: beside
+   it, named after the time, so each rewrite keeps its own copy."
+  [path ^java.time.LocalDateTime instant]
+  (str path "." (.format instant (java.time.format.DateTimeFormatter/ofPattern "yyyyMMdd-HHmmss")) ".bak"))
+
 (defn write!
-  "Writes an env.edn map to the primary path and returns the path."
-  [config]
-  (spit primary-path (render config))
-  primary-path)
+  "Writes an env.edn map to path (the primary path by default) and returns
+   {:path path :backup <where the previous file was copied, or nil>}. A file
+   already at path is copied aside first and never overwritten, so a write
+   can always be undone; when the copy fails nothing is written."
+  ([config] (write! config primary-path))
+  ([config path]
+   (let [backup (when (fs/exists? path)
+                  (let [target (backup-path path (java.time.LocalDateTime/now))]
+                    (fs/copy path target {:copy-attributes true})
+                    target))]
+     (spit path (render config))
+     {:path path :backup backup})))
 
 (defn exists?
   []

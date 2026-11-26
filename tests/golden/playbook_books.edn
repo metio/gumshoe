@@ -836,10 +836,11 @@
      :coerce :long}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
-    :kubectl-can-get ["pods" "poddisruptionbudgets" "nodes"],
+    :kubectl-can-get
+    ["pods" "poddisruptionbudgets" "nodes" "daemonsets"],
     :cluster-capabilities [],
     :kubectl-can-patch ["nodes"],
-    :kubectl-can-delete ["pods"]},
+    :kubectl-can-create ["pods/eviction"]},
    :select {:mode :one, :label "Node", :flag :node},
    :confirm
    {:action
@@ -857,9 +858,9 @@
     ""
     "Needs:"
     "  tools: kubectl, fzf"
-    "  kubectl get: pods, poddisruptionbudgets, nodes"
-    "  kubectl patch: nodes"
-    "  kubectl delete: pods"]},
+    "  kubectl get: pods, poddisruptionbudgets, nodes, daemonsets"
+    "  kubectl create: pods/eviction"
+    "  kubectl patch: nodes"]},
   :unanswered
   {:result false,
    :out

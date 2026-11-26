@@ -128,8 +128,16 @@
       :else {:exit 0 :out (json/generate-string {:items (map second (filter matches objects))}) :err ""})))
 
 (defn- bump-generation
+  "objects after a write that raised their generation and changed nothing
+   else: a status write, for a type whose CRD has no status subresource."
   [objects]
   (mapv (fn [[t o]] [t (update-in o [:metadata :generation] (fnil inc 0))]) objects))
+
+(defn- change-spec
+  "objects after a spec change: their spec gained a field and the API server
+   raised their generation, as it does for every spec change."
+  [objects]
+  (mapv (fn [[t o]] [t (assoc-in o [:spec :changedWhileConfirming] true)]) (bump-generation objects)))
 
 ;; --- running a book ------------------------------------------------------------------
 
@@ -194,7 +202,8 @@
    (fn [out seen state stdout]
      (let [{:keys [confirmation precondition announce! effect step post-checks]} seen]
        (cond
-         (= :spec-changed between) (swap! state update :objects bump-generation)
+         (= :spec-changed between) (swap! state update :objects change-spec)
+         (= :status-written between) (swap! state update :objects bump-generation)
          (= :unanswered between) (swap! state assoc :answering? false)
          (map? between) (swap! state assoc :objects (:objects between)))
        (normalise
@@ -638,15 +647,22 @@
    (standard {:target "velero/daily" :invalid "daily"
               :permitted [[schedule-type (schedule true)]] :refused [[schedule-type (schedule false)]]})
 
+   ;; the Application CRD has no status subresource, so the controller's
+   ;; status writes raise the generation; :status-written shows that alone
+   ;; does not refuse the change
    "tools/argocd/runbooks/refresh.clj"
-   (standard {:target "argocd/shop" :invalid "shop" :opts {:hard true}
-              :permitted [[application-type (application)]]
-              :refused [[application-type (application :refresh "normal")]]})
+   (assoc (standard {:target "argocd/shop" :invalid "shop" :opts {:hard true}
+                     :permitted [[application-type (application)]]
+                     :refused [[application-type (application :refresh "normal")]]})
+          :status-written {:objects [[application-type (application)]] :target "argocd/shop" :opts {:hard true}
+                           :between :status-written})
 
    "tools/argocd/runbooks/sync.clj"
-   (standard {:target "argocd/shop" :invalid "shop" :opts {:prune true}
-              :permitted [[application-type (application)]]
-              :refused [[application-type (application :operation true)]]})
+   (assoc (standard {:target "argocd/shop" :invalid "shop" :opts {:prune true}
+                     :permitted [[application-type (application)]]
+                     :refused [[application-type (application :operation true)]]})
+          :status-written {:objects [[application-type (application)]] :target "argocd/shop" :opts {:prune true}
+                           :between :status-written})
 
    "tools/cnpg/runbooks/fence.clj"
    (standard {:target "db/pg pg-2" :invalid "db/pg"
