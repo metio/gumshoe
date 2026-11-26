@@ -40,11 +40,29 @@ Cluster-wide:
     (is (true? (detective/unread? check e)) "a status the check cannot read is never a pass")
     (is (= [] (vec (autoscaler/detect-autoscaler-status e))))))
 
+(defn- scanned
+  "The findings a scan reports for the check on this evidence: marked unread
+   as a scan marks it, then judged by run-detectives."
+  [e]
+  (vec (detective/run-detectives (detective/mark-unread autoscaler/detectives e) e)))
+
 (deftest a-stale-text-status-is-still-reported
   (let [e (evidence (configmap text-status "2026-11-20 09:00:00 +0000 UTC"))]
     (is (true? (detective/unread? check e)))
-    (is (= ["the cluster autoscaler has stopped updating its status"]
-           (mapv :summary (autoscaler/detect-autoscaler-status e))))))
+    (is (true? (:unread (first (detective/mark-unread autoscaler/detectives e)))))
+    (testing "the scan keeps the staleness, which rests on the annotation that answered"
+      (is (= [{:severity :critical :summary "the cluster autoscaler has stopped updating its status"}]
+             (mapv #(select-keys % [:severity :summary]) (scanned e)))))
+    (testing "the marker never reaches the report"
+      (is (not-any? :reports-unread (scanned e))))))
+
+(deftest a-fresh-text-status-reports-nothing-through-the-scan
+  (is (= [] (scanned (evidence (configmap text-status "2026-11-20 11:59:55 +0000 UTC"))))))
+
+(deftest a-stale-structured-status-is-reported-through-the-scan
+  (let [e (evidence (configmap structured-status "2026-11-20 09:00:00 +0000 UTC"))]
+    (is (false? (detective/unread? check e)))
+    (is (= ["the cluster autoscaler has stopped updating its status"] (mapv :summary (scanned e))))))
 
 (deftest a-structured-status-is-read
   (let [e (evidence (configmap structured-status "2026-11-20 11:59:55 +0000 UTC"))]
