@@ -86,3 +86,35 @@
     (is (some #{"pg-2 sits 32.0MiB further ahead than pg-1, which ranks first only because it is not in recovery"}
               lines))
     (is (not-any? #(str/includes? % "would discard") lines))))
+
+(def ^:private split-brain
+  [{:instance "p-1" :readable? true :in-recovery? false :receive-lsn "0/3000000" :replay-lsn ""}
+   {:instance "p-2" :readable? true :in-recovery? false :receive-lsn "0/5000000" :replay-lsn ""}
+   {:instance "s-3" :readable? true :in-recovery? true :receive-lsn "0/4000000" :replay-lsn "0/4000000"}])
+
+(deftest two-instances-out-of-recovery-rank-by-pod-name-and-are-named-as-such-test
+  (let [proposal (console/proposal split-brain unhealthy-primary)
+        lines (console/proposal-lines proposal)]
+    (is (= "p-1" (:candidate proposal)))
+    (is (= ["p-1" "p-2"] (:out-of-recovery proposal)))
+    (testing "the primary ahead is named a primary, and the reason is the pod name"
+      (is (some #{(str "p-2 sits 32.0MiB further ahead than p-1 and is not in recovery either - "
+                       "p-1 ranks first only because its pod name sorts first")}
+                lines))
+      (is (not-any? #(and (str/starts-with? % "p-2 ") (str/includes? % "only because it is not in recovery"))
+                    lines)))
+    (testing "the standby ahead keeps the recovery reason, which holds for it"
+      (is (some #{"s-3 sits 16.0MiB further ahead than p-1, which ranks first only because it is not in recovery"}
+                lines)))
+    (testing "the split brain is stated"
+      (is (some #(str/starts-with? % "2 instances report themselves out of recovery: p-1, p-2 - more than one accepts writes")
+                lines)))))
+
+(deftest a-single-instance-out-of-recovery-states-no-split-brain-test
+  (let [lines (console/proposal-lines
+               (console/proposal [(first split-brain) (nth split-brain 2)] unhealthy-primary))]
+    (is (not-any? #(str/includes? % "out of recovery:") lines))
+    (is (not-any? #(str/includes? % "pod name sorts first") lines))))
+
+(deftest standbys-alone-report-no-instance-out-of-recovery-test
+  (is (= [] (:out-of-recovery (console/proposal archive-readings unhealthy-primary)))))
