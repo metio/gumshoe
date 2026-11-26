@@ -19,8 +19,9 @@ multi-stage delivery.
   from, and edges to the StageInventories the rollout applied through (found by
   label - a shard's name carries a hash, so the cluster has to be asked).
 - **Runbooks** - `stageset/reconcile` (trigger reconciliation, `--update-now` to
-  override the update window) and `stageset/promote` (advance a stage held on a
-  manual gate).
+  override the update window) and `stageset/promote` (advance a stage held at its
+  promotion gate, with the promote token bound to the revision it is held at
+  through `stages.metio.wtf/promote-revision`).
 
 ```clojure
 ;; bb.edn
