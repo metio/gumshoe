@@ -43,9 +43,10 @@
                                  "start a netshoot pod")
                        :target cluster
                        :items [(str namespace "/netshoot-shell")]}
-        :effect (effect/plan (effect/kubectl-plugin context "netshoot" "run" "netshoot-shell"
-                                             "--namespace" namespace
-                                             (str "--host-network=" host-network)))}))))
+        :effect (effect/plan (effect/interactive
+                              (effect/kubectl-plugin context "netshoot" "run" "netshoot-shell"
+                                                     "--namespace" namespace
+                                                     (str "--host-network=" host-network))))}))))
 
 (runbook/execute!
  {:description "Starts a standalone interactive netshoot pod in a namespace"

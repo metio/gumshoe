@@ -200,7 +200,8 @@
      (with-redefs [kubectl/current-context (constantly "ctx")
                    kubectl/current-cluster (constantly "cluster")
                    interact/confirm! (fn [_#] (swap! ~'asked inc) true)
-                   shell/run-with-output (fn [& args#] (swap! ~'ran conj (vec args#)) 0)]
+                   shell/run-with-output (fn [& args#] (swap! ~'ran conj (vec args#)) 0)
+                   shell/run-attributed (fn [& args#] (swap! ~'ran conj (vec args#)) 0)]
        (binding [*out* (java.io.StringWriter.) *err* (java.io.StringWriter.)]
          ~@body))))
 
@@ -270,7 +271,8 @@
     (with-redefs [kubectl/current-context (constantly "ctx")
                   kubectl/current-cluster (constantly "cluster")
                   interact/confirm! (constantly true)
-                  shell/run-with-output (fn [& _] (if (= n (swap! calls inc)) 1 0))]
+                  shell/run-with-output (fn [& _] (if (= n (swap! calls inc)) 1 0))
+                  shell/run-attributed (fn [& _] (if (= n (swap! calls inc)) 1 0))]
       (binding [*err* (java.io.StringWriter.) *out* (java.io.StringWriter.)
                 outcome/*record* record flow/*dry-run* (boolean dry-run?)]
         (mutation/run-on! spec "w-1" {} nil)))

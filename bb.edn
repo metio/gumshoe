@@ -214,6 +214,8 @@
                    [gumshoe.dns-test]
                    [gumshoe.etcd-test]
                    [gumshoe.effect-test]
+                   [gumshoe.child-output-test]
+                   [gumshoe.attributed-warnings-test]
                    [gumshoe.federation-test]
                    [gumshoe.firebook-test]
                    [gumshoe.firebook-books-test]
@@ -509,6 +511,8 @@
                                                          'gumshoe.dns-test
                                                          'gumshoe.etcd-test
                                                          'gumshoe.effect-test
+                                                         'gumshoe.child-output-test
+                                                         'gumshoe.attributed-warnings-test
                                                          'gumshoe.federation-test
                                                          'gumshoe.firebook-test
                                                          'gumshoe.firebook-books-test

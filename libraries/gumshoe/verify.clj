@@ -89,23 +89,8 @@
   [outcome text]
   (if (progress/in-step?) (stdout/note text) (stdout/line outcome text)))
 
-(defn eventually
-  "Retries check until it returns truthy or timeout (seconds) elapses on the
-   wall clock, counting the time each attempt takes. Exceptions inside check
-   count as not-yet-verified, among them a strict read that did not answer.
-   Each attempt gets the time left before the deadline, and at least one
-   interval, so a check that hangs ends the wait at most one interval late. A
-   malformed post-check is refused. Returns the verdict - true when verified,
-   true-with-a-warning when a :soft? check times out (recorded with
-   outcome/unconfirmed!), false when a hard check times out.
-
-   :abort (fn [] -> reason or nil) names a state the check can no longer reach
-   from, such as an operation that failed: the wait ends at once with the
-   reason, a :soft? check included, instead of running out its timeout.
-
-   :detail (fn [] -> text or nil) says how the state the check judged last
-   stood; it is printed when the check times out, so a check that never
-   held names what it last saw instead of only what it waited for."
+(defn- judge
+  "eventually's wait for one post-check, printing as it goes."
   [{:keys [description check timeout interval soft? watch abort detail] :or {timeout 60 interval 5}}]
   (if-not (and (string? description) (fn? check))
     (do (verdict! :failure "refusing a malformed post-check: it needs a :description string and a :check function")
@@ -152,6 +137,41 @@
                   (doseq [signal fresh]
                     (stdout/warn (str "while waiting — " signal)))
                   (recur (into seen fresh))))))))))
+
+(defn- warnings!
+  "Prints the warnings a check's reads wrote. Inside a task list they join the
+   check's row, which draws them one level in under itself; elsewhere they go
+   two levels in under the verdict line."
+  [warnings]
+  (if (progress/in-step?)
+    (run! #(stdout/line :finding %) warnings)
+    (stdout/child-warnings warnings)))
+
+(defn eventually
+  "Retries check until it returns truthy or timeout (seconds) elapses on the
+   wall clock, counting the time each attempt takes. Exceptions inside check
+   count as not-yet-verified, among them a strict read that did not answer.
+   Each attempt gets the time left before the deadline, and at least one
+   interval, so a check that hangs ends the wait at most one interval late. A
+   malformed post-check is refused. Returns the verdict - true when verified,
+   true-with-a-warning when a :soft? check times out (recorded with
+   outcome/unconfirmed!), false when a hard check times out.
+
+   :abort (fn [] -> reason or nil) names a state the check can no longer reach
+   from, such as an operation that failed: the wait ends at once with the
+   reason, a :soft? check included, instead of running out its timeout.
+
+   :detail (fn [] -> text or nil) says how the state the check judged last
+   stood; it is printed when the check times out, so a check that never
+   held names what it last saw instead of only what it waited for.
+
+   A warning a read of the check wrote - a deprecation notice, say - is shown
+   once under the check, however many attempts read it: inside a task list
+   as part of the check's row, elsewhere under its verdict line."
+  [config]
+  (let [{:keys [value warnings]} (shell/collecting-warnings #(judge config))]
+    (warnings! warnings)
+    value))
 
 (defn unobservable
   "A post-check for an outcome nothing records, so it cannot be verified:

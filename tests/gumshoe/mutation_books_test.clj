@@ -236,6 +236,7 @@
         eventually verify/eventually]
     (with-redefs [shell/execute (fn [& argv] (answer {:objects objects :answering? true :ssh ssh} (vec argv)))
                   shell/run-with-output (fn [& _] (exit))
+                  shell/run-attributed (fn [& _] (exit))
                   shell/execute-with-stdin (fn [& _] (let [code (exit)]
                                                        {:exit code :out "" :err (if (zero? code) "" "Error from server (Forbidden): refused")}))
                   kubectl/current-context (constantly "ctx")

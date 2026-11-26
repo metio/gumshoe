@@ -239,6 +239,11 @@
                                    (when-not (str/blank? out) (println out))
                                    (when-not (str/blank? err) (binding [*out* *err*] (println err)))
                                    exit))
+       #'shell/run-attributed (fn [& argv]
+                                (let [{:keys [exit out err]} (shell! nil argv)]
+                                  (when-not (str/blank? out) (println out))
+                                  (when-not (str/blank? err) (binding [*out* *err*] (println err)))
+                                  exit))
        #'kubectl/current-context (constantly "ctx")
        #'kubectl/current-cluster (constantly "cluster")
        #'fuzzy/select-single (constantly nil)

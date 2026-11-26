@@ -332,7 +332,13 @@ and current list.
 3. Show the human the plan and the command without `--dry-run`, written so
    they can run it in their own session, for example
    `! bb run runbooks/kubernetes/nodes/cordon.clj --node worker-3`.
-4. After they run it, check the outcome with the matching detective. The
+4. After they run it, check the outcome with the matching detective. Each
+   effect that changes something prints its own `▸ <command>` line before it
+   runs, and a warning its command wrote (`Warning: …` from a deprecated API
+   or a Warn-mode admission policy) follows that line, two levels in and
+   marked as a finding; a post-check shows the warnings of its reads under
+   its row in the post-check list, and an investigation names each warning by the
+   evidence read that produced it (`🔶 endpoints: Warning: …`). The
    final banner says what the run did: `DONE - applied and verified` is the
    only one that promises its post-checks held (with `; skipped as already
    done: …` naming the steps it found done), `DONE - applied, NOT confirmed
