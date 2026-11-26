@@ -15,6 +15,13 @@
    and a delete is relearned. A read that did not answer reports `unread` and
    `unknown`, never an absent route.
 
+   Every VTEP a learned remote fdb row names has its BGP paths counted on that
+   host, once per VNI: `show bgp vni <vni> vtep <vtep> json`, or on an FRR
+   that does not know that command `show bgp l2vpn evpn route vni <vni> vtep
+   <vtep> json`. A VTEP with no path makes evpn-orphan-fdb report the rows
+   naming it, one finding per host and VTEP, whether or not a local tap
+   collides with them; a count that did not answer leaves them unjudged.
+
    Hosts, VNIs, gateway VTEPs and guest MAC prefixes each come from their
    option, else from env.edn's :evpn block for the current kubectl context.
    Without gateway VTEPs evpn-gateway-only-mac cannot judge: stderr says so,
