@@ -22,7 +22,8 @@
             [gumshoe.net :as net]
             [gumshoe.runbook :as runbook]
             [gumshoe.spec :as spec]
-            [gumshoe.stdout :as stdout]))
+            [gumshoe.stdout :as stdout]
+            [gumshoe.theme :as theme]))
 
 (def prerequisites {})
 
@@ -150,7 +151,7 @@
         ;; a validation pass over the result, so a wrong shape is flagged before
         ;; it is written and silently ignored at run time
         (when-let [issues (spec/env-config-problems merged)]
-          (stdout/print-section "🔶 Heads up")
+          (stdout/print-section (str (theme/glyph :finding) " Heads up"))
           (doseq [issue issues] (stdout/warn issue)))
         (cond
           ;; a rehearsal shows the file above and writes nothing

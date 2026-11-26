@@ -276,7 +276,7 @@
     "✅ verified: node n1 is unschedulable"
     "✅ verified: no evictable pods remain on node n1"
     "── ⏸  perform the maintenance on the node now ──────────────────────────────────"
-    "── 4/5 ✅ Uncordon ──────────────────────────────────────────────────────────────"
+    "── 4/5 🔓 Uncordon ──────────────────────────────────────────────────────────────"
     "This will uncordon (mark schedulable) a node on 'cluster':"
     "  - n1"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
@@ -312,10 +312,10 @@
     "        shop/web"
     "        hint: node drains will block on the pods this budget covers"
     "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"
-    "  ✓ Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
-    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
-    "  ✓ Nodes running different kubelet minor versions"]},
+    "✅ 2 other checks came back clean: hpas, hpa-failures"
+    "  ✅ Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
+    "  ✅ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
+    "  ✅ Nodes running different kubelet minor versions"]},
   :declined
   {:result false,
    :out
@@ -346,7 +346,7 @@
     "        shop/web"
     "        hint: node drains will block on the pods this budget covers"
     "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"]},
+    "✅ 2 other checks came back clean: hpas, hpa-failures"]},
   :dry-run
   {:result true,
    :out
@@ -373,7 +373,7 @@
     "  would run: kubectl drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=-1 --timeout=300s"
     "── ⏸  perform the maintenance on the node now ──────────────────────────────────"
     "  would pause: perform the maintenance on the node now"
-    "── 4/5 ✅ Uncordon ──────────────────────────────────────────────────────────────"
+    "── 4/5 🔓 Uncordon ──────────────────────────────────────────────────────────────"
     "────────────────────────────────────────────────────────────────────────────────"
     "  🔍 DRY RUN - nothing will be changed"
     "────────────────────────────────────────────────────────────────────────────────"
@@ -396,10 +396,10 @@
     "        shop/web"
     "        hint: node drains will block on the pods this budget covers"
     "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"
-    "  ✓ Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
-    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
-    "  ✓ Nodes running different kubelet minor versions"]},
+    "✅ 2 other checks came back clean: hpas, hpa-failures"
+    "  ✅ Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
+    "  ✅ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
+    "  ✅ Nodes running different kubelet minor versions"]},
   :empty
   {:result false,
    :out
@@ -456,13 +456,13 @@
     "        shop/web"
     "        hint: node drains will block on the pods this budget covers"
     "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"]},
+    "✅ 2 other checks came back clean: hpas, hpa-failures"]},
   :from-segment-2
   {:result true,
    :out
    ["▸ Node: n1"
     "── ⏸  perform the maintenance on the node now ──────────────────────────────────"
-    "── 4/5 ✅ Uncordon ──────────────────────────────────────────────────────────────"
+    "── 4/5 🔓 Uncordon ──────────────────────────────────────────────────────────────"
     "This will uncordon (mark schedulable) a node on 'cluster':"
     "  - n1"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
@@ -487,9 +487,9 @@
    :banner "DONE - applied and verified",
    :recovery [],
    :stdout
-   ["  ✓ Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
-    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
-    "  ✓ Nodes running different kubelet minor versions"]},
+   ["  ✅ Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
+    "  ✅ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
+    "  ✅ Nodes running different kubelet minor versions"]},
   :from-segment-9
   {:result false,
    :out
@@ -539,7 +539,7 @@
     "        shop/web"
     "        hint: node drains will block on the pods this budget covers"
     "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"]},
+    "✅ 2 other checks came back clean: hpas, hpa-failures"]},
   :grace-period
   {:result true,
    :out
@@ -564,7 +564,7 @@
     "✅ verified: node n1 is unschedulable"
     "✅ verified: no evictable pods remain on node n1"
     "── ⏸  perform the maintenance on the node now ──────────────────────────────────"
-    "── 4/5 ✅ Uncordon ──────────────────────────────────────────────────────────────"
+    "── 4/5 🔓 Uncordon ──────────────────────────────────────────────────────────────"
     "This will uncordon (mark schedulable) a node on 'cluster':"
     "  - n1"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
@@ -600,10 +600,10 @@
     "        shop/web"
     "        hint: node drains will block on the pods this budget covers"
     "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"
-    "  ✓ Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
-    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
-    "  ✓ Nodes running different kubelet minor versions"]},
+    "✅ 2 other checks came back clean: hpas, hpa-failures"
+    "  ✅ Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
+    "  ✅ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
+    "  ✅ Nodes running different kubelet minor versions"]},
   :resumed-after-cordon
   {:result true,
    :out
@@ -625,7 +625,7 @@
     "✅ verified: node n1 is unschedulable"
     "✅ verified: no evictable pods remain on node n1"
     "── ⏸  perform the maintenance on the node now ──────────────────────────────────"
-    "── 4/5 ✅ Uncordon ──────────────────────────────────────────────────────────────"
+    "── 4/5 🔓 Uncordon ──────────────────────────────────────────────────────────────"
     "This will uncordon (mark schedulable) a node on 'cluster':"
     "  - n1"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
@@ -661,10 +661,10 @@
     "        shop/web"
     "        hint: node drains will block on the pods this budget covers"
     "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"
-    "  ✓ Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
-    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
-    "  ✓ Nodes running different kubelet minor versions"]},
+    "✅ 2 other checks came back clean: hpas, hpa-failures"
+    "  ✅ Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
+    "  ✅ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
+    "  ✅ Nodes running different kubelet minor versions"]},
   :resumed-after-drain
   {:result true,
    :out
@@ -683,7 +683,7 @@
     "✅ already holds: no evictable pods remain on node n1"
     "✅ skipped, already done: 💨 Drain"
     "── ⏸  perform the maintenance on the node now ──────────────────────────────────"
-    "── 4/5 ✅ Uncordon ──────────────────────────────────────────────────────────────"
+    "── 4/5 🔓 Uncordon ──────────────────────────────────────────────────────────────"
     "This will uncordon (mark schedulable) a node on 'cluster':"
     "  - n1"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
@@ -717,10 +717,10 @@
     "        shop/web"
     "        hint: node drains will block on the pods this budget covers"
     "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"
-    "  ✓ Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
-    "  ✓ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
-    "  ✓ Nodes running different kubelet minor versions"]},
+    "✅ 2 other checks came back clean: hpas, hpa-failures"
+    "  ✅ Node health: readiness, every node condition in its unhealthy state (pressures, NetworkUnavailable, node-problem-detector, the EKS agent's *Ready conditions), cordoned nodes"
+    "  ✅ Nodes whose removal by the cluster autoscaler, Karpenter or a delete has not finished"
+    "  ✅ Nodes running different kubelet minor versions"]},
   :resumed-after-drain-dry-run
   {:result true,
    :out
@@ -740,7 +740,7 @@
     "✅ skipped, already done: 💨 Drain"
     "── ⏸  perform the maintenance on the node now ──────────────────────────────────"
     "  would pause: perform the maintenance on the node now"
-    "── 4/5 ✅ Uncordon ──────────────────────────────────────────────────────────────"
+    "── 4/5 🔓 Uncordon ──────────────────────────────────────────────────────────────"
     "────────────────────────────────────────────────────────────────────────────────"
     "  🔍 DRY RUN - nothing will be changed"
     "────────────────────────────────────────────────────────────────────────────────"
@@ -763,13 +763,13 @@
     "        shop/web"
     "        hint: node drains will block on the pods this budget covers"
     "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"
+    "✅ 2 other checks came back clean: hpas, hpa-failures"
     "  nodes (1 finding)"
     "    💡 INFO     node is cordoned (unschedulable)"
     "        n1"
     "        hint: uncordon with runbooks/kubernetes/nodes/uncordon.clj when the work on it is done"
     "0 critical, 0 warning, 1 info"
-    "✓ 2 other checks came back clean: node-removals, kubelet-skew"]},
+    "✅ 2 other checks came back clean: node-removals, kubelet-skew"]},
   :resumed-after-drain-unattended
   {:result false,
    :out
@@ -810,7 +810,7 @@
     "        shop/web"
     "        hint: node drains will block on the pods this budget covers"
     "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"]},
+    "✅ 2 other checks came back clean: hpas, hpa-failures"]},
   :surface
   {:description
    "Playbook: cordon, drain, maintain, uncordon, and verify a node",
@@ -853,7 +853,7 @@
     "  2/5 🚧 Cordon - cordon (mark unschedulable) a node, verified, skipped when already done"
     "  3/5 💨 Drain - drain a node - every pod on it is evicted and emptyDir data is deleted (destructive), verified, skipped when already done"
     "  ⏸  perform the maintenance on the node now - waits for ENTER; --from-segment 2 continues here"
-    "  4/5 ✅ Uncordon - uncordon (mark schedulable) a node, verified, skipped when already done"
+    "  4/5 🔓 Uncordon - uncordon (mark schedulable) a node, verified, skipped when already done"
     "  5/5 🔬 Verification - reads and reports"
     ""
     "Needs:"
@@ -917,7 +917,7 @@
     "        shop/web"
     "        hint: node drains will block on the pods this budget covers"
     "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"]},
+    "✅ 2 other checks came back clean: hpas, hpa-failures"]},
   :unhealthy-after
   {:result false,
    :out
@@ -942,7 +942,7 @@
     "✅ verified: node n1 is unschedulable"
     "✅ verified: no evictable pods remain on node n1"
     "── ⏸  perform the maintenance on the node now ──────────────────────────────────"
-    "── 4/5 ✅ Uncordon ──────────────────────────────────────────────────────────────"
+    "── 4/5 🔓 Uncordon ──────────────────────────────────────────────────────────────"
     "This will uncordon (mark schedulable) a node on 'cluster':"
     "  - n1"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
@@ -981,12 +981,12 @@
     "        shop/web"
     "        hint: node drains will block on the pods this budget covers"
     "0 critical, 1 warning, 0 info"
-    "✓ 2 other checks came back clean: hpas, hpa-failures"
+    "✅ 2 other checks came back clean: hpas, hpa-failures"
     "  nodes (1 finding)"
     "    🔥 CRITICAL node is not Ready (status False)"
     "        n2"
     "1 critical, 0 warning, 0 info"
-    "✓ 2 other checks came back clean: node-removals, kubelet-skew"]},
+    "✅ 2 other checks came back clean: node-removals, kubelet-skew"]},
   :unpicked
   {:result false,
    :out

@@ -65,7 +65,7 @@
   "Queries every repository. thresholds are the staleness limits in days."
   [{:keys [repositories password warn-days critical-days]}]
   (stdout/print-section "🔍 Evidence (restic)")
-  (run! #(stdout/err-println (format "  %s %s" (stdout/blue "▸") %)) repositories)
+  (run! #(stdout/item :info %) repositories)
   (let [probes (concurrent/map-all (fn [repository] [repository (snapshots-of repository password)])
                                    repositories)]
     {:now (java.time.Instant/now)

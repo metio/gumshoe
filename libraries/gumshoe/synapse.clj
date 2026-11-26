@@ -16,7 +16,7 @@
    admin-token is optional and unlocks the federation destinations check."
   [{:keys [domain host admin-token]}]
   (stdout/print-section "🔍 Evidence (Matrix HTTP API)")
-  (stdout/err-println (format "  %s server_name %s, homeserver %s" (stdout/blue "▸") domain host))
+  (stdout/item :info (format "server_name %s, homeserver %s" domain host))
   (let [auth (when admin-token {"Authorization" (str "Bearer " admin-token)})
         [wk-server wk-client fed-version server-keys client-versions health destinations]
         (concurrent/all

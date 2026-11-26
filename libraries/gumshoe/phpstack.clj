@@ -187,7 +187,7 @@
 
 (defn- report!
   [label pod-name container]
-  (stdout/err-println (format "  %s %s config from %s/%s" (stdout/blue "▸") label pod-name container)))
+  (stdout/item :info (format "%s config from %s/%s" label pod-name container)))
 
 (defn- first-answer
   "The first answer of command among the pod's containers that answered? accepts,

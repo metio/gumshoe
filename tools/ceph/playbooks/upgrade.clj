@@ -138,9 +138,9 @@
             false)
 
         :else
-        (do (stdout/err-println (format "  ⏳ %s (%ds elapsed)"
-                                        (or (:message status) (:progress status) "upgrading")
-                                        elapsed))
+        (do (stdout/item :in-progress (format "%s (%ds elapsed)"
+                                              (or (:message status) (:progress status) "upgrading")
+                                              elapsed))
             (Thread/sleep 30000)
             (recur (+ elapsed 30)))))))
 

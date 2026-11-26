@@ -105,11 +105,11 @@
  {:ceph-unanswered
   {:result false,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\nrefusing: could not read the unarchived crash reports - ceph crash ls-new failed: Error initializing cluster client: ObjectNotFound('RADOS object not found (error calling conf_read_file)')"},
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✅ can connect to mgr-1\nrefusing: could not read the unarchived crash reports - ceph crash ls-new failed: Error initializing cluster client: ObjectNotFound('RADOS object not found (error calling conf_read_file)')"},
   :cephadm
   {:result true,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to admin@mgr-1\n  ✓ can use sudo on admin@mgr-1",
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✅ can connect to admin@mgr-1\n  ✅ can use sudo on admin@mgr-1",
    :change
    {:action
     "archive crash reports - the RECENT_CRASH warning clears, make sure they were actually looked at",
@@ -155,7 +155,7 @@
   {:result false,
    :out
    ["── 🔌 Connection ────────────────────────────────────────────────────────────────"
-    "  ✓ can connect to mgr-1"
+    "  ✅ can connect to mgr-1"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "❌ NOT verified within 0s: the 2 confirmed crash report(s) are archived"],
@@ -165,7 +165,7 @@
   :new-crash-meanwhile
   {:result true,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1",
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✅ can connect to mgr-1",
    :change
    {:action
     "archive crash reports - the RECENT_CRASH warning clears, make sure they were actually looked at",
@@ -202,11 +202,11 @@
   :none
   {:result true,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n✅ no unarchived crashes - nothing to do"},
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✅ can connect to mgr-1\n✅ no unarchived crashes - nothing to do"},
   :permitted
   {:result true,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1",
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✅ can connect to mgr-1",
    :change
    {:action
     "archive crash reports - the RECENT_CRASH warning clears, make sure they were actually looked at",
@@ -243,7 +243,7 @@
   :still-unarchived
   {:result true,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1",
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✅ can connect to mgr-1",
    :change
    {:action
     "archive crash reports - the RECENT_CRASH warning clears, make sure they were actually looked at",
@@ -301,7 +301,7 @@
   :unanswered-meanwhile
   {:result true,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1",
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✅ can connect to mgr-1",
    :change
    {:action
     "archive crash reports - the RECENT_CRASH warning clears, make sure they were actually looked at",
@@ -341,16 +341,16 @@
   :unreachable
   {:result false,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✗ can not connect to mgr-1"}},
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ❌ can not connect to mgr-1"}},
  "tools/ceph/runbooks/osd_in.clj"
  {:all-in
   {:result false,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n❌ OSD osd.3 not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"},
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✅ can connect to mgr-1\n❌ OSD osd.3 not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"},
   :brought-in-meanwhile
   {:result true,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n▸ OSD: osd.3",
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✅ can connect to mgr-1\n▸ OSD: osd.3",
    :change
    {:action "bring an OSD back in - data migrates back onto it",
     :target "mgr-1",
@@ -374,7 +374,7 @@
   :cephadm
   {:result true,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to admin@mgr-1\n  ✓ can use sudo on admin@mgr-1\n▸ OSD: osd.3",
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✅ can connect to admin@mgr-1\n  ✅ can use sudo on admin@mgr-1\n▸ OSD: osd.3",
    :change
    {:action "bring an OSD back in - data migrates back onto it",
     :target "mgr-1",
@@ -403,7 +403,7 @@
   {:result false,
    :out
    ["── 🔌 Connection ────────────────────────────────────────────────────────────────"
-    "  ✓ can connect to mgr-1"
+    "  ✅ can connect to mgr-1"
     "▸ OSD: osd.3"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
@@ -423,7 +423,7 @@
   :numbered
   {:result true,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n▸ OSD: osd.3",
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✅ can connect to mgr-1\n▸ OSD: osd.3",
    :change
    {:action "bring an OSD back in - data migrates back onto it",
     :target "mgr-1",
@@ -447,7 +447,7 @@
   :permitted
   {:result true,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n▸ OSD: osd.3",
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✅ can connect to mgr-1\n▸ OSD: osd.3",
    :change
    {:action "bring an OSD back in - data migrates back onto it",
     :target "mgr-1",
@@ -471,7 +471,7 @@
   :still-out
   {:result true,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n▸ OSD: osd.3",
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✅ can connect to mgr-1\n▸ OSD: osd.3",
    :change
    {:action "bring an OSD back in - data migrates back onto it",
     :target "mgr-1",
@@ -529,7 +529,7 @@
   :unanswered-meanwhile
   {:result true,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n▸ OSD: osd.3",
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✅ can connect to mgr-1\n▸ OSD: osd.3",
    :change
    {:action "bring an OSD back in - data migrates back onto it",
     :target "mgr-1",
@@ -553,8 +553,8 @@
   :unpicked
   {:result false,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✓ can connect to mgr-1\n❌ OSD osd.9 not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"},
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✅ can connect to mgr-1\n❌ OSD osd.9 not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"},
   :unreachable
   {:result false,
    :out
-   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ✗ can not connect to mgr-1"}}}
+   "── 🔌 Connection ────────────────────────────────────────────────────────────────\n  ❌ can not connect to mgr-1"}}}

@@ -52,5 +52,5 @@
           (assoc nodes/cordon :title "🚧 Cordon" :recovery nodes/cordon-recovery)
           (assoc nodes/drain :title "💨 Drain" :recovery nodes/drain-recovery)
           {:pause "perform the maintenance on the node now"}
-          (assoc nodes/uncordon :title "✅ Uncordon" :recovery nodes/uncordon-recovery)
+          (assoc nodes/uncordon :title "🔓 Uncordon" :recovery nodes/uncordon-recovery)
           health-check]})

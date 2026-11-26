@@ -307,7 +307,7 @@
   [connection]
   (stdout/print-section "🔍 Evidence (ceph via SSH)")
   (doseq [[key command] (sort-by first evidence-commands)]
-    (stdout/err-println (str "  " (stdout/blue "▸") " ceph " (str/join " " command) " (" key ")")))
+    (stdout/item :info (str "ceph " (str/join " " command) " (" key ")")))
   (into {:now (java.time.Instant/now)}
         (concurrent/map-all (fn [[key command]] [key (apply ceph-json connection command)])
                             evidence-commands)))

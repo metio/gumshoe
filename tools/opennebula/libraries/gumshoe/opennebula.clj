@@ -43,7 +43,7 @@
   [connection]
   (stdout/print-section "🔍 Evidence (OpenNebula via SSH)")
   (doseq [command ["onehost" "onevm" "onedatastore"]]
-    (stdout/err-println (str "  " (stdout/blue "▸") " " command " list --json")))
+    (stdout/item :info (str command " list --json")))
   (let [[hosts vms datastores] (concurrent/all [#(one-json connection "onehost" :HOST_POOL :HOST)
                                                 #(one-json connection "onevm" :VM_POOL :VM)
                                                 #(one-json connection "onedatastore" :DATASTORE_POOL :DATASTORE)])]

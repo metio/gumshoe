@@ -22,7 +22,8 @@
             [gumshoe.evpn :as evpn]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.runbook :as runbook]
-            [gumshoe.stdout :as stdout]))
+            [gumshoe.stdout :as stdout]
+            [gumshoe.theme :as theme]))
 
 (def ^:private book-path "runbooks/detectives/fabric.clj")
 
@@ -262,13 +263,13 @@
     (testing "a fabric with nothing wrong and no gateway VTEPs"
       (let [{:keys [stdout stderr]} (run {})
             description "guest MACs no scanned host owns that every VTEP reaches through a gateway VTEP"]
-        (is (not (str/includes? stdout (str "✓ " description))))
+        (is (not (str/includes? stdout (str (theme/glyph :success) " " description))))
         (is (not (str/includes? stderr "no issues found")))
         (is (str/includes? stdout "evpn-gateway-only-mac"))
         (is (str/includes? stdout "read nothing"))))
     (testing "the same fabric with gateway VTEPs passes every check"
       (let [{:keys [stdout stderr]} (run {:gateway-vteps gateway :guest-mac-prefixes "02:00:"})]
-        (is (= 6 (count (re-seq #"✓" stdout))))
+        (is (= 6 (count (re-seq (re-pattern (java.util.regex.Pattern/quote (theme/glyph :success))) stdout))))
         (is (str/includes? stderr "no issues found - 6 checks passed"))))))
 
 (deftest a-collection-that-read-nothing-still-checked-nothing

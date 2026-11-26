@@ -31,7 +31,7 @@
 (defn collect-evidence!
   [base-url]
   (stdout/print-section "🔍 Evidence (Thanos HTTP API)")
-  (stdout/err-println (format "  %s %s" (stdout/blue "▸") base-url))
+  (stdout/item :info base-url)
   (let [[ready stores rules] (concurrent/map-all #(http/fetch (str base-url %))
                                                  ["/-/ready" "/api/v1/stores" "/api/v1/rules"])]
     (doseq [[path response] [["/api/v1/stores" stores] ["/api/v1/rules" rules]]

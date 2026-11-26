@@ -1629,8 +1629,8 @@
     "This will restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable on 'cluster':"
     "  - cp-1"
     "  would run: ssh cp-1 -- sudo crictl stop abc123"
-    "  ✓ can connect to cp-1"
-    "  ✓ can use sudo on cp-1"
+    "  ✅ can connect to cp-1"
+    "  ✅ can use sudo on cp-1"
     "────────────────────────────────────────────────────────────────────────────────"
     "node       : cp-1"
     "container  : abc123"
@@ -1642,8 +1642,8 @@
   :failed-after-applying
   {:result false,
    :out
-   ["✓ can connect to cp-1"
-    "  ✓ can use sudo on cp-1"
+   ["✅ can connect to cp-1"
+    "  ✅ can use sudo on cp-1"
     "────────────────────────────────────────────────────────────────────────────────"
     "node       : cp-1"
     "container  : abc123"
@@ -1666,8 +1666,8 @@
   :failed-at-the-first-effect
   {:result false,
    :out
-   ["✓ can connect to cp-1"
-    "  ✓ can use sudo on cp-1"
+   ["✅ can connect to cp-1"
+    "  ✅ can use sudo on cp-1"
     "────────────────────────────────────────────────────────────────────────────────"
     "node       : cp-1"
     "container  : abc123"
@@ -1678,10 +1678,10 @@
    :recovery []},
   :no-container
   {:stopped
-   "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n❌ no running kube-apiserver container on this node\nrefusing: its precondition does not hold"},
+   "✅ can connect to cp-1\n  ✅ can use sudo on cp-1\n❌ no running kube-apiserver container on this node\nrefusing: its precondition does not hold"},
   :no-sudo
   {:stopped
-   "✓ can connect to cp-1\n  ✗ can not use sudo on cp-1\nrefusing: its precondition does not hold"},
+   "✅ can connect to cp-1\n  ❌ can not use sudo on cp-1\nrefusing: its precondition does not hold"},
   :permitted
   {:action
    "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
@@ -1699,7 +1699,7 @@
    :precondition
    {:result true,
     :out
-    "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n────────────────────────────────────────────────────────────────────────────────\nnode       : cp-1\ncontainer  : abc123\nstarted-at : <instant>"},
+    "✅ can connect to cp-1\n  ✅ can use sudo on cp-1\n────────────────────────────────────────────────────────────────────────────────\nnode       : cp-1\ncontainer  : abc123\nstarted-at : <instant>"},
    :announce "Restart kube-apiserver on cp-1",
    :checks
    [{:description
@@ -1722,7 +1722,7 @@
      "abc123"]]},
   :refused
   {:stopped
-   "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n❌ this node's apiserver does not answer /readyz - fix that before restarting it\nrefusing: its precondition does not hold"},
+   "✅ can connect to cp-1\n  ✅ can use sudo on cp-1\n❌ this node's apiserver does not answer /readyz - fix that before restarting it\nrefusing: its precondition does not hold"},
   :spec-changed
   {:action
    "restart kube-apiserver on a control-plane node - the API on this node is briefly unavailable",
@@ -1740,7 +1740,7 @@
    :precondition
    {:result false,
     :out
-    "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n────────────────────────────────────────────────────────────────────────────────\nnode       : cp-1\ncontainer  : abc123\nstarted-at : <instant>\nrefusing: its spec changed after the confirmation: changedWhileConfirming"},
+    "✅ can connect to cp-1\n  ✅ can use sudo on cp-1\n────────────────────────────────────────────────────────────────────────────────\nnode       : cp-1\ncontainer  : abc123\nstarted-at : <instant>\nrefusing: its spec changed after the confirmation: changedWhileConfirming"},
    :announce "Restart kube-apiserver on cp-1",
    :checks
    [{:description
@@ -1765,7 +1765,7 @@
    :precondition
    {:result true,
     :out
-    "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n────────────────────────────────────────────────────────────────────────────────\nnode       : cp-1\ncontainer  : abc123\nstarted-at : <instant>"},
+    "✅ can connect to cp-1\n  ✅ can use sudo on cp-1\n────────────────────────────────────────────────────────────────────────────────\nnode       : cp-1\ncontainer  : abc123\nstarted-at : <instant>"},
    :announce "Restart kube-apiserver on cp-1",
    :checks
    [{:description
@@ -1829,7 +1829,7 @@
    :precondition
    {:result false,
     :out
-    "✓ can connect to cp-1\n  ✓ can use sudo on cp-1\n────────────────────────────────────────────────────────────────────────────────\nnode       : cp-1\ncontainer  : abc123\nstarted-at : <instant>\nrefusing: its spec changed after the confirmation: taints"},
+    "✅ can connect to cp-1\n  ✅ can use sudo on cp-1\n────────────────────────────────────────────────────────────────────────────────\nnode       : cp-1\ncontainer  : abc123\nstarted-at : <instant>\nrefusing: its spec changed after the confirmation: taints"},
    :announce "Restart kube-apiserver on cp-1",
    :checks
    [{:description
@@ -1872,7 +1872,7 @@
    "refusing: node w-1 carries no node-role.kubernetes.io/control-plane label"},
   :unreachable
   {:stopped
-   "✗ can not connect to cp-1\nrefusing: its precondition does not hold"}},
+   "❌ can not connect to cp-1\nrefusing: its precondition does not hold"}},
  "runbooks/kubernetes/nodes/uncordon.clj"
  {:absent {:stopped "refusing: node n1 no longer exists"},
   :empty {:result false, :out "❌ no Node n2 - not found"},
