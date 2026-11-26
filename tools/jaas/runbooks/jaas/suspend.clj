@@ -9,7 +9,8 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
             [gumshoe.select :as select]
-            [gumshoe.tools.jaas :as jaas]))
+            [gumshoe.tools.jaas :as jaas]
+            [gumshoe.verify :as verify]))
 
 (defn snippets
   [context]
@@ -19,7 +20,7 @@
   [context namespace name target]
   {:description (format "JsonnetSnippet %s reports itself suspended" target)
    :timeout 60 :interval 5
-   :check (fn [] (= "Suspended" (jaas/ready-reason context namespace name)))})
+   :check (fn [] (verify/object-holds? (jaas/snippet context namespace name) jaas/suspended?))})
 
 (def selection
   {:mode :namespaced :label "JsonnetSnippet" :namespace-flag :namespace :name-flag :name

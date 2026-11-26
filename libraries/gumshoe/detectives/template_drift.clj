@@ -86,11 +86,22 @@
 
 ;; --- environment and process -----------------------------------------------------
 
+(defn- effective-env
+  "A container's env by name as the kubelet resolves it: a name listed twice
+   takes its last definition, which is the one the process sees."
+  [env]
+  (into {} (map (juxt :name identity)) env))
+
 (defn- env-diffs
+  "Compares the env each side resolves to, so a template that lists a name
+   twice matches a pod carrying the same list. duplicate-env reports the
+   repetition itself."
   [template pod]
-  (let [running (into {} (map (juxt :name identity)) (:env pod))]
-    (for [{:keys [name] :as wanted} (:env template)
-          :let [actual (get running name)
+  (let [running (effective-env (:env pod))
+        wanted-env (effective-env (:env template))]
+    (for [name (distinct (map :name (:env template)))
+          :let [wanted (get wanted-env name)
+                actual (get running name)
                 diff (cond
                        (nil? actual) (format "env %s removed" name)
                        (not= (dissoc wanted :name) (dissoc actual :name)) (format "env %s changed" name)

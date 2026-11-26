@@ -18,6 +18,7 @@
                                      :reason "BackOff"
                                      :message "Back-off restarting failed container"
                                      :count 41
+                                     :firstTimestamp "2026-07-04T11:20:00Z"
                                      :lastTimestamp "2026-07-04T11:59:00Z"
                                      :involvedObject {:namespace "moodle" :name "web-1"}}
                                     {:type "Warning"
@@ -140,5 +141,5 @@
                       :eventTime "2026-11-18T08:00:00.123456Z"
                       :series {:count 240 :lastObservedTime "2026-11-18T11:59:00.000000Z"}
                       :involvedObject {:kind "Pod" :namespace "shop" :name "web-1"}}]
-    (is (= ["FailedScheduling seen 240x in the last hour"]
+    (is (= ["FailedScheduling seen 240x since 2026-11-18T08:00:00.123456Z, most recently in the last hour"]
            (map :summary (events/detect-warning-events {:now now "events" {:items [series-event]}}))))))

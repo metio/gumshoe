@@ -27,14 +27,32 @@
   [s]
   (try (Long/parseLong s) (catch Exception _ nil)))
 
+(def ^:private ipv6-pattern
+  "A token shaped like an IPv6 address: hex groups and at least two colons. A
+  MAC has the same alphabet, so the caller rules MACs out separately."
+  #"^[0-9a-fA-F]{0,4}(:[0-9a-fA-F]{0,4}){2,7}(:\d{1,3}(\.\d{1,3}){3})?$")
+
+(defn- line-address
+  "The first IPv4 or IPv6 address among a line's tokens. FRR prints the local
+  VTEP with %pIA, which prints either family, so an IPv6 underlay is read as
+  readily as an IPv4 one."
+  [line]
+  (or (re-find ipv4-pattern line)
+      (some (fn [token]
+              (when (and (re-matches ipv6-pattern token)
+                         (not (re-matches mac-pattern token)))
+                token))
+            (str/split (str/trim line) #"[\s,]+"))))
+
 (defn parse-local-vtep
   "The host's own VTEP address, from `show evpn vni <vni>`. Matched loosely - any
   address on a line mentioning VTEP - so a column reshuffle between FRR releases
-  does not silently yield the wrong host."
+  does not silently yield the wrong host. nil when no such line carries an
+  address."
   [output]
   (some (fn [line]
           (when (str/includes? line "VTEP")
-            (re-find ipv4-pattern line)))
+            (line-address line)))
         (str/split-lines (or output ""))))
 
 (defn parse-macs
@@ -222,6 +240,8 @@
 (defn collect-host
   "Everything one host knows about one VNI. Never throws: an unreachable host or a
   missing command comes back as `:error` and the caller turns that into a finding.
+  A host whose own VTEP address could not be read keeps its tables but carries
+  `:vtep-error`, because ownership of its guests cannot be judged without it.
 
   The transport is injectable because every defect found while building this lived
   in the seam rather than in the parsing - a pure test of the parsers passes
@@ -243,11 +263,15 @@
              {:host host :vni vni
               :error (str "no output from '" (str/join " " (:macs cmds))
                           "' - is FRR running, and does this account have sudo?")}
-             {:host host
-              :vni vni
-              :host-vtep host-vtep
-              :macs (vec (parse-macs vni host host-vtep (:macs out)))
-              :fdb (vec (parse-fdb vni host (:fdb out)))})))))))
+             (cond-> {:host host
+                      :vni vni
+                      :host-vtep host-vtep
+                      :macs (vec (parse-macs vni host host-vtep (:macs out)))
+                      :fdb (vec (parse-fdb vni host (:fdb out)))}
+               (nil? host-vtep)
+               (assoc :vtep-error
+                      (str "no local VTEP address in the output of '"
+                           (str/join " " (:vni cmds)) "'"))))))))))
 
 (defn conflict-commands
   "The two reads one fdb conflict needs: FRR's view of the MAC, and the BGP

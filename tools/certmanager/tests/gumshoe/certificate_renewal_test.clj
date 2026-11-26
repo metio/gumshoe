@@ -47,7 +47,7 @@
   (is (certificates/failing-renewal (certificate :ready-generation 2) now)))
 
 (deftest not-ready-stays-with-the-not-ready-finding
-  (is (= #{"certificate is not Ready (unknown)" "certificate expires soon (2026-12-01T00:00:00Z)"}
+  (is (= #{"certificate is not Ready (unknown)" "certificate renewal is overdue since 2026-11-01T00:00:00Z; it expires in 11 day(s) (2026-12-01T00:00:00Z)"}
          (set (map :summary (detect (certificate :ready "False")))))
       "no renewal finding while Ready is False"))
 
@@ -61,8 +61,9 @@
   (let [[finding] (detect (certificate :issuing {:type "Issuing" :status "True"}))]
     (is (re-find #"^cert-manager retries" (:hint finding)))))
 
-(deftest expires-soon-still-fires-without-a-failure
-  (is (= ["certificate expires soon (2026-12-01T00:00:00Z)"] (map :summary (detect (certificate :attempts nil))))))
+(deftest an-overdue-renewal-still-fires-without-a-failure
+  (is (= ["certificate renewal is overdue since 2026-11-01T00:00:00Z; it expires in 11 day(s) (2026-12-01T00:00:00Z)"]
+         (map :summary (detect (certificate :attempts nil))))))
 
 (deftest a-healthy-certificate-far-from-expiry-is-silent
-  (is (empty? (detect (certificate :attempts nil :not-after "2027-06-01T00:00:00Z")))))
+  (is (empty? (detect (certificate :attempts nil :renewal "2027-02-01T00:00:00Z" :not-after "2027-06-01T00:00:00Z")))))

@@ -309,18 +309,23 @@
   "Collapses repeated identical (severity, summary) findings within an area into
    one entry carrying the count, every component it covers, and the shared hint.
    A wall of 150 near-identical warnings becomes a single fact with a number,
-   which is what an SRE needs to see the shape of the problem."
+   which is what an SRE needs to see the shape of the problem. Entries are
+   ordered by severity, then by where each first appears among findings."
   [findings]
-  (->> (group-by (juxt :severity :summary) findings)
-       (sort-by (fn [[[severity _] _]] (severity-order severity)))
-       (mapv (fn [[[severity summary] fs]]
-               {:severity severity
-                :summary summary
-                :count (count fs)
-                :components (mapv :component fs)
-                :subjects (vec (distinct (keep subject/from-finding fs)))
-                :since (onset/earliest fs)
-                :hint (:hint (first fs))}))))
+  (let [position (zipmap (reverse (map (juxt :severity :summary) findings))
+                         (range (dec (count findings)) -1 -1))]
+    (->> (group-by (juxt :severity :summary) findings)
+         ;; group-by keeps no order past eight keys, so entries of one
+         ;; severity follow the order the detective returned its findings in
+         (sort-by (fn [[[severity _ :as k] _]] [(severity-order severity) (position k)]))
+         (mapv (fn [[[severity summary] fs]]
+                 {:severity severity
+                  :summary summary
+                  :count (count fs)
+                  :components (mapv :component fs)
+                  :subjects (vec (distinct (keep subject/from-finding fs)))
+                  :since (onset/earliest fs)
+                  :hint (:hint (first fs))})))))
 
 (def ^:private sample-size
   "How many affected components to name before summing the rest - enough to

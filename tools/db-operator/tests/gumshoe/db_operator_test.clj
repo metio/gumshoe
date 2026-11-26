@@ -11,13 +11,13 @@
 (defn- summaries [findings] (set (map :summary findings)))
 
 (deftest db-operator-detective-test
-  (is (= #{"database is not ready (phase: Creating)"}
+  (is (= #{"database is not ready (engine postgres)"}
          (summaries (db-operator/detect-database-problems
                      {db-operator/database-type
                       {:items [{:metadata {:namespace "moodle" :name "moodle-db"}
-                                :status {:status false :phase "Creating"}}
+                                :status {:status false :engine "postgres"}}
                                {:metadata {:namespace "fine" :name "keycloak-db"}
-                                :status {:status true :phase "Ready"}}]}})))))
+                                :status {:status true :engine "postgres"}}]}})))))
 
 (deftest package-registers-databases-scope-and-capability-test
   (is (seq (registry/for-scope :databases)) "the package joins the :databases scan scope")
