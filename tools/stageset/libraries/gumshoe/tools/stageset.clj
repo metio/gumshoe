@@ -29,9 +29,15 @@
 (def stage-set-label "stages.metio.wtf/stage-set")
 (def stage-label "stages.metio.wtf/stage")
 
-;; stagesetctl promote stamps "<stage>@<token>" here, and the controller copies
-;; the token into status.stages[].lastHandledPromotion once it acted on it.
+;; The promote request is "<stage>@<token>". The controller copies the token
+;; into status.stages[].lastHandledPromotion once it acted on it, or records
+;; it in status.stages[].ignoredPromotion when it refused it.
 (def promote-annotation :stages.metio.wtf/promote)
+
+;; Binds the promote token to the revision the stage was held at. Controllers
+;; from stageset-controller 799771f on refuse the token for any other revision
+;; (reason RevisionMismatch); older ones ignore the annotation.
+(def promote-revision-annotation :stages.metio.wtf/promote-revision)
 
 (defn declared-stages
   "The stage names a StageSet declares, as its status reports them, else as
@@ -81,14 +87,23 @@
            (keep identity [(get pinned key)])
            (vals pinned)))))
 
+(defn held-revision
+  "The revision a stage status holds at its promotion gate, as the controller's
+   StageStatus.HeldRevision reads it: the abortedRevision an
+   onFailure=Rollback set aside when there is one, else the appliedRevision.
+   nil when the status names neither. Whether the stage is held at all is
+   hold's question."
+  [status]
+  (or (not-empty (-> status :promotionState :abortedRevision))
+      (not-empty (:appliedRevision status))))
+
 (defn hold
   "Why stage of stageset is not held at its promotion gate at the revision
    the controller is rolling out now, or nil when it is. Held means: the
    controller has observed the StageSet's current generation, the StageSet is
    not suspended, its Ready condition reports a promotion hold, the stage
    declares a promotion gate, its promotionState.phase is one of held-phases,
-   and the revision it holds - its appliedRevision, or the abortedRevision a
-   rollback set aside - is one the current run pins. A token addressed to a
+   and the revision it holds (held-revision) is one the current run pins. A token addressed to a
    stage outside that state is not consumed now: the controller ignores it
    for a stage Promoted at this revision and keeps it armed, so it would
    promote the stage, skipping every gate, when the next revision reaches it."
@@ -98,7 +113,7 @@
         phase (:phase state)
         ready (conditions/condition stageset "Ready")
         revisions (current-revisions stageset stage)
-        held-revision (some revisions [(:appliedRevision status) (not-empty (:abortedRevision state))])]
+        held-revision (some revisions [(held-revision status)])]
     (cond
       (true? (-> stageset :spec :suspend))
       "the StageSet is suspended, so the controller would not act on the promotion"
@@ -127,6 +142,23 @@
   [stageset]
   (filterv #(nil? (hold stageset %)) (declared-stages stageset)))
 
+(defn held-revisions
+  "The revision each stage of stageset held at its promotion gate now is
+   held at, by stage name: the value the promote-revision annotation binds
+   a promotion of that stage to."
+  [stageset]
+  (into {} (for [stage (held-stages stageset)]
+             [stage (held-revision (stage-status stageset stage))])))
+
+(defn promote-annotations
+  "The annotations that promote `stage` past its gate at `revision` with
+   `token`, as key=value arguments of one kubectl annotate: the request and
+   the revision it is bound to, written in one patch so the controller never
+   sees the token without its binding."
+  [stage revision token]
+  [(str (subs (str promote-annotation) 1) "=" stage "@" token)
+   (str (subs (str promote-revision-annotation) 1) "=" revision)])
+
 (defn promotion-refusal
   "Why `stage` of the StageSet named `target` must not be promoted, judged on
    the StageSet as read now; `requested` is the stage the flags named, when
@@ -147,6 +179,17 @@
       (hold stageset stage) (format "StageSet %s: %s" target (hold stageset stage))
       :else nil)))
 
+(defn moved-revision
+  "Why a promotion of `stage` confirmed at revision `confirmed` must not go
+   ahead on the StageSet as read now: the stage is held at another revision,
+   which the operator did not see. nil when it is held at `confirmed`, or
+   when nothing was confirmed."
+  [target stageset stage confirmed]
+  (let [now (held-revision (stage-status stageset stage))]
+    (when (and confirmed (not= confirmed now))
+      (format "StageSet %s: stage %s is held at revision %s now, not at %s as confirmed; run the book again to promote %s"
+              target stage (or now "none") confirmed (or now "it")))))
+
 (defn armed-promotion
   "The stage the StageSet's promote annotation addresses, when it carries
    one, else nil."
@@ -162,25 +205,66 @@
   (format "kubectl --context=%s --namespace=%s annotate %s %s %s-"
           context namespace stageset-type name (subs (str promote-annotation) 1)))
 
+(defn ignored-promotion
+  "The status.stages[].ignoredPromotion record in which the controller
+   refused `token` for `stage`, or nil. Controllers before
+   stageset-controller 799771f never write the field, so for them this is
+   always nil: an absent record means the token was not refused."
+  [stageset stage token]
+  (some (fn [status]
+          (when (= stage (:name status))
+            (let [ignored (:ignoredPromotion status)]
+              (when (and token (= token (:token ignored))) ignored))))
+        (get-in stageset [:status :stages])))
+
+(def ignored-reason-guidance
+  "What an operator does after the controller refused a promote token, by
+   the reason it recorded."
+  {"NoPromotionGate" "The stage declares no promotion gate, so there is nothing to promote."
+   "AlreadyPromoted" "The stage had already cleared its gate at that revision; nothing is left to promote."
+   "NotHeld" "The stage was not held at its promotion gate for the revision being rolled out. Run the book again once it is; it offers only held stages."
+   "RevisionMismatch" "A newer revision reached the stage after the token was bound to the confirmed one. Inspect the revision it is held at now, then run the book again to promote that one."})
+
+(defn ignored-promotion-reason
+  "The one-line reason the post-check ends with when the controller refused
+   `token` for `stage`, or nil while it has not."
+  [stageset stage token]
+  (when-let [{:keys [reason message]} (ignored-promotion stageset stage token)]
+    (format "the controller ignored the promotion (%s): %s"
+            (or reason "no reason given") (or (not-empty message) "no message given"))))
+
 (defn promotion-recovery
-  "The guidance printed when a promotion failed: whether the promote
-   annotation is still armed, as read now, and the command that removes it.
-   An armed token the stage never consumed promotes it, skipping every gate,
-   whenever the controller next holds it there, so it is named rather than
-   left behind silently. stageset is nil when the read did not answer."
-  [context target stageset stage]
+  "The guidance printed when a promotion failed, judged on the StageSet as
+   read now: why the controller refused `token` and what to do, when it
+   recorded that; else whether the promote annotation is still armed and
+   the command that removes it. An armed token the stage never consumed
+   promotes it, skipping every gate, whenever the controller next holds it
+   there, so it is named rather than left behind silently. A refused token
+   is never judged again, so it cannot promote anything later. stageset is
+   nil when the read did not answer."
+  [context target stageset stage token]
   (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
         command (disarm-command context namespace name)
-        armed (armed-promotion stageset)]
+        armed (armed-promotion stageset)
+        ignored (ignored-promotion stageset stage token)
+        bound (get-in stageset [:metadata :annotations promote-revision-annotation])]
     (cond
       (nil? stageset)
       (str (format "StageSet %s could not be read, so whether its promote annotation is still armed is unknown." target)
            "\nAn armed annotation promotes the stage it names, skipping every gate, when the controller next holds it at its gate."
            "\nCheck it, and remove it unless the promotion should still happen:\n  " command)
 
+      ignored
+      (str (format "The controller ignored the promotion of stage %s of StageSet %s (%s): %s"
+                   stage target (or (:reason ignored) "no reason given") (or (not-empty (:message ignored)) "no message given"))
+           "\n" (get ignored-reason-guidance (:reason ignored) "Read the stage's status before promoting it again.")
+           "\nThe controller never judges that token again, so it cannot promote a later revision. Removing the annotation only tidies up:\n  " command)
+
       (= stage armed)
       (str (format "The promote annotation of StageSet %s is STILL ARMED for stage %s: the controller has not consumed it." target stage)
-           "\nWhile it stays, the controller promotes the stage, skipping soak, analysis and manual gates, the next time it holds it there - also for a later revision nobody reviewed."
+           (if bound
+             (format "\nIt is bound to revision %s. A controller from stageset-controller 799771f on honours it only at that revision; an older one ignores the binding and promotes the stage, skipping soak, analysis and manual gates, the next time it holds it there - also for a later revision nobody reviewed." bound)
+             "\nWhile it stays, the controller promotes the stage, skipping soak, analysis and manual gates, the next time it holds it there - also for a later revision nobody reviewed.")
            "\nRemove it unless the promotion should still happen:\n  " command)
 
       armed
@@ -191,15 +275,13 @@
       (format "StageSet %s carries no promote annotation, so nothing is left armed." target))))
 
 (defn promotion-handled?
-  "Whether the stage acted on the promotion the StageSet's promote annotation
-   addresses to it: the annotation names the stage and a token, and the
-   stage's lastHandledPromotion is that token."
-  [stageset stage]
-  (let [[_ addressed token] (some->> (get-in stageset [:metadata :annotations promote-annotation])
-                                     (re-matches #"([^@]+)@(.+)"))]
-    (boolean (and (= stage addressed)
-                  (some #(and (= stage (:name %)) (= token (:lastHandledPromotion %)))
-                        (get-in stageset [:status :stages]))))))
+  "Whether the stage acted on the promotion stamped with `token`: the
+   stage's lastHandledPromotion is that token. Every controller version
+   records it so."
+  [stageset stage token]
+  (boolean (and token
+                (some #(and (= stage (:name %)) (= token (:lastHandledPromotion %)))
+                      (get-in stageset [:status :stages])))))
 
 ;; The window override stagesetctl reconcile --update-now stamps; the
 ;; controller copies the value it honoured into status.lastHandledUpdateOverride

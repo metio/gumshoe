@@ -152,16 +152,15 @@
                      {:name "prod"}]}})
 
 (deftest promotion-handled-test
-  (testing "the stage handled the token the promote annotation addresses to it"
-    (is (true? (stageset/promotion-handled? (promoted-stageset "canary@tok2" "tok2") "canary"))))
-  (testing "the controller has not yet acted on the newest token"
-    (is (false? (stageset/promotion-handled? (promoted-stageset "canary@tok2" "tok1") "canary"))))
-  (testing "the annotation addresses another stage, or is missing or malformed"
-    (is (false? (stageset/promotion-handled? (promoted-stageset "prod@tok2" "tok2") "canary")))
-    (is (false? (stageset/promotion-handled? (promoted-stageset nil "tok2") "canary")))
-    (is (false? (stageset/promotion-handled? (promoted-stageset "canary@" "") "canary"))))
+  (testing "the stage handled the token this run stamped"
+    (is (true? (stageset/promotion-handled? (promoted-stageset "canary@tok2" "tok2") "canary" "tok2"))))
+  (testing "the controller has not yet acted on this run's token"
+    (is (false? (stageset/promotion-handled? (promoted-stageset "canary@tok2" "tok1") "canary" "tok2"))))
+  (testing "another stage handled the token, or no token is known"
+    (is (false? (stageset/promotion-handled? (promoted-stageset "prod@tok2" "tok2") "prod" "tok2")))
+    (is (false? (stageset/promotion-handled? (promoted-stageset "canary@" "") "canary" nil))))
   (testing "a StageSet that could not be read is not promoted"
-    (is (false? (stageset/promotion-handled? nil "canary")))))
+    (is (false? (stageset/promotion-handled? nil "canary" "tok2")))))
 
 (defn- with-stages
   [spec-stages status-stages]
