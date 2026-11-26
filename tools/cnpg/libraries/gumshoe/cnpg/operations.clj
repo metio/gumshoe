@@ -12,8 +12,7 @@
    expressed. An empty list removes the annotation."
   (:require [cheshire.core :as json]
             [clojure.string :as str]
-            [gumshoe.kubectl :as kubectl]
-            [gumshoe.shell :as shell]))
+            [gumshoe.kubectl :as kubectl]))
 
 (def fence-annotation "cnpg.io/fencedInstances")
 (def everything "*")
@@ -159,9 +158,7 @@
    namespace, as kubectl auth can-i answers it. Any answer but yes, an
    unreachable API server included, is no."
   [context namespace]
-  (zero? (shell/exit-code-of "kubectl" (str "--context=" context) "auth" "can-i" "patch"
-                             "clusters.postgresql.cnpg.io" "--subresource=status"
-                             (str "--namespace=" namespace) "--quiet")))
+  (kubectl/can-i-in? context "patch" cluster-status namespace))
 
 (defn status-rights-refusal
   "Why a promotion in namespace would fail for want of rights, judged by
