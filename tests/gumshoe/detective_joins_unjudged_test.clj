@@ -178,12 +178,14 @@
 
 (def ^:private isolated-services
   {:check (check-named network/detectives "isolated-services")
-   :joins ["services" "pods" "networkpolicies"]
-   :unguarded :silent
+   :joins ["services" "pods" "networkpolicies" network/global-policy-type network/calico-policy-type]
+   ;; a missing Calico read would leave a Calico-admitted Service reported as isolated
+   :unguarded :false-finding
    :answered {"services" (items {:metadata (meta-of "web" "app") :spec {:selector {:app "app"}}})
               "pods" (items (pod "web" "app-1" :labels {:app "app"}))
               "networkpolicies" (items {:metadata (meta-of "web" "default-deny") :spec {:podSelector {}}})
-              network/global-policy-type (items)}})
+              network/global-policy-type (items)
+              network/calico-policy-type (items)}})
 
 (def ^:private version-drift
   {:check (check-named apiversions/detectives "version-drift")
@@ -334,11 +336,10 @@
 
 (deftest reads-judged-on-their-own-stay-unjoined
   ;; each of these reads is judged only when it answered, or only adds to a
-  ;; hint, or is a type a cluster may not serve
+  ;; hint, or is a type a cluster may not serve. Calico's policy types answer
+  ;; an empty list where Calico is not installed, so isolated-services joins them
   (is (= ["services" "serviceaccounts" "secret-names" "namespaces"]
          (remove (set (:joins (:check template-references))) (:requires (:check template-references)))))
-  (is (= [network/global-policy-type]
-         (remove (set (:joins (:check isolated-services))) (:requires (:check isolated-services)))))
   (is (= [tls-secrets/gateway-type]
          (remove (set (:joins (:check tls-secrets))) (:requires (:check tls-secrets))))))
 

@@ -170,6 +170,10 @@
                    [gumshoe.db-operator-test]
                    [gumshoe.stageset-test]
                    [gumshoe.tools.jaas-test]
+                   [gumshoe.detective-semantics-test]
+                   [gumshoe.tools.jaas-observed-test]
+                   [gumshoe.certificate-expiry-test]
+                   [gumshoe.db-operator-status-test]
                    [gumshoe.monitoring-test]
                    [gumshoe.calico-test]
                    [gumshoe.flows-test]
@@ -416,6 +420,10 @@
                                                          'gumshoe.db-operator-test
                                                          'gumshoe.stageset-test
                                                          'gumshoe.tools.jaas-test
+                                                         'gumshoe.detective-semantics-test
+                                                         'gumshoe.tools.jaas-observed-test
+                                                         'gumshoe.certificate-expiry-test
+                                                         'gumshoe.db-operator-status-test
                                                          'gumshoe.monitoring-test
                                                          'gumshoe.calico-test
                                                          'gumshoe.flows-test

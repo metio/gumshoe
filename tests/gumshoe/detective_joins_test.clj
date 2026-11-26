@@ -122,10 +122,11 @@
 
 (def ^:private network-policies
   {:check (check-named network/detectives "network-policies")
-   :joins ["networkpolicies" "pods"]
+   :joins ["networkpolicies" "pods" network/global-policy-type network/calico-policy-type]
    :answered {"networkpolicies" (items {:metadata (meta-of "web" "default-deny") :spec {:podSelector {}}})
               "pods" (items (ready-pod "web" "app-1" {:app "app"}) (ready-pod "api" "api-1" {:app "api"}))
-              network/global-policy-type (items)}})
+              network/global-policy-type (items)
+              network/calico-policy-type (items)}})
 
 (def ^:private csi-drivers
   {:check (check-named csi/detectives "csi-drivers")

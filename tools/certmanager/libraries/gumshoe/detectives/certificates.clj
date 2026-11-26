@@ -3,7 +3,8 @@
 
 (ns gumshoe.detectives.certificates
   "Detectives for cert-manager: certificates that are not ready, whose
-   renewal keeps failing, or that expire soon, and ACME orders that went sour."
+   renewal keeps failing or is overdue, or that expired, and ACME orders that
+   went sour."
   (:require [gumshoe.conditions :as conditions]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]))
@@ -13,10 +14,65 @@
 
 (def ^:private expiry-warning-days 14)
 
+(def renewal-grace
+  "How long past its renewalTime a certificate may stay unrenewed before the
+   renewal counts as overdue. cert-manager starts issuing at renewalTime, and
+   an issuance normally completes within minutes."
+  (java.time.Duration/ofHours 1))
+
 (defn expires-within?
   [now days not-after]
   (.isBefore (java.time.Instant/parse not-after)
              (.plus now (java.time.Duration/ofDays days))))
+
+(defn expiry-state
+  "How a certificate's expiry reads at now, judged by its renewalTime, or nil
+   when there is nothing to say. cert-manager renews at renewalTime (by
+   default two thirds through the lifetime) and moves it forward once
+   renewed, so a renewalTime in the future means renewal is scheduled however
+   close notAfter is, which keeps short-lived certificates quiet.
+
+   :expired once notAfter has passed; :overdue when renewalTime passed more
+   than renewal-grace ago, or passed at all while notAfter is within the
+   warning window; :expires-soon when no renewalTime is recorded and notAfter
+   is within the window."
+  [certificate now]
+  (let [{:keys [notAfter renewalTime]} (:status certificate)
+        after (onset/instant notAfter)
+        renewal (onset/instant renewalTime)
+        near? (and after (expires-within? now expiry-warning-days (str after)))]
+    (cond
+      (or (nil? after) (nil? now)) nil
+      (not (.isAfter ^java.time.Instant after now)) :expired
+      (and renewal (.isBefore ^java.time.Instant renewal now)
+           (or near? (.isBefore ^java.time.Instant (.plus ^java.time.Instant renewal ^java.time.Duration renewal-grace) now)))
+      :overdue
+      (and (nil? renewal) near?) :expires-soon
+      :else nil)))
+
+(defn- expiry-finding
+  [certificate state now]
+  (let [{:keys [notAfter renewalTime]} (:status certificate)
+        base {:component (kubectl/namespace-name-of certificate)
+              :hint "renew with runbooks/kubernetes/certificates/renew.clj"}]
+    (case state
+      :expired
+      (onset/since (assoc base :severity :critical
+                          :summary (format "certificate expired (%s)" notAfter))
+                   notAfter)
+      :overdue
+      (onset/since (assoc base :severity :warning
+                          :summary (format "certificate renewal is overdue since %s; it expires in %d day(s) (%s)"
+                                           renewalTime
+                                           (.toDays (java.time.Duration/between ^java.time.Instant now ^java.time.Instant (onset/instant notAfter)))
+                                           notAfter)
+                          :hint (str "cert-manager should have renewed it at its renewalTime and has not; "
+                                     "its Issuing condition, CertificateRequests and logs say why. "
+                                     "Renew with runbooks/kubernetes/certificates/renew.clj"))
+                   renewalTime)
+      :expires-soon
+      (assoc base :severity :warning
+             :summary (format "certificate expires soon (%s)" notAfter)))))
 
 (defn failing-renewal
   "The renewal failure of a certificate that is still Ready, or nil: cert-manager
@@ -74,14 +130,15 @@
            :when failure]
        (renewal-finding certificate failure))
      (for [certificate certificates
-           :let [not-after (-> certificate :status :notAfter)]
-           ;; a failing renewal already says when it runs out
-           :when (and not-after (expires-within? now expiry-warning-days not-after)
-                      (not (failing-renewal certificate now)))]
-       {:severity :warning
-        :component (kubectl/namespace-name-of certificate)
-        :summary (format "certificate expires soon (%s)" not-after)
-        :hint "renew with runbooks/kubernetes/certificates/renew.clj"}))))
+           :let [state (expiry-state certificate now)
+                 ready (conditions/condition certificate "Ready")]
+           ;; a failing renewal already says when it runs out, and a
+           ;; certificate cert-manager marks not Ready as Expired already
+           ;; reads as expired in the not-Ready finding
+           :when (and state
+                      (not (failing-renewal certificate now))
+                      (not (and (= :expired state) (= "False" (:status ready)) (= "Expired" (:reason ready)))))]
+       (expiry-finding certificate state now)))))
 
 (defn detect-invalid-orders
   [evidence]

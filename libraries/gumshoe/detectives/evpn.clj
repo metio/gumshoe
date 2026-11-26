@@ -68,7 +68,9 @@
 (defn detect-ownership-conflicts
   "The provable case: some host has the tap, and another host reaches the MAC
   through a VTEP that is not the owner's. It needs no gateway VTEPs to find
-  one; they only decide which cause the hint names."
+  one; they only decide which cause the hint names. An owner whose own VTEP
+  was not read cannot be compared with anything, so its guests are left to
+  evpn-hosts, which names the host as unjudged."
   [evidence]
   (let [macs (get evidence "evpn-macs")
         gateways (gateway-vteps evidence)
@@ -76,7 +78,7 @@
     (for [{:keys [vni mac type host vtep remote-seq]} macs
           :when (= :remote type)
           :let [owner (get owned [vni mac])]
-          :when (and owner (not= vtep (:vtep owner)))]
+          :when (and owner (:vtep owner) (not= vtep (:vtep owner)))]
       {:severity :critical
        :component (str "vni " vni "/" mac)
        :summary (str "MAC is local on " (:host owner) " (" (:intf owner) ") but "
@@ -208,31 +210,44 @@
                 "fault, remove it once the fault is fixed - after a migration it "
                 "black-holes the guest exactly as the fault did")}))
 
+(defn- vtep-unread-finding
+  [{:keys [host vni vtep-error]}]
+  {:severity :warning
+   :component (str host "/vni " vni)
+   :summary (str "host's own VTEP address could not be read: " vtep-error)
+   :hint (str "evpn-mac-ownership compares the VTEP other hosts reach a guest through "
+              "with its owner's own VTEP, so ownership of this host's guests is "
+              "unjudged rather than clean. Check `show evpn vni " vni "` on the host: "
+              "FRR prints the address as 'Local VTEP IP'")})
+
 (defn detect-host-problems
   "A host that could not be read is a gap in the evidence, and the severity says
   how big. One unreadable host among several leaves the other hosts' disagreements
   visible, so it is a warning. None readable means nothing was compared at all -
   and because a detective with no evidence reports nothing, the run would otherwise
   end by calling every other check clean. That is the one outcome worse than a
-  finding, so it is critical."
+  finding, so it is critical. A host that answered but whose own VTEP address
+  was not read is a warning too: ownership of its guests is unjudged."
   [evidence]
   (let [hosts (get evidence "evpn-hosts")
         failed (filter :error hosts)
         total-failure? (and (seq hosts) (= (count failed) (count hosts)))]
-    (for [{:keys [host vni error]} failed]
-      {:severity (if total-failure? :critical :warning)
-       :component (str host "/vni " vni)
-       :summary (str "fabric evidence could not be collected: " error)
-       :hint (if total-failure?
-               (str "no host could be read, so nothing was compared - treat the other "
-                    "checks as unrun rather than clean. Inside a rootless namespace "
-                    "ssh refuses a system config owned by an unmapped uid; gumshoe.ssh "
-                    "names the user's own config with -F to avoid that, so a failure "
-                    "here is more likely credentials, the host, or the network")
-               (str "the scan is incomplete, so an ownership conflict involving this "
-                    "host's guests cannot be seen. During a partition the unreachable "
-                    "host is often the symptom - check it before trusting a clean "
-                    "result"))})))
+    (concat
+     (for [{:keys [host vni error]} failed]
+       {:severity (if total-failure? :critical :warning)
+        :component (str host "/vni " vni)
+        :summary (str "fabric evidence could not be collected: " error)
+        :hint (if total-failure?
+                (str "no host could be read, so nothing was compared - treat the other "
+                     "checks as unrun rather than clean. Inside a rootless namespace "
+                     "ssh refuses a system config owned by an unmapped uid; gumshoe.ssh "
+                     "names the user's own config with -F to avoid that, so a failure "
+                     "here is more likely credentials, the host, or the network")
+                (str "the scan is incomplete, so an ownership conflict involving this "
+                     "host's guests cannot be seen. During a partition the unreachable "
+                     "host is often the symptom - check it before trusting a clean "
+                     "result"))})
+     (map vtep-unread-finding (filter #(and (not (:error %)) (:vtep-error %)) hosts)))))
 
 (declare detectives)
 

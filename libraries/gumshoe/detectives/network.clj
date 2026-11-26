@@ -4,9 +4,13 @@
 (ns gumshoe.detectives.network
   "Detectives for network segmentation: namespaces running pods with no
    NetworkPolicy at all, and Services whose every ready backend NetworkPolicies
-   isolate without admitting any traffic. Calico-aware: when GlobalNetworkPolicies exist (via
-   the projectcalico.org/v3 aggregated API), traffic is governed globally and
-   the per-namespace findings would be noise."
+   isolate without admitting any traffic. Calico-aware: when GlobalNetworkPolicies exist,
+   traffic is governed globally and the per-namespace findings would be noise,
+   and a namespaced Calico NetworkPolicy protects its namespace and may admit
+   traffic a Kubernetes policy isolates. Both are read through the
+   projectcalico.org/v3 API only (CRDs on current Calico, an aggregated API
+   server on older releases), never through the crd.projectcalico.org/v1
+   storage resources."
   (:require [clojure.string :as str]
             [gumshoe.detectives.services :as services]
             [gumshoe.evidence :as evidence]
@@ -14,11 +18,21 @@
 
 (def global-policy-type "globalnetworkpolicies.projectcalico.org")
 
+(def calico-policy-type "networkpolicies.projectcalico.org")
+
+(def calico-policy-types
+  "Calico's policy types. They are served only where Calico runs, so their
+   collector answers an empty list on a cluster without them and nil when
+   the read fails (registered in gumshoe.detectives.registry)."
+  [global-policy-type calico-policy-type])
+
 (def unprotected-namespace-joins
   "The reads the namespace check joins: without the NetworkPolicy list every
-   namespace running pods would read as unprotected. The GlobalNetworkPolicy
-   type is served only where Calico runs, so it is required but not joined."
-  ["networkpolicies" "pods"])
+   namespace running pods would read as unprotected, and without Calico's
+   policies a namespace they govern would. A cluster without Calico answers
+   its types with an empty list, so only a failed read leaves the join
+   unmade."
+  (into ["networkpolicies" "pods"] calico-policy-types))
 
 (defn detect-unprotected-namespaces
   "Namespaces running pods without any NetworkPolicy, unless Calico
@@ -27,7 +41,8 @@
   [evidence]
   (let [global (kubectl/items-of (get evidence global-policy-type))
         covered (set (map kubectl/namespace-of
-                          (kubectl/items-of (get evidence "networkpolicies"))))
+                          (concat (kubectl/items-of (get evidence "networkpolicies"))
+                                  (kubectl/items-of (get evidence calico-policy-type)))))
         workload-namespaces (distinct (map kubectl/namespace-of
                                            (kubectl/items-of (get evidence "pods"))))]
     (cond
@@ -81,17 +96,31 @@
 
 (def isolated-service-joins
   "A Service's backends are its ready pods, and the NetworkPolicies say which
-   of them admit nothing. Calico's GlobalNetworkPolicies only add a note, and
-   a cluster without Calico does not serve them."
-  ["services" "pods" "networkpolicies"])
+   of them admit nothing. Calico's policies decide whether the claim can be
+   made at all, so they are joined too; a cluster without Calico answers them
+   with an empty list."
+  (into ["services" "pods" "networkpolicies"] calico-policy-types))
+
+(defn- calico-ingress-policies
+  "The namespace's Calico NetworkPolicies that carry an ingress rule. Calico
+   evaluates Kubernetes policies in its default tier alongside its own, so an
+   Allow there admits traffic a rule-less Kubernetes policy isolates. Calico
+   selectors are an expression language we do not evaluate, so any such
+   policy in the namespace counts."
+  [policies namespace]
+  (filter #(and (= namespace (kubectl/namespace-of %)) (seq (-> % :spec :ingress)))
+          policies))
 
 (defn detect-isolated-services
   "Services whose every ready backend is isolated for ingress with no rule
-   admitting anything. Nothing is judged when a joined read did not answer."
+   admitting anything. A namespaced Calico policy with an ingress rule may
+   admit the traffic, so such a Service is info naming the policy rather than
+   a warning. Nothing is judged when a joined read did not answer."
   [evidence]
   (let [policies (kubectl/items-of (get evidence "networkpolicies"))
+        calico-policies (kubectl/items-of (get evidence calico-policy-type))
         pods (kubectl/items-of (get evidence "pods"))
-        calico? (seq (kubectl/items-of (get evidence global-policy-type)))]
+        global? (seq (kubectl/items-of (get evidence global-policy-type)))]
     (for [service (when (evidence/joined? evidence isolated-service-joins)
                     (kubectl/items-of (get evidence "services")))
           :let [selector (-> service :spec :selector)
@@ -103,23 +132,30 @@
           :when (and (seq backends) (every? #(admits-nothing? policies %) backends))
           :let [involved (sort-by kubectl/name-of (distinct (mapcat #(ingress-policies policies %) backends)))
                 names (str/join ", " (map kubectl/name-of involved))
-                only-default-deny? (every? default-deny? involved)]]
-      {:severity :warning
+                only-default-deny? (every? default-deny? involved)
+                admitting (sort (map kubectl/name-of (calico-ingress-policies calico-policies (kubectl/namespace-of service))))]]
+      {:severity (if (seq admitting) :info :warning)
        :component (kubectl/namespace-name-of service)
-       :summary (format "Service's %d ready backend(s) admit no ingress traffic (NetworkPolicy %s)" (count backends) names)
-       :hint (str (if only-default-deny?
+       :summary (if (seq admitting)
+                  (format "Service's %d ready backend(s) admit no ingress through Kubernetes NetworkPolicies (NetworkPolicy %s); Calico policies with ingress rules may admit it" (count backends) names)
+                  (format "Service's %d ready backend(s) admit no ingress traffic (NetworkPolicy %s)" (count backends) names))
+       :hint (str (cond
+                    (seq admitting)
+                    (str "Calico NetworkPolicy " (str/join ", " admitting) " in the namespace has ingress rules, and an Allow there admits traffic the Kubernetes policies isolate. Calico selectors are not evaluated here, so check whether they select the backends")
+                    only-default-deny?
                     "the namespace's default-deny policy isolates them and no policy allows any traffic in - add a policy that allows the Service's clients"
+                    :else
                     "the policies that select them isolate ingress but none has an ingress rule - add a rule that allows the Service's clients")
-                  (when calico? "; a Calico policy may still admit the traffic before these apply"))})))
+                  (when global? "; a Calico policy may still admit the traffic before these apply"))})))
 
 (def detectives
   [{:name "network-policies"
     :description "Namespaces running pods without any NetworkPolicy"
-    :requires (conj unprotected-namespace-joins global-policy-type)
+    :requires unprotected-namespace-joins
     :joins unprotected-namespace-joins
     :detect detect-unprotected-namespaces}
    {:name "isolated-services"
     :description "Services whose every ready backend NetworkPolicies isolate without any ingress rule"
-    :requires (conj isolated-service-joins global-policy-type)
+    :requires isolated-service-joins
     :joins isolated-service-joins
     :detect detect-isolated-services}])
