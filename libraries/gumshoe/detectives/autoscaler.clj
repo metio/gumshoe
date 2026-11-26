@@ -12,7 +12,10 @@
    structured status - the human-readable text older releases wrote - was
    not read: the check reports staleness but counts as unread, never as
    passed, because its parsed-status evidence is nil and the check joins it.
-   The text format has no specification to parse it against."
+   The text format has no specification to parse it against. Staleness rests
+   on the ConfigMap's annotation alone, which did answer, so that finding is
+   marked :reports-unread and a scan keeps it while it drops everything else
+   an unread check concludes."
   (:require [clj-yaml.core :as yaml]
             [clojure.string :as str]
             [gumshoe.onset :as onset]))
@@ -69,6 +72,8 @@
     (when (and updated now (.isAfter ^java.time.Instant now (.plus ^java.time.Instant updated stale-after)))
       (onset/since
        {:severity :critical
+        ;; read from the annotation, never from the status a check may not read
+        :reports-unread true
         :component "kube-system/cluster-autoscaler-status"
         :summary "the cluster autoscaler has stopped updating its status"
         :hint (str "it rewrites the status every loop; an old one means the autoscaler is not running, "
