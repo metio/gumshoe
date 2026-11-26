@@ -12,7 +12,8 @@
    expressed. An empty list removes the annotation."
   (:require [cheshire.core :as json]
             [clojure.string :as str]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.shell :as shell]))
 
 (def fence-annotation "cnpg.io/fencedInstances")
 (def everything "*")
@@ -145,6 +146,30 @@
              instance (sort (healthy-instances cluster))
              :when (nil? (switchover-refusal cluster instance))]
          (str (cluster-key cluster) " " instance))))
+
+(def cluster-status
+  "The subresource a promotion writes: the cnpg plugin sets
+   status.targetPrimary through the Cluster's status subresource
+   (pkg/resources/status/patch.go), which RBAC grants apart from the
+   Cluster itself."
+  "clusters.postgresql.cnpg.io/status")
+
+(defn can-patch-status?
+  "Whether the user of context may patch the status of Clusters in
+   namespace, as kubectl auth can-i answers it. Any answer but yes, an
+   unreachable API server included, is no."
+  [context namespace]
+  (zero? (shell/exit-code-of "kubectl" (str "--context=" context) "auth" "can-i" "patch"
+                             "clusters.postgresql.cnpg.io" "--subresource=status"
+                             (str "--namespace=" namespace) "--quiet")))
+
+(defn status-rights-refusal
+  "Why a promotion in namespace would fail for want of rights, judged by
+   `can-patch-status?` (namespace -> boolean), or nil."
+  [can-patch-status? namespace]
+  (when-not (can-patch-status? namespace)
+    (format "you may not patch %s in namespace %s, or it could not be confirmed - the promotion writes status.targetPrimary through it"
+            cluster-status namespace)))
 
 (defn promote-args
   "The cnpg plugin call that promotes an instance. The plugin binary is run

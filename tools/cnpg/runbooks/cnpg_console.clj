@@ -90,11 +90,18 @@
 
 (defn promote-refusal
   "Why --promote must not run for instance of the cluster object read as
-   cluster, among the instance pods instances, or nil."
-  [cluster instances instance]
-  (if-not (some #{instance} instances)
+   cluster, among the instance pods instances, or nil. `can-patch-status?`
+   (namespace -> boolean) says whether the user may write the Cluster's
+   status, which the promotion does; the console's prerequisites cannot ask
+   for it, since a read-only run needs no write rights."
+  [cluster instances instance can-patch-status?]
+  (cond
+    (not (some #{instance} instances))
     (format "%s is not an instance of %s" instance (kubectl/namespace-name-of cluster))
-    (operations/console-promote-refusal cluster instance)))
+
+    :else
+    (or (operations/console-promote-refusal cluster instance)
+        (operations/status-rights-refusal can-patch-status? (kubectl/namespace-of cluster)))))
 
 (defn- promote!
   [context namespace cluster instance proposal]
@@ -166,7 +173,7 @@
             (stdout/print-section "Promotion proposal")
             (doseq [line (console/proposal-lines proposal)] (stdout/warn line))
             (if-let [instance (:promote opts)]
-              (if-let [why (promote-refusal cluster instances instance)]
+              (if-let [why (promote-refusal cluster instances instance #(operations/can-patch-status? context %))]
                 (do (stdout/error (format "refusing to promote %s - %s" instance why)) false)
                 (promote! context namespace name instance proposal))
               (do (stdout/ok "read-only run - nothing was changed")

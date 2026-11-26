@@ -29,7 +29,9 @@
   :subject {:type cnpg/cluster-type :parse operations/parse-pick
             :invalid "the pick is not \"<namespace>/<cluster> <instance>\""
             :facts #(select-keys (:status %) [:currentPrimary :targetPrimary])}
-  :refusal (fn [{:keys [ref object]}] (operations/switchover-refusal object (:instance ref)))
+  :refusal (fn [{:keys [context ref object]}]
+             (or (operations/switchover-refusal object (:instance ref))
+                 (operations/status-rights-refusal #(operations/can-patch-status? context %) (:namespace ref))))
   :announce (fn [{:keys [ref]}] (format "Promote %s in %s/%s" (:instance ref) (:namespace ref) (:cluster ref)))
   :effect (fn [{:keys [context ref]}]
             (effect/plan (apply effect/cmd (operations/promote-args context ref))))
