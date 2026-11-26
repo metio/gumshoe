@@ -55,8 +55,10 @@
                :recovery firebook/fabric-recovery}
   :expect {:detectives (filterv #(= "evpn-static-fdb" (:name %)) evpn-detectives/detectives)
            :collect (fn [{:keys [conn vni]}] (firebook/fabric-evidence conn vni))
-           :fire? (fn [{:keys [component]} {:keys [conn]}]
-                    (= component (str (:host conn) "/" firebook/drill-mac)))
+           :fire? (fn [{:keys [host dev mac]} {:keys [conn vni]}]
+                    (and (= host (:host conn))
+                         (= dev (str "lo." vni))
+                         (= mac firebook/drill-mac)))
            :timeout 30
            :out-timeout 30}
   :lit (fn [{:keys [vni]}]

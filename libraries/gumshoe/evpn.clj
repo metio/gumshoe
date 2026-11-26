@@ -87,6 +87,64 @@
 
 (def ^:private vxlan-dev-pattern #"^lo\.(\d+)$")
 
+(def ^:private fdb-valued-keys
+  "The words iproute2's `bridge fdb show` prints before a value (print_fdb in
+  bridge/fdb.c): `dev`, `dst`, `vlan`, `port`, `vni`, `src_vni`, `via`, `nhid`,
+  `link-netnsid` and `master <bridge>`."
+  #{"dev" "dst" "vlan" "port" "vni" "src_vni" "via" "nhid" "link-netnsid" "master"})
+
+(def ^:private fdb-state-words
+  "The NUD state word print_fdb ends a row with: `permanent` (NUD_PERMANENT),
+  `static` (NUD_NOARP) or `stale` (NUD_STALE). A reachable entry prints none,
+  and any other state prints as `state=0x…`."
+  #{"permanent" "static" "stale"})
+
+(def ^:private fdb-flag-words
+  "The flag words print_fdb prints after the values, from ndm_flags and, with
+  details, the activity bits. `master` doubles as the flag NTF_MASTER, printed
+  bare, and as the key of `master <bridge>`."
+  #{"self" "router" "extern_learn" "offload" "master" "sticky" "locked"
+    "activity_notify" "inactive"})
+
+(defn- bare-word?
+  [token]
+  (or (nil? token)
+      (contains? fdb-valued-keys token)
+      (contains? fdb-state-words token)
+      (contains? fdb-flag-words token)
+      (str/starts-with? token "state=")))
+
+(defn parse-fdb-line
+  "One row of `bridge fdb show` as its MAC, its keyed values, its flag words and
+  its state, or nil for a line that does not start with a MAC.
+
+  Words are read by what they are rather than by position, so a row is read the
+  same whatever subset of fields iproute2 printed: `master` followed by a bridge
+  name is the bridge, `master` followed by another keyword is the bare flag, and
+  `via ifindex N` (printed when the device sits in another namespace) keeps both
+  words. A word nothing here knows is kept among the flags rather than dropped,
+  so it still tells two otherwise equal rows apart."
+  [line]
+  (let [tokens (str/split (str/trim (or line "")) #"\s+")
+        mac (first tokens)]
+    (when (and mac (re-matches mac-pattern mac))
+      (loop [[token & more] (rest tokens)
+             row {:mac (str/lower-case mac) :values {} :flags #{} :state nil}]
+        (cond
+          (nil? token) row
+
+          (and (= "via" token) (= "ifindex" (first more)) (second more))
+          (recur (drop 2 more) (assoc-in row [:values "via"] (str "ifindex " (second more))))
+
+          (and (contains? fdb-valued-keys token) (not (bare-word? (first more))))
+          (recur (rest more) (assoc-in row [:values token] (first more)))
+
+          (or (contains? fdb-state-words token) (str/starts-with? token "state="))
+          (recur more (assoc row :state token))
+
+          :else
+          (recur more (update row :flags conj token)))))))
+
 (defn parse-fdb
   "Rows of `bridge fdb show`, kept only for this VNI: its own VXLAN device and the
   guest taps.
@@ -98,28 +156,37 @@
 
   `dst` marks an entry that sends the MAC across the fabric; its absence on a tap
   marks local ownership. Both existing for one MAC on one host is the contradiction
-  the fdb-conflict detective looks for."
+  the fdb-conflict detective looks for.
+
+  One host's table is read once per VNI scanned, so a tap row comes back once per
+  read. Each row carries the VNI whose read produced it as `:read-vni`, and its
+  trimmed text as `:line`, so a check can tell a row the table printed twice from
+  one row read twice."
   [vni host output]
   (let [vxlan-dev (str "lo." vni)]
     (for [line (str/split-lines (or output ""))
-          :let [tokens (str/split (str/trim line) #"\s+")
-                mac (first tokens)]
-          :when (and mac (re-matches mac-pattern mac))
-          :let [pairs (apply hash-map (concat (rest tokens)
-                                              (when (odd? (count (rest tokens))) [nil])))
-                dev (get pairs "dev")
-                dst (get pairs "dst")
-                flags (set (rest tokens))
+          :let [{:keys [mac values flags state]} (parse-fdb-line line)
+                dev (get values "dev")
                 other-overlay? (and dev
                                     (re-matches vxlan-dev-pattern dev)
                                     (not= dev vxlan-dev))]
-          :when (and dev (not other-overlay?))]
+          :when (and mac dev (not other-overlay?))]
       {:host host
-       :mac (str/lower-case mac)
+       :mac mac
        :dev dev
-       :dst dst
+       :dst (get values "dst")
+       :vlan (get values "vlan")
+       :entry-vni (get values "vni")
+       :port (get values "port")
+       :via (get values "via")
+       :master (get values "master")
+       :self? (contains? flags "self")
+       :state state
+       :flags flags
+       :line (str/trim line)
+       :read-vni vni
        :vxlan? (= dev vxlan-dev)
-       :static? (contains? flags "static")
+       :static? (= "static" state)
        :extern-learn? (contains? flags "extern_learn")})))
 
 (def ^:private interval-patterns

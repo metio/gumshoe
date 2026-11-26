@@ -13,7 +13,8 @@
   Evidence is per host, so a disagreement between two hosts about the same MAC
   is visible without asking a router anything."
   (:require [clojure.string :as str]
-            [gumshoe.evpn :as evpn]))
+            [gumshoe.evpn :as evpn]
+            [gumshoe.tally :as tally]))
 
 (defn- gateway-vteps
   "The gateway VTEPs the scan was given, or nil when none were: an empty set
@@ -197,18 +198,129 @@
         :stale-remote-vtep stale-remote-vtep}
        reading))))
 
+(defn- overlay-vni
+  [dev]
+  (some->> dev (re-matches #"^lo\.(\d+)$") second))
+
+(defn- row-identity
+  [row]
+  (or (:line row) (dissoc row :read-vni)))
+
+(defn- sightings
+  "Each host's distinct fdb rows, each with `:seen`: how often one read of the
+  table printed it. The table is read once per VNI scanned, so a row that every
+  read prints once is one row seen once, and only a row one read printed twice
+  counts twice."
+  [rows]
+  (for [{items :items} (tally/tally (juxt :host row-identity) rows)]
+    (assoc (first items)
+           :seen (apply max (map :count (tally/tally :read-vni items))))))
+
+(defn- row-text
+  "The row as `bridge fdb show` printed it, or rebuilt from its fields when it
+  carries no line."
+  [{:keys [line mac dev vlan dst entry-vni master self? state static?]}]
+  (or line
+      (str/join " " (concat [mac "dev" dev]
+                            (when dst ["dst" dst])
+                            (when vlan ["vlan" vlan])
+                            (when entry-vni ["vni" entry-vni])
+                            (when self? ["self"])
+                            (when master ["master" master])
+                            [(or state (when static? "static"))]))))
+
+(defn- delete-command
+  "The command that removes exactly this row. A row with a destination lives in
+  the VXLAN device's own table and is addressed with `self` and its `dst`, a
+  bridge row with `master` and its `vlan`; `bridge fdb del` without either flag
+  addresses the device's own table only, so a bridge row needs `master` named."
+  [{:keys [mac dev dst vlan entry-vni master self?]}]
+  (str/join " " (concat ["bridge" "fdb" "del" mac "dev" dev]
+                        (when dst ["dst" dst])
+                        (when entry-vni ["vni" entry-vni])
+                        (when vlan ["vlan" vlan])
+                        (if (or dst self? (not master)) ["self"] ["master"]))))
+
+(defn static-fdb-entries
+  "The static fdb entries in the evidence, one per thing an operator acts on.
+
+  One static entry spans several rows of `bridge fdb show`: the VXLAN device's
+  own row naming the remote VTEP (`dst <vtep> self static`) and the bridge's rows
+  sending the MAC out of that device (`master <bridge> static`, often twice, with
+  and without a `vlan`). Rows for one host, device, entry VNI and MAC are one
+  entry, and each distinct static destination among them is its own entry
+  carrying the bridge rows with it, so two pins naming different VTEPs stay two.
+  An entry with no static destination names what the VXLAN device's learned rows
+  point at, a local port for a device that is no overlay, or `:unread` when no
+  row names a destination at all.
+
+  `:rows` holds each distinct row with how often one read printed it, and
+  `:count` adds those up."
+  [fdb]
+  (for [{[host dev entry-vni mac] :key group :items}
+        (tally/tally (juxt :host :dev :entry-vni :mac) (sightings (filter map? fdb)))
+        :let [static (filter :static? group)]
+        :when (seq static)
+        :let [bridge-rows (remove :dst static)
+              learned (->> group (remove :static?) (keep :dst) distinct vec)
+              vni (or entry-vni (overlay-vni dev))
+              base {:host host :dev dev :vni vni :mac mac}]
+        entry (if-let [pinned (seq (filter :dst static))]
+                (for [{dst :key rows :items} (tally/tally :dst pinned)]
+                  (assoc base :dst dst :destination :static
+                         :rows (vec (concat rows bridge-rows))))
+                [(merge base
+                        {:dst nil :rows (vec bridge-rows)}
+                        (cond (nil? vni) {:destination :local-port}
+                              (seq learned) {:destination :learned :learned-dsts learned}
+                              :else {:destination :unread}))])]
+    (assoc entry :count (reduce + (map :seen (:rows entry))))))
+
+(defn- destination-text
+  [{:keys [dst dev destination learned-dsts]}]
+  (case destination
+    :static (str "pointing at " dst)
+    :learned (str "with no static destination; the device's learned rows send it to "
+                  (str/join ", " learned-dsts))
+    :local-port (str "pinned to the local port " dev ", so no remote VTEP")
+    :unread (str "whose destination VTEP could not be read: no row for it on " dev
+                 " names a dst")))
+
+(defn- count-text
+  [{:keys [rows] n :count}]
+  (str (tally/counted n "fdb row" "fdb rows")
+       (when (< (count rows) n)
+         (str ", " (count rows) " distinct"))))
+
 (defn detect-static-fdb
+  "One warning per static entry, naming host, device, VNI, MAC and destination
+  VTEP - or saying why there is none - with the rows behind it and how many
+  there were, so an operator can reconcile the finding with `bridge fdb show`
+  and remove every row of a pin rather than half of it."
   [evidence]
-  (for [{:keys [host mac dev dst static?]} (get evidence "evpn-fdb")
-        :when static?]
-    {:severity :warning
-     :component (str host "/" mac)
-     :summary (str "static fdb entry on " dev
-                   (when dst (str " pointing at " dst)))
-     :hint (str "a static entry outranks what EVPN learns, so it keeps working only "
-                "while the guest stays put. If it was added to work around a fabric "
-                "fault, remove it once the fault is fixed - after a migration it "
-                "black-holes the guest exactly as the fault did")}))
+  (for [{:keys [host dev vni mac dst destination learned-dsts rows] n :count :as entry}
+        (static-fdb-entries (get evidence "evpn-fdb"))]
+    (cond-> {:severity :warning
+             :component (str host "/" dev "/" mac)
+             :summary (str "static fdb entry for " mac " on " dev
+                           (when vni (str " (VNI " vni ")"))
+                           " " (destination-text entry)
+                           " - " (count-text entry))
+             :hint (str "a static entry outranks what EVPN learns, so it keeps working only "
+                        "while the guest stays put. If it was added to work around a fabric "
+                        "fault, remove it once the fault is fixed - after a migration it "
+                        "black-holes the guest exactly as the fault did. Removing it takes one "
+                        "command per row, and a row left behind keeps part of the pin: "
+                        (str/join "; " (map #(str "`" (delete-command %) "`") rows)))
+             :host host
+             :dev dev
+             :vni vni
+             :mac mac
+             :dst dst
+             :destination (name destination)
+             :count n
+             :rows (mapv (fn [row] {:row (row-text row) :seen (:seen row)}) rows)}
+      (seq learned-dsts) (assoc :learned-dsts learned-dsts))))
 
 (defn- vtep-unread-finding
   [{:keys [host vni vtep-error]}]
