@@ -193,6 +193,75 @@
                    (when (and (= :running status) (not (str/blank? note)))
                      [(str "    " (paint ctx :dim note))]))))))
 
+(defn- code-point-columns
+  "The columns code point cp may take on a terminal, erring wide: below
+   U+1100, and in the punctuation, arrow, box-drawing and braille blocks a
+   spinner draws from, one; anything else (CJK, emoji, symbols that a
+   terminal may draw two wide) two. A line measured too wide is only cut
+   shorter than it had to be."
+  [cp]
+  (cond
+    (< cp 0x1100) 1
+    (<= 0x2000 cp 0x22FF) 1
+    (<= 0x2500 cp 0x25FF) 1
+    (<= 0x2800 cp 0x28FF) 1
+    :else 2))
+
+(defn columns
+  "The terminal columns s takes at most, colour escapes excluded, counting
+   every character that may be drawn two wide as two."
+  [s]
+  (let [bare (strip-colors s)]
+    (reduce + 0 (map code-point-columns (.toArray (.codePoints ^String bare))))))
+
+(defn cut
+  "s cut at the end to at most `budget` columns (see columns), with an
+   ellipsis where it was cut. s must carry no escapes. A budget below one
+   gives the empty string."
+  [budget s]
+  (let [s (str s)]
+    (cond
+      (< budget 1) ""
+      (<= (columns s) budget) s
+      :else (loop [cps (seq (.toArray (.codePoints ^String s))) used 1 kept (StringBuilder.)]
+              (let [cp (first cps)
+                    w (when cp (code-point-columns cp))]
+                (if (and cp (<= (+ used w) budget))
+                  (recur (next cps) (+ used w) (.appendCodePoint kept (int cp)))
+                  (str kept "…")))))))
+
+(defn- one-line
+  "text as one line of plain text: colour removed and every control
+   character, a newline or an escape included, turned into a space, so it can
+   never move the cursor."
+  [text]
+  (str/replace (strip-colors text) #"[\x00-\x1f\x7f]" " "))
+
+(defn live-line
+  "The one line a live task list repaints, from the rows it has not printed
+   for good yet: a spinner frame, then what is in flight. The first running
+   row with a status note (gumshoe.progress/status!) shows as its label and
+   that note, with how many more run; else one running row shows its label
+   and several their count and labels; with nothing running, how many rows
+   have not started. Nil when there is nothing in flight. The text is cut at
+   the end to `width` columns, so the line never wraps; nil leaves it whole."
+  [ctx rows {:keys [frame width]}]
+  (let [running (filter #(= :running (:status %)) rows)
+        noted (first (remove #(str/blank? (:note %)) running))
+        waiting (count (filter #(= :pending (:status %)) rows))
+        text (cond
+               noted (str (one-line (:label noted)) ": " (one-line (:note noted))
+                          (when (next running) (str " (" (dec (count running)) " more running)")))
+               (= 1 (count running)) (one-line (:label (first running)))
+               (seq running) (str (count running) " running: "
+                                  (str/join ", " (map (comp one-line :label) running)))
+               (pos? waiting) (str waiting " not started"))]
+    (when text
+      (let [spinner (spinner-frame ctx (or frame 0))
+            lead (str "  " (strip-colors spinner) " ")
+            body (if width (cut (- width (columns lead)) text) text)]
+        (str "  " spinner " " (if noted (paint ctx :dim body) body))))))
+
 (defn command
   "The echo of a command about to run: $ and the words."
   [ctx words]

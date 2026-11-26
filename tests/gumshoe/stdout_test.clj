@@ -177,7 +177,8 @@
     #'stdout/no-color-requested? #'stdout/strip-colors #'stdout/elide #'stdout/wrap
     #'stdout/hanging #'stdout/shorten-path #'stdout/red #'stdout/green #'stdout/yellow
     #'stdout/blue #'stdout/bold #'stdout/animate? #'stdout/data-table #'stdout/table #'stdout/context
-    #'stdout/*in-task-list*})
+    #'stdout/*in-task-list* #'stdout/choose-terminal-columns #'stdout/terminal-columns
+    #'stdout/unknown-terminal-columns})
 
 (deftest every-public-helper-is-classified
   (is (= (set (vals (ns-publics 'gumshoe.stdout)))

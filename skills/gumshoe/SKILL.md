@@ -1074,16 +1074,19 @@ test or a book that composes a line inside another (`(stdout/detail
 (render/item (stdout/context) :failure "…"))`). `(theme/glyph :finding)`
 gives the bare glyph for a menu label or a heading.
 
-A task list draws each row `:not-yet` until it starts, a spinner while it
-runs, then `:done`, `:failure`, `:not-yet` with a reason when the step could
-not read its answer, or `:finding` for a best-effort post-check that could
-not confirm. A step is `:done` only on `true`, a truthy non-map value, or
+A task list prints each row once, when it settles: `:done`, `:failure`,
+`:not-yet` with a reason when the step could not read its answer (or never
+started), or `:finding` for a best-effort post-check that could not confirm.
+On a terminal one line below the rows repaints, a spinner and what is still
+in flight, cut to the terminal's width; rows print in the order they were
+added, so a row settling behind a running one waits for it. A step is `:done` only on `true`, a truthy non-map value, or
 `{:ok? true}`: a throw, `nil`, `{:unread? true}` or a map without `:ok?`
-never is. What a step prints on stderr is drawn under its row, and
-`(progress/status! "12 of 48 reads")` sets its transient status line.
+never is. What a step prints on stderr is printed under its row, and
+`(progress/status! "12 of 48 reads")` replaces the live line's text while
+the step runs.
 Mutation books, playbooks and firebooks render their post-checks this way:
 each check is a row (`verified: …` once it holds), its wait line is the
-row's status, and a failed check's reason is a plain line under it. Off a
+live line's text while it polls, and a failed check's reason is a plain line under it. Off a
 terminal, under `NO_COLOR` or `--no-color`, every row prints once when it
 settles, with no cursor movement and no colour, so a log or an agent reading
 stderr gets plain lines.

@@ -154,7 +154,7 @@
 
 (deftest a-live-status-line-shows-while-running-and-goes-when-settled
   (let [err (live-err #(progress/run-steps [{:label "phase" :run (fn [] (progress/status! "12 of 48 reads") (Thread/sleep 250) true)}]))]
-    (is (str/includes? err "phase\n    12 of 48 reads\n") "drawn under the running row")
+    (is (str/includes? (render/strip-colors err) " phase: 12 of 48 reads\n") "drawn as the live line")
     (is (not (str/includes? (after-last-clear err) "12 of 48")) "gone once the row settled")))
 
 (deftest a-plain-status-line-prints-at-once
@@ -233,11 +233,12 @@
 (deftest live-post-checks-fill-in-with-their-wait-line
   (let [tries (atom 0)
         held (atom nil)
-        err (live-err #(reset! held (verify/all [{:description "the pods run" :interval 1 :timeout 5
-                                                 :check (fn [] (> (swap! tries inc) 1))}])))]
+        err (binding [stdout/*width* 120]
+              (live-err #(reset! held (verify/all [{:description "the pods run" :interval 1 :timeout 5
+                                                   :check (fn [] (> (swap! tries inc) 1))}]))))]
     (is (true? @held))
-    (is (re-find #"the pods run\n    waiting for: the pods run \(0/5s\)\n" err)
-        "the polling wait line is the running row's status")
+    (is (re-find #" the pods run: waiting for: the pods run \(0/5s\)\n" (render/strip-colors err))
+        "the polling wait line is the live line's text")
     (is (str/includes? (after-last-clear err) "✅ verified: the pods run\n"))
     (is (not (str/includes? (after-last-clear err) "waiting for")) "the wait line is gone from the screen")))
 

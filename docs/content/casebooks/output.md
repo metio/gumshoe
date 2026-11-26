@@ -70,9 +70,12 @@ The older names keep working and print exactly the same:
 
 ## Task lists
 
-`gumshoe.progress` draws a live task list: on a terminal each row repaints
-in place as its work runs and settles; anywhere else each row prints once,
-when it settles. A mutation book's post-checks and the prerequisites of
+`gumshoe.progress` draws a live task list. On a terminal each row prints
+once, for good, when it settles, and a single line below the rows repaints
+in place: a spinner and what is still in flight (`3 running: pods, events,
+nodes`), cut to the terminal's width. A repaint therefore costs the same
+whether the list holds two rows or two hundred. Anywhere else each row
+prints once, when it settles, and nothing repaints. A mutation book's post-checks and the prerequisites of
 every book run through it, and a book with its own `:action` renders its
 phases with the same calls.
 
@@ -146,8 +149,8 @@ phases:
   and settles it with what the work returned or threw.
 - `(progress/start! board i)` and `(progress/settle! board i returned)` do
   the same in two calls, for work that does not fit one function.
-- `(progress/status! "12 of 48 reads")` replaces the running row's status
-  line. Off a terminal it prints the line at once, so a log still shows the
+- `(progress/status! "12 of 48 reads")` replaces the text of the live
+  line with the running row's label and that status, until the row settles. Off a terminal it prints the line at once, so a log still shows the
   wait as it happens. Outside a list it prints an `:in-progress` item.
 - `with-board` returns what its body returned. When the body ends, normally
   or by a throw, every row is printed for good, rows never started as
@@ -155,20 +158,22 @@ phases:
 
 ### Printing inside a step
 
-What a step prints on stderr while the list is open is kept and drawn under
-its row, so a repaint never overwrites it; on a terminal the last lines show
-while the step runs. A step's result on stdout still goes to stdout when
+What a step prints on stderr while the list is open is kept and printed
+under its row when the row settles, so a repaint never overwrites it.
+Rows print in the order they were added: a row that settles while an earlier
+one still runs waits for it, so each step's text stays under its own row.
+Text printed outside any step goes above the live line, a line at a time. A step's result on stdout still goes to stdout when
 stdout is a pipe or a file, so `--output json | jq` keeps working. A list or
 spinner started inside a step prints plain lines into that step's text.
 
 A step must not run a child process that writes to the terminal directly
 (an effect streaming its output): that output bypasses the list and the next
-repaint overwrites it.
+repaint clears the line it ends on.
 
 ### Parallel tasks
 
-`watch-futures!` animates a set of tasks running at once and returns their
-values in order once all are done:
+`watch-futures!` draws a set of tasks running at once, each row printed as
+its future resolves, and returns their values in order once all are done:
 
 ```clojure
 (progress/watch-futures! [["pods" (future (read-pods))]
