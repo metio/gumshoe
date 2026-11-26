@@ -739,6 +739,35 @@
   [context namespace type name]
   (= :absent (presence context {:type type :namespace namespace :name name})))
 
+(defn namespace-objects
+  "Every object left in `namespace`, read across each namespaced type the
+   cluster lists: {:ok? true :objects [\"<kind>/<name>\" ..]} when discovery
+   and the listing both answered in full, else {:ok? false :reason <why>}.
+   kubectl api-resources exits non-zero while still printing the groups it
+   did read when one aggregated API is unavailable; that counts as unread,
+   because the unavailable API may serve exactly the objects in question.
+   Ignores *strict-reads*: the caller judges :ok? itself."
+  [context namespace]
+  (let [discovery (shell/execute "kubectl" (str "--context=" context) request-timeout
+                                 "api-resources" "--namespaced=true" "--verbs=list" "--output=name")
+        types (remove str/blank? (map str/trim (str/split-lines (str (:out discovery)))))
+        failure (fn [what {:keys [exit err]}]
+                  (format "%s did not answer: %s" what
+                          (or (not-empty (str/trim (str err))) (str "exit " exit))))]
+    (cond
+      (not (zero? (:exit discovery)))
+      {:ok? false :reason (failure "the discovery of namespaced types" discovery)}
+
+      (empty? types)
+      {:ok? false :reason "the discovery of namespaced types listed none"}
+
+      :else
+      (let [listing (shell/execute "kubectl" (str "--context=" context) (str "--namespace=" namespace)
+                                   request-timeout "get" (str/join "," types) "--output=name")]
+        (if (zero? (:exit listing))
+          {:ok? true :objects (vec (remove str/blank? (map str/trim (str/split-lines (str (:out listing))))))}
+          {:ok? false :reason (failure (str "the listing of namespace " namespace) listing)})))))
+
 (defn pods-on-node
   [context node]
   (get-json context "pods" "--all-namespaces" (str "--field-selector=spec.nodeName=" node)))

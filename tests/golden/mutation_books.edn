@@ -1001,8 +1001,10 @@
    ["────────────────────────────────────────────────────────────────────────────────"
     "  🔍 DRY RUN - nothing will be changed"
     "────────────────────────────────────────────────────────────────────────────────"
-    "This will force namespace termination - every resource left in it is deleted on 'cluster':"
+    "This will force-remove the namespace - objects still in it are NOT deleted: they stay in etcd without cleanup, and a namespace created later under this name exposes them again on 'cluster':"
     "  - stuck"
+    "  - the namespace reports no deletion conditions"
+    "  - no object is left in it"
     "  would run: kubectl replace --raw /api/v1/namespaces/stuck/finalize --filename - (with stdin)"],
    :banner "DONE - nothing was changed",
    :recovery []},
@@ -1035,11 +1037,14 @@
    :recovery []},
   :permitted
   {:action
-   "force namespace termination - every resource left in it is deleted",
+   "force-remove the namespace - objects still in it are NOT deleted: they stay in etcd without cleanup, and a namespace created later under this name exposes them again",
    :destructive? true,
-   :items ["stuck"],
+   :items
+   ["stuck"
+    "the namespace reports no deletion conditions"
+    "no object is left in it"],
    :step
-   "force namespace termination - every resource left in it is deleted",
+   "force-remove the namespace - objects still in it are NOT deleted: they stay in etcd without cleanup, and a namespace created later under this name exposes them again",
    :plan
    [[:kubectl-stdin
      "ctx"
@@ -1060,8 +1065,11 @@
   {:result true,
    :out "▸ Namespace: stuck",
    :action
-   "force namespace termination - every resource left in it is deleted",
-   :items ["stuck"],
+   "force-remove the namespace - objects still in it are NOT deleted: they stay in etcd without cleanup, and a namespace created later under this name exposes them again",
+   :items
+   ["stuck"
+    "the namespace reports no deletion conditions"
+    "no object is left in it"],
    :plan
    [[:kubectl-stdin
      "ctx"
@@ -1075,11 +1083,14 @@
   {:stopped "refusing: namespace stuck is Active, not Terminating"},
   :spec-changed
   {:action
-   "force namespace termination - every resource left in it is deleted",
+   "force-remove the namespace - objects still in it are NOT deleted: they stay in etcd without cleanup, and a namespace created later under this name exposes them again",
    :destructive? true,
-   :items ["stuck"],
+   :items
+   ["stuck"
+    "the namespace reports no deletion conditions"
+    "no object is left in it"],
    :step
-   "force namespace termination - every resource left in it is deleted",
+   "force-remove the namespace - objects still in it are NOT deleted: they stay in etcd without cleanup, and a namespace created later under this name exposes them again",
    :plan
    [[:kubectl-stdin
      "ctx"
@@ -1104,7 +1115,11 @@
    {:namespace
     {:desc "The stuck namespace - interactive selection when omitted",
      :coerce :string,
-     :alias :n}},
+     :alias :n},
+    :orphan-remaining
+    {:desc
+     "Finalize even though objects may remain in the namespace, leaving them in etcd without cleanup",
+     :coerce :boolean}},
    :prerequisites
    {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [],
@@ -1113,12 +1128,12 @@
    :empty-message "no namespace is stuck in Terminating",
    :confirm
    {:action
-    "force namespace termination - every resource left in it is deleted",
+    "force-remove the namespace - objects still in it are NOT deleted: they stay in etcd without cleanup, and a namespace created later under this name exposes them again",
     :destructive? true},
    :details
    ["What it does:"
     "  picks one Namespace (--namespace, or interactively)"
-    "  asks to confirm: force namespace termination - every resource left in it is deleted (destructive - type yes)"
+    "  asks to confirm: force-remove the namespace - objects still in it are NOT deleted: they stay in etcd without cleanup, and a namespace created later under this name exposes them again (destructive - type yes)"
     "  checks again right before acting that what was confirmed still holds"
     "  announces the change to the changelog"
     "  verifies the result before it reports success"
@@ -1129,11 +1144,14 @@
    :candidates {:permitted ["stuck"], :refused []}},
   :unanswered
   {:action
-   "force namespace termination - every resource left in it is deleted",
+   "force-remove the namespace - objects still in it are NOT deleted: they stay in etcd without cleanup, and a namespace created later under this name exposes them again",
    :destructive? true,
-   :items ["stuck"],
+   :items
+   ["stuck"
+    "the namespace reports no deletion conditions"
+    "no object is left in it"],
    :step
-   "force namespace termination - every resource left in it is deleted",
+   "force-remove the namespace - objects still in it are NOT deleted: they stay in etcd without cleanup, and a namespace created later under this name exposes them again",
    :plan
    [[:kubectl-stdin
      "ctx"
@@ -4749,7 +4767,8 @@
    :precondition {:result true, :out ""},
    :announce "Reset HelmRelease apps/podinfo",
    :checks
-   [{:description "HelmRelease apps/podinfo is Ready",
+   [{:description
+     "HelmRelease apps/podinfo handled the reset and is Ready",
      :timeout 300,
      :interval 15,
      :holds false}]},
@@ -4773,7 +4792,8 @@
    :precondition {:result true, :out ""},
    :announce "Reset HelmRelease apps/podinfo",
    :checks
-   [{:description "HelmRelease apps/podinfo is Ready",
+   [{:description
+     "HelmRelease apps/podinfo handled the reset and is Ready",
      :timeout 300,
      :interval 15,
      :holds false}]},
@@ -4800,7 +4820,8 @@
     "refusing: its spec changed after the confirmation (generation 1, now 2)"},
    :announce "Reset HelmRelease apps/podinfo",
    :checks
-   [{:description "HelmRelease apps/podinfo is Ready",
+   [{:description
+     "HelmRelease apps/podinfo handled the reset and is Ready",
      :timeout 300,
      :interval 15,
      :holds false}]},
@@ -4871,7 +4892,8 @@
     "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
    :announce "Reset HelmRelease apps/podinfo",
    :checks
-   [{:description "HelmRelease apps/podinfo is Ready",
+   [{:description
+     "HelmRelease apps/podinfo handled the reset and is Ready",
      :timeout 300,
      :interval 15,
      :holds false}]}},

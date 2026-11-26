@@ -53,6 +53,74 @@
     (format "namespace %s carries no kubernetes finalizer" name)
     :else nil))
 
+(def deletion-condition-types
+  "The conditions the namespace controller writes while it empties a
+   Terminating namespace."
+  ["NamespaceContentRemaining" "NamespaceFinalizersRemaining" "NamespaceDeletionContentFailure"
+   "NamespaceDeletionDiscoveryFailure" "NamespaceDeletionGroupVersionParsingFailure"])
+
+(defn deletion-conditions
+  "The namespace's deletion conditions, in the order of deletion-condition-types."
+  [namespace]
+  (let [by-type (into {} (map (juxt :type identity)) (-> namespace :status :conditions))]
+    (keep by-type deletion-condition-types)))
+
+(defn content-blockers
+  "The deletion conditions that hold. Each of them means content may remain:
+   objects left or held by finalizers, a delete that failed, or a group the
+   controller could not enumerate at all, whose objects it cannot count."
+  [namespace]
+  (filter #(= "True" (:status %)) (deletion-conditions namespace)))
+
+(defn deletion-condition-lines
+  "The deletion conditions as the confirmation shows them."
+  [namespace]
+  (if-let [conditions (seq (deletion-conditions namespace))]
+    (for [{:keys [type status message]} conditions]
+      (str type " " status (when-not (str/blank? message) (str ": " message))))
+    ["the namespace reports no deletion conditions"]))
+
+(defn content-lines
+  "What a namespace-objects read found, as the confirmation shows it."
+  [{:keys [ok? objects reason]}]
+  (cond
+    (not ok?) [(str "could not list the objects left in it: " reason)]
+    (empty? objects) ["no object is left in it"]
+    :else (cons (format "%d object(s) left in it:" (count objects))
+                (map #(str "  " %) objects))))
+
+(defn namespace-items
+  "The confirmation items of a forced finalization: the namespace, its
+   deletion conditions and the objects left in it."
+  [name namespace contents]
+  (concat [name] (deletion-condition-lines namespace) (content-lines contents)))
+
+(defn remaining-content
+  "Why objects may remain in the namespace, or nil when its listing answered
+   empty and no deletion condition holds. A listing that did not answer is a
+   reason too, since nothing then shows the namespace is empty."
+  [namespace {:keys [ok? objects reason]}]
+  (let [blockers (map :type (content-blockers namespace))]
+    (cond
+      (not ok?) (str "the objects in it could not be listed (" reason ")")
+      (seq objects) (format "%d object(s) are left in it" (count objects))
+      (seq blockers) (str (str/join ", " blockers) " hold")
+      :else nil)))
+
+(defn orphan-refusal
+  "Why the namespace must not be finalized while objects may remain in it,
+   unless the operator acknowledged orphaning them. The finalize subresource
+   removes the Namespace without deleting what is left in it: those objects
+   stay in etcd, their controllers never clean up, and a namespace created
+   later under the same name exposes them again."
+  [name namespace contents acknowledged?]
+  (when-not acknowledged?
+    (when-let [why (remaining-content namespace contents)]
+      (format (str "namespace %s may still hold objects: %s. Forcing its finalization leaves them "
+                   "in etcd without cleanup, and a namespace created later under this name exposes "
+                   "them again; pass --orphan-remaining to accept that")
+              name why))))
+
 ;; --- Released PersistentVolumes -----------------------------------------------------
 
 (defn released?
