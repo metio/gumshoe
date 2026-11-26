@@ -9,7 +9,6 @@
    runs and reports in status.operationState."
   (:require [cheshire.core :as json]
             [gumshoe.kubectl :as kubectl]
-            [gumshoe.onset :as onset]
             [gumshoe.pick :as pick]))
 
 (def refresh-annotation "argocd.argoproj.io/refresh")
@@ -81,28 +80,46 @@
      "prune: resources removed from Git are deleted from the cluster"
      "no prune: resources removed from Git stay in the cluster")])
 
+(def request-info
+  "The name of the operation info entry a sync writes its request token
+   under. The application controller copies the whole operation, info
+   included, into status.operationState.operation when it starts it."
+  "gumshoe-request")
+
+(defn request-token
+  "A token no other operation carries, which identifies the operation a run
+   requested."
+  []
+  (str (random-uuid)))
+
 (defn sync-patch
-  [initiator prune?]
+  "The merge patch that requests a sync carrying token as its request info."
+  [initiator prune? token]
   (json/generate-string {:operation {:initiatedBy {:username initiator}
+                                     :info [{:name request-info :value token}]
                                      :sync (cond-> {:syncStrategy {:hook {}}} prune? (assoc :prune true))}}))
 
-(defn- since?
-  [operation-state ^java.time.Instant requested]
-  (when-let [started (onset/instant (:startedAt operation-state))]
-    ;; startedAt has second precision, so the request's second counts
-    (not (.isBefore started (.truncatedTo requested java.time.temporal.ChronoUnit/SECONDS)))))
+(defn requested-operation?
+  "Whether the operation state reports the operation that carries token.
+   Matching the token the run wrote, not when the operation started, keeps
+   the judgement independent of the clocks of the workstation and the
+   controller."
+  [operation-state token]
+  (boolean (and (some? token)
+                (some #(and (= request-info (:name %)) (= token (:value %)))
+                      (-> operation-state :operation :info)))))
 
 (defn synced?
-  "The operation requested at the instant finished Succeeded."
-  [application requested]
+  "The operation that carries token finished Succeeded."
+  [application token]
   (let [state (-> application :status :operationState)]
     (boolean (and (nil? (:operation application))
                   (= "Succeeded" (:phase state))
-                  (since? state requested)))))
+                  (requested-operation? state token)))))
 
 (defn sync-signals
-  "Why the wait can end: the requested operation's failure."
-  [application requested]
+  "Why the wait can end: the failure of the operation that carries token."
+  [application token]
   (let [state (-> application :status :operationState)]
-    (when (and (contains? #{"Failed" "Error"} (:phase state)) (since? state requested))
+    (when (and (contains? #{"Failed" "Error"} (:phase state)) (requested-operation? state token))
       [(format "the sync %s: %s" (if (= "Error" (:phase state)) "errored" "failed") (or (:message state) "no message"))])))

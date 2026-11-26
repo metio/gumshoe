@@ -61,6 +61,13 @@
 
 (def ^:private claim-ref {:type "persistentvolumeclaims" :namespace "shop" :name "data"})
 
+(defn- holder-reads
+  "Answered reads of every holder type, the pods holding pods."
+  [pods]
+  (assoc (zipmap ["statefulsets" "deployments" "daemonsets" "replicasets" "jobs" "cronjobs"]
+                 (repeat {:ok? true :doc {:items []}}))
+         "pods" {:ok? true :doc pods}))
+
 (defn- pod
   [name & volumes]
   {:metadata {:namespace "shop" :name name} :spec {:volumes (vec volumes)}})
@@ -71,14 +78,14 @@
                       (pod "web-0" {:name "data" :persistentVolumeClaim {:claimName "data"}})]}]
     (is (= ["web-0" "web-1"] (cleanup/pods-claiming pods "shop" "data")))
     (is (= "PersistentVolumeClaim shop/data is used by pod(s) web-0, web-1"
-           (cleanup/claim-refusal claim-ref {:metadata {}} {:ok? true :doc pods})))))
+           (cleanup/claim-refusal claim-ref {:metadata {}} (holder-reads pods))))))
 
 (deftest a-generic-ephemeral-volume-claims-the-claim-kubernetes-names-after-it
   (is (= ["job"] (cleanup/pods-claiming {:items [(pod "job" {:name "data" :ephemeral {}})]} "shop" "job-data"))))
 
 (deftest an-unused-claim-is-deleted-only-when-the-pods-were-read
-  (is (nil? (cleanup/claim-refusal claim-ref {:metadata {}} {:ok? true :doc {:items []}})))
+  (is (nil? (cleanup/claim-refusal claim-ref {:metadata {}} (holder-reads {:items []}))))
   (is (= "the pods of namespace shop could not be read, so whether one uses PersistentVolumeClaim shop/data is unknown"
-         (cleanup/claim-refusal claim-ref {:metadata {}} {:ok? false})))
+         (cleanup/claim-refusal claim-ref {:metadata {}} (assoc (holder-reads {:items []}) "pods" {:ok? false}))))
   (is (= "PersistentVolumeClaim shop/data no longer exists"
-         (cleanup/claim-refusal claim-ref nil {:ok? true :doc {:items []}}))))
+         (cleanup/claim-refusal claim-ref nil (holder-reads {:items []})))))

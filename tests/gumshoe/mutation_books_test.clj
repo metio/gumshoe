@@ -786,10 +786,13 @@
               :refused [[stageset-type (assoc-in (stageset "True") [:spec :suspend] true)]]})})
 
 (def ^:private book-redefs
-  "Vars a book defines that the harness fixes, by the book's path: the
-   random suffix cronjobs/start gives the Job it creates."
+  "Vars a book defines or calls that the harness fixes, by the book's path:
+   the random suffix cronjobs/start gives the Job it creates, and the token
+   argocd sync writes into its operation."
   {"runbooks/kubernetes/cronjobs/start.clj"
-   {'runbooks.kubernetes.cronjobs.start/random-suffix (constantly "abcde")}})
+   {'runbooks.kubernetes.cronjobs.start/random-suffix (constantly "abcde")}
+   "tools/argocd/runbooks/sync.clj"
+   {'gumshoe.argocd-actions/request-token (constantly "request-token")}})
 
 (defn- pick-scenarios
   "The scenarios a book runs through its own selection: opts that pick a

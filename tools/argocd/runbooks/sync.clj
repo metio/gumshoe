@@ -29,17 +29,17 @@
   :empty-message "every Application is running an operation already"
   :confirm {:action "sync an Application - the cluster is changed to match its source" :destructive? true}
   :subject {:type argocd/application-type :parse actions/parse-pick :invalid "the pick is not \"<namespace>/<name>\""}
-  ;; taken before the change, so the operation it starts is newer
-  :values {:requested (fn [_] (java.time.Instant/now))}
+  ;; written into the operation, so the post-check knows the operation it started
+  :values {:token (fn [_] (actions/request-token))}
   :items (fn [{:keys [object target opts]}]
            (if object (actions/sync-items object (boolean (:prune opts))) [(str "sync " target)]))
   :refusal (fn [{:keys [object]}] (actions/sync-refusal object))
   :announce (fn [{:keys [target]}] (format "Sync Application %s" target))
-  :effect (fn [{:keys [context ref opts]}]
+  :effect (fn [{:keys [context ref opts token]}]
             (effect/plan (effect/kubectl context (str "--namespace=" (:namespace ref)) "patch" argocd/application-type (:name ref)
-                                         "--type=merge" (str "--patch=" (actions/sync-patch "gumshoe" (boolean (:prune opts)))))))
-  :verify (fn [{:keys [target requested] :as ctx}]
+                                         "--type=merge" (str "--patch=" (actions/sync-patch "gumshoe" (boolean (:prune opts)) token)))))
+  :verify (fn [{:keys [target token] :as ctx}]
             [{:description (format "%s synced" target)
               :timeout 900 :interval 10
-              :abort #(first (actions/sync-signals (mutation/read-subject ctx) requested))
-              :check #(actions/synced? (mutation/read-subject ctx) requested)}])})
+              :abort #(first (actions/sync-signals (mutation/read-subject ctx) token))
+              :check #(actions/synced? (mutation/read-subject ctx) token)}])})

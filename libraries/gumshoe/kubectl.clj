@@ -1008,9 +1008,11 @@
       (forward-and-run context namespace service local-port remote-port f))))
 
 (defn unused-pvc-candidates
-  "Namespace/name of every PersistentVolumeClaim no pod refers to, for a book
-   that offers them for deletion. Throws when the pods could not be read:
-   without them every claim would look unused."
+  "Namespace/name of every PersistentVolumeClaim no pod refers to. Throws
+   when the pods could not be read: without them every claim would look
+   unused. Pods are not the only holders of a claim (a StatefulSet scaled to
+   0, a CronJob between runs, an owner), so a book that offers claims for
+   deletion uses gumshoe.claims/unused-candidates instead."
   [context]
   (let [pods (get-json-result context "pods" "--all-namespaces")
         pvcs (get-json-result context "persistentvolumeclaims" "--all-namespaces")]
@@ -1022,7 +1024,9 @@
 
 (defn pvc-unused?
   "True only when the pods of `namespace` were read and none refers to the
-   claim `name` - the check to repeat right before deleting it."
+   claim `name`. Before deleting a claim, judge it with
+   gumshoe.cleanup/claim-refusal, which also asks the workloads and owners
+   that keep it."
   [context namespace name]
   (confirmed-absent? context namespace "pods"
                      #(contains? (claimed-pvcs {:items [%]}) (format "%s/%s" namespace name))))

@@ -227,6 +227,9 @@
                    [gumshoe.velero.actions-test]
                    [gumshoe.argocd-test]
                    [gumshoe.argocd-actions-test]
+                   [gumshoe.argocd-sync-token-test]
+                   [gumshoe.claims-test]
+                   [gumshoe.statefulset-retained-claims-test]
                    [gumshoe.karpenter-test]
                    [gumshoe.strimzi-test]
                    [gumshoe.kueue-test]
@@ -449,6 +452,9 @@
                                                          'gumshoe.velero.actions-test
                                                          'gumshoe.argocd-test
                                                          'gumshoe.argocd-actions-test
+                                                         'gumshoe.argocd-sync-token-test
+                                                         'gumshoe.claims-test
+                                                         'gumshoe.statefulset-retained-claims-test
                                                          'gumshoe.karpenter-test
                                                          'gumshoe.strimzi-test
                                                          'gumshoe.kueue-test

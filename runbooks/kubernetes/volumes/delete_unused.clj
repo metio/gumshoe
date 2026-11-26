@@ -2,8 +2,12 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns runbooks.kubernetes.volumes.delete-unused
-  "Deletes a PersistentVolumeClaim that no pod uses."
-  (:require [gumshoe.cleanup :as cleanup]
+  "Deletes a PersistentVolumeClaim nothing holds: no pod uses it, no
+   StatefulSet keeps it for one of its ordinals, it has no owner, and no
+   workload names it in its pod template, even one scaled to 0 or suspended
+   (see gumshoe.claims)."
+  (:require [gumshoe.claims :as claims]
+            [gumshoe.cleanup :as cleanup]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
@@ -17,24 +21,24 @@
 
 (def selection
   {:mode :namespaced :label "PersistentVolumeClaim" :namespace-flag :namespace :name-flag :pvc
-   :candidates kubectl/unused-pvc-candidates})
+   :candidates claims/unused-candidates})
 
 (mutation/book
- {:description "Deletes a PersistentVolumeClaim that no pod uses"
+ {:description "Deletes a PersistentVolumeClaim nothing uses or keeps"
   :options (select/options selection)
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities []
-                  :kubectl-can-get ["persistentvolumeclaims" "pods"]
+                  :kubectl-can-get (into ["persistentvolumeclaims"] claims/holder-types)
                   :kubectl-can-delete ["persistentvolumeclaims"]}
   :select selection
-  :empty-message "every PersistentVolumeClaim is in use"
+  :empty-message "every PersistentVolumeClaim is used by a pod or kept by a workload or owner"
   :confirm {:action "delete a PersistentVolumeClaim - the data on the volume is lost"
             :destructive? true}
   :subject {:type "persistentvolumeclaims"}
-  ;; a pod may have started using the claim since it was offered
+  ;; a pod or a workload may have started using the claim since it was offered
   :recheck (fn [{:keys [context ref]}]
-             {:pods (kubectl/get-json-result context "pods" (str "--namespace=" (:namespace ref)))})
-  :refusal (fn [{:keys [ref object pods]}] (cleanup/claim-refusal ref object pods))
+             {:holders (claims/read-holders context (:namespace ref))})
+  :refusal (fn [{:keys [ref object holders]}] (cleanup/claim-refusal ref object holders))
   :announce (fn [{:keys [target]}] (format "Delete unused PersistentVolumeClaim %s" target))
   ;; --wait=false: the pvc-protection finalizer holds the claim for as long as
   ;; a pod uses it, and the gone check is the bounded wait
