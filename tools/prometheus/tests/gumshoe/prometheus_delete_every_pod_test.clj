@@ -67,14 +67,14 @@
                                (fn [{:keys [pod]} record!]
                                  (swap! tried conj pod)
                                  (case pod
-                                   "p-0" (do (record! :deleted? true) (record! :confirmed? true) (record! :verified? true) true)
+                                   "p-0" (do (record! :reached? true) (record! :deleted? true) (record! :confirmed? true) (record! :verified? true) true)
                                    "p-1" false
-                                   "p-2" (do (record! :deleted? true) (record! :verified? true) false))))]
+                                   "p-2" (do (record! :reached? true) (record! :deleted? true) (record! :verified? true) false))))]
     (is (= ["p-0" "p-1" "p-2"] @tried) "a failed pod does not stop the others")
     (is (false? ok?))
-    (is (= [{:pod "p-0" :deleted? true :verified? true :confirmed? true}
-            {:pod "p-1" :deleted? false :verified? false :confirmed? false}
-            {:pod "p-2" :deleted? true :verified? false :confirmed? false}]
+    (is (= [{:pod "p-0" :reached? true :deleted? true :verified? true :confirmed? true}
+            {:pod "p-1" :reached? false :deleted? false :verified? false :confirmed? false}
+            {:pod "p-2" :reached? true :deleted? true :verified? false :confirmed? false}]
            results)
         "a pod whose forward failed after the delete keeps its delete but is not verified"))
   (is (true? (:ok? (prometheus/delete-on-every-pod! [{:pod "p-0"}] (fn [_ record!] (record! :deleted? true) (record! :verified? true) true)))))
@@ -107,11 +107,12 @@
   "Runs delete_metric against two pods of Prometheus monitoring/k8s, with
    pod `failing` refusing the delete. Returns what each forward targeted,
    the run's result and its outcome record."
-  [failing]
+  [failing & {:keys [unreachable]}]
   (let [{:keys [action]} (binding [runbook/*loading* true] (load-file "tools/prometheus/runbooks/delete_metric.clj"))
         forwards (atom [])
         current (atom nil)
         record (outcome/fresh)
+        err (java.io.StringWriter.)
         eventually verify/eventually
         result (with-redefs [kubectl/current-context (constantly "ctx")
                              kubectl/current-cluster (constantly "cluster")
@@ -120,19 +121,24 @@
                              kubectl/with-port-forward (fn [{:keys [pod service remote-port]} f]
                                                          (swap! forwards conj [(or pod (str "service/" service)) remote-port])
                                                          (reset! current pod)
-                                                         (f))
+                                                         (if (= unreachable pod) false (f)))
                              kubectl/port-forward-alive? (constantly true)
                              http/request (fn [method _ _]
                                             (if (= :post method)
                                               {:reachable true :status (if (= failing @current) 500 204) :body ""}
                                               {:reachable true :status 200 :json {:status "success" :data []}}))
                              verify/eventually (fn [check] (eventually (assoc check :timeout 0 :watch nil)))]
-                 (binding [*err* (java.io.StringWriter.)
+                 (binding [*err* err
                            outcome/*record* record]
                    (action {:metric "up" :namespace "monitoring" :service "prometheus-operated"
                             :selector prometheus/governing-service-selector :port-name "web" :delete-timeout 5}
                            {:announcement-data nil})))]
-    {:forwards @forwards :result result :record @record}))
+    {:forwards @forwards :result result :record @record :err (str err)}))
+
+(defn- delete-metric-report-lines
+  [results]
+  (binding [runbook/*loading* true] (load-file "tools/prometheus/runbooks/delete_metric.clj"))
+  ((requiring-resolve 'runbooks.prometheus.delete-metric/report-lines) results))
 
 (deftest the-book-deletes-on-every-pod-of-the-chosen-prometheus
   (let [{:keys [forwards result record]} (run-book! nil)]
@@ -148,6 +154,25 @@
     (is (false? (:verified record)))
     (is (str/includes? (get-in record [:recovery :text]) "deleted on 1 of 2"))
     (is (str/includes? (get-in record [:recovery :text]) "prometheus-k8s-0 still hold it"))))
+
+(deftest a-pod-no-forward-reached-is-never-said-to-hold-the-metric
+  (let [{:keys [forwards result record err]} (run-book! nil :unreachable "prometheus-k8s-0")
+        guidance (get-in record [:recovery :text])]
+    (is (= 2 (count forwards)) "the other pod is still tried")
+    (is (false? result))
+    (is (str/includes? guidance "deleted on 1 of 2"))
+    (is (str/includes? guidance "prometheus-k8s-0 could not be reached through a port-forward, so the delete never ran there"))
+    (is (not (str/includes? guidance "still hold it")) guidance)
+    (is (str/includes? err "prometheus-k8s-0: NOT deleted - no port-forward to it started") err)
+    (is (not (str/includes? err "the metric is still there")) err)))
+
+(deftest the-report-says-what-each-pod-did
+  (is (= ["  a: NOT deleted - no port-forward to it started (see the error above), so it was not asked"
+          "  b: NOT deleted - the metric is still there"
+          "  c: deleted, no series left"]
+         (vec (delete-metric-report-lines [{:pod "a" :reached? false :deleted? false}
+                                           {:pod "b" :reached? true :deleted? false}
+                                           {:pod "c" :reached? true :deleted? true :verified? true :confirmed? true}])))))
 
 ;; --- set_capacity's claims ---------------------------------------------------------
 

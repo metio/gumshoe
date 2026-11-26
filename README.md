@@ -88,7 +88,9 @@ Kubernetes cluster you are on and the VPN-looking interfaces on this host,
 asking for your ceph mgr host, and writing a tidy env.edn. Run it again and it
 asks only for what is not set yet, keeps every value already there, names
 each value it adds or changes before it writes, and keeps the previous file
-as `env.edn.<timestamp>.bak`. Or copy
+under `$XDG_STATE_HOME/gumshoe/env-backups/` (`~/.local/state/...` when that
+is unset), outside any working tree and readable only by you; the
+confirmation and the result name the backup. Or copy
 `env.edn.example` to `env.edn` and edit by hand. The first file found is
 used: the one `GUMSHOE_ENV` points to, then `./env.edn`, then
 `$XDG_CONFIG_HOME/gumshoe/env.edn`, then `~/.config/gumshoe/env.edn`. It

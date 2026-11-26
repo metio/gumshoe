@@ -24,4 +24,5 @@ recordings/
 ceph-backups/
 *.dump
 env.edn
+# backups that releases before the XDG state directory wrote beside env.edn
 env.edn.*.bak

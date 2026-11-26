@@ -424,25 +424,65 @@
        (with-out-str (pprint/pprint (dissoc config ::unread-clusters)))))
 ;; REUSE-IgnoreEnd
 
+(defn backup-dir
+  "Where env.edn backups are kept: $XDG_STATE_HOME/gumshoe/env-backups, or
+   ~/.local/state/gumshoe/env-backups when XDG_STATE_HOME is unset, empty or
+   relative (the XDG spec says to ignore a relative one). The directory is
+   outside every working tree, so a backup of an env.edn holding a webhook
+   URL or another secret is never committed by accident, whatever the
+   casebook's .gitignore says."
+  ([] (backup-dir (System/getenv "XDG_STATE_HOME") (System/getProperty "user.home")))
+  ([xdg-state-home home]
+   (let [base (if (and (not (str/blank? xdg-state-home)) (fs/absolute? xdg-state-home))
+                xdg-state-home
+                (str (fs/path home ".local" "state")))]
+     (str (fs/path base "gumshoe" "env-backups")))))
+
+(defn- sha256-hex
+  [^String s]
+  (let [digest (.digest (java.security.MessageDigest/getInstance "SHA-256") (.getBytes s "UTF-8"))]
+    (apply str (map #(format "%02x" (bit-and % 0xff)) digest))))
+
 (defn backup-path
-  "Where the env.edn at path is kept before it is rewritten at instant: beside
-   it, named after the time, so each rewrite keeps its own copy."
-  [path ^java.time.LocalDateTime instant]
-  (str path "." (.format instant (java.time.format.DateTimeFormatter/ofPattern "yyyyMMdd-HHmmss")) ".bak"))
+  "Where the env.edn at path is kept before it is rewritten at instant: in
+   dir (backup-dir by default), named after a hash of path's absolute form
+   and the time to the millisecond, so backups of different casebooks never
+   collide and each rewrite keeps its own copy. All backups of one env.edn
+   share the hash prefix."
+  ([path instant] (backup-path (backup-dir) path instant))
+  ([dir path ^java.time.LocalDateTime instant]
+   (let [absolute (str (fs/normalize (fs/absolutize path)))]
+     (str (fs/path dir (str (subs (sha256-hex absolute) 0 16) "-"
+                            (.format instant (java.time.format.DateTimeFormatter/ofPattern "yyyyMMdd-HHmmss-SSS"))
+                            ".edn.bak"))))))
+
+(defn- keep-backup!
+  "Copies the file at path to backup, creating backup with mode 0600 before
+   any content goes in and its directory with mode 0700, so no other user
+   can read a copy of a secret at any moment. Refuses to overwrite an
+   existing file at backup."
+  [path backup]
+  (let [dir (fs/parent backup)]
+    (fs/create-dirs dir {:posix-file-permissions "rwx------"})
+    (fs/set-posix-file-permissions dir "rwx------")
+    (fs/create-file backup {:posix-file-permissions "rw-------"})
+    (fs/write-bytes backup (fs/read-all-bytes path))
+    backup))
 
 (defn write!
   "Writes an env.edn map to path (the primary path by default) and returns
    {:path path :backup <where the previous file was copied, or nil>}. A file
-   already at path is copied aside first and never overwritten, so a write
-   can always be undone; when the copy fails nothing is written."
+   already at path is copied to backup (backup-path for now by default)
+   first and never overwritten, so a write can always be undone; when the
+   copy fails nothing is written. A caller that names the backup in its
+   confirmation passes the same backup here."
   ([config] (write! config primary-path))
-  ([config path]
-   (let [backup (when (fs/exists? path)
-                  (let [target (backup-path path (java.time.LocalDateTime/now))]
-                    (fs/copy path target {:copy-attributes true})
-                    target))]
+  ([config path] (write! config path (backup-path path (java.time.LocalDateTime/now))))
+  ([config path backup]
+   (let [kept (when (fs/exists? path)
+                (keep-backup! path backup))]
      (spit path (render config))
-     {:path path :backup backup})))
+     {:path path :backup kept})))
 
 (defn exists?
   []
