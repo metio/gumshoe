@@ -48,10 +48,21 @@
 (deftest a-read-only-book-reports-findings-without-claiming-a-failure
   (is (= {:tone :ok :text "DONE - no findings"}
          (banner {:changes? false :outcome :ok})))
-  (is (= {:tone :neutral :text "FINDINGS - read the report above"}
-         (banner {:changes? false :outcome :failed :findings? true})))
+  (is (= {:tone :neutral :text "FINDINGS - the book ran and reported 3 critical findings, see above"}
+         (banner {:changes? false :outcome :failed :findings? true} {:findings {:critical 3 :warning 1}})))
+  (is (= {:tone :neutral :text "FINDINGS - the book ran and reported 1 critical finding, see above"}
+         (banner {:changes? false :outcome :failed :findings? true} {:findings {:critical 1}})))
   (testing "a read-only book that failed without findings still fails"
-    (is (= :error (:tone (banner {:changes? false :outcome :failed}))))))
+    (is (= :error (:tone (banner {:changes? false :outcome :failed})))))
+  (testing "captured findings the report did not record as critical do not explain a failure"
+    (is (= {:tone :error :text "FAILED - read the messages above"}
+           (banner {:changes? false :outcome :failed :findings? true} {:findings {:warning 2}})))
+    (is (= {:tone :error :text "FAILED - read the messages above"}
+           (banner {:changes? false :outcome :failed :findings? true}))))
+  (testing "a reason the run could not do its job wins over its findings"
+    (is (= {:tone :error :text "FAILED - nothing was checked - read the messages above"}
+           (banner {:changes? false :outcome :failed :findings? true}
+                   {:findings {:critical 2} :incomplete ["nothing was checked" "nothing was checked"]})))))
 
 (deftest only-a-change-whose-post-checks-held-claims-verification
   (is (= {:tone :ok :text "DONE - applied and verified"}
@@ -166,3 +177,29 @@
         "guidance recorded after the fallback still wins")
     (is (nil? (outcome/recovery-lines :neutral (recorded #(outcome/fallback! "generic" {})))))
     (is (nil? (outcome/fallback! "generic" {})) "outside a run nothing is recorded")))
+
+(deftest the-reports-of-a-run-add-up-their-findings
+  (is (= {:critical 3 :warning 1 :info 0}
+         (:findings (recorded #(do (outcome/findings! {:critical 1 :warning 1 :info 0})
+                                   (outcome/findings! {:critical 2 :unknown 9}))))))
+  (is (= ["nothing was checked" "1 check could not run"]
+         (:incomplete (recorded #(do (outcome/incomplete! "nothing was checked")
+                                     (outcome/incomplete! "1 check could not run"))))))
+  (is (nil? (outcome/findings! {:critical 1})) "outside a run nothing is recorded"))
+
+(deftest findings-and-incomplete-never-change-the-default-exit-code
+  (doseq [outcome [:ok :failed :error]
+          extra [{} {:findings {:critical 2}} {:incomplete ["x"]} {:findings {:critical 2} :incomplete ["x"]}]]
+    (is (= (outcome/exit-code outcome {:applied 0})
+           (outcome/exit-code outcome (merge {:applied 0} extra))
+           (outcome/detailed-exit-code :default {:changes? false :outcome outcome} (merge {:applied 0} extra))))))
+
+(deftest the-detailed-contract-exits-2-only-for-findings-alone
+  (let [run {:changes? false :outcome :failed}]
+    (is (= 2 (outcome/detailed-exit-code :detailed run {:applied 0 :findings {:critical 1}})))
+    (is (= 1 (outcome/detailed-exit-code :detailed run {:applied 0 :findings {:critical 1} :incomplete ["x"]})))
+    (is (= 1 (outcome/detailed-exit-code :detailed run {:applied 0 :findings {:warning 4}})))
+    (is (= 1 (outcome/detailed-exit-code :detailed (assoc run :outcome :error) {:applied 0 :findings {:critical 1}})))
+    (is (= 1 (outcome/detailed-exit-code :detailed (assoc run :changes? true) {:applied 0 :findings {:critical 1}})))
+    (is (= 1 (outcome/detailed-exit-code :detailed run {:applied 0 :aborted "declined" :findings {:critical 1}})))
+    (is (= 0 (outcome/detailed-exit-code :detailed (assoc run :outcome :ok) {:applied 0 :findings {:critical 1}})))))

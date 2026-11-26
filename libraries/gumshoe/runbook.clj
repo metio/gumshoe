@@ -8,7 +8,9 @@
    - uniform CLI flags with -h/--help, unknown flags are rejected
    - prerequisites (tooling, connectivity, permissions) are checked first
    - flags are always optional where interactive selection can fill the gap
-   - the process exits 0 on success and 1 on failure or abort"
+   - the process exits 0 on success and 1 on failure or abort; under the
+     opt-in detailed contract a read-only run that only reported critical
+     findings exits 2 (gumshoe.outcome/detailed-exit-code)"
   (:require [babashka.cli :as cli]
             [clojure.string :as str]
             [gumshoe.command :as command]
@@ -38,6 +40,11 @@
              :coerce :boolean}
    :no-color {:desc "Disable colored output (also honors the NO_COLOR env var)"
               :coerce :boolean}
+   :exit-codes {:desc "Exit codes: default (0/1), or detailed (2 = only critical findings); env GUMSHOE_EXIT_CODES"
+                :coerce :string
+                :validate {:pred #{"default" "detailed"}
+                           :ex-msg (fn [{:keys [value]}]
+                                     (format "invalid exit-code contract %s - use default or detailed" (pr-str value)))}}
    :help {:desc "Show this help message"
           :alias :h
           :coerce :boolean}})
@@ -369,22 +376,42 @@
                (contains? config :change?) declared
                :else announce?))))
 
+(defn exit-mode
+  "Pure: the exit-code contract of a run, :default or :detailed, from the
+   --exit-codes flag and else the GUMSHOE_EXIT_CODES value, as {:mode ..
+   :note ..}. The flag wins. An env value that names no contract is ignored
+   with a note: :default reports every failure and every finding as 1, so
+   falling back to it never lets a failure pass."
+  [flag env]
+  (let [env (some-> env str str/trim str/lower-case not-empty)]
+    (cond
+      flag {:mode (keyword flag)}
+      (nil? env) {:mode :default}
+      (contains? outcome/exit-modes (keyword env)) {:mode (keyword env)}
+      :else {:mode :default
+             :note (format "GUMSHOE_EXIT_CODES=%s names no exit-code contract (default, detailed) - using default"
+                           (pr-str env))})))
+
 (defn verdict
   "Pure: the final banner and the exit code of a finished run of the book
    described by config, with the parsed opts, the outcome of its action, the
    record of what it did and whether it captured findings, as
-   {:banner {:tone .. :text ..} :exit 0|1}. Whether the run may change
+   {:banner {:tone .. :text ..} :exit 0|1|2}. Whether the run may change
    things comes from change-book?, which honours :change?, so a change book
    that posts nothing is bannered as a change. Both halves are judged from
    the same outcome and record, so the banner never contradicts the exit
-   code."
+   code.
+
+   The exit code follows the contract (:exit-codes opts), :default or
+   :detailed, as outcome/detailed-exit-code judges it; a string names it as
+   the flag does, and nil is :default."
   [config opts outcome record findings?]
-  {:banner (outcome/banner {:dry-run? (boolean (:dry-run opts))
-                            :changes? (change-book? config opts)
-                            :outcome outcome
-                            :findings? (boolean findings?)}
-                           record)
-   :exit (outcome/exit-code outcome record)})
+  (let [run {:dry-run? (boolean (:dry-run opts))
+             :changes? (change-book? config opts)
+             :outcome outcome
+             :findings? (boolean findings?)}]
+    {:banner (outcome/banner run record)
+     :exit (outcome/detailed-exit-code (some-> (:exit-codes opts) keyword) run record)}))
 
 (defn execute!
   "Runs a runbook described by a config map:
@@ -428,12 +455,13 @@
       (if (some #{"-h" "--help"} *command-line-args*)
         (println (help config))
         (let [{:keys [opts notes]} (arguments options *command-line-args* error-fn)
-              change? (change-book? config opts)]
+              change? (change-book? config opts)
+              exit-contract (exit-mode (:exit-codes opts) (System/getenv "GUMSHOE_EXIT_CODES"))]
           ;; select the output theme and the interactive backend from env.edn (or a
           ;; plugin's, just loaded) before anything prints or prompts
           (theme/apply!)
           (ui/activate!)
-          (doseq [note notes] (stdout/warn note))
+          (doseq [note (cond-> (vec notes) (:note exit-contract) (conj (:note exit-contract)))] (stdout/warn note))
           (when-not (prerequisites? prerequisites opts)
             (stdout/print-banner stdout/red (str (theme/token :error) " PREREQUISITES NOT MET - nothing was attempted"))
             (stdout/err-println "Next: install the missing tools, connect to the right cluster/VPN, or fix the")
@@ -474,7 +502,7 @@
                                                    :outcome outcome
                                                    :skipped (:skipped @record)
                                                    :meta (:announcement-data ctx)})
-                  final (verdict config opts outcome @record (summary/captured?))]
+                  final (verdict config (assoc opts :exit-codes (:mode exit-contract)) outcome @record (summary/captured?))]
               ;; the final banner leaves no doubt about the outcome, even at 3am
               (print-outcome! (:banner final) @record)
               ;; run summary: where the record is, how to reproduce, how to dig in together

@@ -34,6 +34,8 @@
    "  -e, --extinguish  Put out the fire: remove the drill's fdb entry"
    "      --dry-run     Show what would change without changing anything"
    "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help        Show this help message"]},
  "firebooks/kubernetes/crash_loop.clj"
  {:options
@@ -51,6 +53,8 @@
    "  -e, --extinguish  Put out the fire: delete the fire-drill namespace"
    "      --dry-run     Show what would change without changing anything"
    "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help        Show this help message"]},
  "firebooks/kubernetes/image_pull.clj"
  {:options
@@ -68,6 +72,8 @@
    "  -e, --extinguish  Put out the fire: delete the fire-drill namespace"
    "      --dry-run     Show what would change without changing anything"
    "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help        Show this help message"]},
  "firebooks/kubernetes/pending_pvc.clj"
  {:options
@@ -85,6 +91,8 @@
    "  -e, --extinguish  Put out the fire: delete the fire-drill namespace"
    "      --dry-run     Show what would change without changing anything"
    "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help        Show this help message"]},
  "playbooks/kubernetes/node_maintenance.clj"
  {:options
@@ -139,6 +147,8 @@
    "                       opens it, once the operator acted on it"
    "      --dry-run        Show what would change without changing anything"
    "      --no-color       Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes     Exit codes: default (0/1), or detailed (2 = only critical"
+   "                       findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help           Show this help message"]},
  "runbooks/alertmanager/alerts/silence.clj"
  {:options
@@ -177,6 +187,8 @@
    "  -m, --matchers      The labels to match (key=value), repeatable (required)"
    "      --dry-run       Show what would change without changing anything"
    "      --no-color      Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes    Exit codes: default (0/1), or detailed (2 = only critical"
+   "                      findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help          Show this help message"]},
  "runbooks/collaborate/share.clj"
  {:options
@@ -196,13 +208,15 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -w, --with      A user allowed to join, repeatable - a GitHub username, or"
-   "                  provider:name (gitlab:bob)"
-   "      --open      Let anyone holding the connect string join - refused without"
-   "                  it when no --with is given"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -w, --with        A user allowed to join, repeatable - a GitHub username, or"
+   "                    provider:name (gitlab:bob)"
+   "      --open        Let anyone holding the connect string join - refused without"
+   "                    it when no --with is given"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/detectives/apiversions.clj"
  {:options
   {:output
@@ -219,11 +233,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/detectives/cluster.clj"
  {:options
   {:hpa-grace-minutes
@@ -254,6 +270,8 @@
    "      --dry-run            Show what would change without changing anything"
    "      --no-color           Disable colored output (also honors the NO_COLOR env"
    "                           var)"
+   "      --exit-codes         Exit codes: default (0/1), or detailed (2 = only"
+   "                           critical findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help               Show this help message"]},
  "runbooks/detectives/csi.clj"
  {:options
@@ -271,11 +289,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/detectives/databases.clj"
  {:options
   {:output
@@ -292,11 +312,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/detectives/dns.clj"
  {:options
   {:output
@@ -328,14 +350,16 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -z, --zone      The zone to investigate"
-   "  -s, --server    The DNS server used as the entry point"
-   "  -p, --probes    Names that must resolve identically everywhere, repeatable"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -z, --zone        The zone to investigate"
+   "  -s, --server      The DNS server used as the entry point"
+   "  -p, --probes      Names that must resolve identically everywhere, repeatable"
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/detectives/events.clj"
  {:options
   {:output
@@ -352,11 +376,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/detectives/fabric.clj"
  {:options
   {:gateway-vteps
@@ -410,6 +436,8 @@
    "      --dry-run             Show what would change without changing anything"
    "      --no-color            Disable colored output (also honors the NO_COLOR env"
    "                            var)"
+   "      --exit-codes          Exit codes: default (0/1), or detailed (2 = only"
+   "                            critical findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help                Show this help message"]},
  "runbooks/detectives/mail.clj"
  {:options
@@ -457,6 +485,8 @@
    "      --dry-run         Show what would change without changing anything"
    "      --no-color        Disable colored output (also honors the NO_COLOR env"
    "                        var)"
+   "      --exit-codes      Exit codes: default (0/1), or detailed (2 = only"
+   "                        critical findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help            Show this help message"]},
  "runbooks/detectives/nodes.clj"
  {:options
@@ -474,11 +504,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/detectives/observability.clj"
  {:options
   {:output
@@ -495,11 +527,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/detectives/platform.clj"
  {:options
   {:output
@@ -516,11 +550,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/detectives/pods.clj"
  {:options
   {:output
@@ -537,11 +573,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/detectives/posture.clj"
  {:options
   {:output
@@ -558,11 +596,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/detectives/rbac.clj"
  {:options
   {:output
@@ -579,11 +619,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/detectives/security.clj"
  {:options
   {:output
@@ -600,11 +642,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/detectives/storage.clj"
  {:options
   {:output
@@ -621,11 +665,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/detectives/upgrade.clj"
  {:options
   {:output
@@ -642,11 +688,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/detectives/workloads.clj"
  {:options
   {:hpa-grace-minutes
@@ -677,6 +725,8 @@
    "      --dry-run            Show what would change without changing anything"
    "      --no-color           Disable colored output (also honors the NO_COLOR env"
    "                           var)"
+   "      --exit-codes         Exit codes: default (0/1), or detailed (2 = only"
+   "                           critical findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help               Show this help message"]},
  "runbooks/etcd/check_performance.clj"
  {:options
@@ -702,14 +752,16 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the etcd pod - interactive selection when"
-   "                   omitted"
-   "  -p, --pod        The etcd pod to use - interactive selection when omitted"
-   "  -l, --workload   The workload model: s(mall), m(edium), l(arge), xl (one of:"
-   "                   l, m, s, xl) (default: s)"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -n, --namespace   The namespace of the etcd pod - interactive selection when"
+   "                    omitted"
+   "  -p, --pod         The etcd pod to use - interactive selection when omitted"
+   "  -l, --workload    The workload model: s(mall), m(edium), l(arge), xl (one of:"
+   "                    l, m, s, xl) (default: s)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/etcd/endpoint_health.clj"
  {:options
   {:namespace
@@ -728,12 +780,14 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the etcd pod - interactive selection when"
-   "                   omitted"
-   "  -p, --pod        The etcd pod to use - interactive selection when omitted"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -n, --namespace   The namespace of the etcd pod - interactive selection when"
+   "                    omitted"
+   "  -p, --pod         The etcd pod to use - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/etcd/endpoint_status.clj"
  {:options
   {:namespace
@@ -752,12 +806,14 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the etcd pod - interactive selection when"
-   "                   omitted"
-   "  -p, --pod        The etcd pod to use - interactive selection when omitted"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -n, --namespace   The namespace of the etcd pod - interactive selection when"
+   "                    omitted"
+   "  -p, --pod         The etcd pod to use - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/etcd/get_value.clj"
  {:options
   {:key
@@ -780,13 +836,15 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the etcd pod - interactive selection when"
-   "                   omitted"
-   "  -p, --pod        The etcd pod to use - interactive selection when omitted"
-   "  -k, --key        The etcd key to read - interactive selection when omitted"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -n, --namespace   The namespace of the etcd pod - interactive selection when"
+   "                    omitted"
+   "  -p, --pod         The etcd pod to use - interactive selection when omitted"
+   "  -k, --key         The etcd key to read - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/etcd/member_list.clj"
  {:options
   {:namespace
@@ -805,12 +863,14 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the etcd pod - interactive selection when"
-   "                   omitted"
-   "  -p, --pod        The etcd pod to use - interactive selection when omitted"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -n, --namespace   The namespace of the etcd pod - interactive selection when"
+   "                    omitted"
+   "  -p, --pod         The etcd pod to use - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/grafana/export_dashboard.clj"
  {:options
   {:dashboard
@@ -846,18 +906,20 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -f, --folder     The folder containing the dashboard - interactive selection"
-   "                   when omitted"
-   "  -d, --dashboard  The dashboard to export - interactive selection when omitted"
-   "  -g, --grafana    The Grafana base URL (e.g. https://grafana.example.org);"
-   "                   defaults to env.edn :grafana :url"
-   "  -n, --namespace  The Grafana org namespace ('default' is org 1) (default:"
-   "                   default)"
-   "  -t, --token      The Grafana service account token - resolved via gopass when"
-   "                   omitted"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -f, --folder      The folder containing the dashboard - interactive selection"
+   "                    when omitted"
+   "  -d, --dashboard   The dashboard to export - interactive selection when omitted"
+   "  -g, --grafana     The Grafana base URL (e.g. https://grafana.example.org);"
+   "                    defaults to env.edn :grafana :url"
+   "  -n, --namespace   The Grafana org namespace ('default' is org 1) (default:"
+   "                    default)"
+   "  -t, --token       The Grafana service account token - resolved via gopass when"
+   "                    omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/investigate.clj"
  {:options
   {:host
@@ -884,16 +946,18 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -H, --host       A hostname a user reported - resolves to the route, service,"
-   "                   and pods behind it"
-   "  -n, --namespace  Start from a namespace - pick one of its pods (unhealthy"
-   "                   first)"
-   "      --node       Start from a node by name"
-   "      --pod        Start from a pod, given as namespace/name"
-   "      --resume     Resume the last investigation where you left off"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -H, --host        A hostname a user reported - resolves to the route, service,"
+   "                    and pods behind it"
+   "  -n, --namespace   Start from a namespace - pick one of its pods (unhealthy"
+   "                    first)"
+   "      --node        Start from a node by name"
+   "      --pod         Start from a pod, given as namespace/name"
+   "      --resume      Resume the last investigation where you left off"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/certificates/renew.clj"
  {:options
   {:certificates
@@ -922,6 +986,8 @@
    "                      interactive selection when omitted"
    "      --dry-run       Show what would change without changing anything"
    "      --no-color      Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes    Exit codes: default (0/1), or detailed (2 = only critical"
+   "                      findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help          Show this help message"]},
  "runbooks/kubernetes/cronjobs/resume.clj"
  {:options
@@ -955,12 +1021,14 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the CronJob - interactive selection when"
-   "                   omitted"
-   "  -j, --job        The name of the CronJob - interactive selection when omitted"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -n, --namespace   The namespace of the CronJob - interactive selection when"
+   "                    omitted"
+   "  -j, --job         The name of the CronJob - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/cronjobs/start.clj"
  {:options
   {:job
@@ -991,12 +1059,14 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the CronJob - interactive selection when"
-   "                   omitted"
-   "  -j, --job        The name of the CronJob - interactive selection when omitted"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -n, --namespace   The namespace of the CronJob - interactive selection when"
+   "                    omitted"
+   "  -j, --job         The name of the CronJob - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/cronjobs/suspend.clj"
  {:options
   {:job
@@ -1029,12 +1099,14 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the CronJob - interactive selection when"
-   "                   omitted"
-   "  -j, --job        The name of the CronJob - interactive selection when omitted"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -n, --namespace   The namespace of the CronJob - interactive selection when"
+   "                    omitted"
+   "  -j, --job         The name of the CronJob - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/finalizers/remove.clj"
  {:options
   {:pick
@@ -1061,11 +1133,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -p, --pick      \"<type> <namespace>/<name> <finalizer>\" - interactive"
-   "                  selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -p, --pick        \"<type> <namespace>/<name> <finalizer>\" - interactive"
+   "                    selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/helm/rollback.clj"
  {:options
   {:release
@@ -1101,6 +1175,8 @@
    "                     one when omitted"
    "      --dry-run      Show what would change without changing anything"
    "      --no-color     Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes   Exit codes: default (0/1), or detailed (2 = only critical"
+   "                     findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help         Show this help message"]},
  "runbooks/kubernetes/namespaces/remove_finalizers.clj"
  {:options
@@ -1138,6 +1214,8 @@
    "      --dry-run           Show what would change without changing anything"
    "      --no-color          Disable colored output (also honors the NO_COLOR env"
    "                          var)"
+   "      --exit-codes        Exit codes: default (0/1), or detailed (2 = only"
+   "                          critical findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help              Show this help message"]},
  "runbooks/kubernetes/netshoot/node.clj"
  {:options
@@ -1162,10 +1240,12 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --node      The node to debug - interactive selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -n, --node        The node to debug - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/netshoot/pod.clj"
  {:options
   {:namespace
@@ -1193,11 +1273,14 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the pod - interactive selection when omitted"
-   "  -p, --pod        The pod to debug - interactive selection when omitted"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -n, --namespace   The namespace of the pod - interactive selection when"
+   "                    omitted"
+   "  -p, --pod         The pod to debug - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/netshoot/run.clj"
  {:options
   {:host-network
@@ -1221,6 +1304,8 @@
    "  -r, --host-network  Run netshoot in the node's network namespace"
    "      --dry-run       Show what would change without changing anything"
    "      --no-color      Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes    Exit codes: default (0/1), or detailed (2 = only critical"
+   "                      findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help          Show this help message"]},
  "runbooks/kubernetes/nodes/cordon.clj"
  {:options
@@ -1248,10 +1333,12 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --node      The node to cordon - interactive selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -n, --node        The node to cordon - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/nodes/drain.clj"
  {:options
   {:drain-timeout
@@ -1297,6 +1384,8 @@
    "                       up and fails - 0 waits forever (default: 300)"
    "      --dry-run        Show what would change without changing anything"
    "      --no-color       Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes     Exit codes: default (0/1), or detailed (2 = only critical"
+   "                       findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help           Show this help message"]},
  "runbooks/kubernetes/nodes/list_taints.clj"
  {:options
@@ -1311,10 +1400,12 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --node      The node to inspect - interactive selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -n, --node        The node to inspect - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/nodes/remove_taint.clj"
  {:options
   {:node
@@ -1334,13 +1425,15 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --node      The node to remove a taint from - interactive selection when"
-   "                  omitted"
-   "  -t, --taint     The taint to remove (key[=value]:effect) - interactive"
-   "                  selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -n, --node        The node to remove a taint from - interactive selection when"
+   "                    omitted"
+   "  -t, --taint       The taint to remove (key[=value]:effect) - interactive"
+   "                    selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/nodes/restart_apiserver.clj"
  {:options
   {:node
@@ -1370,12 +1463,14 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --node      The control-plane node to restart kube-apiserver on -"
-   "                  interactive selection when omitted"
-   "  -u, --user      The SSH user - your ssh config decides when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -n, --node        The control-plane node to restart kube-apiserver on -"
+   "                    interactive selection when omitted"
+   "  -u, --user        The SSH user - your ssh config decides when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/nodes/uncordon.clj"
  {:options
   {:node
@@ -1402,10 +1497,12 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --node      The node to uncordon - interactive selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -n, --node        The node to uncordon - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/objects/delete.clj"
  {:options
   {:pick
@@ -1432,11 +1529,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -p, --pick      \"<type> <namespace>/<name>\" - interactive selection when"
-   "                  omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -p, --pick        \"<type> <namespace>/<name>\" - interactive selection when"
+   "                    omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/orders/recreate.clj"
  {:options
   {:orders
@@ -1463,11 +1562,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --orders    namespace/name of invalid orders to recreate, repeatable -"
-   "                  interactive selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --orders      namespace/name of invalid orders to recreate, repeatable -"
+   "                    interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/pods/list_image_pull_back_off.clj"
  {:options {},
   :help
@@ -1477,9 +1578,11 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/pods/list_images.clj"
  {:options {},
   :help
@@ -1489,9 +1592,11 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/pods/list_resources.clj"
  {:options {},
   :help
@@ -1501,9 +1606,11 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/statefulsets/enlarge_volumes.clj"
  {:options
   {:capacity
@@ -1542,6 +1649,8 @@
    "  -c, --capacity     The new storage capacity (bare numbers mean Gi) (required)"
    "      --dry-run      Show what would change without changing anything"
    "      --no-color     Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes   Exit codes: default (0/1), or detailed (2 = only critical"
+   "                     findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help         Show this help message"]},
  "runbooks/kubernetes/volumes/delete_released.clj"
  {:options
@@ -1569,11 +1678,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -v, --volumes   Released PersistentVolumes to delete, repeatable - interactive"
-   "                  selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -v, --volumes     Released PersistentVolumes to delete, repeatable -"
+   "                    interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/volumes/delete_unused.clj"
  {:options
   {:namespace
@@ -1605,13 +1716,15 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the PersistentVolumeClaim - interactive"
-   "                   selection when omitted"
-   "  -p, --pvc        The name of the PersistentVolumeClaim - interactive selection"
-   "                   when omitted"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -n, --namespace   The namespace of the PersistentVolumeClaim - interactive"
+   "                    selection when omitted"
+   "  -p, --pvc         The name of the PersistentVolumeClaim - interactive"
+   "                    selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/workloads/pause.clj"
  {:options
   {:pick
@@ -1639,11 +1752,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -p, --pick      \"Deployment <namespace>/<name>\" - interactive selection when"
-   "                  omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -p, --pick        \"Deployment <namespace>/<name>\" - interactive selection when"
+   "                    omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/workloads/restart.clj"
  {:options
   {:pick
@@ -1670,11 +1785,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -p, --pick      \"<Kind> <namespace>/<name>\" - interactive selection when"
-   "                  omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -p, --pick        \"<Kind> <namespace>/<name>\" - interactive selection when"
+   "                    omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/workloads/resume.clj"
  {:options
   {:pick
@@ -1702,11 +1819,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -p, --pick      \"Deployment <namespace>/<name>\" - interactive selection when"
-   "                  omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -p, --pick        \"Deployment <namespace>/<name>\" - interactive selection when"
+   "                    omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/kubernetes/workloads/rollback.clj"
  {:options
   {:pick
@@ -1741,6 +1860,8 @@
    "      --to-revision  The revision to go back to - the previous one when omitted"
    "      --dry-run      Show what would change without changing anything"
    "      --no-color     Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes   Exit codes: default (0/1), or detailed (2 = only critical"
+   "                     findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help         Show this help message"]},
  "runbooks/kubernetes/workloads/scale.clj"
  {:options
@@ -1771,12 +1892,14 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -p, --pick      \"<Kind> <namespace>/<name>\" - interactive selection when"
-   "                  omitted"
-   "  -r, --replicas  The replica count to scale to"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -p, --pick        \"<Kind> <namespace>/<name>\" - interactive selection when"
+   "                    omitted"
+   "  -r, --replicas    The replica count to scale to"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/setup/init.clj"
  {:options {},
   :help
@@ -1786,9 +1909,11 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/argocd/runbooks/refresh.clj"
  {:options
   {:application
@@ -1824,6 +1949,8 @@
    "                     cache"
    "      --dry-run      Show what would change without changing anything"
    "      --no-color     Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes   Exit codes: default (0/1), or detailed (2 = only critical"
+   "                     findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help         Show this help message"]},
  "tools/argocd/runbooks/scan.clj"
  {:options
@@ -1841,11 +1968,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/argocd/runbooks/sync.clj"
  {:options
   {:application
@@ -1879,6 +2008,8 @@
    "      --prune        Delete resources that were removed from Git"
    "      --dry-run      Show what would change without changing anything"
    "      --no-color     Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes   Exit codes: default (0/1), or detailed (2 = only critical"
+   "                     findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help         Show this help message"]},
  "tools/calico/runbooks/flows.clj"
  {:options
@@ -1916,18 +2047,20 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -w, --whisker   Whisker base URL, e.g. https://whisker.example.org - overrides"
-   "                  env.edn"
-   "  -k, --secret    Password-store path holding the Whisker credentials (password"
-   "                  plus a login field)"
-   "  -u, --user      Whisker basic-auth user, when the secret does not carry a"
-   "                  login field"
-   "  -t, --window    Window to read, in seconds (default: 3600)"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -w, --whisker     Whisker base URL, e.g. https://whisker.example.org -"
+   "                    overrides env.edn"
+   "  -k, --secret      Password-store path holding the Whisker credentials"
+   "                    (password plus a login field)"
+   "  -u, --user        Whisker basic-auth user, when the secret does not carry a"
+   "                    login field"
+   "  -t, --window      Window to read, in seconds (default: 3600)"
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/calico/runbooks/scan.clj"
  {:options
   {:output
@@ -1944,11 +2077,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/ceph/playbooks/upgrade.clj"
  {:options
   {:cephadm-shell
@@ -2001,6 +2136,8 @@
    "      --dry-run              Show what would change without changing anything"
    "      --no-color             Disable colored output (also honors the NO_COLOR"
    "                             env var)"
+   "      --exit-codes           Exit codes: default (0/1), or detailed (2 = only"
+   "                             critical findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help                 Show this help message"]},
  "tools/ceph/runbooks/archive_crashes.clj"
  {:options
@@ -2030,6 +2167,8 @@
    "                       have the cephadm binary"
    "      --dry-run        Show what would change without changing anything"
    "      --no-color       Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes     Exit codes: default (0/1), or detailed (2 = only critical"
+   "                       findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help           Show this help message"]},
  "tools/ceph/runbooks/osd_in.clj"
  {:options
@@ -2076,6 +2215,8 @@
    "                       selection when omitted"
    "      --dry-run        Show what would change without changing anything"
    "      --no-color       Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes     Exit codes: default (0/1), or detailed (2 = only critical"
+   "                       findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help           Show this help message"]},
  "tools/ceph/runbooks/osd_out.clj"
  {:options
@@ -2117,6 +2258,8 @@
    "  -f, --force          Take the OSD out even though the cluster is not HEALTH_OK"
    "      --dry-run        Show what would change without changing anything"
    "      --no-color       Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes     Exit codes: default (0/1), or detailed (2 = only critical"
+   "                       findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help           Show this help message"]},
  "tools/ceph/runbooks/restart_daemon.clj"
  {:options
@@ -2158,6 +2301,8 @@
    "  -f, --force          Restart even though the cluster is not HEALTH_OK"
    "      --dry-run        Show what would change without changing anything"
    "      --no-color       Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes     Exit codes: default (0/1), or detailed (2 = only critical"
+   "                       findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help           Show this help message"]},
  "tools/ceph/runbooks/scan.clj"
  {:options
@@ -2196,6 +2341,8 @@
    "                       format (default: text)"
    "      --dry-run        Show what would change without changing anything"
    "      --no-color       Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes     Exit codes: default (0/1), or detailed (2 = only critical"
+   "                       findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help           Show this help message"]},
  "tools/ceph/runbooks/status.clj"
  {:options
@@ -2225,6 +2372,8 @@
    "                       have the cephadm binary"
    "      --dry-run        Show what would change without changing anything"
    "      --no-color       Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes     Exit codes: default (0/1), or detailed (2 = only critical"
+   "                       findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help           Show this help message"]},
  "tools/certmanager/runbooks/scan.clj"
  {:options
@@ -2242,11 +2391,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/cluster-api/runbooks/scan.clj"
  {:options
   {:output
@@ -2263,11 +2414,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/cnpg/runbooks/backup.clj"
  {:options
   {:cluster
@@ -2298,12 +2451,14 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -c, --cluster   \"<namespace>/<cluster>\" - interactive selection when omitted"
-   "      --method    barmanObjectStore, plugin or volumeSnapshot - the first the"
-   "                  cluster configures when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -c, --cluster     \"<namespace>/<cluster>\" - interactive selection when omitted"
+   "      --method      barmanObjectStore, plugin or volumeSnapshot - the first the"
+   "                    cluster configures when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/cnpg/runbooks/cnpg_console.clj"
  {:options
   {:cluster
@@ -2325,12 +2480,15 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  Namespace of the cluster - interactive selection when omitted"
-   "  -c, --cluster    Name of the cluster - interactive selection when omitted"
-   "      --promote    Promote this instance to primary - asks for approval first"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -n, --namespace   Namespace of the cluster - interactive selection when"
+   "                    omitted"
+   "  -c, --cluster     Name of the cluster - interactive selection when omitted"
+   "      --promote     Promote this instance to primary - asks for approval first"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/cnpg/runbooks/fence.clj"
  {:options
   {:pick
@@ -2358,11 +2516,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -p, --pick      \"<namespace>/<cluster> <instance>\" (by name, by number, or *)"
-   "                  - interactive selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -p, --pick        \"<namespace>/<cluster> <instance>\" (by name, by number, or"
+   "                    *) - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/cnpg/runbooks/hibernate.clj"
  {:options
   {:cluster
@@ -2389,10 +2549,12 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -c, --cluster   \"<namespace>/<cluster>\" - interactive selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -c, --cluster     \"<namespace>/<cluster>\" - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/cnpg/runbooks/pooler_console.clj"
  {:options
   {:lines
@@ -2416,12 +2578,14 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  Namespace of the pooler - interactive selection when omitted"
-   "  -p, --pooler     Name of the pooler - interactive selection when omitted"
-   "  -l, --lines      How many log lines to read (default: 400)"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -n, --namespace   Namespace of the pooler - interactive selection when omitted"
+   "  -p, --pooler      Name of the pooler - interactive selection when omitted"
+   "  -l, --lines       How many log lines to read (default: 400)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/cnpg/runbooks/rehydrate.clj"
  {:options
   {:cluster
@@ -2448,10 +2612,12 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -c, --cluster   \"<namespace>/<cluster>\" - interactive selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -c, --cluster     \"<namespace>/<cluster>\" - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/cnpg/runbooks/reload.clj"
  {:options
   {:cluster
@@ -2478,10 +2644,12 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -c, --cluster   \"<namespace>/<cluster>\" - interactive selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -c, --cluster     \"<namespace>/<cluster>\" - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/cnpg/runbooks/restart.clj"
  {:options
   {:cluster
@@ -2508,10 +2676,12 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -c, --cluster   \"<namespace>/<cluster>\" - interactive selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -c, --cluster     \"<namespace>/<cluster>\" - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/cnpg/runbooks/resume_scheduled_backup.clj"
  {:options
   {:scheduled-backup
@@ -2544,6 +2714,8 @@
    "      --dry-run           Show what would change without changing anything"
    "      --no-color          Disable colored output (also honors the NO_COLOR env"
    "                          var)"
+   "      --exit-codes        Exit codes: default (0/1), or detailed (2 = only"
+   "                          critical findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help              Show this help message"]},
  "tools/cnpg/runbooks/scan.clj"
  {:options
@@ -2561,11 +2733,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/cnpg/runbooks/suspend_scheduled_backup.clj"
  {:options
   {:scheduled-backup
@@ -2598,6 +2772,8 @@
    "      --dry-run           Show what would change without changing anything"
    "      --no-color          Disable colored output (also honors the NO_COLOR env"
    "                          var)"
+   "      --exit-codes        Exit codes: default (0/1), or detailed (2 = only"
+   "                          critical findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help              Show this help message"]},
  "tools/cnpg/runbooks/switchover.clj"
  {:options
@@ -2625,11 +2801,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -p, --pick      \"<namespace>/<cluster> <instance>\" (the instance by name or"
-   "                  number) - interactive selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -p, --pick        \"<namespace>/<cluster> <instance>\" (the instance by name or"
+   "                    number) - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/cnpg/runbooks/unfence.clj"
  {:options
   {:pick
@@ -2657,11 +2835,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -p, --pick      \"<namespace>/<cluster> <instance>\" (by name, by number, or *)"
-   "                  - interactive selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -p, --pick        \"<namespace>/<cluster> <instance>\" (by name, by number, or"
+   "                    *) - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/cnpg/runbooks/verifier_churn.clj"
  {:options
   {:cluster
@@ -2686,13 +2866,16 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  Namespace of the cluster - interactive selection when omitted"
-   "  -c, --cluster    Name of the cluster - interactive selection when omitted"
-   "  -w, --window     Seconds between the two readings - cover one reconcile"
-   "                   interval (default: 420)"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -n, --namespace   Namespace of the cluster - interactive selection when"
+   "                    omitted"
+   "  -c, --cluster     Name of the cluster - interactive selection when omitted"
+   "  -w, --window      Seconds between the two readings - cover one reconcile"
+   "                    interval (default: 420)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/crossplane/runbooks/scan.clj"
  {:options
   {:output
@@ -2709,11 +2892,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/db-operator/runbooks/admin_connect.clj"
  {:options
   {:instance
@@ -2734,13 +2919,15 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -i, --instance  The DbInstance to connect to - interactive selection when"
-   "                  omitted"
-   "  -p, --port      The local port used for the port-forward (1-65535) - a free"
-   "                  port when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -i, --instance    The DbInstance to connect to - interactive selection when"
+   "                    omitted"
+   "  -p, --port        The local port used for the port-forward (1-65535) - a free"
+   "                    port when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/db-operator/runbooks/connect.clj"
  {:options
   {:database
@@ -2770,16 +2957,18 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the Database - interactive selection when"
-   "                   omitted"
-   "  -d, --database   The Database to connect to - interactive selection when"
-   "                   omitted"
-   "  -i, --ingress    A public ingress host, used to look up the namespace"
-   "  -p, --port       The local port used for the port-forward (1-65535) - a free"
-   "                   port when omitted"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -n, --namespace   The namespace of the Database - interactive selection when"
+   "                    omitted"
+   "  -d, --database    The Database to connect to - interactive selection when"
+   "                    omitted"
+   "  -i, --ingress     A public ingress host, used to look up the namespace"
+   "  -p, --port        The local port used for the port-forward (1-65535) - a free"
+   "                    port when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/db-operator/runbooks/dump.clj"
  {:options
   {:database
@@ -2813,16 +3002,18 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the Database - interactive selection when"
-   "                   omitted"
-   "  -d, --database   The Database to dump - interactive selection when omitted"
-   "  -i, --ingress    A public ingress host, used to look up the namespace"
-   "  -r, --dump       The file to write the dump to (required)"
-   "  -p, --port       The local port used for the port-forward (1-65535) - a free"
-   "                   port when omitted"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -n, --namespace   The namespace of the Database - interactive selection when"
+   "                    omitted"
+   "  -d, --database    The Database to dump - interactive selection when omitted"
+   "  -i, --ingress     A public ingress host, used to look up the namespace"
+   "  -r, --dump        The file to write the dump to (required)"
+   "  -p, --port        The local port used for the port-forward (1-65535) - a free"
+   "                    port when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/db-operator/runbooks/restore.clj"
  {:options
   {:database
@@ -2857,17 +3048,19 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the Database - interactive selection when"
-   "                   omitted"
-   "  -d, --database   The Database to restore into - interactive selection when"
-   "                   omitted"
-   "  -i, --ingress    A public ingress host, used to look up the namespace"
-   "  -r, --dump       The dump file to restore (required)"
-   "  -p, --port       The local port used for the port-forward (1-65535) - a free"
-   "                   port when omitted"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -n, --namespace   The namespace of the Database - interactive selection when"
+   "                    omitted"
+   "  -d, --database    The Database to restore into - interactive selection when"
+   "                    omitted"
+   "  -i, --ingress     A public ingress host, used to look up the namespace"
+   "  -r, --dump        The dump file to restore (required)"
+   "  -p, --port        The local port used for the port-forward (1-65535) - a free"
+   "                    port when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/external-dns/runbooks/scan.clj"
  {:options
   {:output
@@ -2889,12 +3082,14 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -s, --server    The DNS server the records must exist on"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -s, --server      The DNS server the records must exist on"
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/flagger/runbooks/scan.clj"
  {:options
   {:output
@@ -2911,11 +3106,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/flux/runbooks/flux/clear_helm_storage.clj"
  {:options
   {:name
@@ -2954,13 +3151,15 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the HelmRelease - interactive selection when"
-   "                   omitted"
-   "  -N, --name       The name of the HelmRelease - interactive selection when"
-   "                   omitted (deprecated alias: -r, -s)"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"],
+   "  -n, --namespace   The namespace of the HelmRelease - interactive selection"
+   "                    when omitted"
+   "  -N, --name        The name of the HelmRelease - interactive selection when"
+   "                    omitted (deprecated alias: -r, -s)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"],
   :parsed
   {"--name web" {:opts {:name "web"}, :notes []},
    "-N web" {:opts {:name "web"}, :notes []},
@@ -2989,13 +3188,15 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the HelmRelease - interactive selection when"
-   "                   omitted"
-   "  -N, --name       The name of the HelmRelease - interactive selection when"
-   "                   omitted (deprecated alias: -r, -s)"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"],
+   "  -n, --namespace   The namespace of the HelmRelease - interactive selection"
+   "                    when omitted"
+   "  -N, --name        The name of the HelmRelease - interactive selection when"
+   "                    omitted (deprecated alias: -r, -s)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"],
   :parsed
   {"--name web" {:opts {:name "web"}, :notes []},
    "-N web" {:opts {:name "web"}, :notes []},
@@ -3036,13 +3237,15 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the HelmRelease - interactive selection when"
-   "                   omitted"
-   "  -N, --name       The name of the HelmRelease - interactive selection when"
-   "                   omitted (deprecated alias: -r, -s)"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"],
+   "  -n, --namespace   The namespace of the HelmRelease - interactive selection"
+   "                    when omitted"
+   "  -N, --name        The name of the HelmRelease - interactive selection when"
+   "                    omitted (deprecated alias: -r, -s)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"],
   :parsed
   {"--name web" {:opts {:name "web"}, :notes []},
    "-N web" {:opts {:name "web"}, :notes []},
@@ -3084,13 +3287,15 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the HelmRelease - interactive selection when"
-   "                   omitted"
-   "  -N, --name       The name of the HelmRelease - interactive selection when"
-   "                   omitted (deprecated alias: -r, -s)"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"],
+   "  -n, --namespace   The namespace of the HelmRelease - interactive selection"
+   "                    when omitted"
+   "  -N, --name        The name of the HelmRelease - interactive selection when"
+   "                    omitted (deprecated alias: -r, -s)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"],
   :parsed
   {"--name web" {:opts {:name "web"}, :notes []},
    "-N web" {:opts {:name "web"}, :notes []},
@@ -3127,11 +3332,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -p, --pick      \"<Kind> <namespace>/<name>\" - interactive selection when"
-   "                  omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -p, --pick        \"<Kind> <namespace>/<name>\" - interactive selection when"
+   "                    omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/flux/runbooks/flux/suspend.clj"
  {:options
   {:pick
@@ -3159,11 +3366,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -p, --pick      \"<Kind> <namespace>/<name>\" - interactive selection when"
-   "                  omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -p, --pick        \"<Kind> <namespace>/<name>\" - interactive selection when"
+   "                    omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/flux/runbooks/gitops.clj"
  {:options
   {:output
@@ -3180,11 +3389,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/gateway/runbooks/scan.clj"
  {:options
   {:output
@@ -3201,11 +3412,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/jaas/runbooks/jaas/reconcile.clj"
  {:options
   {:name
@@ -3238,13 +3451,15 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the JsonnetSnippet - interactive selection"
-   "                   when omitted"
-   "  -N, --name       The name of the JsonnetSnippet - interactive selection when"
-   "                   omitted (deprecated alias: -r, -s)"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"],
+   "  -n, --namespace   The namespace of the JsonnetSnippet - interactive selection"
+   "                    when omitted"
+   "  -N, --name        The name of the JsonnetSnippet - interactive selection when"
+   "                    omitted (deprecated alias: -r, -s)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"],
   :parsed
   {"--name web" {:opts {:name "web"}, :notes []},
    "-N web" {:opts {:name "web"}, :notes []},
@@ -3285,13 +3500,15 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the JsonnetSnippet - interactive selection"
-   "                   when omitted"
-   "  -N, --name       The name of the JsonnetSnippet - interactive selection when"
-   "                   omitted (deprecated alias: -r, -s)"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"],
+   "  -n, --namespace   The namespace of the JsonnetSnippet - interactive selection"
+   "                    when omitted"
+   "  -N, --name        The name of the JsonnetSnippet - interactive selection when"
+   "                    omitted (deprecated alias: -r, -s)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"],
   :parsed
   {"--name web" {:opts {:name "web"}, :notes []},
    "-N web" {:opts {:name "web"}, :notes []},
@@ -3332,13 +3549,15 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the JsonnetSnippet - interactive selection"
-   "                   when omitted"
-   "  -N, --name       The name of the JsonnetSnippet - interactive selection when"
-   "                   omitted (deprecated alias: -r, -s)"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"],
+   "  -n, --namespace   The namespace of the JsonnetSnippet - interactive selection"
+   "                    when omitted"
+   "  -N, --name        The name of the JsonnetSnippet - interactive selection when"
+   "                    omitted (deprecated alias: -r, -s)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"],
   :parsed
   {"--name web" {:opts {:name "web"}, :notes []},
    "-N web" {:opts {:name "web"}, :notes []},
@@ -3364,11 +3583,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/karpenter/runbooks/scan.clj"
  {:options
   {:output
@@ -3385,11 +3606,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/kueue/runbooks/scan.clj"
  {:options
   {:output
@@ -3406,11 +3629,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/loki/runbooks/scan.clj"
  {:options
   {:namespace
@@ -3447,19 +3672,21 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The Loki namespace - env.edn (:loki :namespace) or"
-   "                   interactive when omitted"
-   "  -l, --selector   Label selector that finds the Loki workloads (default:"
-   "                   app.kubernetes.io/name=loki)"
-   "      --port-name  The distributor service port to forward for the ring check"
-   "                   (default: http-metrics)"
-   "  -p, --port       The local port used for the port-forward (1-65535) - a free"
-   "                   port when omitted"
-   "  -o, --output     Report format: text, json, edn, or a plugin-registered format"
-   "                   (default: text)"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -n, --namespace   The Loki namespace - env.edn (:loki :namespace) or"
+   "                    interactive when omitted"
+   "  -l, --selector    Label selector that finds the Loki workloads (default:"
+   "                    app.kubernetes.io/name=loki)"
+   "      --port-name   The distributor service port to forward for the ring check"
+   "                    (default: http-metrics)"
+   "  -p, --port        The local port used for the port-forward (1-65535) - a free"
+   "                    port when omitted"
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/matrix/runbooks/scan.clj"
  {:options
   {:admin-secret
@@ -3499,6 +3726,8 @@
    "                      format (default: text)"
    "      --dry-run       Show what would change without changing anything"
    "      --no-color      Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes    Exit codes: default (0/1), or detailed (2 = only critical"
+   "                      findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help          Show this help message"]},
  "tools/node-exporter/runbooks/facts.clj"
  {:options
@@ -3580,6 +3809,8 @@
    "                    format (default: text)"
    "      --dry-run     Show what would change without changing anything"
    "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help        Show this help message"]},
  "tools/opennebula/runbooks/scan.clj"
  {:options
@@ -3606,13 +3837,15 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -f, --frontend  The OpenNebula frontend host to SSH into - overrides env.edn"
-   "  -u, --user      The SSH user - your ssh config decides when omitted"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -f, --frontend    The OpenNebula frontend host to SSH into - overrides env.edn"
+   "  -u, --user        The SSH user - your ssh config decides when omitted"
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/prometheus/runbooks/delete_metric.clj"
  {:options
   {:delete-timeout
@@ -3680,6 +3913,8 @@
    "      --dry-run         Show what would change without changing anything"
    "      --no-color        Disable colored output (also honors the NO_COLOR env"
    "                        var)"
+   "      --exit-codes      Exit codes: default (0/1), or detailed (2 = only"
+   "                        critical findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help            Show this help message"],
   :parsed
   {"--service query" "threw: Required option: --metric",
@@ -3705,11 +3940,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -d, --directory  Directory with Prometheus rule files; defaults to env.edn"
-   "                   :prometheus :rules-directory"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -d, --directory   Directory with Prometheus rule files; defaults to env.edn"
+   "                    :prometheus :rules-directory"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/prometheus/runbooks/list_dashboard_metrics.clj"
  {:options
   {:grafana
@@ -3730,13 +3967,15 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -g, --grafana   The Grafana base URL (e.g. https://grafana.example.org);"
-   "                  defaults to env.edn :grafana :url"
-   "  -t, --token     The Grafana service account token - resolved via gopass when"
-   "                  omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -g, --grafana     The Grafana base URL (e.g. https://grafana.example.org);"
+   "                    defaults to env.edn :grafana :url"
+   "  -t, --token       The Grafana service account token - resolved via gopass when"
+   "                    omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/prometheus/runbooks/list_scaling_metrics.clj"
  {:options {},
   :help
@@ -3746,9 +3985,11 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/prometheus/runbooks/list_unused_metrics.clj"
  {:options
   {:directory
@@ -3808,6 +4049,8 @@
    "      --dry-run              Show what would change without changing anything"
    "      --no-color             Disable colored output (also honors the NO_COLOR"
    "                             env var)"
+   "      --exit-codes           Exit codes: default (0/1), or detailed (2 = only"
+   "                             critical findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help                 Show this help message"]},
  "tools/prometheus/runbooks/right_size.clj"
  {:options
@@ -3856,6 +4099,8 @@
    "      --dry-run              Show what would change without changing anything"
    "      --no-color             Disable colored output (also honors the NO_COLOR"
    "                             env var)"
+   "      --exit-codes           Exit codes: default (0/1), or detailed (2 = only"
+   "                             critical findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help                 Show this help message"]},
  "tools/prometheus/runbooks/scan.clj"
  {:options
@@ -3873,11 +4118,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/prometheus/runbooks/set_capacity.clj"
  {:options
   {:capacity
@@ -3909,6 +4156,8 @@
    "  -c, --capacity    The new storage capacity (bare numbers mean Gi) (required)"
    "      --dry-run     Show what would change without changing anything"
    "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help        Show this help message"]},
  "tools/restic/runbooks/scan.clj"
  {:options
@@ -3957,6 +4206,8 @@
    "      --dry-run          Show what would change without changing anything"
    "      --no-color         Disable colored output (also honors the NO_COLOR env"
    "                         var)"
+   "      --exit-codes       Exit codes: default (0/1), or detailed (2 = only"
+   "                         critical findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help             Show this help message"]},
  "tools/stageset/runbooks/scan.clj"
  {:options
@@ -3974,11 +4225,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/stageset/runbooks/stageset/promote.clj"
  {:options
   {:name
@@ -4013,14 +4266,16 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the StageSet - interactive selection when"
-   "                   omitted"
-   "  -N, --name       The name of the StageSet - interactive selection when omitted"
-   "                   (deprecated alias: -r, -s)"
-   "      --stage      The stage to promote - interactive selection when omitted"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"],
+   "  -n, --namespace   The namespace of the StageSet - interactive selection when"
+   "                    omitted"
+   "  -N, --name        The name of the StageSet - interactive selection when"
+   "                    omitted (deprecated alias: -r, -s)"
+   "      --stage       The stage to promote - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"],
   :parsed
   {"--name web" {:opts {:name "web"}, :notes []},
    "-N web" {:opts {:name "web"}, :notes []},
@@ -4072,6 +4327,8 @@
    "      --update-now  Override the update window and roll a held revision now"
    "      --dry-run     Show what would change without changing anything"
    "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help        Show this help message"],
   :parsed
   {"--name web" {:opts {:name "web"}, :notes []},
@@ -4098,11 +4355,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/thanos/runbooks/scan.clj"
  {:options
   {:namespace
@@ -4144,20 +4403,22 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the Thanos Query service - interactive"
-   "                   selection when omitted"
-   "  -s, --service    The Thanos Query service - interactive selection when omitted"
-   "                   (deprecated alias: -m)"
-   "  -l, --selector   Label selector used to find Thanos Query services (default:"
-   "                   app.kubernetes.io/name=thanos-query)"
-   "      --port-name  The service port to forward (default: http)"
-   "  -p, --port       The local port used for the port-forward (1-65535) - a free"
-   "                   port when omitted"
-   "  -o, --output     Report format: text, json, edn, or a plugin-registered format"
-   "                   (default: text)"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"],
+   "  -n, --namespace   The namespace of the Thanos Query service - interactive"
+   "                    selection when omitted"
+   "  -s, --service     The Thanos Query service - interactive selection when"
+   "                    omitted (deprecated alias: -m)"
+   "  -l, --selector    Label selector used to find Thanos Query services (default:"
+   "                    app.kubernetes.io/name=thanos-query)"
+   "      --port-name   The service port to forward (default: http)"
+   "  -p, --port        The local port used for the port-forward (1-65535) - a free"
+   "                    port when omitted"
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"],
   :parsed
   {"--service query"
    {:opts
@@ -4196,11 +4457,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/upload/runbooks/scan.clj"
  {:options
   {:namespace
@@ -4222,12 +4485,15 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -n, --namespace  The namespace of the app - interactive selection when omitted"
-   "  -o, --output     Report format: text, json, edn, or a plugin-registered format"
-   "                   (default: text)"
-   "      --dry-run    Show what would change without changing anything"
-   "      --no-color   Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help       Show this help message"]},
+   "  -n, --namespace   The namespace of the app - interactive selection when"
+   "                    omitted"
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/velero/runbooks/backup.clj"
  {:options
   {:schedule
@@ -4254,10 +4520,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -s, --schedule  \"<namespace>/<schedule>\" - interactive selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -s, --schedule    \"<namespace>/<schedule>\" - interactive selection when"
+   "                    omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/velero/runbooks/delete_backup.clj"
  {:options
   {:backup
@@ -4284,10 +4553,12 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -b, --backup    \"<namespace>/<backup>\" - interactive selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -b, --backup      \"<namespace>/<backup>\" - interactive selection when omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/velero/runbooks/pause_schedule.clj"
  {:options
   {:schedule
@@ -4315,10 +4586,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -s, --schedule  \"<namespace>/<schedule>\" - interactive selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -s, --schedule    \"<namespace>/<schedule>\" - interactive selection when"
+   "                    omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/velero/runbooks/resume_schedule.clj"
  {:options
   {:schedule
@@ -4346,10 +4620,13 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -s, --schedule  \"<namespace>/<schedule>\" - interactive selection when omitted"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]},
+   "  -s, --schedule    \"<namespace>/<schedule>\" - interactive selection when"
+   "                    omitted"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "tools/velero/runbooks/scan.clj"
  {:options
   {:output
@@ -4366,8 +4643,10 @@
    "  bb <runbook> [options]"
    ""
    "Options:"
-   "  -o, --output    Report format: text, json, edn, or a plugin-registered format"
-   "                  (default: text)"
-   "      --dry-run   Show what would change without changing anything"
-   "      --no-color  Disable colored output (also honors the NO_COLOR env var)"
-   "  -h, --help      Show this help message"]}}
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]}}

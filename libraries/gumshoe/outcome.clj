@@ -96,6 +96,25 @@
   [description]
   (record! update :unconfirmed (fnil conj []) description))
 
+(defn findings!
+  "A report rendered findings: `counts` maps a severity to how many it
+   reported, as {:critical 2 :warning 1}. The counts of several reports in
+   one run add up. Recording findings never fails or passes a run by itself;
+   it lets the verdict name a run that failed only because it reported a
+   critical finding as having findings rather than as broken."
+  [counts]
+  (record! update :findings #(merge-with + (or % {}) (select-keys counts [:critical :warning :info]))))
+
+(defn incomplete!
+  "The run could not do its job: a source did not answer, nothing was
+   checked, a check crashed, or the report never reached stdout. `reason`
+   says which. It never fails a run by itself, since the action reports the
+   failure through its result; it keeps a failed run that also reported
+   findings from being bannered as findings, because a failure must never
+   be passed off as a mere finding."
+  [reason]
+  (record! update :incomplete (fnil conj []) reason))
+
 (defn changed-so-far?
   "Whether the current run has changed anything yet; false outside a run."
   []
@@ -209,6 +228,52 @@
   [outcome record]
   (if (failed? outcome record) 1 0))
 
+(defn critical-findings
+  "The number of critical findings the run's reports recorded, 0 when none."
+  [record]
+  (or (get-in record [:findings :critical]) 0))
+
+(defn findings-only?
+  "Pure: whether a run did its job and failed only because its report named
+   critical findings. It holds for a book that changes nothing whose action
+   reported failure, whose reports recorded at least one critical finding,
+   and whose record holds no other failure, no abort, no pause and nothing
+   incomplete. An unexpected error, a step that stopped, an unmet
+   precondition, an abort, a pause or any `incomplete!` reason wins over the
+   findings, so a run that both found something and did not finish is a
+   failure."
+  [{:keys [changes? outcome]} record]
+  (boolean (and (not changes?)
+                (= :failed outcome)
+                (not (failed? :ok record))
+                (not (:aborted record))
+                (not (:paused record))
+                (empty? (:incomplete record))
+                (pos? (critical-findings record)))))
+
+(def exit-modes
+  "The exit-code contracts a run can follow. :default exits 0 or 1, as
+   `exit-code` judges. :detailed keeps 0 and 1 and exits 2 for a run that
+   `findings-only?` holds for, so a caller tells a book that reported critical
+   findings from one that could not do its job by the exit code alone."
+  #{:default :detailed})
+
+(def findings-exit
+  "The exit code of a run that did its job and reported critical findings,
+   under the :detailed contract. Every failure, and anything that ends a
+   process unexpectedly, exits 1, so a crash never reads as findings."
+  2)
+
+(defn detailed-exit-code
+  "The exit code of a run under `mode`: `exit-code` under :default (or nil),
+   and under :detailed `findings-exit` where `findings-only?` holds for the
+   run, `exit-code` otherwise. `run` is {:changes? .. :outcome ..}."
+  [mode run record]
+  (let [code (exit-code (:outcome run) record)]
+    (if (and (= :detailed mode) (findings-only? run record))
+      findings-exit
+      code)))
+
 (defn- effects
   [n]
   (if (= 1 n) "1 effect" (str n " effects")))
@@ -247,6 +312,11 @@
    record     the facts recorded during the run (see the recording functions)
 
    A successful run names the changes it skipped as already done.
+
+   A read-only run that failed only because its reports recorded critical
+   findings (`findings-only?`) is bannered FINDINGS with their count; one
+   that recorded an `incomplete!` reason is bannered FAILED naming it, even
+   when it also reported findings.
 
    Only a run whose post-checks all ran and held may claim verification; a
    :soft? check that ran out its time is named as not confirmed.
@@ -315,7 +385,14 @@
         ;; warnings and info findings
         (and (not failed) findings?) {:tone :ok :text "DONE - nothing critical; read the findings above"}
         (not failed) {:tone :ok :text "DONE - no findings"}
-        findings? {:tone :neutral :text "FINDINGS - read the report above"}
+        (findings-only? {:changes? changes? :outcome outcome} record)
+        {:tone :neutral
+         :text (let [n (critical-findings record)]
+                 (str "FINDINGS - the book ran and reported " n " critical finding" (when (not= 1 n) "s")
+                      ", see above"))}
+        (seq (:incomplete record))
+        {:tone :error :text (str "FAILED - " (str/join "; " (distinct (:incomplete record)))
+                                 " - read the messages above")}
         :else {:tone :error :text "FAILED - read the messages above"})
 
       stopped

@@ -32,6 +32,7 @@
             [gumshoe.investigation :as investigation]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.onset :as onset]
+            [gumshoe.outcome :as outcome]
             [gumshoe.report :as report]
             [gumshoe.summary :as summary]
             [gumshoe.progress :as progress]
@@ -523,6 +524,7 @@
   (if (written?)
     healthy
     (do (stdout/error "the report could not be written to stdout (a full disk or a closed pipe?) - nothing was reported")
+        (outcome/incomplete! "the report could not be written to stdout")
         false)))
 
 (defn report!
@@ -531,6 +533,9 @@
    was found, no detective crashed and at least one detective read something; a
    run that judged nothing reports :nothing-checked and returns false, and a run
    with a detective that threw names it under :crashed and returns false.
+   Inside a run it records the counts with outcome/findings! and each reason
+   it could not judge with outcome/incomplete!, so the verdict banners a run
+   that only reported critical findings as FINDINGS and any other as FAILED.
 
    `extra` is a map a book adds to the machine-readable formats, such as the
    rows it collected; the report's own keys win over it, and the text report
@@ -549,6 +554,12 @@
      ;; keep the findings so the harness banners them and offers to share
      ;; them - every scan renders through here, the custom flows included
      (summary/capture! findings)
+     ;; and tell the verdict what the report found and what kept it from
+     ;; judging, so a run that only found something is told apart from one
+     ;; that could not do its job
+     (outcome/findings! (:summary data))
+     (when blind (outcome/incomplete! "nothing was checked"))
+     (when (seq crashed) (outcome/incomplete! (crashed-message crashed)))
      (delivered
       (case output
         "json" (do (println (json-report data))

@@ -152,6 +152,17 @@ otherwise ask for:
   and a `FAILED`, `NOT VERIFIED`, `ABORTED` or `DRY RUN failed` banner only
   exits 1. `ABORTED` is yellow when nothing was changed and red after a
   change had run.
+- **Tell findings from failure.** A read-only book that did its job and
+  reported critical findings ends `FINDINGS - the book ran and reported N
+  critical findings, see above`; one that could not do its job (a refused
+  prerequisite, an unread source, a crashed check, an unwritten report) ends
+  `FAILED`, and a run with both is `FAILED`. Both exit 1 by default. Pass
+  `--exit-codes detailed`, or set `GUMSHOE_EXIT_CODES=detailed` (it also
+  reaches books a front door launches; the flag wins), to get `0` ok, `1`
+  could not do its job, `2` completed with critical findings and nothing
+  else wrong. Prefer it when you act on the exit code: `2` means read the
+  findings, `1` means the result says nothing about the system. A change
+  book never exits 2.
 - **Skip the interactive front doors.** `./gumshoe`, `./detect`,
   `./investigate` and `./run` without `--list` are fzf menus for people. The
   drill-down of `./investigate` follows one object to the next by asking at
