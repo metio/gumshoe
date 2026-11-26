@@ -74,6 +74,13 @@
   (when abort
     (try (abort) (catch Exception _ nil))))
 
+(defn- print-detail!
+  "The text detail names, printed under a timed-out check; nothing when it
+   names none or throws."
+  [detail]
+  (when-let [text (when detail (try (detail) (catch Exception _ nil)))]
+    (stdout/err-println (str "  last seen: " text))))
+
 (defn eventually
   "Retries check until it returns truthy or timeout (seconds) elapses on the
    wall clock, counting the time each attempt takes. Exceptions inside check
@@ -86,8 +93,12 @@
 
    :abort (fn [] -> reason or nil) names a state the check can no longer reach
    from, such as an operation that failed: the wait ends at once with the
-   reason, a :soft? check included, instead of running out its timeout."
-  [{:keys [description check timeout interval soft? watch abort] :or {timeout 60 interval 5}}]
+   reason, a :soft? check included, instead of running out its timeout.
+
+   :detail (fn [] -> text or nil) says how the state the check judged last
+   stood; it is printed when the check times out, so a check that never
+   held names what it last saw instead of only what it waited for."
+  [{:keys [description check timeout interval soft? watch abort detail] :or {timeout 60 interval 5}}]
   (if-not (and (string? description) (fn? check))
     (do (stdout/error "refusing a malformed post-check: it needs a :description string and a :check function")
         false)
@@ -115,9 +126,11 @@
             (>= now deadline)
             (if soft?
               (do (stdout/warn (format "could not confirm within %ds (best effort): %s%s" timeout description (str unread)))
+                  (print-detail! detail)
                   (stdout/warn "the operation itself reported no error - confirm by hand if in doubt")
                   true)
               (do (stdout/error (format "NOT verified within %ds: %s%s" timeout description (str unread)))
+                  (print-detail! detail)
                   false))
 
             :else

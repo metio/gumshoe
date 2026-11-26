@@ -7,6 +7,7 @@
             [clojure.test :refer [deftest is testing]]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.quantity :as quantity]
             [gumshoe.shell :as shell]
             [gumshoe.storage :as storage]))
 
@@ -31,7 +32,30 @@
   (is (= "100Gi" (storage/normalize-capacity "100")))
   (is (= "100Gi" (storage/normalize-capacity "100Gi")))
   (is (= 100 (storage/gi-value "100Gi")))
-  (is (nil? (storage/gi-value "1Ti"))))
+  (testing "the API server reads a multiple of 1024Gi back as Ti"
+    (is (= 1024 (storage/gi-value "1Ti")))
+    (is (= 1536 (storage/gi-value "1.5Ti"))))
+  (is (= 0 (storage/gi-value "0Gi")))
+  (testing "anything that is not a whole number of Gi"
+    (doseq [value ["100" "20G" "1536Mi" "-1Gi" "lots" nil]]
+      (is (nil? (storage/gi-value value)) (pr-str value)))))
+
+(deftest quantities-compare-as-amounts
+  (is (quantity/same? "1Ti" "1024Gi"))
+  (is (quantity/at-least? "1Ti" "1024Gi"))
+  (is (quantity/at-least? "21Gi" "20Gi"))
+  (is (not (quantity/at-least? "20Gi" "21Gi")))
+  (is (not (quantity/same? "20Gi" "20G")))
+  (testing "a value that does not parse satisfies nothing"
+    (is (not (quantity/at-least? nil "20Gi")))
+    (is (not (quantity/at-least? "20Gi" "lots")))
+    (is (not (quantity/same? nil nil)))))
+
+(deftest a-claim-read-back-as-ti-is-compared-not-refused
+  (let [plan [{:pvc "data-pg-0" :exists? true :resizable? true :storage-class "fast" :current "1Ti" :target "2048Gi"}]]
+    (is (= [] (storage/expansion-problems plan)))
+    (is (= ["PVC data-pg-0 already has 1Ti - shrinking to 512Gi is not possible"]
+           (storage/expansion-problems (assoc-in plan [0 :target] "512Gi"))))))
 
 (deftest statefulset-pvc-names-test
   (is (= ["data-postgres-0" "data-postgres-1"]

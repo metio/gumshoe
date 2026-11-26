@@ -485,6 +485,16 @@ mostly data:
   one holding nothing, with `gumshoe.shell/execute` stubbed, and names each
   check that holds where it must not; a casebook can call it from its own
   tests, as gumshoe's mutation-book harness does for every book;
+- a post-check never takes the change's own write for its result: a claim
+  requesting the new size proves only that the patch landed. It waits for
+  what the cluster reports in turn (a capacity, a status, a condition), and
+  judges conditions and events against the object as read right before the
+  effect, so evidence the object carried already decides nothing. A check
+  can name a state it can no longer reach with `:abort (fn [] -> reason)`,
+  ending the wait at once, and say how it last stood with `:detail (fn [] ->
+  text)`, printed under a timeout. `storage/kept-claim-verdict` is the
+  pattern: a pure verdict over the claim now, the events and the baseline
+  the change's `:refusal` read (`storage/kept-claims-baseline`);
 - a change that acts on one object declares it as `:subject {:type
   "cronjobs"}`, with `:parse` for a pick of another shape (`gumshoe.pick`
   has `namespaced`, `cluster-scoped`, `(kinded kind->type)` and `(typed

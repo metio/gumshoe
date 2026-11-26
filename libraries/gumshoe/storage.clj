@@ -15,6 +15,7 @@
             [gumshoe.claims :as claims]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.quantity :as quantity]
             [gumshoe.stdout :as stdout]
             [gumshoe.verify :as verify]
             [gumshoe.watch :as watch]))
@@ -26,9 +27,17 @@
     (str capacity "Gi")
     (str capacity)))
 
+(def ^:private bytes-per-gi 1073741824.0)
+
 (defn gi-value
+  "capacity as a whole number of Gi - '100Gi' -> 100, '1Ti' -> 1024, the
+   form the API server reads a multiple of 1024Gi back as - or nil when it
+   is not a whole number of Gi or does not parse."
   [capacity]
-  (some-> (re-matches #"(\d+)Gi" (str capacity)) second parse-long))
+  (when-let [bytes (quantity/quantity->number capacity)]
+    (let [gi (/ (double bytes) bytes-per-gi)]
+      (when (and (>= gi 0) (== gi (Math/rint gi)))
+        (long gi)))))
 
 (defn statefulset-pvc-names
   "The PVC names a StatefulSet's volume claim template creates:
@@ -151,7 +160,7 @@
     (for [{:keys [pvc current target exists?]} plan
           :when (and (not (false? exists?))
                      (or (nil? (gi-value current)) (nil? (gi-value target))))]
-      (format "PVC %s: cannot compare '%s' with '%s' - only Gi capacities are supported"
+      (format "PVC %s: cannot compare '%s' with '%s' - only whole Gi capacities (such as 100Gi or 1Ti) are supported"
               pvc current target)))))
 
 (defn recreate-manifest
@@ -240,12 +249,21 @@
    :watch (watch/resize-watchers context cluster namespace (map :pvc plan))
    :check (fn []
             (every? (fn [{:keys [pvc]}]
-                      (= capacity (-> (kubectl/get-namespaced-resource context namespace
-                                                                       "persistentvolumeclaims" pvc)
-                                      :status :capacity :storage)))
+                      (quantity/at-least? (-> (kubectl/get-namespaced-resource context namespace
+                                                                               "persistentvolumeclaims" pvc)
+                                              :status :capacity :storage)
+                                          capacity))
                     plan))})
 
 ;; --- claims no pod mounts --------------------------------------------------------
+;;
+;; A kept claim - one a scaled-down StatefulSet keeps for a replica that does
+;; not run - is mounted by no pod. Our own patch only sets its request, so the
+;; request alone proves nothing: the claim is done once the cluster shows it
+;; took the resize up. Evidence the claim carried before the change is stale
+;; and never decides anything; "before" is the claim and the events as read
+;; right before the effect (kept-claims-baseline), compared by the cluster's
+;; own fields rather than the local clock.
 
 (def ^:private resize-error-conditions
   "The claim conditions a resizer sets when it failed to grow the volume."
@@ -255,93 +273,177 @@
   "The allocatedResourceStatuses that say a resize can never succeed."
   #{"ControllerResizeInfeasible" "NodeResizeInfeasible"})
 
+(def ^:private node-expansion-statuses
+  "The allocatedResourceStatuses that say the resize controller finished and
+   only the node's part, done when a pod mounts the volume, is left."
+  #{"NodeResizePending" "NodeResizeInProgress"})
+
 (def ^:private resize-failure-reasons
   "The reasons of the Warning events the external resizer and the kubelet
    emit for a claim they failed to grow."
   #{"VolumeResizeFailed" "FileSystemResizeFailed"})
 
-(defn- event-instant
-  [{:keys [lastTimestamp eventTime firstTimestamp series]}]
-  (some (fn [stamp]
-          (when (string? stamp)
-            (try (java.time.Instant/parse stamp) (catch Exception _ nil))))
-        [lastTimestamp (:lastObservedTime series) eventTime firstTimestamp]))
+(defn- event-key
+  "What tells one state of an event from another: a repeated event keeps its
+   uid and raises its count or its series."
+  [event]
+  [(-> event :metadata :uid) (:count event) (:lastTimestamp event) (:eventTime event)
+   (-> event :series :count) (-> event :series :lastObservedTime)])
+
+(defn- condition-key
+  "What tells a condition written after the change from one carried over:
+   Kubernetes keeps a resize condition's lastTransitionTime and message while
+   its type and status stay the same."
+  [condition]
+  ((juxt :type :status :lastTransitionTime) condition))
 
 (defn- one-line
   [text]
   (str/trim (str/replace (str text) #"\s+" " ")))
 
-(defn retained-claim-verdict
-  "Pure: how the resize of a retained claim - one no pod mounts, so a
-   driver that grows the filesystem on the node finishes only when a pod
-   mounts it - stands, given the claim as read (nil when it was not found),
-   the namespace's events and since, the instant before the change, so an
-   older event is not taken for this resize's. {:claim :state :line}, where
-   :state is :rejected when a resize error condition, an infeasible
-   allocation status or a resize failure event since then names the claim,
-   when it no longer exists, or when it does not request capacity; else
-   :grown when it reports capacity, :accepted when it waits with
-   FileSystemResizePending, and :requested when it requests capacity and
-   the resizer has not reported yet. An event without a timestamp is not
-   judged; the claim's own conditions are."
-  [claim-name claim events since capacity]
-  (let [conditions (-> claim :status :conditions)
-        error (some #(when (and (contains? resize-error-conditions (:type %))
-                                (not= "False" (:status %)))
-                       (str (:type %) (when-not (str/blank? (str (:message %))) (str ": " (one-line (:message %))))))
-                    conditions)
-        infeasible (some #(when (contains? infeasible-statuses %) %)
-                         (vals (-> claim :status :allocatedResourceStatuses)))
-        failed-event (some #(when (and (= "Warning" (:type %))
-                                       (contains? resize-failure-reasons (:reason %))
-                                       (= "PersistentVolumeClaim" (-> % :involvedObject :kind))
-                                       (= claim-name (-> % :involvedObject :name))
-                                       (when-let [at (event-instant %)] (not (.isBefore at since))))
-                              (str (:reason %) ": " (one-line (:message %))))
-                           events)
+(defn- condition-text
+  [{:keys [type message]}]
+  (str type (when-not (str/blank? (str message)) (str ": " (one-line message)))))
+
+(defn kept-claim-names
+  "The names in retained among the claims of plan, in plan order."
+  [plan retained]
+  (let [retained (set retained)]
+    (vec (keep #(when (contains? retained (:pvc %)) (:pvc %)) plan))))
+
+(defn kept-claims-baseline
+  "The state the post-check of the kept claims judges against, read right
+   before the effect: {:claims {name claim-or-nil} :events #{event-key}}.
+   Reads as the caller binds them; under kubectl/*strict-reads*, which a
+   change's :refusal runs under, a read that did not answer throws, so no
+   baseline is recorded from a cluster that did not answer."
+  [context namespace claim-names]
+  {:claims (into {} (for [claim-name claim-names]
+                      [claim-name (kubectl/get-namespaced-resource context namespace "persistentvolumeclaims" claim-name)]))
+   :events (set (map event-key (kubectl/items-of (kubectl/get-namespaced context namespace "events"))))})
+
+(defn kept-claims-refusal
+  "Why the change must not run given baseline, or nil: a kept claim that no
+   longer exists cannot be resized."
+  [{:keys [claims]}]
+  (when-let [gone (seq (sort (keep (fn [[claim-name claim]] (when (nil? claim) claim-name)) claims)))]
+    (format "the kept %s %s no longer %s" (if (next gone) "claims" "claim") (str/join ", " gone)
+            (if (next gone) "exist" "exists"))))
+
+(defn kept-claim-verdict
+  "Pure: how the resize of a kept claim to capacity stands.
+
+   claim is the claim as read now, nil when it does not exist, or :unread;
+   events the namespace's events, or :unread; baseline what
+   kept-claims-baseline read right before the effect, nil when it was not
+   recorded. Returns {:claim :state :line}, :state being
+
+   :rejected  the claim does not exist, requests less than capacity, or
+              carries a resize error condition, an infeasible
+              allocatedResourceStatus or a resize failure event the baseline
+              did not hold;
+   :done      the cluster took the resize up: status.capacity is at least
+              capacity, status.allocatedResources is at least capacity with
+              only the node's expansion left (NodeResizePending,
+              NodeResizeInProgress), or a FileSystemResizePending condition
+              the baseline did not hold appeared;
+   :pending   anything else, among it a claim that only requests capacity,
+              a controller resize in progress, evidence carried over from
+              before the change, and reads that did not answer.
+
+   Without a baseline nothing on the claim counts as written after the
+   change: only its capacity can make it done, and only its absence or its
+   request can reject it. Quantities compare as numbers, so 1Ti is 1024Gi."
+  [{claim-name :name :keys [capacity claim events baseline]}]
+  (let [verdict (fn [state text] {:claim claim-name :state state :line (format "kept claim %s: %s" claim-name text)})
+        known? (some? baseline)
+        before (get-in baseline [:claims claim-name])
+        before-conditions (set (map condition-key (-> before :status :conditions)))
+        fresh? #(and known? (not (contains? before-conditions (condition-key %))))
+        active (fn [types] (filter #(and (contains? types (:type %)) (not= "False" (:status %)))
+                                   (-> claim :status :conditions)))
+        errors (active resize-error-conditions)
+        statuses (-> claim :status :allocatedResourceStatuses)
+        before-statuses (-> before :status :allocatedResourceStatuses)
+        infeasible (filter (fn [[_ status]] (contains? infeasible-statuses status)) statuses)
+        fresh-infeasible (some (fn [[resource status]] (when (and known? (not= status (get before-statuses resource))) status))
+                               infeasible)
+        failed-event (when (and known? (sequential? events))
+                       (some #(when (and (= "Warning" (:type %))
+                                         (contains? resize-failure-reasons (:reason %))
+                                         (= "PersistentVolumeClaim" (-> % :involvedObject :kind))
+                                         (= claim-name (-> % :involvedObject :name))
+                                         (not (contains? (:events baseline) (event-key %))))
+                                (str (:reason %) ": " (one-line (:message %))))
+                             events))
         requested (-> claim :spec :resources :requests :storage)
         reported (-> claim :status :capacity :storage)
-        pending? (some #(and (= "FileSystemResizePending" (:type %)) (not= "False" (:status %))) conditions)
-        verdict (fn [state text] {:claim claim-name :state state :line (format "kept claim %s: %s" claim-name text)})]
+        allocated (-> claim :status :allocatedResources :storage)
+        storage-status (get statuses :storage)
+        filesystem-pending (first (filter fresh? (active #{"FileSystemResizePending"})))
+        age (if known? "from before the change" "of unknown age")
+        carried (concat (map #(str "a " (condition-text %) " " age) (remove fresh? errors))
+                        (keep (fn [[_ status]] (when-not (= status fresh-infeasible) (str status " " age)))
+                              infeasible))]
     (cond
+      (= :unread claim) (verdict :pending "could not be read")
       (nil? claim) (verdict :rejected "not found, so it was not resized")
-      error (verdict :rejected (str "resize rejected - " error))
-      infeasible (verdict :rejected (str "resize rejected - " infeasible))
+      (not (quantity/at-least? requested capacity))
+      (verdict :rejected (format "requests %s, not %s - the resize was not accepted" requested capacity))
+      (some fresh? errors) (verdict :rejected (str "resize rejected - " (condition-text (first (filter fresh? errors)))))
+      fresh-infeasible (verdict :rejected (str "resize rejected - " fresh-infeasible))
       failed-event (verdict :rejected (str "resize rejected - " failed-event))
-      (= capacity reported) (verdict :grown (str "grew to " capacity))
-      (not= capacity requested) (verdict :rejected (format "requests %s, not %s - the resize was not accepted" requested capacity))
-      pending? (verdict :accepted "resize accepted, the filesystem grows when a pod mounts it")
-      :else (verdict :requested (format "requests %s, the volume and its filesystem grow at the latest when a pod mounts it" capacity)))))
+      (= :unread events) (verdict :pending "the namespace's events could not be read, so a resize failure could not be ruled out")
+      (quantity/at-least? reported capacity) (verdict :done (str "grew to " reported))
+      (and (quantity/at-least? allocated capacity) (contains? node-expansion-statuses storage-status))
+      (verdict :done (format "the volume grew to %s, its filesystem grows when a pod mounts it (%s)" allocated storage-status))
+      filesystem-pending
+      (verdict :done "the volume grew, its filesystem grows when a pod mounts it (FileSystemResizePending)")
+      :else
+      (verdict :pending (str/join ", " (concat [(format "requests %s, the cluster has not taken the resize up (capacity %s%s)"
+                                                         requested (or reported "unknown")
+                                                         (if storage-status (str ", " storage-status) ""))]
+                                               carried
+                                               (when-not known? ["the state before the change was not recorded, so no condition on it counts"])))))))
+
+(defn- read-or-unread
+  "What read returns, or :unread when a read in it did not answer."
+  [read]
+  (try (read)
+       (catch clojure.lang.ExceptionInfo e
+         (if (::kubectl/unread (ex-data e)) :unread (throw e)))))
 
 (defn retained-claims-check
-  "The post-check that every claim of claim-names, the retained claims of a
-   StatefulSet no pod mounts, accepted the resize to capacity, judged by
-   retained-claim-verdict over strict reads of each claim and the
-   namespace's events since the instant since. It holds once none is
-   rejected, printing how each stands, so the claims that grow only on
-   their next mount never hold the run for a capacity they cannot report
-   yet; one that is rejected ends the wait at once and fails it."
-  [context namespace claim-names capacity since]
-  (let [last-verdicts (atom nil)]
-    {:description (format "the %d kept %s of replicas that do not run (%s) accepted the resize to %s"
+  "The post-check that every claim of claim-names, the kept claims of a
+   StatefulSet no pod mounts, took the resize to capacity up, judged by
+   kept-claim-verdict over strict reads of each claim and the namespace's
+   events against @baseline, the kept-claims-baseline read right before the
+   effect. It holds once every claim is :done, ends the wait at once when one
+   is :rejected, and otherwise waits; a claim still pending at the timeout
+   fails the run, naming how each claim last stood, since a resize the
+   cluster never showed taking up is not verified."
+  [context namespace claim-names capacity baseline]
+  (let [last-verdicts (atom nil)
+        lines-of (fn [state] (keep #(when (= state (:state %)) (:line %)) @last-verdicts))]
+    {:description (format "the %d kept %s of replicas that do not run (%s) took up the resize to %s"
                           (count claim-names) (if (= 1 (count claim-names)) "claim" "claims")
                           (str/join ", " claim-names) capacity)
-     :timeout 60 :interval 5
+     :timeout 300 :interval 10
      :check (fn []
-              (let [events (kubectl/items-of (kubectl/get-namespaced context namespace "events"))
-                    verdicts (mapv #(retained-claim-verdict
-                                     % (kubectl/get-namespaced-resource context namespace "persistentvolumeclaims" %)
-                                     events since capacity)
+              (let [events (read-or-unread #(kubectl/items-of (kubectl/get-namespaced context namespace "events")))
+                    verdicts (mapv (fn [claim-name]
+                                     (kept-claim-verdict
+                                      {:name claim-name :capacity capacity :events events :baseline @baseline
+                                       :claim (read-or-unread #(kubectl/get-namespaced-resource
+                                                                context namespace "persistentvolumeclaims" claim-name))}))
                                    claim-names)]
                 (reset! last-verdicts verdicts)
-                (if (some #(= :rejected (:state %)) verdicts)
-                  false
-                  (do (doseq [{:keys [line]} verdicts]
-                        (stdout/err-println (str "  " line)))
-                      true))))
-     :abort (fn []
-              (when-let [rejected (seq (filter #(= :rejected (:state %)) @last-verdicts))]
-                (str/join "; " (map :line rejected))))}))
+                (when (every? #(= :done (:state %)) verdicts)
+                  (doseq [{:keys [line]} verdicts]
+                    (stdout/err-println (str "  " line)))
+                  true)))
+     :abort (fn [] (some->> (seq (lines-of :rejected)) (str/join "; ")))
+     :detail (fn [] (some->> (seq (concat (lines-of :pending) (lines-of :done))) (str/join "; ")))}))
 
 ;; --- a StatefulSet's volumes -----------------------------------------------------
 
@@ -406,7 +508,7 @@
              (let [recreated (kubectl/get-namespaced-resource context namespace "statefulsets" name)]
                (boolean
                 (some #(and (= template-name (-> % :metadata :name))
-                            (= capacity (-> % :spec :resources :requests :storage)))
+                            (quantity/same? capacity (-> % :spec :resources :requests :storage)))
                       (-> recreated :spec :volumeClaimTemplates)))))}
    {:description "every pod of the StatefulSet is Running"
     :timeout 300
@@ -417,20 +519,22 @@
 
 (defn statefulset-checks
   "The post-checks of a StatefulSet's resize: the claims of the running
-   replicas report capacity, the retained claims among plan - the names in
-   retained, which no pod mounts - accepted the resize (see
-   retained-claims-check), the StatefulSet exists again with the new
-   template, and every replica is ready. Without retained every claim of
-   plan must report capacity."
+   replicas report capacity, the kept claims among plan - the names in
+   retained, which no pod mounts - took the resize up (see
+   retained-claims-check, judged against @baseline, the
+   kept-claims-baseline read right before the effect; without one no
+   condition on a kept claim counts, only its capacity), the StatefulSet
+   exists again with the new template, and every replica is ready. Without
+   retained every claim of plan must report capacity."
   ([context cluster namespace name template-name capacity plan]
-   (statefulset-checks context cluster namespace name template-name capacity plan nil))
+   (statefulset-checks context cluster namespace name template-name capacity plan nil nil))
   ([context cluster namespace name template-name capacity plan retained]
-   (let [retained (set retained)
-         running (vec (remove #(contains? retained (:pvc %)) plan))
-         kept (vec (keep #(when (contains? retained (:pvc %)) (:pvc %)) plan))
-         since (java.time.Instant/now)]
+   (statefulset-checks context cluster namespace name template-name capacity plan retained nil))
+  ([context cluster namespace name template-name capacity plan retained baseline]
+   (let [kept (kept-claim-names plan retained)
+         running (vec (remove #(contains? (set kept) (:pvc %)) plan))]
      (vec
       (concat
        (when (seq running) [(claims-capacity-check context cluster namespace running capacity)])
-       (when (seq kept) [(retained-claims-check context namespace kept capacity since)])
+       (when (seq kept) [(retained-claims-check context namespace kept capacity (or baseline (atom nil)))])
        (statefulset-state-checks context namespace name template-name capacity))))))
