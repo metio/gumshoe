@@ -125,7 +125,7 @@
    "  2/5 🚧 Cordon - cordon (mark unschedulable) a node, verified, skipped when already done"
    "  3/5 💨 Drain - drain a node - every pod on it is evicted and emptyDir data is deleted (destructive), verified, skipped when already done"
    "  ⏸  perform the maintenance on the node now - waits for ENTER; --from-segment 2 continues here"
-   "  4/5 ✅ Uncordon - uncordon (mark schedulable) a node, verified, skipped when already done"
+   "  4/5 🔓 Uncordon - uncordon (mark schedulable) a node, verified, skipped when already done"
    "  5/5 🔬 Verification - reads and reports"
    ""
    "Needs:"

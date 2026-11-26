@@ -13,6 +13,7 @@
             [gumshoe.shell :as shell]
             [gumshoe.outcome :as outcome]
             [gumshoe.stdout :as stdout]
+            [gumshoe.theme :as theme]
             [gumshoe.ui :as ui]))
 
 ;; Every resolved selection is recorded so a book's recording can show exactly
@@ -56,8 +57,8 @@
    (if-let [ask (ui/backend :ask-text)]
      (ask prompt)
      (if (command/installed? "gum")
-       (shell/capture-line "gum" "input" "--prompt" "▸ ")
-       (do (binding [*out* *err*] (print "▸ ") (flush))
+       (shell/capture-line "gum" "input" "--prompt" (str (theme/glyph :info) " "))
+       (do (binding [*out* *err*] (print (str (theme/glyph :info) " ")) (flush))
            (not-empty (some-> (read-line) str/trim)))))))
 
 (defn valid-choice?
@@ -166,7 +167,7 @@
   [{:keys [destructive?] :as request}]
   (if destructive?
     (stdout/print-banner stdout/red "💥 DESTRUCTIVE ACTION - this cannot be undone automatically")
-    (stdout/print-banner stdout/yellow "🔶 You are about to change a running system"))
+    (stdout/banner :finding "You are about to change a running system"))
   (stdout/err-println (confirmation-message request))
   ;; destructive actions always require the literal word 'yes', whatever the UI
   ;; backend - the deliberate friction is the point, not a widget's convenience

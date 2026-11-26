@@ -190,16 +190,16 @@
   [{:keys [domain host server dkim-selectors probe-timeout-ms]
     :or {probe-timeout-ms default-probe-timeout-ms}}]
   (stdout/print-section "🔍 Evidence (dig + openssl)")
-  (stdout/err-println (format "  %s domain %s, host %s" (stdout/blue "▸") (or domain "-") (or host "-")))
+  (stdout/item :info (format "domain %s, host %s" (or domain "-") (or host "-")))
   (let [q (fn [type name] (dns/query {:server server} type name))
         domain? (given? domain)
         host? (given? host)
         unprobed (constantly nil)
         _ (if host?
-            (stdout/err-println (format "  %s probing %d service ports on %s" (stdout/blue "▸") (count services) host))
-            (stdout/err-println (format "  %s no host given, so no service port and no reverse DNS is probed" (stdout/yellow "▸"))))
+            (stdout/item :info (format "probing %d service ports on %s" (count services) host))
+            (stdout/item :finding "no host given, so no service port and no reverse DNS is probed"))
         _ (when-not domain?
-            (stdout/err-println (format "  %s no domain given, so no MX, SPF, DMARC or DKIM record is queried" (stdout/yellow "▸"))))
+            (stdout/item :finding "no domain given, so no MX, SPF, DMARC or DKIM record is queried"))
         [mx spf dmarc ptr dkim & probes]
         (concurrent/all
          (into [(if domain? #(q "MX" domain) unprobed)

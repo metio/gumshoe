@@ -158,6 +158,11 @@
    #'stdout/warn #(stdout/warn "careful")
    #'stdout/check-ok #(stdout/check-ok "can connect to" "host")
    #'stdout/check-error #(stdout/check-error "cannot connect to" "host")
+   #'stdout/line #(stdout/line :done "migrated")
+   #'stdout/item #(stdout/item :not-yet "restored")
+   #'stdout/note #(stdout/note "a" "note")
+   #'stdout/detail #(stdout/detail "kubectl" "get" "pods")
+   #'stdout/banner #(stdout/banner :failure "stop")
    #'stdout/selected #(stdout/selected "Node" "w-1")
    #'stdout/print-data-table #(stdout/print-data-table {:node "w-1"})
    #'stdout/print-table #(stdout/print-table [["POD" :pod]] [{:pod "web-1"}])
@@ -170,7 +175,7 @@
     #'stdout/results-wrap-width #'stdout/disable-colors! #'stdout/colors-enabled?
     #'stdout/no-color-requested? #'stdout/strip-colors #'stdout/elide #'stdout/wrap
     #'stdout/hanging #'stdout/shorten-path #'stdout/red #'stdout/green #'stdout/yellow
-    #'stdout/blue #'stdout/bold #'stdout/animate? #'stdout/data-table #'stdout/table})
+    #'stdout/blue #'stdout/bold #'stdout/animate? #'stdout/data-table #'stdout/table #'stdout/context})
 
 (deftest every-public-helper-is-classified
   (is (= (set (vals (ns-publics 'gumshoe.stdout)))

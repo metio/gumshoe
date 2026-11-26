@@ -127,8 +127,8 @@
         resolve (fn [host]
                   [host (resolution #(dns/query {:server server} %1 %2) host)])]
     (when (seq unread)
-      (stdout/err-println (format "  %s could not read %s - nothing is judged" (stdout/red "✗") (str/join ", " unread))))
-    (stdout/err-println (format "  %s %d hostnames via %s" (stdout/blue "▸") (count sources) server))
+      (stdout/item :failure (format "could not read %s - nothing is judged" (str/join ", " unread))))
+    (stdout/item :info (format "%d hostnames via %s" (count sources) server))
     {:now (java.time.Instant/now)
      "server" server
      "sources" sources

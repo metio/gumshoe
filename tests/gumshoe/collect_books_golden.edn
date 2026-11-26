@@ -51,7 +51,7 @@
   "clean text"
   {:result true,
    :stdout
-   "  ✓ Failing ceph health checks\n  ✓ OSDs that are down or out\n  ✓ Placement groups that are not active+clean\n  ✓ Monitors missing from the quorum\n  ✓ Cluster and pool capacity running out\n  ✓ Individual OSDs running full\n  ✓ cephadm services with missing daemons\n  ✓ Unarchived daemon crashes\n",
+   "  ✅ Failing ceph health checks\n  ✅ OSDs that are down or out\n  ✅ Placement groups that are not active+clean\n  ✅ Monitors missing from the quorum\n  ✅ Cluster and pool capacity running out\n  ✅ Individual OSDs running full\n  ✅ cephadm services with missing daemons\n  ✅ Unarchived daemon crashes\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when storage is slow or degraded - the ceph cluster's own health, its OSDs, and placement-group state, straight from a mgr host.\n── 🔌 Connection ────────────────────────────────────────────────────────────────\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 8 checks passed\n",
    :calls
@@ -132,7 +132,7 @@
   "finding text"
   {:result true,
    :stdout
-   "  ceph-health (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 7 other checks came back clean: ceph-osds, ceph-pgs, ceph-mons, ceph-capacity, ceph-osd-utilization, ceph-services, ceph-crashes\n",
+   "  ceph-health (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✅ 7 other checks came back clean: ceph-osds, ceph-pgs, ceph-mons, ceph-capacity, ceph-osd-utilization, ceph-services, ceph-crashes\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when storage is slow or degraded - the ceph cluster's own health, its OSDs, and placement-group state, straight from a mgr host.\n── 🔌 Connection ────────────────────────────────────────────────────────────────\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
    :calls
@@ -211,7 +211,7 @@
   "clean text"
   {:result true,
    :stdout
-   "  ✓ The entry server answers over both IPv4 and IPv6\n  ✓ The zone has redundant, dual-stack reachable nameservers\n  ✓ Every nameserver answers and serves the same SOA serial\n  ✓ Probe names resolve identically on every nameserver\n",
+   "  ✅ The entry server answers over both IPv4 and IPv6\n  ✅ The zone has redundant, dual-stack reachable nameservers\n  ✅ Every nameserver answers and serves the same SOA serial\n  ✅ Probe names resolve identically on every nameserver\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when names aren't resolving, mail is bouncing, or right after a nameserver change - transports, nameserver redundancy, SOA replication, and answer consistency across servers.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 4 checks passed\n",
    :calls
@@ -274,7 +274,7 @@
   "finding text"
   {:result true,
    :stdout
-   "  dns-transports (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 3 other checks came back clean: dns-nameservers, dns-replication, dns-probes\n",
+   "  dns-transports (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✅ 3 other checks came back clean: dns-nameservers, dns-replication, dns-probes\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when names aren't resolving, mail is bouncing, or right after a nameserver change - transports, nameserver redundancy, SOA replication, and answer consistency across servers.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
    :calls
@@ -317,7 +317,7 @@
   "clean text"
   {:result true,
    :stdout
-   "  ✓ Cluster-declared hostnames that do not resolve in DNS\n",
+   "  ✅ Cluster-declared hostnames that do not resolve in DNS\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a hostname points nowhere - it checks that every hostname your ingresses and routes declare actually resolves in DNS.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 1 check passed\n",
    :calls
@@ -446,7 +446,7 @@
   "clean text"
   {:result true,
    :stdout
-   "  ✓ guest MACs the fabric attributes to a VTEP that is not their host's\n  ✓ hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local and whether BGP still advertises the remote one\n  ✓ hosts whose fabric state could not be read, making the scan incomplete\n  ✓ static fdb entries, which outrank EVPN learning and go stale silently\n  ✓ values the scan judges against that neither an option nor env.edn supplied, and the checks that could not judge without them\n▸ 1 check read nothing on this cluster - other (evpn-gateway-only-mac); what they read is not served, not readable, or not gathered by this scan\n",
+   "  ✅ guest MACs the fabric attributes to a VTEP that is not their host's\n  ✅ hosts holding both a local tap and a remote entry for one MAC, with how long FRR has held it local and whether BGP still advertises the remote one\n  ✅ hosts whose fabric state could not be read, making the scan incomplete\n  ✅ static fdb entries, which outrank EVPN learning and go stale silently\n  ✅ values the scan judges against that neither an option nor env.edn supplied, and the checks that could not judge without them\n▸ 1 check read nothing on this cluster - other (evpn-gateway-only-mac); what they read is not served, not readable, or not gathered by this scan\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when hosts or guests are unreachable and nothing inside the cluster explains it - a guest whose MAC the fabric attributes to the wrong VTEP is up and serving, and invisible.\n── 🔌 Fabric ────────────────────────────────────────────────────────────────────\n🔶 no gateway VTEPs - pass --gateway-vteps or set :evpn :gateway-vteps in env.edn; evpn-gateway-only-mac cannot judge without them and is reported as unjudged\n🔶 no guest MAC prefixes - pass --guest-mac-prefixes or set :evpn :guest-mac-prefixes in env.edn; evpn-gateway-only-mac counts every MAC as a guest\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 5 checks passed\n",
    :calls
@@ -566,7 +566,7 @@
   "finding text"
   {:result true,
    :stdout
-   "  evpn-hosts (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 4 other checks came back clean: evpn-mac-ownership, evpn-fdb-conflict, evpn-static-fdb, evpn-inputs\n▸ 1 check read nothing on this cluster - other (evpn-gateway-only-mac); what they read is not served, not readable, or not gathered by this scan\n",
+   "  evpn-hosts (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✅ 4 other checks came back clean: evpn-mac-ownership, evpn-fdb-conflict, evpn-static-fdb, evpn-inputs\n▸ 1 check read nothing on this cluster - other (evpn-gateway-only-mac); what they read is not served, not readable, or not gathered by this scan\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when hosts or guests are unreachable and nothing inside the cluster explains it - a guest whose MAC the fabric attributes to the wrong VTEP is up and serving, and invisible.\n── 🔌 Fabric ────────────────────────────────────────────────────────────────────\n🔶 no gateway VTEPs - pass --gateway-vteps or set :evpn :gateway-vteps in env.edn; evpn-gateway-only-mac cannot judge without them and is reported as unjudged\n🔶 no guest MAC prefixes - pass --guest-mac-prefixes or set :evpn :guest-mac-prefixes in env.edn; evpn-gateway-only-mac counts every MAC as a guest\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
    :calls
@@ -649,7 +649,7 @@
   "clean text"
   {:result true,
    :stdout
-   "  ✓ The Whisker flow API answers\n  ✓ Flows denied over the window, grouped by path, with the deciding policy\n  ✓ Flows a staged policy would decide differently\n",
+   "  ✅ The Whisker flow API answers\n  ✅ Flows denied over the window, grouped by path, with the deciding policy\n  ✅ Flows a staged policy would decide differently\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when traffic is being dropped and you want the verdict rather than another probe - which policy denied a path, what a staged policy would change, and which denials look like timeouts. Also run it before enforcing a staged default-deny.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 3 checks passed\n",
    :calls
@@ -706,7 +706,7 @@
   "finding text"
   {:result true,
    :stdout
-   "  calico-denied-flows (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 2 other checks came back clean: calico-flows-api, calico-staged-disagreement\n",
+   "  calico-denied-flows (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✅ 2 other checks came back clean: calico-flows-api, calico-staged-disagreement\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when traffic is being dropped and you want the verdict rather than another probe - which policy denied a path, what a staged policy would change, and which denials look like timeouts. Also run it before enforcing a staged default-deny.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
    :calls
@@ -773,7 +773,7 @@
   "clean text"
   {:result true,
    :stdout
-   "  ✓ Loki runs in microservice mode with components present\n  ✓ Every essential Loki component (distributor, ingester, querier, query-frontend) exists\n  ✓ Every Loki component has all its replicas ready\n  ✓ Every reachable component hash ring is fully ACTIVE\n",
+   "  ✅ Loki runs in microservice mode with components present\n  ✅ Every essential Loki component (distributor, ingester, querier, query-frontend) exists\n  ✅ Every Loki component has all its replicas ready\n  ✅ Every reachable component hash ring is fully ACTIVE\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 4 checks passed\n",
    :calls
@@ -840,7 +840,7 @@
   "finding text"
   {:result true,
    :stdout
-   "  loki-components (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 3 other checks came back clean: loki-mode, loki-health, loki-rings\n",
+   "  loki-components (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✅ 3 other checks came back clean: loki-mode, loki-health, loki-rings\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
    :calls
@@ -871,7 +871,7 @@
   "no distributor"
   {:result true,
    :stdout
-   "  ✓ Loki runs in microservice mode with components present\n  ✓ Every essential Loki component (distributor, ingester, querier, query-frontend) exists\n  ✓ Every Loki component has all its replicas ready\n▸ 1 check read nothing on this cluster - other (loki-rings); what they read is not served, not readable, or not gathered by this scan\n",
+   "  ✅ Loki runs in microservice mode with components present\n  ✅ Every essential Loki component (distributor, ingester, querier, query-frontend) exists\n  ✅ Every Loki component has all its replicas ready\n▸ 1 check read nothing on this cluster - other (loki-rings); what they read is not served, not readable, or not gathered by this scan\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when logs are missing or queries fail - it discovers the Loki components in the namespace and checks their health and hash rings.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 3 checks passed\n",
    :calls
@@ -938,7 +938,7 @@
   "clean text"
   {:result true,
    :stdout
-   "  ✓ MX records: mail can be received at all\n  ✓ SPF record present, unique, and not dangerously permissive\n  ✓ DMARC policy published and enforcing\n  ✓ DKIM keys published for the configured selectors\n  ✓ Forward-confirmed reverse DNS for the mail host\n  ✓ SMTP/POP3/IMAP ports reachable, STARTTLS offered, certificates valid\n",
+   "  ✅ MX records: mail can be received at all\n  ✅ SPF record present, unique, and not dangerously permissive\n  ✅ DMARC policy published and enforcing\n  ✅ DKIM keys published for the configured selectors\n  ✅ Forward-confirmed reverse DNS for the mail host\n  ✅ SMTP/POP3/IMAP ports reachable, STARTTLS offered, certificates valid\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when mail is bouncing or landing in spam - deliverability records (SPF/DKIM/DMARC/reverse DNS) and the live SMTP/POP3/IMAP services.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 6 checks passed\n",
    :calls
@@ -1012,7 +1012,7 @@
   "finding text"
   {:result true,
    :stdout
-   "  mail-mx (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 5 other checks came back clean: mail-spf, mail-dmarc, mail-dkim, mail-rdns, mail-services\n",
+   "  mail-mx (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✅ 5 other checks came back clean: mail-spf, mail-dmarc, mail-dkim, mail-rdns, mail-services\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when mail is bouncing or landing in spam - deliverability records (SPF/DKIM/DMARC/reverse DNS) and the live SMTP/POP3/IMAP services.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
    :calls
@@ -1084,7 +1084,7 @@
   "clean text"
   {:result true,
    :stdout
-   "  ✓ The Matrix client API answers\n  ✓ The homeserver health endpoint is green\n  ✓ The federation API is reachable\n  ✓ Signing keys are published and not expiring\n  ✓ .well-known federation delegation is coherent\n  ✓ Federation to other servers is not silently failing (needs admin token)\n",
+   "  ✅ The Matrix client API answers\n  ✅ The homeserver health endpoint is green\n  ✅ The federation API is reachable\n  ✅ Signing keys are published and not expiring\n  ✅ .well-known federation delegation is coherent\n  ✅ Federation to other servers is not silently failing (needs admin token)\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when federation or logins break - the client and federation APIs, signing-key expiry, and .well-known delegation.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 6 checks passed\n",
    :calls
@@ -1161,7 +1161,7 @@
   "finding text"
   {:result true,
    :stdout
-   "  matrix-health (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 5 other checks came back clean: matrix-client-api, matrix-federation-api, matrix-signing-keys, matrix-wellknown, matrix-federation-destinations\n",
+   "  matrix-health (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✅ 5 other checks came back clean: matrix-client-api, matrix-federation-api, matrix-signing-keys, matrix-wellknown, matrix-federation-destinations\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when federation or logins break - the client and federation APIs, signing-key expiry, and .well-known delegation.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
    :calls
@@ -1245,7 +1245,7 @@
   "clean text"
   {:result true,
    :stdout
-   "  ✓ Every host-facts query answered\n  ✓ Every host's node_exporter is up\n  ✓ Every host reports its CPU count and memory\n▸ 2 checks read nothing on this cluster - other (declared-hosts-report, reporting-hosts-declared); what they read is not served, not readable, or not gathered by this scan\n",
+   "  ✅ Every host-facts query answered\n  ✅ Every host's node_exporter is up\n  ✅ Every host reports its CPU count and memory\n▸ 2 checks read nothing on this cluster - other (declared-hosts-report, reporting-hosts-declared); what they read is not served, not readable, or not gathered by this scan\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this to count and size hosts from their metrics, or to find hosts that are declared but not scraped, and scraped but not declared.\n── 🖥️  Hosts (1) ───────────────────────────────────────────────────────────────\nHOST  CORES  MEMORY GiB  KERNEL  OS         UP\nw1    4      8.0         6.1     Debian 12  yes\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 3 checks passed\n",
    :calls
@@ -1334,7 +1334,7 @@
   "finding text"
   {:result true,
    :stdout
-   "  host-facts-complete (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 2 other checks came back clean: host-queries, host-exporters-up\n▸ 2 checks read nothing on this cluster - other (declared-hosts-report, reporting-hosts-declared); what they read is not served, not readable, or not gathered by this scan\n",
+   "  host-facts-complete (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✅ 2 other checks came back clean: host-queries, host-exporters-up\n▸ 2 checks read nothing on this cluster - other (declared-hosts-report, reporting-hosts-declared); what they read is not served, not readable, or not gathered by this scan\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this to count and size hosts from their metrics, or to find hosts that are declared but not scraped, and scraped but not declared.\n── 🖥️  Hosts (1) ───────────────────────────────────────────────────────────────\nHOST  CORES  MEMORY GiB  KERNEL  OS         UP\nw1    4      8.0         6.1     Debian 12  yes\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
    :calls
@@ -1386,7 +1386,7 @@
   "clean text"
   {:result true,
    :stdout
-   "  ✓ Hosts in error or offline states\n  ✓ VMs that failed or failed to clone\n  ✓ Datastores running out of space\n",
+   "  ✅ Hosts in error or offline states\n  ✅ VMs that failed or failed to clone\n  ✅ Datastores running out of space\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a VM won't start or a datastore is filling up - OpenNebula hosts in error/offline states, failed VMs, and datastore capacity.\n── 🔌 Connection ────────────────────────────────────────────────────────────────\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 3 checks passed\n",
    :calls
@@ -1422,7 +1422,7 @@
   "finding text"
   {:result true,
    :stdout
-   "  opennebula-vms (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 2 other checks came back clean: opennebula-hosts, opennebula-datastores\n",
+   "  opennebula-vms (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✅ 2 other checks came back clean: opennebula-hosts, opennebula-datastores\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a VM won't start or a datastore is filling up - OpenNebula hosts in error/offline states, failed VMs, and datastore capacity.\n── 🔌 Connection ────────────────────────────────────────────────────────────────\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
    :calls
@@ -1466,7 +1466,7 @@
   "clean text"
   {:result true,
    :stdout
-   "  ✓ Restic repositories readable, populated, and backing up on schedule\n",
+   "  ✅ Restic repositories readable, populated, and backing up on schedule\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when you need to trust the backups - that each restic repository is readable, actually populated, and has a recent enough snapshot.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 1 check passed\n",
    :calls
@@ -1569,7 +1569,7 @@
   "clean text"
   {:result true,
    :stdout
-   "  ✓ Thanos Query is up and ready to serve\n  ✓ Store endpoints are connected and error-free\n  ✓ Recording and alerting rules evaluate cleanly\n",
+   "  ✅ Thanos Query is up and ready to serve\n  ✅ Store endpoints are connected and error-free\n  ✅ Recording and alerting rules evaluate cleanly\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when long-range queries or recording rules misbehave - Thanos query readiness, its store endpoints, and rule health.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 3 checks passed\n",
    :calls
@@ -1631,7 +1631,7 @@
   "finding text"
   {:result true,
    :stdout
-   "  thanos-stores (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✓ 2 other checks came back clean: thanos-readiness, thanos-rules\n",
+   "  thanos-stores (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✅ 2 other checks came back clean: thanos-readiness, thanos-rules\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when long-range queries or recording rules misbehave - Thanos query readiness, its store endpoints, and rule health.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
    :calls
@@ -1704,7 +1704,7 @@
   "clean text"
   {:result true,
    :stdout
-   "  ✓ The nginx + php-fpm file-upload limit chain is coherent\n",
+   "  ✅ The nginx + php-fpm file-upload limit chain is coherent\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a Moodle/Nextcloud upload fails at a size limit - the nginx client_max_body_size and php-fpm post/upload limits along the whole chain.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 1 check passed\n",
    :calls
@@ -1770,7 +1770,7 @@
   "nginx only"
   {:result true,
    :stdout
-   "  ✓ The nginx + php-fpm file-upload limit chain is coherent\n",
+   "  ✅ The nginx + php-fpm file-upload limit chain is coherent\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when a Moodle/Nextcloud upload fails at a size limit - the nginx client_max_body_size and php-fpm post/upload limits along the whole chain.\n🔶 no container answered 'php-fpm -i' or 'php -i' - reporting the nginx side only\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 1 check passed\n",
    :calls

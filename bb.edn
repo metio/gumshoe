@@ -59,6 +59,7 @@
                    [gumshoe.cancellation-test]
                    [gumshoe.summary-test]
                    [gumshoe.theme-test]
+                   [gumshoe.ui-surface-test]
                    [gumshoe.spec-test]
                    [gumshoe.conformance-test]
                    [gumshoe.conformance-library-test]
@@ -351,6 +352,7 @@
                                                          'gumshoe.cancellation-test
                                                          'gumshoe.summary-test
                                                          'gumshoe.theme-test
+                                                         'gumshoe.ui-surface-test
                                                          'gumshoe.spec-test
                                                          'gumshoe.conformance-test
                                                          'gumshoe.conformance-library-test

@@ -135,7 +135,7 @@
                   false))
 
             :else
-            (do (stdout/err-println (format "  ⏳ waiting for: %s (%d/%ds)" description (quot (- now start) 1000) timeout))
+            (do (stdout/item :in-progress (format "waiting for: %s (%d/%ds)" description (quot (- now start) 1000) timeout))
                 (Thread/sleep (long (min interval-ms (max 0 (- deadline now)))))
                 (let [fresh (when watch
                               (try (seq (remove seen (watch))) (catch Exception _ nil)))]

@@ -120,10 +120,10 @@
    and probes are all nil."
   [{:keys [server zone probes]}]
   (stdout/print-section "🔍 Evidence (dig)")
-  (stdout/err-println (str "  " (stdout/blue "▸") " zone " zone " via " server))
+  (stdout/item :info (str "zone " zone " via " server))
   (let [nameservers (some->> (query {:server server} "NS" zone) (mapv strip-dot))
         _ (doseq [ns nameservers]
-            (stdout/err-println (str "  " (stdout/blue "▸") " nameserver " ns)))
+            (stdout/item :info (str "nameserver " ns)))
         [transports addresses serials probed]
         (concurrent/all
          [(fn [] {:ipv4 (answers? {:server server :transport :ipv4} zone)

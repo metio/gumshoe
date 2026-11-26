@@ -2,20 +2,33 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.stdout
-  "Terminal output helpers shared by all books.
+  "The output primitives every book composes its terminal output from.
 
-   Diagnostics (sections, checks, banners, commands) go to stderr; results go
-   to stdout. That keeps `bb <book> --output json | jq` and `> result.txt`
-   clean while the interactive chatter stays visible on the terminal."
+   Diagnostics (sections, report lines, task lists, banners, commands) go to
+   stderr; results go to stdout. That keeps `bb <book> --output json | jq`
+   and `> result.txt` clean while the interactive chatter stays visible on
+   the terminal.
+
+   The surface, each taking its marks from the active theme (gumshoe.theme):
+
+     (print-section \"Title\")            a titled rule
+     (line :success \"text\")             a report line for any outcome:
+                                         :success :failure :finding :info
+                                         :done :not-yet :in-progress :skipped
+     (item :not-yet \"text\")             the same, one level in
+     (note \"text\") (detail \"text\")     a plain line, at the margin or one in
+     (banner :failure \"text\")           a full-width banner
+     (print-table cols rows)             an aligned table
+     (print-command \"kubectl\" ...)       the echo of a command about to run
+     gumshoe.progress/checklist          a live task list
+
+   ok, error, warn, check-ok and check-error are the names lines had before
+   outcomes were named; each prints the same as its `line`/`item` outcome.
+   The strings these print are rendered by gumshoe.render, pure functions
+   of a context, which `context` builds from the active theme and terminal."
   (:require [clojure.string :as str]
+            [gumshoe.render :as render]
             [gumshoe.theme :as theme]))
-
-(def ^:private escape-red "\u001b[31m")
-(def ^:private escape-green "\u001b[32m")
-(def ^:private escape-yellow "\u001b[33m")
-(def ^:private escape-blue "\u001b[34m")
-(def ^:private escape-bold "\u001b[1m")
-(def ^:private escape-reset "\u001b[0m")
 
 (def fixed-width
   "The width of output that is captured: piped, redirected or recorded output
@@ -132,50 +145,41 @@
   (reset! no-color-flag? true)
   (reset! colors? false))
 
-(defn colors-enabled? [] @colors?)
+(defn colors-enabled?
+  "Whether this run writes ANSI colour (see colors? above)."
+  []
+  @colors?)
 
 (defn no-color-requested?
   "Whether the operator asked for no colour with --no-color this run."
   []
   @no-color-flag?)
 
-(defn- colorize
-  [escape text]
-  ;; Colour needs both a colour-capable destination (tty / FORCE_COLOR / not
-  ;; NO_COLOR) and a theme that permits it, so a :plain theme is always colourless.
-  (if (and @colors? (theme/token :color? true)) (str escape text escape-reset) text))
-
 (defn strip-colors
   "Removes ANSI color escapes from a string. fzf --ansi renders colors but
    returns the selected line without them, so a colored menu label must be
    matched back to its item by its stripped form."
   [s]
-  (str/replace (str s) #"\[[0-9;]*m" ""))
+  (render/strip-colors s))
 
 (defn- visible-width
-  "The printed column count of s, colour escapes excluded, so a colourised value
-   measures the same as its plain form."
   [s]
-  (let [bare (strip-colors (str s))]
-    (.codePointCount ^String bare 0 (count bare))))
+  (render/visible-width s))
+
+(defn context
+  "The render context of this run: the active theme, and whether colour is on
+   - both a colour-capable destination (tty, FORCE_COLOR, no NO_COLOR or
+   --no-color) and a theme that permits it. `width` adds the column budget a
+   rule or banner fills."
+  ([] {:theme (theme/active-theme)
+       :color? (boolean (and @colors? (theme/token :color? true)))})
+  ([width] (assoc (context) :width width)))
 
 (defn elide
   "Shortens s to at most `at` visible columns with a middle ellipsis, so a long
    value still shows where it begins and ends. A shorter string passes through."
   [at s]
-  (let [s (str s)]
-    (if (<= (visible-width s) at)
-      s
-      ;; head/tail are code-point counts; slice on code points (not UTF-16 units)
-      ;; so an astral character at a cut boundary is never split into a lone
-      ;; surrogate.
-      (let [budget (max 1 (dec at))          ; one column for the ellipsis
-            head (quot budget 2)
-            tail (- budget head)
-            n (count s)]
-        (str (subs s 0 (.offsetByCodePoints ^String s 0 head))
-             "…"
-             (subs s (.offsetByCodePoints ^String s n (- tail))))))))
+  (render/elide at s))
 
 (defn wrap
   "Word-wraps text to at most `at` columns (default the shared width), breaking on
@@ -221,11 +225,13 @@
       (str "~" (subs p (count home)))
       p)))
 
-(defn red [text] (colorize escape-red text))
-(defn green [text] (colorize escape-green text))
-(defn yellow [text] (colorize escape-yellow text))
-(defn blue [text] (colorize escape-blue text))
-(defn bold [text] (colorize escape-bold text))
+;; Colour needs both a colour-capable destination (tty / FORCE_COLOR / not
+;; NO_COLOR) and a theme that permits it, so a :plain theme is always colourless.
+(defn red "text in red when colour is on." [text] (render/paint (context) :red text))
+(defn green "text in green when colour is on." [text] (render/paint (context) :green text))
+(defn yellow "text in yellow when colour is on." [text] (render/paint (context) :yellow text))
+(defn blue "text in blue when colour is on." [text] (render/paint (context) :blue text))
+(defn bold "text in bold when colour is on." [text] (render/paint (context) :bold text))
 
 (defn err-println
   "Prints to stderr - the channel for everything that is not a result."
@@ -259,13 +265,13 @@
    done, so a captured result and a scrolling log both stay clean."
   [message thunk]
   (if (stderr-live?)
-    (let [frames (theme/token :spinner)
+    (let [ctx (context)
           running (atom true)
           animation (future
                       (loop [i 0]
                         (when @running
                           (binding [*out* *err*]
-                            (print (str "\r" (blue (nth frames (mod i (count frames)))) " " message))
+                            (print (str "\r" (render/spinner-frame ctx i) " " message))
                             (flush))
                           (Thread/sleep 90)
                           (recur (inc i)))))]
@@ -281,51 +287,84 @@
         (thunk))))
 
 (defn print-section-marker
+  "A full-width rule with no title, closing a block of output."
   []
-  (err-println (apply str (repeat (width) (theme/token :rule)))))
+  (err-println (render/rule (context (width)))))
 
 (defn print-section
   "A titled horizontal rule: ── Title ─────────. A title too long for the frame is
    elided in the middle, so the rule always closes within the width."
   [title]
-  (let [width (width)
-        title (elide (- width 6) title)
-        rule (theme/token :rule)
-        visible (visible-width title)
-        padding (apply str (repeat (max 0 (- width 4 visible)) rule))]
-    (err-println (str rule rule " " (bold title) " " padding))))
+  (err-println (render/section (context (width)) title)))
 
 (defn print-banner
-  "A full-width banner that is hard to miss."
+  "A full-width banner that is hard to miss, every line passed through color-fn
+   (red, green, yellow ...). `banner` takes the colour and the leading glyph
+   from an outcome instead."
   [color-fn text]
-  (let [line (apply str (repeat (width) (theme/token :rule)))]
+  (let [line (render/rule (context (width)))]
     (err-println (color-fn line))
     (err-println (color-fn (str "  " text)))
     (err-println (color-fn line))))
 
-;; The status marks are ANSI-colored like the check-ok/check-error ticks, so a
-;; terminal that renders the ✅/❌/🔶 emoji monochrome still shows green/red/yellow.
-;; colorize honors --no-color / NO_COLOR and the ASCII theme, so this is a no-op
-;; when color is off.
-(defn ok
+(defn banner
+  "A full-width banner for an outcome: the theme's mark and colour for it, and
+   the text."
+  [outcome text]
+  (doseq [l (render/banner (context (width)) outcome text)]
+    (err-println l)))
+
+(defn line
+  "A report line on stderr: the theme's mark for outcome, then the parts joined
+   by spaces. The outcomes are those gumshoe.theme/outcomes names - :success,
+   :failure, :finding and :info for what a check concluded, :done, :not-yet,
+   :in-progress and :skipped for how far a piece of work got."
+  [outcome & parts]
+  (err-println (render/line (context) outcome (str/join " " parts))))
+
+(defn item
+  "A report line one level in (see line): one check of a list under a section
+   or a top-level line."
+  [outcome & parts]
+  (err-println (render/item (context) outcome (str/join " " parts))))
+
+(defn note
+  "A plain line on stderr with no mark, the parts joined by spaces: prose a
+   book explains itself with, a blank line, a hint. err-println, under the
+   name the surface documents."
   [& parts]
-  (err-println (green (theme/token :ok)) (str/join " " parts)))
+  (err-println (str/join " " parts)))
+
+(defn detail
+  "A plain line one level in, with no mark: the explanation under an item, a
+   command to run by hand, a row of a hand-laid list."
+  [& parts]
+  (err-println (render/detail (context) (str/join " " parts))))
+
+(defn ok
+  "A success line: (line :success ...)."
+  [& parts]
+  (apply line :success parts))
 
 (defn error
+  "A failure line: (line :failure ...)."
   [& parts]
-  (err-println (red (theme/token :error)) (str/join " " parts)))
+  (apply line :failure parts))
 
 (defn warn
+  "A finding line, something worth the operator's attention: (line :finding ...)."
   [& parts]
-  (err-println (yellow (theme/token :warn)) (str/join " " parts)))
+  (apply line :finding parts))
 
 (defn check-ok
+  "A passed check one level in: (item :success ...)."
   [& parts]
-  (err-println (str "  " (green (theme/token :check-ok))) (str/join " " parts)))
+  (apply item :success parts))
 
 (defn check-error
+  "A failed check one level in: (item :failure ...)."
   [& parts]
-  (err-println (str "  " (red (theme/token :check-error))) (str/join " " parts)))
+  (apply item :failure parts))
 
 (defn selected
   "Echoes a resolved selection - the label and what was chosen - to the terminal.
@@ -334,7 +373,7 @@
    which subject the run acted on. Diagnostic, so it joins the other chatter on
    stderr; a multi-pick collection is rendered comma-separated."
   [label value]
-  (err-println (blue (theme/token :bullet))
+  (err-println (render/mark (context) :info)
                (str (bold label) ":")
                (green (if (coll? value) (str/join ", " value) (str value)))))
 
@@ -351,6 +390,7 @@
            (str/join "\n")))))
 
 (defn print-data-table
+  "Prints key/value data (see data-table) under a rule."
   [data]
   (print-section-marker)
   (err-println (data-table data)))
@@ -389,4 +429,4 @@
 (defn print-command
   "Shows the exact command about to run, so the underlying tooling stays learnable."
   [& args]
-  (err-println (blue "$") (str/join " " args)))
+  (err-println (render/command (context) args)))

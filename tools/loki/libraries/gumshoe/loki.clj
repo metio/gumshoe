@@ -11,6 +11,7 @@
   (:require [gumshoe.concurrent :as concurrent]
             [gumshoe.http :as http]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.render :as render]
             [gumshoe.stdout :as stdout]))
 
 (def ring-paths
@@ -46,16 +47,16 @@
    desired replicas, and how many are ready."
   [{:keys [context namespace selector]}]
   (stdout/print-section "🔍 Evidence (Loki components)")
-  (stdout/err-println (format "  %s namespace %s (selector %s)" (stdout/blue "▸") namespace selector))
+  (stdout/item :info (format "namespace %s (selector %s)" namespace selector))
   (let [{:keys [ok? doc]} (kubectl/get-json-result context "deployments,statefulsets"
                                                   "--all-namespaces" (str "--selector=" selector))
         ;; a read that did not answer leaves the workloads nil, so the checks
         ;; over them are unread instead of reporting no Loki components
         workloads (when ok? (workloads-from (kubectl/items-of doc) namespace))]
     (when-not ok?
-      (stdout/err-println (str "    " (stdout/red "✗") " could not read the deployments and statefulsets")))
+      (stdout/detail (render/item (stdout/context) :failure "could not read the deployments and statefulsets")))
     (doseq [{:keys [component name]} workloads]
-      (stdout/err-println (str "    " (stdout/blue "▸") " " (or component name))))
+      (stdout/detail (render/item (stdout/context) :info (or component name))))
     {:now (java.time.Instant/now)
      "namespace" namespace
      "workloads" workloads}))
@@ -79,7 +80,7 @@
    its own."
   [base-url]
   (stdout/print-section "🔍 Evidence (Loki hash rings)")
-  (stdout/err-println (format "  %s %s" (stdout/blue "▸") base-url))
+  (stdout/item :info base-url)
   (let [rings (concurrent/map-all (fn [[ring path]] [ring (http/fetch (str base-url path))])
                                   ring-paths)]
     {"url" base-url

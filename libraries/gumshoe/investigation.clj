@@ -23,7 +23,8 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]
-            [gumshoe.subject :as subject]))
+            [gumshoe.subject :as subject]
+            [gumshoe.theme :as theme]))
 
 ;; ---------------------------------------------------------------------------
 ;; Situations -> plain words and the probe that answers them (pure).
@@ -154,8 +155,8 @@
    instead of reading every line. Blank for a healthy or unknown object."
   [situation]
   (case (situation-severity situation)
-    :critical (str (stdout/red "🔴") " ")
-    :warning (str (stdout/yellow "🟡") " ")
+    :critical (str (stdout/red (theme/marker :critical)) " ")
+    :warning (str (stdout/yellow (theme/marker :warning)) " ")
     ""))
 
 (defn- situation-badge

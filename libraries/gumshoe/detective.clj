@@ -39,6 +39,7 @@
             [gumshoe.runbook :as runbook]
             [gumshoe.stdout :as stdout]
             [gumshoe.subject :as subject]
+            [gumshoe.render :as render]
             [gumshoe.theme :as theme]))
 
 (def severity-order {:critical 0 :warning 1 :info 2})
@@ -401,7 +402,7 @@
         quiet (remove #(noisy (:name %)) detectives)
         clean (remove :unread quiet)]
     (when (seq clean)
-      (println (str (stdout/green "✓")
+      (println (str (render/mark (stdout/context) :success)
                     (format " %d other check%s came back clean: "
                             (count clean) (if (= 1 (count clean)) "" "s"))
                     (str/join ", " (map :name clean)))))
@@ -419,7 +420,7 @@
   (if (empty? findings)
     (do
       (doseq [{:keys [description]} (remove :unread detectives)]
-        (println (str "  " (stdout/green "✓") " " description)))
+        (println (str "  " (render/mark (stdout/context) :success) " " description)))
       (stdout/print-section-marker)
       (let [passed (count (remove :unread detectives))]
         (stdout/ok (format "no issues found - %d check%s passed" passed (if (= 1 passed) "" "s"))))
