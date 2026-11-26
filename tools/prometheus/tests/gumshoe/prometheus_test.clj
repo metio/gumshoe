@@ -126,14 +126,19 @@
   (is (str/starts-with? (recovery 5) "Every effect ran: Prometheus monitoring/k8s was unpaused")))
 
 (deftest the-pods-check-needs-pods-and-every-one-running
-  (let [[capacity pods-check] (prometheus/resize-checks "ctx" "cluster" "monitoring" "k8s" "20Gi" resize-plan)
+  (let [[capacity _ pods-check] (prometheus/resize-checks "ctx" "cluster" "monitoring" "k8s" "20Gi" resize-plan)
+        owner [{:kind "StatefulSet" :uid "uid-sts" :controller true}]
         answer (fn [& phases]
-                 (fn [& _] {:exit 0 :err ""
-                            :out (json/generate-string
-                                  {:items (for [phase phases]
-                                            {:metadata {:namespace "monitoring"} :status {:phase phase}})})}))]
+                 (fn [& argv]
+                   {:exit 0 :err ""
+                    :out (json/generate-string
+                          (if (some #{"statefulsets"} argv)
+                            {:items [{:metadata {:uid "uid-sts"}}]}
+                            {:items (for [phase phases]
+                                      {:metadata {:namespace "monitoring" :ownerReferences owner}
+                                       :status {:phase phase}})}))}))]
     (is (= ["all 2 PVCs report capacity 20Gi" 300 15 true] ((juxt :description :timeout :interval :soft?) capacity)))
-    (is (= ["every Prometheus pod is Running again" 300 15] ((juxt :description :timeout :interval) pods-check)))
+    (is (= ["every Prometheus pod is Running again under its StatefulSet" 300 15] ((juxt :description :timeout :interval) pods-check)))
     (with-redefs [shell/execute (answer "Running" "Running")] (is (true? ((:check pods-check)))))
     (with-redefs [shell/execute (answer "Running" "Pending")] (is (false? ((:check pods-check)))))
     (with-redefs [shell/execute (answer)] (is (false? ((:check pods-check))) "no pods is not running"))))

@@ -356,6 +356,7 @@
         other {:out (str "{\"osds\":[{\"osd\":1,\"in\":1,\"up\":1},{\"osd\":2,\"in\":1,\"up\":1}]}")}]
     (with-redefs [ssh/check-connection? (constantly true)
                   ceph/daemons (constantly [{:daemon_name "osd.1" :status_desc "running"}])
+                  ceph/daemon-list (constantly {:daemons [{:daemon_name "osd.1" :status_desc "running"}]})
                   shell/execute (fn [& args]
                                   (if (health-read? args) ((answering status-result)) ((answering other))))
                   shell/run-with-output (fn [& _] 0)

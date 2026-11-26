@@ -12,7 +12,8 @@
 
    A pod whose log could not be read is reported as unread. Silence here is
    missing data, and a log that failed to read is not a log without failures."
-  (:require [gumshoe.kubectl :as kubectl]))
+  (:require [gumshoe.cnpg.instances :as inst]
+            [gumshoe.kubectl :as kubectl]))
 
 (def evidence-key "cnpg-pooler-logs")
 
@@ -24,13 +25,15 @@
 (def ^:private pooler-role-selector "cnpg.io/podRole=pooler")
 
 (defn collect
-  "One row per pooler pod: its namespace, name, whether its log was read, and
-   the log itself. nil when the pod list did not answer (list-pooler-pods
-   returned nil), so a failed list leaves the evidence unread rather than
-   reading as a cluster without poolers."
+  "One row per pooler pod that is not terminated (inst/terminated?): its
+   namespace, name, whether its log was read, and the log itself. A
+   terminated pod serves no client, and its log may be gone with its
+   container, which would read as an unread log. nil when the pod list did
+   not answer (list-pooler-pods returned nil), so a failed list leaves the
+   evidence unread rather than reading as a cluster without poolers."
   [list-pooler-pods read-log]
   (when-some [pods (list-pooler-pods)]
-    (vec (for [pod pods
+    (vec (for [pod (remove inst/terminated? pods)
                :let [namespace (kubectl/namespace-of pod)
                      name (kubectl/name-of pod)]]
            (merge {:namespace namespace :pod name}

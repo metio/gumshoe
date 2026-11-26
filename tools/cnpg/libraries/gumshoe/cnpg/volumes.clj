@@ -73,19 +73,26 @@
    per-node, and a sweep of every node in a cluster would cost far more than the
    question is worth.
 
+   A node whose summary read failed (fetch-summary returned nil: nodes/proxy
+   denied, the kubelet unreachable, a timeout) is listed under :unread-nodes,
+   so its pods are reported as unread rather than as pods the kubelet left
+   out.
+
    nil when the pod list did not answer (fetch-pods returned nil): with no pods
    to look for, every instance would go unjudged and the check would pass."
   [fetch-pods fetch-summary]
   (when-some [listed (fetch-pods)]
     (let [pods (filter inst/instance-pod? (kubectl/items-of listed))
-          nodes (into (sorted-set) (keep #(-> % :spec :nodeName) pods))]
+          nodes (into (sorted-set) (keep #(-> % :spec :nodeName) pods))
+          summaries (into {} (map (juxt identity fetch-summary)) nodes)]
       {:instance-pods (mapv (fn [pod]
                               {:namespace (kubectl/namespace-of pod)
                                :pod (kubectl/name-of pod)
                                :node (-> pod :spec :nodeName)})
                             pods)
        :nodes (vec nodes)
-       :volumes (vec (mapcat #(summary->volumes (fetch-summary %)) nodes))})))
+       :unread-nodes (vec (filter #(nil? (get summaries %)) nodes))
+       :volumes (vec (mapcat #(summary->volumes (get summaries %)) nodes))})))
 
 (defn- fetch-pods
   "Every pod, nil unless the list read answered."

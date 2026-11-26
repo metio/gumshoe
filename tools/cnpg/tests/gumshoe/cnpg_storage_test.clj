@@ -60,7 +60,8 @@
 (deftest an-unreadable-size-is-not-guessed-at-test
   (is (= :unknown (:state (storage/assess-volume nil (pvc "a-1" "20Gi" "20Gi")))))
   (is (= :unknown (:state (storage/assess-volume 100.0 (pvc "a-1" nil nil)))))
-  (is (empty? (findings (pvc "cloudnative-pg-cluster-general-1" nil nil)))))
+  (is (= [:info] (map :severity (findings (pvc "cloudnative-pg-cluster-general-1" nil nil))))
+      "reported as not judged, never as a shortfall"))
 
 (deftest another-clusters-volume-is-not-compared-test
   (let [other {:metadata {:namespace "cloudnative-pg-cluster-general" :name "elsewhere-1"

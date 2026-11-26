@@ -904,6 +904,109 @@
     "❌ storage class fast of PVC prometheus-k8s-db-prometheus-k8s-1 does not allow volume expansion"],
    :banner "FAILED - read the messages above; nothing was changed",
    :recovery []},
+  :operator-down
+  {:mutations
+   [{:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=monitoring"
+      "patch"
+      "prometheuses.monitoring.coreos.com"
+      "k8s"
+      "--type=merge"
+      "--patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=monitoring"
+      "patch"
+      "persistentvolumeclaims"
+      "prometheus-k8s-db-prometheus-k8s-0"
+      "--type=merge"
+      "--patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=monitoring"
+      "patch"
+      "persistentvolumeclaims"
+      "prometheus-k8s-db-prometheus-k8s-1"
+      "--type=merge"
+      "--patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=monitoring"
+      "delete"
+      "statefulset"
+      "--selector=operator.prometheus.io/name=k8s"
+      "--cascade=orphan"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=monitoring"
+      "patch"
+      "prometheuses.monitoring.coreos.com"
+      "k8s"
+      "--type=merge"
+      "--patch={\"spec\":{\"paused\":false}}"],
+     :exit 0}],
+   :checks
+   [{:description "all 2 PVCs report capacity 20Gi",
+     :timeout 300,
+     :interval 15,
+     :soft? true,
+     :watch? true}
+    {:description
+     "the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready",
+     :timeout 300,
+     :interval 15,
+     :watch? false}
+    {:description
+     "every Prometheus pod is Running again under its StatefulSet",
+     :timeout 300,
+     :interval 15,
+     :watch? false}],
+   :announced
+   [["cluster" "Resize storage of Prometheus monitoring/k8s to 20Gi"]],
+   :confirmations
+   [{:action
+     "resize the storage of Prometheus monitoring/k8s to 20Gi - the StatefulSet is recreated",
+     :target "cluster",
+     :items
+     ("prometheus-k8s-db-prometheus-k8s-0"
+      "prometheus-k8s-db-prometheus-k8s-1"),
+     :destructive? true}],
+   :out
+   ["▸ Prometheus: monitoring/k8s"
+    "── 📋 Resize plan ───────────────────────────────────────────────────────────────"
+    "  prometheus-k8s-db-prometheus-k8s-0: 10Gi -> 20Gi"
+    "  prometheus-k8s-db-prometheus-k8s-1: 10Gi -> 20Gi"
+    "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
+    "✅ verified: all 2 PVCs report capacity 20Gi"
+    "❌ NOT verified within 0s: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
+    "❌ NOT verified within 0s: every Prometheus pod is Running again under its StatefulSet"],
+   :result false,
+   :banner
+   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   :recovery
+   ["Recovery:"
+    "  Every effect ran: Prometheus monitoring/k8s was unpaused with the new volume claim template."
+    "  Enlarged, and they stay so - a claim cannot shrink, so this cannot be undone:"
+    "    prometheus-k8s-db-prometheus-k8s-0"
+    "    prometheus-k8s-db-prometheus-k8s-1"
+    "  Nothing was rolled back. The post-check messages above name what did not hold."],
+   :stdout
+   ["prometheuses.monitoring.coreos.com/k8s patched"
+    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-0 patched"
+    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-1 patched"
+    "statefulsets deleted"
+    "prometheuses.monitoring.coreos.com/k8s patched"]},
   :pause-fails
   {:result false,
    :out
@@ -994,7 +1097,13 @@
      :interval 15,
      :soft? true,
      :watch? true}
-    {:description "every Prometheus pod is Running again",
+    {:description
+     "the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready",
+     :timeout 300,
+     :interval 15,
+     :watch? false}
+    {:description
+     "every Prometheus pod is Running again under its StatefulSet",
      :timeout 300,
      :interval 15,
      :watch? false}],
@@ -1016,7 +1125,8 @@
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "✅ verified: all 2 PVCs report capacity 20Gi"
-    "❌ NOT verified within 0s: every Prometheus pod is Running again"],
+    "✅ verified: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
+    "❌ NOT verified within 0s: every Prometheus pod is Running again under its StatefulSet"],
    :result false,
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
@@ -1043,6 +1153,109 @@
     "❌ pool replicapool has 3Gi free, needs 20Gi"],
    :banner "FAILED - read the messages above; nothing was changed",
    :recovery []},
+  :replicas-not-ready
+  {:mutations
+   [{:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=monitoring"
+      "patch"
+      "prometheuses.monitoring.coreos.com"
+      "k8s"
+      "--type=merge"
+      "--patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=monitoring"
+      "patch"
+      "persistentvolumeclaims"
+      "prometheus-k8s-db-prometheus-k8s-0"
+      "--type=merge"
+      "--patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=monitoring"
+      "patch"
+      "persistentvolumeclaims"
+      "prometheus-k8s-db-prometheus-k8s-1"
+      "--type=merge"
+      "--patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=monitoring"
+      "delete"
+      "statefulset"
+      "--selector=operator.prometheus.io/name=k8s"
+      "--cascade=orphan"],
+     :exit 0}
+    {:argv
+     ["kubectl"
+      "--context=ctx"
+      "--namespace=monitoring"
+      "patch"
+      "prometheuses.monitoring.coreos.com"
+      "k8s"
+      "--type=merge"
+      "--patch={\"spec\":{\"paused\":false}}"],
+     :exit 0}],
+   :checks
+   [{:description "all 2 PVCs report capacity 20Gi",
+     :timeout 300,
+     :interval 15,
+     :soft? true,
+     :watch? true}
+    {:description
+     "the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready",
+     :timeout 300,
+     :interval 15,
+     :watch? false}
+    {:description
+     "every Prometheus pod is Running again under its StatefulSet",
+     :timeout 300,
+     :interval 15,
+     :watch? false}],
+   :announced
+   [["cluster" "Resize storage of Prometheus monitoring/k8s to 20Gi"]],
+   :confirmations
+   [{:action
+     "resize the storage of Prometheus monitoring/k8s to 20Gi - the StatefulSet is recreated",
+     :target "cluster",
+     :items
+     ("prometheus-k8s-db-prometheus-k8s-0"
+      "prometheus-k8s-db-prometheus-k8s-1"),
+     :destructive? true}],
+   :out
+   ["▸ Prometheus: monitoring/k8s"
+    "── 📋 Resize plan ───────────────────────────────────────────────────────────────"
+    "  prometheus-k8s-db-prometheus-k8s-0: 10Gi -> 20Gi"
+    "  prometheus-k8s-db-prometheus-k8s-1: 10Gi -> 20Gi"
+    "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
+    "✅ verified: all 2 PVCs report capacity 20Gi"
+    "❌ NOT verified within 0s: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
+    "✅ verified: every Prometheus pod is Running again under its StatefulSet"],
+   :result false,
+   :banner
+   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   :recovery
+   ["Recovery:"
+    "  Every effect ran: Prometheus monitoring/k8s was unpaused with the new volume claim template."
+    "  Enlarged, and they stay so - a claim cannot shrink, so this cannot be undone:"
+    "    prometheus-k8s-db-prometheus-k8s-0"
+    "    prometheus-k8s-db-prometheus-k8s-1"
+    "  Nothing was rolled back. The post-check messages above name what did not hold."],
+   :stdout
+   ["prometheuses.monitoring.coreos.com/k8s patched"
+    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-0 patched"
+    "persistentvolumeclaims/prometheus-k8s-db-prometheus-k8s-1 patched"
+    "statefulsets deleted"
+    "prometheuses.monitoring.coreos.com/k8s patched"]},
   :resize-pending
   {:mutations
    [{:argv
@@ -1100,7 +1313,13 @@
      :interval 15,
      :soft? true,
      :watch? true}
-    {:description "every Prometheus pod is Running again",
+    {:description
+     "the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready",
+     :timeout 300,
+     :interval 15,
+     :watch? false}
+    {:description
+     "every Prometheus pod is Running again under its StatefulSet",
      :timeout 300,
      :interval 15,
      :watch? false}],
@@ -1123,7 +1342,8 @@
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "🔶 could not confirm within 0s (best effort): all 2 PVCs report capacity 20Gi"
     "🔶 the operation itself reported no error - confirm by hand if in doubt"
-    "✅ verified: every Prometheus pod is Running again"],
+    "✅ verified: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
+    "✅ verified: every Prometheus pod is Running again under its StatefulSet"],
    :result true,
    :banner
    "DONE - applied, NOT confirmed (best effort): all 2 PVCs report capacity 20Gi",
@@ -1191,7 +1411,13 @@
      :interval 15,
      :soft? true,
      :watch? true}
-    {:description "every Prometheus pod is Running again",
+    {:description
+     "the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready",
+     :timeout 300,
+     :interval 15,
+     :watch? false}
+    {:description
+     "every Prometheus pod is Running again under its StatefulSet",
      :timeout 300,
      :interval 15,
      :watch? false}],
@@ -1213,7 +1439,8 @@
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "✅ verified: all 2 PVCs report capacity 20Gi"
-    "✅ verified: every Prometheus pod is Running again"],
+    "✅ verified: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
+    "✅ verified: every Prometheus pod is Running again under its StatefulSet"],
    :result true,
    :banner "DONE - applied and verified",
    :recovery [],
@@ -1326,7 +1553,8 @@
     ["prometheuses.monitoring.coreos.com"
      "pods"
      "persistentvolumeclaims"
-     "storageclasses"],
+     "storageclasses"
+     "statefulsets"],
     :kubectl-can-patch
     ["prometheuses.monitoring.coreos.com" "persistentvolumeclaims"],
     :kubectl-can-delete ["statefulsets"]},

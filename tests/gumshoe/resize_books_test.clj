@@ -152,7 +152,8 @@
                       (-> manifest
                           (assoc-in [:metadata :uid] (str "uid-" name "-recreated"))
                           (assoc-in [:metadata :generation] 1)
-                          (assoc :status {:readyReplicas (if (:ready-after? state)
+                          (assoc :status {:observedGeneration 1
+                                          :readyReplicas (if (:ready-after? state)
                                                            (get-in manifest [:spec :replicas])
                                                            0)})))
            {:exit 0 :out (str "statefulset.apps/" name " created") :err ""}]))
@@ -333,11 +334,54 @@
   [ordinal phase]
   {:metadata {:namespace "monitoring" :name (str "prometheus-k8s-" ordinal)
               :labels {(keyword "app.kubernetes.io/name") "prometheus"
-                       (keyword "app.kubernetes.io/instance") "k8s"}}
+                       (keyword "app.kubernetes.io/instance") "k8s"}
+              :ownerReferences [{:kind "StatefulSet" :name "prometheus-k8s" :uid "uid-prometheus-k8s" :controller true}]}
    :spec {:volumes [{:name "config"}
                     {:name "prometheus-k8s-db"
                      :persistentVolumeClaim {:claimName (str "prometheus-k8s-db-prometheus-k8s-" ordinal)}}]}
    :status {:phase phase}})
+
+(defn- operator
+  "prometheus-operator and the garbage collector, as they react to a
+   mutation of the monitoring cluster: pods whose StatefulSet is gone lose
+   their ownerReferences (the delete orphans them), and once the Prometheus
+   is unpaused without a StatefulSet the operator creates one from the
+   Prometheus' claim template, which adopts the pods. With :operator-down?
+   nothing recreates it; with :ready-after? false its replicas never get
+   ready."
+  [state]
+  (let [sets (get-in state [:objects "statefulsets"])
+        prometheus (first (get-in state [:objects prometheus-type]))
+        uid "uid-prometheus-k8s-recreated"
+        owned (fn [pods ref] (mapv #(if ref
+                                      (assoc-in % [:metadata :ownerReferences] [ref])
+                                      (update % :metadata dissoc :ownerReferences))
+                                   pods))]
+    (cond
+      (seq sets) state
+
+      (or (:operator-down? state) (true? (get-in prometheus [:spec :paused])))
+      (update-in state [:objects "pods"] owned nil)
+
+      :else
+      (let [replicas (get-in prometheus [:spec :replicas])
+            claim-spec (get-in prometheus [:spec :storage :volumeClaimTemplate :spec])]
+        (-> state
+            (assoc-in [:objects "statefulsets"]
+                      [{:metadata {:namespace "monitoring" :name "prometheus-k8s" :uid uid :generation 1
+                                   :labels {(keyword "operator.prometheus.io/name") "k8s"}}
+                        :spec {:replicas replicas
+                               :volumeClaimTemplates [{:metadata {:name "prometheus-k8s-db"} :spec claim-spec}]}
+                        :status {:observedGeneration 1 :replicas replicas
+                                 :readyReplicas (if (:ready-after? state) replicas 0)}}])
+            (update-in [:objects "pods"] owned
+                       {:kind "StatefulSet" :name "prometheus-k8s" :uid uid :controller true}))))))
+
+(defn- settling
+  "The monitoring cluster with f run after the operator reacts to each
+   mutation."
+  [state f]
+  (assoc state :settle (comp f operator)))
 
 (def ^:private monitoring
   {:objects {prometheus-type [k8s]
@@ -345,12 +389,16 @@
              "persistentvolumeclaims" [(claim "monitoring" "prometheus-k8s-db-prometheus-k8s-0" "fast" "10Gi")
                                        (claim "monitoring" "prometheus-k8s-db-prometheus-k8s-1" "fast" "10Gi")]
              "statefulsets" [{:metadata {:namespace "monitoring" :name "prometheus-k8s" :uid "uid-prometheus-k8s"
+                                         :generation 1
                                          :labels {(keyword "operator.prometheus.io/name") "k8s"}}
-                              :spec {:replicas 2}}]
+                              :spec {:replicas 2
+                                     :volumeClaimTemplates [(template "prometheus-k8s-db" "fast" "10Gi")]}
+                              :status {:observedGeneration 1 :replicas 2 :readyReplicas 2}}]
              "storageclasses" storage-classes
              "events" [{:type "Warning" :reason "VolumeResizeFailed"
                         :involvedObject {:kind "PersistentVolumeClaim" :name "prometheus-k8s-db-prometheus-k8s-0"}
-                        :message "an old failure"}]}})
+                        :message "an old failure"}]}
+   :settle operator})
 
 (def ^:private set-capacity-argv ["--namespace" "monitoring" "--prometheus" "k8s" "--capacity" "20Gi"])
 
@@ -391,18 +439,20 @@
    "tools/prometheus/runbooks/set_capacity.clj"
    {:resized {:state monitoring :argv set-capacity-argv}
     :resize-pending {:state (assoc monitoring :resize? false) :argv set-capacity-argv}
-    :pods-not-running {:state (assoc monitoring :settle (pods-phase "Pending")) :argv set-capacity-argv}
+    :pods-not-running {:state (settling monitoring (pods-phase "Pending")) :argv set-capacity-argv}
+    :operator-down {:state (assoc monitoring :operator-down? true) :argv set-capacity-argv}
+    :replicas-not-ready {:state (assoc monitoring :ready-after? false) :argv set-capacity-argv}
     :pause-fails {:state (assoc monitoring :fail [["patch" prometheus-type nil]]) :argv set-capacity-argv}
     :second-claim-fails {:state (assoc monitoring :fail [["patch" "persistentvolumeclaims" "prometheus-k8s-db-prometheus-k8s-1"]])
                          :argv set-capacity-argv}
     :delete-fails {:state (assoc monitoring :fail [["delete" "statefulsets" nil]]) :argv set-capacity-argv}
-    :unpause-fails {:state (assoc monitoring
-                                  ;; the pause patch goes through; once the StatefulSet
-                                  ;; is gone, a patch of the Prometheus is refused
-                                  :settle (fn [state]
-                                            (if (empty? (get-in state [:objects "statefulsets"]))
-                                              (assoc state :fail [["patch" prometheus-type nil]])
-                                              state)))
+    :unpause-fails {:state (settling monitoring
+                                     ;; the pause patch goes through; once the StatefulSet
+                                     ;; is gone, a patch of the Prometheus is refused
+                                     (fn [state]
+                                       (if (empty? (get-in state [:objects "statefulsets"]))
+                                         (assoc state :fail [["patch" prometheus-type nil]])
+                                         state)))
                     :argv set-capacity-argv}
     :dry-run {:state monitoring :argv set-capacity-argv :dry-run? true}
     :declined {:state monitoring :argv set-capacity-argv :confirm? false}

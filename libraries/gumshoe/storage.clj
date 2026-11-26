@@ -18,7 +18,8 @@
             [gumshoe.quantity :as quantity]
             [gumshoe.stdout :as stdout]
             [gumshoe.verify :as verify]
-            [gumshoe.watch :as watch]))
+            [gumshoe.watch :as watch]
+            [gumshoe.workloads :as workloads]))
 
 (defn normalize-capacity
   "A bare number means Gi: '100' -> '100Gi'."
@@ -500,22 +501,50 @@
                  (claims-left where)
                  ["Nothing was rolled back. The post-check messages above name what did not hold."]))))))
 
+(defn template-requests?
+  "Whether statefulset carries a volumeClaimTemplate called template-name
+   that requests capacity."
+  [statefulset template-name capacity]
+  (boolean
+   (some #(and (= template-name (-> % :metadata :name))
+               (quantity/same? capacity (-> % :spec :resources :requests :storage)))
+         (-> statefulset :spec :volumeClaimTemplates))))
+
+(defn statefulset-ready?
+  "Whether the StatefulSet controller caught up with statefulset: it observed
+   the current generation, and as many replicas are ready as the spec asks
+   for. The API server omits a zero readyReplicas and defaults spec.replicas
+   to 1. A nil statefulset - NotFound, or a lax read that did not answer - is
+   never ready."
+  [statefulset]
+  (verify/object-holds?
+   statefulset
+   (fn [{:keys [metadata status] :as object}]
+     (and (>= (or (:observedGeneration status) 0) (or (:generation metadata) 0))
+          (= (workloads/desired-replicas "StatefulSet" object) (or (:readyReplicas status) 0))))))
+
+(defn statefulset-resized?
+  "Whether statefulset exists with the template template-name requesting
+   capacity and every replica ready (statefulset-ready?): what a resize that
+   deleted the StatefulSet with orphaned pods needs to see before it is done,
+   because the orphaned pods keep running whether or not anything recreates
+   their controller."
+  [statefulset template-name capacity]
+  (verify/object-holds? statefulset #(and (template-requests? % template-name capacity)
+                                          (statefulset-ready? %))))
+
 (defn- statefulset-state-checks
   [context namespace name template-name capacity]
   [{:description (format "StatefulSet %s/%s exists again with the new template" namespace name)
     :timeout 60
     :check (fn []
-             (let [recreated (kubectl/get-namespaced-resource context namespace "statefulsets" name)]
-               (boolean
-                (some #(and (= template-name (-> % :metadata :name))
-                            (quantity/same? capacity (-> % :spec :resources :requests :storage)))
-                      (-> recreated :spec :volumeClaimTemplates)))))}
+             (template-requests? (kubectl/get-namespaced-resource context namespace "statefulsets" name)
+                                 template-name capacity))}
    {:description "every pod of the StatefulSet is Running"
     :timeout 300
     :interval 10
     :check (fn []
-             (verify/object-holds? (kubectl/get-namespaced-resource context namespace "statefulsets" name)
-                                   #(= (-> % :spec :replicas) (-> % :status :readyReplicas))))}])
+             (statefulset-ready? (kubectl/get-namespaced-resource context namespace "statefulsets" name)))}])
 
 (defn statefulset-checks
   "The post-checks of a StatefulSet's resize: the claims of the running

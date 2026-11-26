@@ -36,9 +36,13 @@
             health-read (ceph/health-result connection)
             health (:status health-read)
             refusal (ceph/change-refusal health-read forced)
-            daemons (ceph/daemons connection)
-            daemon (interact/choose-one "Daemon" (sort (map :daemon_name daemons)) (:daemon opts))]
+            {:keys [daemons unread]} (ceph/daemon-list connection)
+            daemon (when-not unread
+                     (interact/choose-one "Daemon" (sort (map :daemon_name daemons)) (:daemon opts)))]
         (cond
+          unread
+          (do (stdout/error (str "could not list the daemons - " unread)) false)
+
           (nil? daemon)
           (do (stdout/error "no daemon selected") false)
 
