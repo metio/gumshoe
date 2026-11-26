@@ -37,6 +37,7 @@
             [gumshoe.summary :as summary]
             [gumshoe.progress :as progress]
             [gumshoe.runbook :as runbook]
+            [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]
             [gumshoe.subject :as subject]
             [gumshoe.render :as render]
@@ -263,6 +264,19 @@
                 (throw (ex-info (timed-out-message [key] timeout-ms) {::timed-out key})))
               [key value])))))
 
+(defn read-warning-lines
+  "Pure: the report lines naming, for each evidence key in order, the
+   warnings its read wrote - a deprecation notice from the API server, a
+   kubectl warning - so each is attributed to the read that provoked it."
+  [ctx warnings-by-key]
+  (vec (for [[key warnings] (sort-by key warnings-by-key)
+             warning warnings]
+         (render/item ctx :finding (str key ": " warning)))))
+
+(defn- print-read-warnings!
+  [warnings-by-key]
+  (run! stdout/err-println (read-warning-lines (stdout/context) warnings-by-key)))
+
 (defn collect-evidence!
   "Fetches every resource type required by the given detectives exactly once,
    all types in parallel. A type the cluster does not know (missing CRD)
@@ -274,7 +288,8 @@
   (let [types (required-keys detectives)
         cluster (try (kubectl/current-cluster) (catch Exception _ nil))
         timeout-ms *collector-timeout-ms*
-        timed-out (atom [])]
+        timed-out (atom [])
+        read-warnings (atom {})]
     (stdout/print-section "🔍 Evidence")
     ;; every resource type is fetched in parallel and shown on a live task list
     ;; that ticks each one off as it lands - so a slow fetch reads as progress,
@@ -287,14 +302,18 @@
                            ;; case, so a custom-evidence detective composes into
                            ;; any scan.
                            [type (future
-                                   (let [value (try (bounded-collect #((registry/collector-for type) context type)
-                                                                     timeout-ms)
-                                                    (catch Throwable _ nil))]
+                                   (let [{:keys [value warnings]}
+                                         (shell/collecting-warnings
+                                          #(try (bounded-collect (fn [] ((registry/collector-for type) context type))
+                                                                 timeout-ms)
+                                                (catch Throwable _ nil)))]
+                                     (when (seq warnings) (swap! read-warnings assoc type warnings))
                                      (if (= ::timed-out value)
                                        (do (swap! timed-out conj type) nil)
                                        value)))])
                          types)
           results (progress/watch-futures! labelled)]
+      (print-read-warnings! @read-warnings)
       (when (seq @timed-out)
         (stdout/warn (timed-out-message (sort @timed-out) timeout-ms)))
       (into (evidence-base cluster) (map vector types results)))))

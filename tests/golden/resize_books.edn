@@ -54,6 +54,9 @@
     "  plan: data-web-0: 10Gi -> 20Gi"
     "  plan: data-web-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=shop delete statefulset web --cascade=orphan --wait=false --request-timeout=30s"
     "Error from server (Forbidden): deleting statefulsets is denied"],
    :banner
    "FAILED after 2 effects - stopped at: kubectl --namespace=shop delete statefulset web --cascade=orphan --wait=false --request-timeout=30s - the effects before it stay applied",
@@ -136,6 +139,10 @@
     "  plan: data-web-0: 10Gi -> 20Gi"
     "  plan: data-web-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=shop delete statefulset web --cascade=orphan --wait=false --request-timeout=30s"
+    "  ▸ kubectl --namespace=shop wait --for=delete statefulset/web --timeout=120s"
     "error: timed out waiting for the condition on statefulsets/web"],
    :banner
    "FAILED after 3 effects - stopped at: kubectl --namespace=shop wait --for=delete statefulset/web --timeout=120s - the effects before it stay applied",
@@ -320,6 +327,11 @@
     "  plan: data-web-0: 10Gi -> 20Gi"
     "  plan: data-web-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=shop delete statefulset web --cascade=orphan --wait=false --request-timeout=30s"
+    "  ▸ kubectl --namespace=shop wait --for=delete statefulset/web --timeout=120s"
+    "  ▸ kubectl apply --filename - (with stdin)"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ✅ verified: all 2 PVCs report capacity 20Gi"
     "  ✅ verified: StatefulSet shop/web exists again with the new template"
@@ -341,6 +353,7 @@
     "  plan: data-web-0: 10Gi -> 20Gi"
     "  plan: data-web-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "Error from server (Forbidden): patching persistentvolumeclaims data-web-0 is denied"],
    :banner
    "FAILED at the first effect: kubectl --namespace=shop patch persistentvolumeclaims data-web-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}} - nothing was changed",
@@ -496,6 +509,11 @@
     "  plan: data-web-0: 10Gi -> 20Gi"
     "  plan: data-web-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=shop delete statefulset web --cascade=orphan --wait=false --request-timeout=30s"
+    "  ▸ kubectl --namespace=shop wait --for=delete statefulset/web --timeout=120s"
+    "  ▸ kubectl apply --filename - (with stdin)"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ✅ verified: all 2 PVCs report capacity 20Gi"
     "  ✅ verified: StatefulSet shop/web exists again with the new template"
@@ -537,6 +555,11 @@
     "  plan: data-web-0: 10Gi -> 20Gi"
     "  plan: data-web-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=shop delete statefulset web --cascade=orphan --wait=false --request-timeout=30s"
+    "  ▸ kubectl --namespace=shop wait --for=delete statefulset/web --timeout=120s"
+    "  ▸ kubectl apply --filename - (with stdin)"
     "❌ Error from server (Forbidden): applying statefulsets web is denied"],
    :banner
    "FAILED after 4 effects - stopped at: kubectl apply --filename - (with stdin) - the effects before it stay applied",
@@ -723,6 +746,11 @@
     "  plan: data-web-0: 10Gi -> 20Gi"
     "  plan: data-web-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=shop delete statefulset web --cascade=orphan --wait=false --request-timeout=30s"
+    "  ▸ kubectl --namespace=shop wait --for=delete statefulset/web --timeout=120s"
+    "  ▸ kubectl apply --filename - (with stdin)"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  🔶 all 2 PVCs report capacity 20Gi"
     "    could not confirm within 0s (best effort): all 2 PVCs report capacity 20Gi"
@@ -747,6 +775,8 @@
     "  plan: data-web-0: 10Gi -> 20Gi"
     "  plan: data-web-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "Error from server (Forbidden): patching persistentvolumeclaims data-web-1 is denied"],
    :banner
    "FAILED after 1 effect - stopped at: kubectl --namespace=shop patch persistentvolumeclaims data-web-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}} - the effects before it stay applied",
@@ -921,6 +951,10 @@
     "  prometheus-k8s-db-prometheus-k8s-0: 10Gi -> 20Gi"
     "  prometheus-k8s-db-prometheus-k8s-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"
+    "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
     "Error from server (Forbidden): deleting statefulsets is denied"],
    :banner
    "FAILED after 3 effects - stopped at: kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan - the effects before it stay applied",
@@ -1113,6 +1147,11 @@
     "  prometheus-k8s-db-prometheus-k8s-0: 10Gi -> 20Gi"
     "  prometheus-k8s-db-prometheus-k8s-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"
+    "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
+    "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ✅ verified: all 2 PVCs report capacity 20Gi"
     "  ❌ the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
@@ -1143,6 +1182,7 @@
     "  prometheus-k8s-db-prometheus-k8s-0: 10Gi -> 20Gi"
     "  prometheus-k8s-db-prometheus-k8s-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"
     "Error from server (Forbidden): patching prometheuses.monitoring.coreos.com k8s is denied"],
    :banner
    "FAILED at the first effect: kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}} - nothing was changed",
@@ -1251,6 +1291,11 @@
     "  prometheus-k8s-db-prometheus-k8s-0: 10Gi -> 20Gi"
     "  prometheus-k8s-db-prometheus-k8s-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"
+    "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
+    "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ✅ verified: all 2 PVCs report capacity 20Gi"
     "  ✅ verified: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
@@ -1365,6 +1410,11 @@
     "  prometheus-k8s-db-prometheus-k8s-0: 10Gi -> 20Gi"
     "  prometheus-k8s-db-prometheus-k8s-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"
+    "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
+    "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ✅ verified: all 2 PVCs report capacity 20Gi"
     "  ❌ the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
@@ -1469,6 +1519,11 @@
     "  prometheus-k8s-db-prometheus-k8s-0: 10Gi -> 20Gi"
     "  prometheus-k8s-db-prometheus-k8s-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"
+    "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
+    "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  🔶 all 2 PVCs report capacity 20Gi"
     "    could not confirm within 0s (best effort): all 2 PVCs report capacity 20Gi"
@@ -1568,6 +1623,11 @@
     "  prometheus-k8s-db-prometheus-k8s-0: 10Gi -> 20Gi"
     "  prometheus-k8s-db-prometheus-k8s-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"
+    "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
+    "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ✅ verified: all 2 PVCs report capacity 20Gi"
     "  ✅ verified: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready"
@@ -1589,6 +1649,9 @@
     "  prometheus-k8s-db-prometheus-k8s-0: 10Gi -> 20Gi"
     "  prometheus-k8s-db-prometheus-k8s-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"
+    "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "Error from server (Forbidden): patching persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 is denied"],
    :banner
    "FAILED after 2 effects - stopped at: kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}} - the effects before it stay applied",
@@ -1705,6 +1768,11 @@
     "  prometheus-k8s-db-prometheus-k8s-0: 10Gi -> 20Gi"
     "  prometheus-k8s-db-prometheus-k8s-1: 10Gi -> 20Gi"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
+    "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"
+    "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
+    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
+    "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}}"
     "Error from server (Forbidden): patching prometheuses.monitoring.coreos.com k8s is denied"],
    :banner
    "FAILED after 4 effects - stopped at: kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}} - the effects before it stay applied",

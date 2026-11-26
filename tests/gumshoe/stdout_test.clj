@@ -166,7 +166,8 @@
    #'stdout/selected #(stdout/selected "Node" "w-1")
    #'stdout/print-data-table #(stdout/print-data-table {:node "w-1"})
    #'stdout/print-table #(stdout/print-table [["POD" :pod]] [{:pod "web-1"}])
-   #'stdout/print-command #(stdout/print-command "kubectl" "get" "pods")})
+   #'stdout/print-command #(stdout/print-command "kubectl" "get" "pods")
+   #'stdout/child-warnings #(stdout/child-warnings ["Warning: v1 Endpoints is deprecated"])})
 
 (def ^:private non-printing
   "The public vars that print nothing: formatters returning strings, colour

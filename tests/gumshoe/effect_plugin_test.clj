@@ -24,8 +24,10 @@
 
 (deftest a-plugin-effect-runs-kubectl-with-the-plugin-first
   (let [seen (atom nil)]
-    (with-redefs [shell/run-with-output (fn [& args] (reset! seen args) 0)]
+    (with-redefs [shell/run-with-output (fn [& args] (reset! seen args) 0)
+                  shell/run-attributed (fn [& args] (reset! seen args) 0)]
       (is (true? (effect/run! (effect/plan (effect/kubectl-plugin "staging" "netshoot" "debug" "web" "--namespace" "shop")))))
       (is (= ["kubectl" "netshoot" "debug" "web" "--namespace" "shop" "--context=staging"] @seen)))
-    (with-redefs [shell/run-with-output (constantly 1)]
+    (with-redefs [shell/run-with-output (constantly 1)
+                  shell/run-attributed (constantly 1)]
       (is (false? (effect/run! (effect/plan (effect/kubectl-plugin "staging" "cnpg" "promote" "pg" "pg-2"))))))))
