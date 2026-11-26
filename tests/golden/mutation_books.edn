@@ -4531,8 +4531,8 @@
    :prerequisites
    {:installed-tools ["kubectl" "kubectl-cnpg" "fzf"],
     :cluster-capabilities [],
-    :kubectl-can-get ["clusters.postgresql.cnpg.io"],
-    :kubectl-can-patch ["clusters.postgresql.cnpg.io"]},
+    :kubectl-can-get ["clusters.postgresql.cnpg.io" "pods"],
+    :kubectl-can-patch ["clusters.postgresql.cnpg.io/status"]},
    :select {:mode :one, :label "New primary", :flag :pick},
    :empty-message
    "no cluster has a healthy, unfenced replica to switch over to",
@@ -4550,8 +4550,8 @@
     ""
     "Needs:"
     "  tools: kubectl, kubectl-cnpg, fzf"
-    "  kubectl get: clusters.postgresql.cnpg.io"
-    "  kubectl patch: clusters.postgresql.cnpg.io"],
+    "  kubectl get: clusters.postgresql.cnpg.io, pods"
+    "  kubectl patch: clusters.postgresql.cnpg.io/status"],
    :candidates {:permitted ["db/pg pg-2"], :refused []}},
   :unanswered
   {:action

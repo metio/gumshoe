@@ -19,8 +19,10 @@
   :options (select/options selection {:pick {:desc "\"<namespace>/<cluster> <instance>\" (the instance by name or number) - interactive selection when omitted"}})
   :prerequisites {:installed-tools ["kubectl" "kubectl-cnpg" "fzf"]
                   :cluster-capabilities []
-                  :kubectl-can-get [cnpg/cluster-type]
-                  :kubectl-can-patch [cnpg/cluster-type]}
+                  ;; the plugin reads the instance's pod and writes
+                  ;; status.targetPrimary through the status subresource
+                  :kubectl-can-get [cnpg/cluster-type "pods"]
+                  :kubectl-can-patch [operations/cluster-status]}
   :select selection
   :empty-message "no cluster has a healthy, unfenced replica to switch over to"
   :confirm {:action (str "switch the primary over - the old primary restarts as a replica, and clients "
@@ -29,9 +31,7 @@
   :subject {:type cnpg/cluster-type :parse operations/parse-pick
             :invalid "the pick is not \"<namespace>/<cluster> <instance>\""
             :facts #(select-keys (:status %) [:currentPrimary :targetPrimary])}
-  :refusal (fn [{:keys [context ref object]}]
-             (or (operations/switchover-refusal object (:instance ref))
-                 (operations/status-rights-refusal #(operations/can-patch-status? context %) (:namespace ref))))
+  :refusal (fn [{:keys [ref object]}] (operations/switchover-refusal object (:instance ref)))
   :announce (fn [{:keys [ref]}] (format "Promote %s in %s/%s" (:instance ref) (:namespace ref) (:cluster ref)))
   :effect (fn [{:keys [context ref]}]
             (effect/plan (apply effect/cmd (operations/promote-args context ref))))
