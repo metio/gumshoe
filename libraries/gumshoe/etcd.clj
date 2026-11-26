@@ -4,7 +4,8 @@
 (ns gumshoe.etcd
   "Runs etcdctl inside kubeadm etcd pods using the certificates on the node,
    and the pick of the etcd pod every etcd book starts with."
-  (:require [gumshoe.kubectl :as kubectl]
+  (:require [clojure.string :as str]
+            [gumshoe.kubectl :as kubectl]
             [gumshoe.select :as select]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
@@ -32,6 +33,27 @@
 (defn etcdctl-stdout
   [context namespace pod & arguments]
   (apply shell/stdout-of (etcdctl-args context namespace pod arguments)))
+
+(defn etcdctl-lines
+  "The non-blank output lines of etcdctl with arguments as {:lines [..]}, or
+   {:unread <why>} when the exec did not exit cleanly, so a failed read is
+   never mistaken for an empty answer."
+  [context namespace pod & arguments]
+  (let [{:keys [exit out err]} (apply shell/execute (etcdctl-args context namespace pod arguments))]
+    (if (zero? exit)
+      {:lines (into [] (remove str/blank?) (str/split-lines (str out)))}
+      {:unread (let [err (str/trim (str err))]
+                 (if (str/blank? err) (str "etcdctl exited with " exit) err))})))
+
+(defn key-candidates
+  "The etcd keys to choose from, as etcdctl-lines returns them: only the key
+   the operator named when they named one, which must exist, else every key.
+   A named key is read on its own, so a large keyspace is listed only when
+   the operator has to pick from it."
+  [context namespace pod provided]
+  (if (str/blank? provided)
+    (etcdctl-lines context namespace pod "get" "--from-key" "" "--keys-only")
+    (etcdctl-lines context namespace pod "get" provided "--keys-only")))
 
 (def pod-prerequisites
   {:installed-tools ["kubectl" "fzf"]

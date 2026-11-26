@@ -66,6 +66,24 @@
                              (= wanted (or (:numberAvailable status) 0)))
             false)))))
 
+;; --- what keeps a rollout from completing ---------------------------------------
+
+(defn rollout-blocker
+  "Why a rollout of the workload's pod template - a restart or a rollback,
+   named by `change` - would never complete, or nil. The controller replaces
+   no pod of a StatefulSet or DaemonSet that updates OnDelete until each is
+   deleted by hand, and none of a StatefulSet below a positive
+   rollingUpdate.partition, so rolled-out? could never hold after it."
+  [kind workload change]
+  (let [strategy (-> workload :spec :updateStrategy)
+        partition (or (-> strategy :rollingUpdate :partition) 0)]
+    (cond
+      (= "OnDelete" (:type strategy))
+      (format "the %s updates OnDelete, so a %s replaces no pod until each is deleted by hand" kind change)
+      (and (= "StatefulSet" kind) (pos? partition))
+      (format "the StatefulSet's rollingUpdate.partition is %d, so pods below it stay on their revision and the %s never completes" partition change)
+      :else nil)))
+
 ;; --- rollout restart -----------------------------------------------------------
 
 (defn restart-refusal
@@ -75,10 +93,9 @@
     (nil? workload) "the workload no longer exists"
     (and (= "Deployment" kind) (true? (-> workload :spec :paused)))
     "the Deployment is paused, so a restart waits until it is resumed - resume it first"
-    (and (= "StatefulSet" kind) (= "OnDelete" (-> workload :spec :updateStrategy :type)))
-    "the StatefulSet updates OnDelete, so a restart replaces no pod until each is deleted by hand"
-    (zero? (desired-replicas kind workload)) "it runs no pods, so there is nothing to restart"
-    :else nil))
+    :else
+    (or (rollout-blocker kind workload "restart")
+        (when (zero? (desired-replicas kind workload)) "it runs no pods, so there is nothing to restart"))))
 
 (defn restart-args
   [{:keys [type namespace name]}]
@@ -210,25 +227,26 @@
       (first (filter #(= to-revision (:revision %)) all))
       (first (filter #(and current (< (:revision %) current)) all)))))
 
+(defn- rollback-revision-refusal
+  [kind workload history to-revision current]
+  (cond
+    (and to-revision (= to-revision current)) (format "revision %d is the current one" to-revision)
+    (nil? (rollback-target kind workload history to-revision))
+    (if to-revision
+      (format "revision %d is not among the %s's %s" to-revision kind
+              (if (= "Deployment" kind) "ReplicaSets" "ControllerRevisions"))
+      (format "the %s has no earlier revision to go back to" kind))
+    :else nil))
+
 (defn rollback-refusal
   [kind workload history to-revision]
-  (let [current (when workload (current-revision kind workload history))
-        strategy (-> workload :spec :updateStrategy)
-        partition (or (-> strategy :rollingUpdate :partition) 0)]
-    (cond
-      (nil? workload) (format "the %s no longer exists" kind)
-      (true? (-> workload :spec :paused)) "the Deployment is paused - resume it first"
-      (= "OnDelete" (:type strategy))
-      (format "the %s updates OnDelete, so a rollback replaces no pod until each is deleted by hand" kind)
-      (pos? partition)
-      (format "the StatefulSet's rollingUpdate.partition is %d, so pods below it stay on their revision and the rollback never completes" partition)
-      (and to-revision (= to-revision current)) (format "revision %d is the current one" to-revision)
-      (nil? (rollback-target kind workload history to-revision))
-      (if to-revision
-        (format "revision %d is not among the %s's %s" to-revision kind
-                (if (= "Deployment" kind) "ReplicaSets" "ControllerRevisions"))
-        (format "the %s has no earlier revision to go back to" kind))
-      :else nil)))
+  (cond
+    (nil? workload) (format "the %s no longer exists" kind)
+    (true? (-> workload :spec :paused)) "the Deployment is paused - resume it first"
+    :else
+    (or (rollout-blocker kind workload "rollback")
+        (rollback-revision-refusal kind workload history to-revision
+                                   (current-revision kind workload history)))))
 
 (defn rollback-items
   [kind workload history to-revision]

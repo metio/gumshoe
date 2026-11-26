@@ -604,7 +604,8 @@
     "✅ verified: StatefulSet shop/web exists again with the new template"
     "✅ verified: every pod of the StatefulSet is Running"],
    :result true,
-   :banner "DONE - applied and verified",
+   :banner
+   "DONE - applied, NOT confirmed (best effort): all 2 PVCs report capacity 20Gi",
    :recovery [],
    :stdout
    ["persistentvolumeclaims/data-web-0 patched"
@@ -1124,7 +1125,8 @@
     "🔶 the operation itself reported no error - confirm by hand if in doubt"
     "✅ verified: every Prometheus pod is Running again"],
    :result true,
-   :banner "DONE - applied and verified",
+   :banner
+   "DONE - applied, NOT confirmed (best effort): all 2 PVCs report capacity 20Gi",
    :recovery [],
    :stdout
    ["prometheuses.monitoring.coreos.com/k8s patched"

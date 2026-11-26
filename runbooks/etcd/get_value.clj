@@ -24,14 +24,23 @@
     (if (nil? target)
       false
       (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
-            keys (->> (etcd/etcdctl-stdout context namespace name "get" "--from-key" "" "--keys-only")
-                      str/split-lines
-                      (remove str/blank?))
-            key (interact/choose-one "Key" keys (:key opts))]
-        (if (nil? key)
-          (do (stdout/error "no key selected") false)
-          (do (stdout/print-section-marker)
-              (etcd/etcdctl! context namespace name "get" key "--print-value-only")))))))
+            provided (:key opts)
+            {:keys [lines unread]} (etcd/key-candidates context namespace name provided)]
+        (cond
+          unread
+          (do (stdout/error (format "could not %s - %s"
+                                    (if (str/blank? provided) "list the etcd keys" (str "read the etcd key " provided))
+                                    unread))
+              false)
+
+          (and (not (str/blank? provided)) (empty? lines))
+          (do (stdout/error (format "etcd holds no key %s" provided)) false)
+
+          :else
+          (if-let [key (interact/choose-one "Key" lines provided)]
+            (do (stdout/print-section-marker)
+                (etcd/etcdctl! context namespace name "get" key "--print-value-only"))
+            (do (stdout/error (if (empty? lines) "etcd answered with no keys" "no key selected")) false)))))))
 
 (runbook/execute!
  {:description "Reads a single key from etcd through one etcd pod"

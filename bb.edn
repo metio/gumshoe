@@ -112,6 +112,9 @@
                    [gumshoe.onset-test]
                    [gumshoe.conditions-test]
                    [gumshoe.outcome-test]
+                   [gumshoe.verdict-contract-test]
+                   [gumshoe.unread-subjects-test]
+                   [gumshoe.pod-containers-test]
                    [gumshoe.correlation-test]
                    [gumshoe.custom-resources-test]
                    [gumshoe.tls-secrets-test]
@@ -362,6 +365,9 @@
                                                          'gumshoe.onset-test
                                                          'gumshoe.conditions-test
                                                          'gumshoe.outcome-test
+                                                         'gumshoe.verdict-contract-test
+                                                         'gumshoe.unread-subjects-test
+                                                         'gumshoe.pod-containers-test
                                                          'gumshoe.correlation-test
                                                          'gumshoe.custom-resources-test
                                                          'gumshoe.tls-secrets-test

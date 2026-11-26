@@ -2,8 +2,11 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns runbooks.kubernetes.pods.list-images
-  "Lists every container image in use, with how many containers run it."
-  (:require [gumshoe.kubectl :as kubectl]
+  "Lists every container image in use, with how many containers run it.
+   Images of init, native sidecar and ephemeral containers are marked with
+   their role."
+  (:require [clojure.string :as str]
+            [gumshoe.kubectl :as kubectl]
             [gumshoe.runbook :as runbook]
             [gumshoe.stdout :as stdout]))
 
@@ -17,8 +20,10 @@
   (let [{:keys [doc unread]} (kubectl/read-all (kubectl/current-context) "pods")]
     (if unread
       (do (stdout/error (str "could not read the pods of the cluster - " unread)) false)
-      (do (doseq [[image count] (sort-by (comp - second) (kubectl/image-counts doc))]
-            (println (format "%6d %s" count image)))
+      (do (doseq [{:keys [image count roles]} (kubectl/image-usage doc)
+                  :let [other (disj roles :container)]]
+            (println (str (format "%6d %s" count image)
+                          (when (seq other) (str " (" (str/join ", " (map name other)) ")")))))
           true))))
 
 (runbook/execute!

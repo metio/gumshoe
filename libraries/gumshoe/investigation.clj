@@ -369,11 +369,23 @@
       edge)
     edge))
 
+(defn- unfetched
+  "Why fetch-object returned nil for subject: {:missing? true} only when a
+   strict read answered that no such object exists, else {:unread? true},
+   since the plain getters return nil for a timeout, a refused permission
+   or an unreachable API as well as for NotFound."
+  [context {:keys [kind namespace name]}]
+  (if (= :absent (kubectl/presence context {:type (subject/kind->type kind)
+                                             :namespace (when-not (str/blank? (str namespace)) namespace)
+                                             :name name}))
+    {:missing? true}
+    {:unread? true}))
+
 (defn- focus!
   [context subject]
   (let [object (fetch-object context subject)]
     (if (nil? object)
-      {:subject subject :missing? true}
+      (assoc (unfetched context subject) :subject subject)
       (let [object-edges (map #(collapse-replicaset! context %)
                               (subject/object-edges (:kind subject) object))]
         {:subject subject
@@ -485,32 +497,46 @@
 
 (defn investigate!
   "Runs the drill-down loop from a starting subject, optionally seeded with a
-   breadcrumb trail (for --resume). Returns true - a read-only investigation
-   never fails - so the harness closes on a green banner and offers the
-   reproducer of everything it ran."
+   breadcrumb trail (for --resume). Returns true when every subject it
+   focused on was read - an object found absent counts as read - so the
+   harness closes on a green banner and offers the reproducer of everything
+   it ran. A subject whose read did not answer is reported as unread, never
+   as deleted, and makes it return false."
   ([context start] (investigate! context start []))
   ([context start initial-trail]
    (stdout/print-section "🔦 Drill-down investigation")
    (stdout/err-println "  pivot to a related object to follow the thread, run a probe to look closer,")
    (stdout/err-println "  or end the investigation - nothing here changes anything.")
    (loop [subject start
-          trail (vec initial-trail)]
+          trail (vec initial-trail)
+          read-all? true]
     (let [focus (stdout/with-spinner (str "gathering " (subject/display subject))
-                                     #(focus! context subject))]
-      (if (:missing? focus)
+                                     #(focus! context subject))
+          finish (fn [trail read-all?] (and (summarise! trail) read-all?))]
+      (cond
+        (:unread? focus)
+        (do (stdout/error (format "could not read %s - kubectl did not answer or was refused; nothing is known about it"
+                                  (subject/display subject)))
+            (if (seq trail)
+              (recur (peek trail) (pop trail) false)
+              (finish [subject] false)))
+
+        (:missing? focus)
         (do (stdout/warn (format "%s not found - it may have just been deleted" (subject/display subject)))
             (if (seq trail)
-              (recur (peek trail) (pop trail))
-              (summarise! [subject])))
+              (recur (peek trail) (pop trail) read-all?)
+              (finish [subject] read-all?)))
+
+        :else
         (do
           (render! context focus)
           (let [item (choose! focus trail)]
             (case (:type item)
-              (nil :done) (summarise! (conj trail subject))
-              :back (recur (peek trail) (pop trail))
+              (nil :done) (finish (conj trail subject) read-all?)
+              :back (recur (peek trail) (pop trail) read-all?)
               :jump (if-let [dest (choose-jump! trail)]
-                      (recur (:subject dest) (:trail dest))
-                      (recur subject trail))
+                      (recur (:subject dest) (:trail dest) read-all?)
+                      (recur subject trail read-all?))
               :probe (do (run-probe! context subject (:probe item))
-                         (recur subject trail))
-              :pivot (recur (:subject item) (conj trail subject))))))))))
+                         (recur subject trail read-all?))
+              :pivot (recur (:subject item) (conj trail subject) read-all?)))))))))

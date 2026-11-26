@@ -5658,7 +5658,7 @@
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  consumers keep serving the last published artifact while suspended"],
    :banner
-   "FAILED after 1 effect - stopped at: kubectl --namespace=apps patch jsonnetsnippets.jaas.metio.wtf site --type=merge --patch {\"spec\":{\"suspend\":true}} - the effects before it stay applied",
+   "FAILED at the first effect: kubectl --namespace=apps patch jsonnetsnippets.jaas.metio.wtf site --type=merge --patch {\"spec\":{\"suspend\":true}} - nothing was changed",
    :recovery []},
   :invalid
   {:stopped
