@@ -319,9 +319,10 @@
         eventually verify/eventually
         out (java.io.StringWriter.)
         err (java.io.StringWriter.)
+        record (outcome/fresh)
         result (binding [*log* log
                          flow/*dry-run* true
-                         outcome/*record* (outcome/fresh)
+                         outcome/*record* record
                          kubectl/*forward-start-ms* 200
                          *in* (java.io.BufferedReader. (java.io.StringReader. yes-forever))
                          *out* out
@@ -341,7 +342,7 @@
                      ((:action config) (:opts (runbook/arguments options argv)) {})
                      (catch Throwable e (str "threw: " (ex-message e))))))]
     {:book path :argv argv :result result :tried @log
-     :output (str out err)}))
+     :record @record :output (str out err)}))
 
 (defn- acts
   [run]
@@ -423,3 +424,37 @@
       (let [run (run-dry! path)]
         (is (= [] (acts run))
             (str path " acted under --dry-run with " (pr-str (:argv run))))))))
+
+(def ^:private legacy-books
+  "Every shipped file that hands gumshoe.flow/change! a legacy :execute!
+   thunk. A dry run never calls one: flow records the step as not
+   rehearsed and the run exits 1 (gumshoe.flow-test,
+   gumshoe.runbook-test). A file joining this list declares a change that
+   cannot be rehearsed, which its review should see."
+  #{"tools/ceph/playbooks/upgrade.clj"
+    "tools/db-operator/runbooks/admin_connect.clj"
+    "tools/db-operator/runbooks/connect.clj"
+    "tools/db-operator/runbooks/restore.clj"
+    "tools/prometheus/runbooks/delete_metric.clj"})
+
+(defn- shipped-sources
+  []
+  (let [roots (concat ["libraries" "runbooks" "playbooks" "firebooks"]
+                      (for [tool (fs/list-dir "tools")
+                            dir ["libraries" "runbooks" "playbooks" "firebooks"]
+                            :let [root (fs/path tool dir)]
+                            :when (fs/directory? root)]
+                        (str root)))]
+    (for [root roots
+          :when (fs/directory? root)
+          file (fs/glob root "**.clj")]
+      (str (fs/relativize (fs/absolutize ".") (fs/absolutize file))))))
+
+(deftest every-legacy-execute-step-is-known
+  (let [engine #{"libraries/gumshoe/flow.clj" "libraries/gumshoe/outcome.clj"}
+        found (set (for [file (shipped-sources)
+                         :when (and (not (engine file))
+                                    (re-find #"(?m)^\s*:execute!\s" (slurp file)))]
+                     file))]
+    (is (contains? found "tools/ceph/playbooks/upgrade.clj") "positive control: the scan finds a known user")
+    (is (= legacy-books found))))

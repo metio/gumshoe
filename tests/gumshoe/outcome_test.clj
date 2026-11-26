@@ -33,6 +33,18 @@
   (is (= 0 (outcome/exit-code :ok {:applied 0})))
   (is (= 1 (outcome/exit-code :failed {}))))
 
+(deftest a-rehearsal-that-passed-a-step-it-could-not-show-is-never-done
+  (doseq [outcome [:ok :failed]
+          changes? [true false]]
+    (testing (str outcome " " (if changes? "change book" "book that does not announce"))
+      (is (= {:tone :error
+              :text "DRY RUN - nothing was changed; not rehearsed: start the upgrade - a real run would do there what this rehearsal could not show"}
+             (banner {:dry-run? true :changes? changes? :outcome outcome} {:unrehearsed ["start the upgrade"]})))))
+  (is (= "DRY RUN - nothing was changed; the precondition of purge does not hold against the current state; not rehearsed: ratchet, start - a real run would do there what this rehearsal could not show"
+         (:text (banner {:dry-run? true :changes? true :outcome :ok} {:unmet ["purge"] :unrehearsed ["ratchet" "start"]}))))
+  (is (= 1 (outcome/exit-code :ok {:unrehearsed ["start the upgrade"]})))
+  (is (= ["a" "b"] (:unrehearsed (recorded #(do (outcome/unrehearsed! "a") (outcome/unrehearsed! "b")))))))
+
 (deftest a-read-only-book-reports-findings-without-claiming-a-failure
   (is (= {:tone :ok :text "DONE - no findings"}
          (banner {:changes? false :outcome :ok})))

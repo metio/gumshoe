@@ -48,6 +48,13 @@
   [step]
   (record! update :unmet (fnil conj []) step))
 
+(defn unrehearsed!
+  "A step a rehearsal could not show, because its work is a legacy
+   :execute! thunk rather than a plan; `step` names it. Nothing of it ran,
+   and the rehearsal cannot say what a real run would do there."
+  [step]
+  (record! update :unrehearsed (fnil conj []) step))
+
 (defn paused!
   "A playbook stopped at a pause it can not wait at; `how` says how to continue."
   [how]
@@ -162,10 +169,12 @@
         (into ["Recovery:"] (map #(str "  " %) (str/split-lines (:text recovery))))))))
 
 (defn exit-code
-  "The exit code of a run: 0 only for :ok, and a rehearsal that found an unmet
-   precondition exits 1 so a script sees that the real run would stop."
+  "The exit code of a run: 0 only for :ok. A rehearsal that found an unmet
+   precondition exits 1 so a script sees that the real run would stop, and
+   one that passed a step it could not rehearse exits 1 so it never reads
+   as a plan that was shown in full."
   [outcome record]
-  (if (and (= :ok outcome) (empty? (:unmet record))) 0 1))
+  (if (and (= :ok outcome) (empty? (:unmet record)) (empty? (:unrehearsed record))) 0 1))
 
 (defn- changed?
   [{:keys [applied thunk]}]
@@ -193,18 +202,23 @@
 
    Only a run whose post-checks all ran and held may claim verification."
   [{:keys [dry-run? changes? outcome findings?]} record]
-  (let [{:keys [aborted applied paused stopped thunk verified unmet skipped]} record]
+  (let [{:keys [aborted applied paused stopped thunk verified unmet unrehearsed skipped]} record]
     (cond
       ;; a rehearsal that threw never showed the plans after the throw
       (and dry-run? changes? (= :error outcome))
       {:tone :error
        :text "DRY RUN stopped by an unexpected error - nothing was changed - read the messages above"}
 
-      (and dry-run? changes? (seq unmet))
+      ;; recorded only under --dry-run, whether or not the book announces
+      (or (and dry-run? changes? (seq unmet)) (and dry-run? (seq unrehearsed)))
       {:tone :error
-       :text (str "DRY RUN - nothing was changed; the precondition of "
-                  (str/join ", " unmet)
-                  " does not hold against the current state")}
+       :text (str "DRY RUN - nothing was changed"
+                  (when (and changes? (seq unmet))
+                    (str "; the precondition of " (str/join ", " unmet)
+                         " does not hold against the current state"))
+                  (when (seq unrehearsed)
+                    (str "; not rehearsed: " (str/join ", " unrehearsed)
+                         " - a real run would do there what this rehearsal could not show")))}
 
       ;; a read-only book reads and reports under --dry-run too
       (and dry-run? changes?)

@@ -115,6 +115,34 @@
                        :extra-env {"GUMSHOE_ENV" (str (fs/path dir "env.edn")) "NO_COLOR" "1"}}
                       "bb" "-cp" (absolute-classpath) "-e" script)))
 
+(defn- run-legacy-book
+  "Runs a change book whose two steps are legacy :execute! thunks, with an
+   :effect step between them, in a fresh bb from a scratch directory with
+   no env.edn, with the given arguments. Each thunk prints when it runs."
+  [dir & args]
+  (let [script (str "(require '[gumshoe.runbook :as runbook] '[gumshoe.flow :as flow] '[gumshoe.effect :as effect])"
+                    "(defn legacy [action] (flow/change! {:confirmation {:action action :target \"c\" :items [\"x\"]}"
+                    "                                     :execute! (fn [] (println (str \"THUNK RAN \" action)) true)}))"
+                    "(binding [*command-line-args* " (pr-str (vec args)) "]"
+                    "  (runbook/execute! {:description \"upgrades\" :announce? false :change? true"
+                    "                     :action (fn [_ _] (and (legacy \"ratchet\")"
+                    "                                            (flow/change! {:confirmation {:action \"label\" :target \"c\" :items [\"x\"]}"
+                    "                                                           :effect [(effect/kubectl \"c\" \"label\" \"x\" \"a=b\")]})"
+                    "                                            (legacy \"start\")))}))")]
+    @(process/process {:dir (str dir) :out :string :err :string :continue true
+                       :extra-env {"GUMSHOE_ENV" (str (fs/path dir "env.edn")) "NO_COLOR" "1"}}
+                      "bb" "-cp" (absolute-classpath) "-e" script)))
+
+(deftest a-dry-run-past-a-legacy-step-fails-and-runs-nothing-test
+  (fs/with-temp-dir [dir {}]
+    (let [{:keys [exit out err]} (run-legacy-book dir "--dry-run")
+          output (str out err)]
+      (is (= 1 exit) output)
+      (is (not (str/includes? output "THUNK RAN")) "no thunk runs under --dry-run")
+      (is (str/includes? output "would run: kubectl label x a=b") "the steps after a legacy one are still shown")
+      (is (str/includes? output "not rehearsed: ratchet, start") output)
+      (is (not (str/includes? output "DONE")) output))))
+
 (deftest a-missing-directory-stops-the-book-in-the-prerequisites-test
   (fs/with-temp-dir [dir {}]
     (let [missing (str (fs/path dir "nonexistent"))

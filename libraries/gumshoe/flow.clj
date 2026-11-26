@@ -14,8 +14,9 @@
 
    The work is expressed one of two ways. Preferred is :effect - a plan of
    effect data (see gumshoe.effect) - which composes, dry-runs, and tests. The
-   legacy :execute! thunk still works, but a book using it cannot be dry-run,
-   so under --dry-run the flow refuses rather than risk running it."
+   legacy :execute! thunk still works, but it cannot be shown without running
+   it: under --dry-run the flow never calls it and records the step as not
+   rehearsed, so the rehearsal ends with exit 1 and never with a clean DONE."
   (:require [clojure.string :as str]
             [gumshoe.effect :as effect]
             [gumshoe.interact :as interact]
@@ -103,9 +104,14 @@
                   refused with an error naming the step, before the
                   confirmation and before any of it runs, as is a plan
                   holding an op no interpreter knows (effect/unknown-ops)
-   :step          optional name of the step for that error, defaulting to
+   :step          optional name of the step for that error, and for the
+                  note that a legacy step was not rehearsed, defaulting to
                   the confirmation's :action
-   :execute!      a thunk doing the work, truthy on success (legacy)
+   :execute!      a thunk doing the work, truthy on success (legacy); under
+                  --dry-run it is never called, the step is recorded with
+                  outcome/unrehearsed! and change! returns true, so a
+                  playbook rehearsal goes on to show the steps after it
+                  while the run itself fails
    :post-checks   optional seq of verify/eventually maps proving the result
    :confirmed?    the operator already approved this change as part of a
                   larger confirmation (a playbook's), so it is shown and runs
@@ -128,8 +134,9 @@
       (throw (unknown-effects (or step (:action confirmation)) (effect/unknown-ops effect)))
 
       ;; a dry run shows what would happen and changes nothing - no prompt, no
-      ;; announcement, no post-check. A legacy thunk cannot be shown safely, so we
-      ;; refuse rather than run it.
+      ;; announcement, no post-check. A legacy thunk cannot be shown without
+      ;; running it, so it is never called and the step is recorded as not
+      ;; rehearsed: the run fails, yet a playbook still shows the steps after it.
       ;;
       ;; The precondition is a read, so the rehearsal runs it and reports a step
       ;; the current state would refuse. It keeps going: in a playbook a later
@@ -140,9 +147,10 @@
           (stdout/err-println (interact/confirmation-message confirmation))
           (let [shown (if effect
                         (effect/dry-run effect)
-                        (do (stdout/warn "this book does not support --dry-run yet - it declares an :execute! thunk, not an :effect plan")
-                            (stdout/warn "nothing was run")
-                            true))]
+                        (let [step (or step (:action confirmation))]
+                          (outcome/unrehearsed! step)
+                          (stdout/error (format "step \"%s\" cannot be rehearsed - it declares an :execute! thunk, not an :effect plan; nothing of it was run" step))
+                          true))]
             (when (and precondition (not (precondition)))
               (outcome/unmet! (:action confirmation))
               (stdout/warn "this step's precondition does not hold against the current state - a real run would abort here unless an earlier step changes that"))
