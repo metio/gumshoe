@@ -41,7 +41,9 @@
                "the pick is not \"<namespace>/<release>\""
                (let [now (revisions context pick)]
                  (if (= before (:version (first now)))
-                   (rollback/rollback-refusal now to)
+                   (or (rollback/rollback-refusal now to)
+                       (rollback/rights-refusal (:namespace pick)
+                                                (kubectl/missing-rights context (:namespace pick) rollback/storage-rights)))
                    "the release changed since it was confirmed"))))
   :announce (fn [{:keys [target target-revision]}] (format "Roll Helm release %s back to revision %s" target (:version target-revision)))
   :effect (fn [{:keys [context pick target-revision]}]

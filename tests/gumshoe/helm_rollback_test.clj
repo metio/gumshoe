@@ -48,7 +48,8 @@
 (deftest the-confirmation
   (is (= ["roll Helm release web/shop back from revision 5 (deployed) to revision 3 (superseded)"
           "helm records the rollback as revision 6; its status says the manifests were applied, not that the pods are ready"
-          "the release's source (Git, a pipeline) still holds the newer chart or values and will upgrade it again"]
+          "the release's source (Git, a pipeline) still holds the newer chart or values and will upgrade it again"
+          "helm writes every object of the release as the operator running it: a right missing for one of them fails the rollback part-way"]
          (rollback/rollback-items pick (rollback/history releases pick) nil))))
 
 (deftest the-command-names-the-revision-and-context

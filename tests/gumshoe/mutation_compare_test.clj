@@ -72,13 +72,24 @@
            (mutation/drift (mutation/fingerprint (config-map "7" {:a "1"}) nil :resource-version)
                            (mutation/fingerprint (config-map "8" {:a "1"}) nil :resource-version))))))
 
-(deftest a-generation-wins-over-compare
+(deftest a-generation-wins-over-a-resource-version-compare
   (let [deployment (fn [generation rv spec] {:metadata {:uid "u" :generation generation :resourceVersion rv} :spec spec})]
-    (is (= {:uid "u" :generation 3} (mutation/fingerprint (deployment 3 "10" {:replicas 1}) nil :spec)))
+    (doseq [compare [nil :resource-version]]
+      (is (= {:uid "u" :generation 3} (mutation/fingerprint (deployment 3 "10" {:replicas 1}) nil compare)))
+      (is (nil? (mutation/drift (mutation/fingerprint (deployment 3 "10" {:replicas 1}) nil compare)
+                                (mutation/fingerprint (deployment 3 "11" {:replicas 1}) nil compare)))
+          "a status write leaves the generation alone")
+      (is (= "its spec changed after the confirmation (generation 3, now 4)"
+             (mutation/drift (mutation/fingerprint (deployment 3 "10" {:replicas 1}) nil compare)
+                             (mutation/fingerprint (deployment 4 "11" {:replicas 2}) nil compare)))))))
+
+(deftest a-spec-compare-wins-over-a-generation
+  (let [deployment (fn [generation rv spec] {:metadata {:uid "u" :generation generation :resourceVersion rv} :spec spec})]
+    (is (= {:uid "u" :spec {:replicas 1}} (mutation/fingerprint (deployment 3 "10" {:replicas 1}) nil :spec)))
     (is (nil? (mutation/drift (mutation/fingerprint (deployment 3 "10" {:replicas 1}) nil :spec)
-                              (mutation/fingerprint (deployment 3 "11" {:replicas 1}) nil :spec)))
-        "a status write leaves the generation alone")
-    (is (= "its spec changed after the confirmation (generation 3, now 4)"
+                              (mutation/fingerprint (deployment 4 "11" {:replicas 1}) nil :spec)))
+        "a generation raised by a status write is not a spec change")
+    (is (= "its spec changed after the confirmation: replicas"
            (mutation/drift (mutation/fingerprint (deployment 3 "10" {:replicas 1}) nil :spec)
                            (mutation/fingerprint (deployment 4 "11" {:replicas 2}) nil :spec))))))
 
@@ -96,12 +107,18 @@
     (is (nil? (mutation/drift (mutation/fingerprint bare nil :spec)
                               (mutation/fingerprint (assoc-in bare [:metadata :resourceVersion] "2") nil :spec))))))
 
-(deftest an-object-that-gained-a-generation-is-refused
+(deftest an-object-that-gained-a-generation-is-still-compared-by-spec
   (doseq [spec [{} {:unschedulable true}]]
-    (is (= "its spec changed after the confirmation"
-           (mutation/drift (mutation/fingerprint (node :spec spec) nil :spec)
-                           (mutation/fingerprint (assoc-in (node :spec spec) [:metadata :generation] 1) nil :spec)))
-        "what is compared changed shape, so the change fails closed without naming keys that did not move")))
+    (is (nil? (mutation/drift (mutation/fingerprint (node :spec spec) nil :spec)
+                              (mutation/fingerprint (assoc-in (node :spec spec) [:metadata :generation] 1) nil :spec))))
+    (is (= "its spec changed after the confirmation: unschedulable"
+           (mutation/drift (mutation/fingerprint (node :spec {}) nil :spec)
+                           (mutation/fingerprint (assoc-in (node :spec {:unschedulable true}) [:metadata :generation] 1) nil :spec))))))
+
+(deftest fingerprints-of-different-comparisons-fail-closed
+  (is (= "its spec changed after the confirmation"
+         (mutation/drift {:uid "u" :spec {}} {:uid "u" :generation 1}))
+      "what is compared changed shape, so the change fails closed without naming keys that did not move"))
 
 (deftest ref-fingerprint-reads-facts-and-compare-from-the-ref
   (is (= {:uid "uid-n1" :spec {:unschedulable true}}

@@ -146,9 +146,12 @@
                     :drain-timeout {:desc "Seconds the drain waits for its evictions before it gives up and fails - 0 waits forever"
                                     :default default-drain-timeout
                                     :coerce :long}})
+   ;; kubectl drain evicts through the eviction subresource and reads the
+   ;; DaemonSet of every DaemonSet pod it skips; it deletes a pod only when
+   ;; asked to with --disable-eviction, which drain-effect never passes
    :prerequisites (merge node-prerequisites
-                         {:kubectl-can-get ["nodes" "pods"]
-                          :kubectl-can-delete ["pods"]})
+                         {:kubectl-can-get ["nodes" "pods" "daemonsets"]
+                          :kubectl-can-create ["pods/eviction"]})
    :select (assoc node-select :candidates all-nodes)
    :confirm {:action "drain a node - every pod on it is evicted and emptyDir data is deleted"
              :destructive? true}

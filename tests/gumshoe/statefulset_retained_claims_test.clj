@@ -38,7 +38,7 @@
         plan (storage/expansion-plan {:pvc-names names :pvcs pvcs :storage-classes classes :capacity "20Gi"})]
     (is (= ["data-web-0" "data-web-1" "data-web-2"] (mapv :pvc plan)))
     (is (= [] (storage/expansion-problems plan)))
-    (is (= [:claims :claims :claims :delete :recreate]
+    (is (= [:claims :claims :claims :delete :gone :recreate]
            (mapv :stage (storage/statefulset-resize-steps "ctx" web "data" "20Gi" plan))))))
 
 (deftest a-retained-claim-belongs-by-selector-labels-or-owner

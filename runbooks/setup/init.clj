@@ -157,7 +157,8 @@
 
           (not (interact/confirm! {:action (if existing "update this env.edn" "write this env.edn")
                                    :target "this machine"
-                                   :items [config/primary-path]}))
+                                   :items (into [config/primary-path]
+                                                (config/change-items (config/changes existing merged)))}))
           false
 
           ;; the file may have been edited while the questions were open
@@ -165,8 +166,11 @@
           (refuse-to-rewrite config/primary-path (config/file-problems config/primary-path))
 
           :else
-          (do (stdout/ok (format "wrote %s" (config/write! merged)))
-              true))))))
+          (let [{:keys [path backup]} (config/write! merged)]
+            (stdout/ok (format "wrote %s" path))
+            (when backup
+              (stdout/ok (format "the previous env.edn is kept as %s" backup)))
+            true))))))
 
 (defn- init
   [_opts _ctx]

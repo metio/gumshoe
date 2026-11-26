@@ -448,11 +448,25 @@
 
 ;; --- a StatefulSet's volumes -----------------------------------------------------
 
+(def statefulset-gone-timeout
+  "Seconds the resize waits for an orphan-deleted StatefulSet to be gone
+   before it gives up without recreating it. The garbage collector removes
+   the orphan finalizer, so a stalled kube-controller-manager keeps the
+   StatefulSet for as long as it is stalled."
+  120)
+
 (defn statefulset-resize-steps
   "The steps that grow the claims of `template-name` of statefulset to
    capacity: enlarge every claim of plan, delete the StatefulSet with its pods
-   orphaned, since a volumeClaimTemplate is immutable, and apply it again with
-   the new template."
+   orphaned, since a volumeClaimTemplate is immutable, wait until it is gone,
+   and apply it again with the new template.
+
+   The delete returns once the API server accepted it (--wait=false, under a
+   request timeout), and the wait that follows is bounded by
+   statefulset-gone-timeout, so a garbage collector that never removes the
+   orphan finalizer stops the run with recovery text instead of hanging it.
+   Applying the manifest before the old StatefulSet is gone would patch the
+   object being deleted."
   [context statefulset template-name capacity plan]
   (let [namespace (kubectl/namespace-of statefulset)
         name (kubectl/name-of statefulset)
@@ -460,16 +474,46 @@
     (conj (resize-claim-steps context namespace plan capacity)
           {:stage :delete
            :effect (effect/kubectl context (str "--namespace=" namespace)
-                                   "delete" "statefulset" name "--cascade=orphan")}
+                                   "delete" "statefulset" name "--cascade=orphan"
+                                   "--wait=false" "--request-timeout=30s")}
+          {:stage :gone
+           :effect (effect/kubectl context (str "--namespace=" namespace)
+                                   "wait" "--for=delete" (str "statefulset/" name)
+                                   (str "--timeout=" statefulset-gone-timeout "s"))}
           {:stage :recreate
            :manifest manifest
            :effect (effect/kubectl-stdin context manifest "apply" "--filename" "-")})))
 
+(defn statefulset-state
+  "Where the StatefulSet namespace/name stands, for the recovery text of a
+   resize that stopped at its delete: :gone when a read answered that it
+   does not exist, :deleting when it carries a deletionTimestamp, :present
+   when it exists and is not being deleted, :unread when no read answered."
+  [context namespace name]
+  (binding [kubectl/*strict-reads* false]
+    (let [{:keys [ok? doc]} (kubectl/get-json-result context (str "--namespace=" namespace) "statefulsets" name)]
+      (cond
+        (and ok? (-> doc :metadata :deletionTimestamp)) :deleting
+        ok? :present
+        :else (case (kubectl/presence context {:type "statefulsets" :namespace namespace :name name})
+                :absent :gone
+                :unread)))))
+
+(defn- reapply-lines
+  [context manifest]
+  [(format "  kubectl --context=%s apply --filename - <<'EOF'" context)
+   (str "  " manifest)
+   "  EOF"])
+
 (defn statefulset-recovery
   "What a run of statefulset-resize-steps left behind after `applied` of its
    effects ran, and what to do about it; nil when none ran. target names the
-   StatefulSet as namespace/name."
-  [{:keys [context target]} steps applied]
+   StatefulSet as namespace/name, and state is where it stands now, as
+   statefulset-state reads it, for a run that stopped at the delete or the
+   wait after it: a delete kubectl reported as failed may still have been
+   accepted, and then the StatefulSet is being deleted, or gone, and a run of
+   the book again finds nothing to enlarge."
+  [{:keys [context target state]} steps applied]
   (let [{:keys [stopped stages] :as where} (progress steps applied)
         manifest (:manifest (last steps))]
     (when (seq stages)
@@ -482,20 +526,43 @@
                  [(format "Find in the kubectl output above why %s could not be patched, then run this book again" (:claim stopped))
                   "with the same capacity: a claim that already requests it is patched to the same value."])
 
-         :delete
-         (concat [(format "StatefulSet %s could not be deleted: it still exists with its old volume claim template," target)
-                  "and its pods were not touched."]
-                 (claims-left where)
-                 ["Find why in the kubectl output above, then run this book again with the same capacity."])
+         (:delete :gone)
+         (case state
+           :present
+           (concat [(format "StatefulSet %s could not be deleted: it still exists with its old volume claim template," target)
+                    "and its pods were not touched."]
+                   (claims-left where)
+                   ["Find why in the kubectl output above, then run this book again with the same capacity."])
+
+           :deleting
+           (concat [(format "StatefulSet %s IS BEING DELETED: the API server accepted the delete, and the garbage collector" target)
+                    "has not removed it yet. Its pods were orphaned: they keep running, but nothing replaces a pod that stops."
+                    "It was not recreated, and running this book again will not find it once it is gone."]
+                   (claims-left where)
+                   ["Check that kube-controller-manager runs; once the StatefulSet is gone, re-apply it with the new volume claim template:"]
+                   (reapply-lines context manifest))
+
+           :gone
+           (concat [(format "THE STATEFULSET %s IS DELETED and was not recreated. Its pods were orphaned:" target)
+                    "they keep running, but nothing replaces a pod that stops."]
+                   (claims-left where)
+                   ["Re-apply it now, with the new volume claim template:"]
+                   (reapply-lines context manifest))
+
+           (concat [(format "Whether StatefulSet %s still exists is unknown: the delete may have been accepted, and the read after it did not answer." target)]
+                   (claims-left where)
+                   [(let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
+                      (format "Read it with: kubectl --context=%s --namespace=%s get statefulset %s" context namespace name))
+                    "If it is still there without a deletionTimestamp, run this book again with the same capacity."
+                    "If it is gone or being deleted, re-apply it once it is gone, with the new volume claim template:"]
+                   (reapply-lines context manifest)))
 
          :recreate
          (concat [(format "THE STATEFULSET %s IS DELETED and could not be recreated. Its pods were orphaned:" target)
                   "they keep running, but nothing replaces a pod that stops."]
                  (claims-left where)
-                 ["Re-apply it now, with the new volume claim template:"
-                  (format "  kubectl --context=%s apply --filename - <<'EOF'" context)
-                  (str "  " manifest)
-                  "  EOF"])
+                 ["Re-apply it now, with the new volume claim template:"]
+                 (reapply-lines context manifest))
 
          (concat [(format "Every effect ran: StatefulSet %s was recreated with the new volume claim template." target)]
                  (claims-left where)
