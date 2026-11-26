@@ -53,9 +53,14 @@
 (deftest the-console-refuses-before-its-confirmation
   (console-book)
   (let [refusal (requiring-resolve 'runbooks.cnpg.cnpg-console/promote-refusal)]
-    (is (= "pg-1 is the primary already" (refusal (cluster) ["pg-1" "pg-2"] "pg-1")))
-    (is (= "pg-9 is not an instance of db/pg" (refusal (cluster) ["pg-1" "pg-2"] "pg-9")))
-    (is (nil? (refusal (cluster) ["pg-1" "pg-2"] "pg-2")))))
+    (is (= "pg-1 is the primary already" (refusal (cluster) ["pg-1" "pg-2"] "pg-1" (constantly true))))
+    (is (= "pg-9 is not an instance of db/pg" (refusal (cluster) ["pg-1" "pg-2"] "pg-9" (constantly true))))
+    (is (nil? (refusal (cluster) ["pg-1" "pg-2"] "pg-2" (constantly true))))
+    (testing "a user who may not write the Cluster's status"
+      (let [asked (atom nil)]
+        (is (str/includes? (refusal (cluster) ["pg-1" "pg-2"] "pg-2" (fn [ns] (reset! asked ns) false))
+                           "you may not patch clusters.postgresql.cnpg.io/status in namespace db"))
+        (is (= "db" @asked))))))
 
 (deftest the-console-judges-the-cluster-again-after-the-confirmation
   (console-book)
