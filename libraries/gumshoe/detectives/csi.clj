@@ -2,7 +2,7 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.detectives.csi
-  "Detectives for the CSI layer: attachments that fail, PersistentVolumes that
+  "Detectives for the CSI layer: attachments that fail to attach or detach, PersistentVolumes that
    failed or were released, and nodes where the ceph-csi drivers are not
    registered."
   (:require [clojure.string :as str]
@@ -14,16 +14,74 @@
   [driver-name]
   (str/ends-with? (str driver-name) "csi.ceph.com"))
 
+(def attach-grace
+  "How long a VolumeAttachment may wait for the external-attacher, attached
+   false without an error, or for its detach once deleted, before the wait
+   counts as stuck. Attaching takes seconds to a few minutes on a healthy
+   cluster."
+  (java.time.Duration/ofMinutes 5))
+
+(defn- older-than-grace?
+  "Whether at lies more than attach-grace before now. Without now or a
+   readable at the age is unknown, and the check reports rather than hides."
+  [at now]
+  (let [at (onset/instant at)]
+    (or (nil? at) (nil? now)
+        (.isAfter ^java.time.Instant now (.plus ^java.time.Instant at ^java.time.Duration attach-grace)))))
+
+(defn attachment-finding
+  "The finding for one VolumeAttachment at now, or nil when it is healthy or
+   still within attach-grace.
+
+   attached false with an attachError is critical at once. attached false
+   without one is a warning only past the grace since creation, because every
+   new attachment starts that way. attached true with a detachError is a
+   failed detach, which keeps the volume on its old node and makes the next
+   node's attach fail with Multi-Attach; a deleted attachment still attached
+   past the grace is a detach that has not finished."
+  [attachment now]
+  (let [status (:status attachment)
+        attached? (true? (:attached status))
+        attach-error (-> status :attachError :message)
+        detach-error (-> status :detachError :message)
+        deleted (-> attachment :metadata :deletionTimestamp)
+        created (-> attachment :metadata :creationTimestamp)
+        node (-> attachment :spec :nodeName)
+        base {:component (or (-> attachment :spec :source :persistentVolumeName)
+                             (kubectl/name-of attachment))}]
+    (cond
+      (and (not attached?) attach-error)
+      (onset/since (assoc base :severity :critical
+                          :summary (format "volume is not attached to node %s" node)
+                          :hint attach-error)
+                   (-> status :attachError :time))
+
+      (and (not attached?) (not deleted) (older-than-grace? created now))
+      (onset/since (assoc base :severity :warning
+                          :summary (format "volume is not attached to node %s" node)
+                          :hint (format "the attachment has waited longer than %d minutes without an error; the CSI driver's external-attacher logs say why"
+                                        (.toMinutes ^java.time.Duration attach-grace)))
+                   created)
+
+      (and attached? detach-error)
+      (onset/since (assoc base :severity :critical
+                          :summary (format "volume cannot be detached from node %s" node)
+                          :hint (str detach-error " - while it stays attached here, attaching it on another node fails with Multi-Attach"))
+                   (or (-> status :detachError :time) deleted))
+
+      (and attached? deleted (older-than-grace? deleted now))
+      (onset/since (assoc base :severity :warning
+                          :summary (format "volume is still attached to node %s after its attachment was deleted" node)
+                          :hint (format "the detach has not finished within %d minutes; the CSI driver's external-attacher logs say why"
+                                        (.toMinutes ^java.time.Duration attach-grace)))
+                   deleted)
+
+      :else nil)))
+
 (defn detect-attachment-problems
   [evidence]
-  (for [attachment (kubectl/items-of (get evidence "volumeattachments"))
-        :when (not (true? (-> attachment :status :attached)))
-        :let [error (-> attachment :status :attachError :message)
-              volume (-> attachment :spec :source :persistentVolumeName)]]
-    {:severity (if error :critical :warning)
-     :component (or volume (kubectl/name-of attachment))
-     :summary (format "volume is not attached to node %s" (-> attachment :spec :nodeName))
-     :hint error}))
+  (keep #(attachment-finding % (:now evidence))
+        (kubectl/items-of (get evidence "volumeattachments"))))
 
 (def ^:private delete-grace-minutes
   "How long a Released volume with the Delete policy may wait for its
@@ -141,6 +199,16 @@
              value (:values expression)]
          value)))
 
+(defn- node-hostnames
+  "The kubernetes.io/hostname label of every node, or its name where the label
+   is absent. The scheduler matches a volume's affinity against node labels,
+   and the label may differ from the node name (a kubelet run with
+   --hostname-override, or a node named by its FQDN)."
+  [nodes]
+  (set (for [node (kubectl/items-of nodes)]
+         (or (get-in node [:metadata :labels (keyword "kubernetes.io/hostname")])
+             (kubectl/name-of node)))))
+
 (def orphaned-local-volume-joins
   "A local volume names its node, so the check needs both lists."
   ["persistentvolumes" "nodes"])
@@ -149,7 +217,7 @@
   "Local volumes pinned to nodes that no longer exist. Nothing is judged
    when a joined read did not answer."
   [evidence]
-  (let [node-names (set (kubectl/names-of (get evidence "nodes")))]
+  (let [node-names (node-hostnames (get evidence "nodes"))]
     ;; with no node evidence every hostname would look absent and every local
     ;; PV would be flagged - so an unanswered or empty node list means "can't
     ;; tell", not "all orphaned".
@@ -165,7 +233,7 @@
 
 (def detectives
   [{:name "csi-attachments"
-    :description "VolumeAttachments that failed to attach"
+    :description "VolumeAttachments that failed to attach or detach, or have waited past a grace period"
     :requires ["volumeattachments"]
     :detect detect-attachment-problems}
    {:name "csi-volumes"

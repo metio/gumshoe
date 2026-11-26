@@ -25,7 +25,8 @@
         {"services" {:items (or services [web-service])}
          "pods" {:items pods}
          "networkpolicies" {:items policies}
-         network/global-policy-type (when global {:items global})})))
+         network/global-policy-type {:items (or global [])}
+         network/calico-policy-type {:items []}})))
 
 (def ^:private backends [(pod "web-1" {:app "web"}) (pod "web-2" {:app "web"})])
 

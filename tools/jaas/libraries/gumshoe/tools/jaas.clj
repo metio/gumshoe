@@ -63,13 +63,30 @@
   [context namespace name]
   (reason-of (snippet context namespace name)))
 
+(defn- observed?
+  "Whether the operator has observed the snippet's current generation. The
+   operator stamps observedGeneration on the Ready condition and in status on
+   every reconcile, so a Ready reason at an older generation describes the
+   spec from before the patch."
+  [snippet]
+  (not (conditions/stale? snippet (conditions/condition snippet "Ready"))))
+
 (defn resumed?
-  "Whether the operator reports the snippet as no longer suspended: it
-   reconciles a snippet into a Ready condition whatever the outcome, so a
-   snippet without one has not been looked at since it was resumed."
+  "Whether the operator reports the snippet as no longer suspended, at the
+   generation the resume produced: it reconciles a snippet into a Ready
+   condition whatever the outcome, so a snippet without one has not been
+   looked at since it was resumed, and a reason from an older generation may
+   predate the suspend."
   [snippet]
   (let [reason (reason-of snippet)]
-    (and (some? reason) (not= "Suspended" reason))))
+    (and (some? reason) (not= "Suspended" reason) (observed? snippet))))
+
+(defn suspended?
+  "Whether the operator reports the snippet as suspended at its current
+   generation. A Suspended reason from an older generation may be left from
+   an earlier suspend the operator has not yet seen undone."
+  [snippet]
+  (and (= "Suspended" (reason-of snippet)) (observed? snippet)))
 
 (defn- snippet-subject
   [snippet]

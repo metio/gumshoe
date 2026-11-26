@@ -75,12 +75,14 @@
                                   {:metadata {:namespace "guarded" :name "b"}}
                                   {:metadata {:namespace "kube-system" :name "c"}}
                                   {:metadata {:namespace "fire-drill" :name "d"}}]}
-                  network/global-policy-type {:items []}})))))
+                  network/global-policy-type {:items []}
+                  network/calico-policy-type {:items []}})))))
   (testing "calico GlobalNetworkPolicies suppress the per-namespace findings"
     (let [findings (network/detect-unprotected-namespaces
                     {"networkpolicies" {:items []}
                      "pods" {:items [{:metadata {:namespace "exposed" :name "a"}}]}
-                     network/global-policy-type {:items [{:metadata {:name "deny-all"}}]}})]
+                     network/global-policy-type {:items [{:metadata {:name "deny-all"}}]}
+                     network/calico-policy-type {:items []}})]
       (is (= ["cluster"] (map :component findings)))
       (is (= #{"1 calico GlobalNetworkPolicies govern cluster traffic"}
              (summaries findings))))))

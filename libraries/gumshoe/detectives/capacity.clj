@@ -15,14 +15,22 @@
   [container resource]
   (or (quantity/quantity->number (get-in container [:resources :requests resource])) 0.0))
 
+(def ^:private pod-level-resources
+  "The resources a pod-level request may set, as component-helpers'
+   IsSupportedPodLevelResource names them for cpu and memory."
+  #{:cpu :memory})
+
 (defn- effective-request
   "What the scheduler charges a pod for one resource, as Kubernetes'
    PodRequests computes it: the app containers plus the restartable init
    containers (native sidecars), or the largest regular init container
    together with the sidecars started before it, whichever is more, plus the
-   pod's overhead."
+   pod's overhead. A pod-level request (spec.resources, PodLevelResources)
+   replaces the container aggregate for the resources that support it."
   [pod resource]
-  (let [[running peak]
+  (let [pod-level (when (pod-level-resources resource)
+                    (quantity/quantity->number (get-in pod [:spec :resources :requests resource])))
+        [running peak]
         (reduce (fn [[running peak sidecars] container]
                   (let [request (request-of container resource)]
                     (if (= "Always" (:restartPolicy container))
@@ -30,7 +38,7 @@
                       [running (max peak (+ sidecars request)) sidecars])))
                 [(reduce + 0.0 (map #(request-of % resource) (-> pod :spec :containers))) 0.0 0.0]
                 (-> pod :spec :initContainers))]
-    (+ (max running peak)
+    (+ (or pod-level (max running peak))
        (or (quantity/quantity->number (get-in pod [:spec :overhead resource])) 0.0))))
 
 (defn- pod-requests

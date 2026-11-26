@@ -521,6 +521,21 @@
   [context type]
   (get-json context type "--all-namespaces"))
 
+(defn get-all-optional
+  "Every object of a resource type the cluster may not serve, in every
+   namespace: the parsed list, an empty list when the server answered that it
+   has no such type, or nil when the read did not answer. A check over a type
+   only some clusters serve (a CRD) can then join the read, so a failed read
+   is unread while a cluster without the type answers that nothing exists."
+  [context type]
+  (try
+    (let [{:keys [ok? doc]} (binding [*strict-reads* true]
+                              (get-json-result context type "--all-namespaces"))]
+      (if ok? doc {:items []}))
+    (catch clojure.lang.ExceptionInfo e
+      (when-not (::unread (ex-data e))
+        (throw e)))))
+
 (defn read-all
   "{:doc <the parsed list>} of every object of type in every namespace, or
    {:unread <why>} when the read did not answer or the server has no such
