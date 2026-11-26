@@ -40,21 +40,155 @@
   (mapv :name (or (seq (-> stageset :status :stages))
                   (-> stageset :spec :stages))))
 
+(def held-phases
+  "The promotion phases in which the controller holds a stage at its gate:
+   soaking, analysing, blocked by an analysis, restart or event check, or
+   awaiting a manual promotion. A promote token addressed to a stage in one
+   of them is consumed on the next reconcile."
+  #{"Soaking" "Analyzing" "Blocked" "AwaitingManual"})
+
+(def hold-reasons
+  "The Ready reasons the controller writes while a promotion gate holds the
+   rollout: Soaking for a soak or an analysis in progress, PromotionBlocked
+   for a failed check, AwaitingPromotion for a manual gate."
+  #{"Soaking" "PromotionBlocked" "AwaitingPromotion"})
+
+(def ^:private direct-source-kinds
+  "The sourceRef kinds the controller reads as the artifact itself, so the
+   artifact's key in status.lastAttemptedRevisions is the reference's own
+   namespace/name. Any other kind names a producer, whose ExternalArtifact
+   carries a name of its own."
+  #{nil "" "ExternalArtifact" "GitRepository" "OCIRepository" "Bucket"})
+
+(defn- stage-spec
+  [stageset stage]
+  (first (filter #(= stage (:name %)) (-> stageset :spec :stages))))
+
+(defn- stage-status
+  [stageset stage]
+  (first (filter #(= stage (:name %)) (-> stageset :status :stages))))
+
+(defn current-revisions
+  "The revisions the stage's source pins in the run the controller is on now
+   (status.lastAttemptedRevisions): the one keyed by the source's
+   namespace/name for a direct source, every pinned revision for a producer,
+   whose artifact name the spec does not say. Empty when nothing is pinned."
+  [stageset stage]
+  (let [pinned (-> stageset :status :lastAttemptedRevisions)
+        ref (:sourceRef (stage-spec stageset stage))
+        key (keyword (str (or (not-empty (:namespace ref)) (kubectl/namespace-of stageset)) "/" (:name ref)))]
+    (set (if (contains? direct-source-kinds (:kind ref))
+           (keep identity [(get pinned key)])
+           (vals pinned)))))
+
+(defn hold
+  "Why stage of stageset is not held at its promotion gate at the revision
+   the controller is rolling out now, or nil when it is. Held means: the
+   controller has observed the StageSet's current generation, the StageSet is
+   not suspended, its Ready condition reports a promotion hold, the stage
+   declares a promotion gate, its promotionState.phase is one of held-phases,
+   and the revision it holds - its appliedRevision, or the abortedRevision a
+   rollback set aside - is one the current run pins. A token addressed to a
+   stage outside that state is not consumed now: the controller ignores it
+   for a stage Promoted at this revision and keeps it armed, so it would
+   promote the stage, skipping every gate, when the next revision reaches it."
+  [stageset stage]
+  (let [status (stage-status stageset stage)
+        state (:promotionState status)
+        phase (:phase state)
+        ready (conditions/condition stageset "Ready")
+        revisions (current-revisions stageset stage)
+        held-revision (some revisions [(:appliedRevision status) (not-empty (:abortedRevision state))])]
+    (cond
+      (true? (-> stageset :spec :suspend))
+      "the StageSet is suspended, so the controller would not act on the promotion"
+
+      (not= (-> stageset :metadata :generation) (-> stageset :status :observedGeneration))
+      "the controller has not observed the StageSet's current spec yet"
+
+      (nil? (:promotion (stage-spec stageset stage)))
+      (format "stage %s has no promotion gate" stage)
+
+      (not (contains? held-phases phase))
+      (format "stage %s is not held at its promotion gate (phase %s)" stage (or phase "none"))
+
+      (nil? held-revision)
+      (format "stage %s is held at a revision the rollout is no longer on (applied %s)"
+              stage (or (:appliedRevision status) "none"))
+
+      (not (and (= "False" (:status ready)) (contains? hold-reasons (:reason ready))))
+      (format "the StageSet's Ready condition reports no promotion hold (%s)" (or (:reason ready) "none"))
+
+      :else nil)))
+
+(defn held-stages
+  "The stages of stageset held at their promotion gate now (see hold), in
+   declared order."
+  [stageset]
+  (filterv #(nil? (hold stageset %)) (declared-stages stageset)))
+
 (defn promotion-refusal
   "Why `stage` of the StageSet named `target` must not be promoted, judged on
    the StageSet as read now; `requested` is the stage the flags named, when
    they named one: the StageSet no longer exists, declares no stages, no
-   stage was chosen (the flags named one it does not declare), or it no
-   longer declares the stage chosen."
+   stage was chosen (the flags named one it does not hold at a gate), it no
+   longer declares the stage chosen, or the stage is not held at its gate at
+   the current revision (hold)."
   [target stageset stage requested]
   (let [stages (declared-stages stageset)]
     (cond
       (nil? stageset) (format "StageSet %s no longer exists" target)
       (empty? stages) (format "StageSet %s declares no stages" target)
-      (and (nil? stage) requested) (format "StageSet %s declares no stage %s, only %s" target requested (str/join ", " stages))
-      (nil? stage) "no stage was chosen"
+      (and (nil? stage) requested (not (some #{requested} stages)))
+      (format "StageSet %s declares no stage %s, only %s" target requested (str/join ", " stages))
+      (and (nil? stage) requested) (format "StageSet %s: %s" target (hold stageset requested))
+      (nil? stage) (format "no stage of StageSet %s is held at its promotion gate" target)
       (not (some #{stage} stages)) (format "StageSet %s no longer declares stage %s" target stage)
+      (hold stageset stage) (format "StageSet %s: %s" target (hold stageset stage))
       :else nil)))
+
+(defn armed-promotion
+  "The stage the StageSet's promote annotation addresses, when it carries
+   one, else nil."
+  [stageset]
+  (some->> (get-in stageset [:metadata :annotations promote-annotation])
+           (re-matches #"([^@]+)@(.+)")
+           second))
+
+(defn disarm-command
+  "The kubectl command that removes the promote annotation of the StageSet
+   namespace/name, as an operator types it."
+  [context namespace name]
+  (format "kubectl --context=%s --namespace=%s annotate %s %s %s-"
+          context namespace stageset-type name (subs (str promote-annotation) 1)))
+
+(defn promotion-recovery
+  "The guidance printed when a promotion failed: whether the promote
+   annotation is still armed, as read now, and the command that removes it.
+   An armed token the stage never consumed promotes it, skipping every gate,
+   whenever the controller next holds it there, so it is named rather than
+   left behind silently. stageset is nil when the read did not answer."
+  [context target stageset stage]
+  (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
+        command (disarm-command context namespace name)
+        armed (armed-promotion stageset)]
+    (cond
+      (nil? stageset)
+      (str (format "StageSet %s could not be read, so whether its promote annotation is still armed is unknown." target)
+           "\nAn armed annotation promotes the stage it names, skipping every gate, when the controller next holds it at its gate."
+           "\nCheck it, and remove it unless the promotion should still happen:\n  " command)
+
+      (= stage armed)
+      (str (format "The promote annotation of StageSet %s is STILL ARMED for stage %s: the controller has not consumed it." target stage)
+           "\nWhile it stays, the controller promotes the stage, skipping soak, analysis and manual gates, the next time it holds it there - also for a later revision nobody reviewed."
+           "\nRemove it unless the promotion should still happen:\n  " command)
+
+      armed
+      (format "The promote annotation of StageSet %s names stage %s, not %s. Remove it unless that promotion should happen:\n  %s"
+              target armed stage command)
+
+      :else
+      (format "StageSet %s carries no promote annotation, so nothing is left armed." target))))
 
 (defn promotion-handled?
   "Whether the stage acted on the promotion the StageSet's promote annotation

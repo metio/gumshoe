@@ -1124,7 +1124,7 @@
 
 (defn- forward-and-run
   "with-port-forward once local-port passed its checks."
-  [context namespace service local-port remote-port f]
+  [context namespace resource local-port remote-port f]
   (let [forward (try
                   ;; babashka.process takes the options first and the
                   ;; command as separate strings; a vector after the
@@ -1135,7 +1135,7 @@
                   (shell/track-child!
                    (apply process/process {:out :stream :err :inherit}
                           ["kubectl" (str "--context=" context) (str "--namespace=" namespace)
-                           "port-forward" (str "service/" service)
+                           "port-forward" resource
                            (str local-port ":" remote-port)]))
                   (catch Exception e
                     (stdout/error (format "could not start kubectl port-forward: %s" (ex-message e)))
@@ -1149,21 +1149,21 @@
           (loop []
             (cond
               (not (process/alive? forward))
-              (do (stdout/error (format "kubectl port-forward to service/%s exited before the port opened" service))
+              (do (stdout/error (format "kubectl port-forward to %s exited before the port opened" resource))
                   false)
 
               (and (= :bound (deref bound 0 nil)) (port-open? local-port) (process/alive? forward))
               (let [result (binding [*port-forward* forward] (f))]
                 (if (process/alive? forward)
                   result
-                  (do (stdout/error (format (str "kubectl port-forward to service/%s exited while it was in use;"
+                  (do (stdout/error (format (str "kubectl port-forward to %s exited while it was in use;"
                                                  " what went through local port %d afterwards may have reached another program")
-                                            service local-port))
+                                            resource local-port))
                       false)))
 
               (> (System/currentTimeMillis) deadline)
-              (do (stdout/error (format "port-forward to service/%s did not report 127.0.0.1:%d bound within %d seconds"
-                                        service local-port (quot *forward-start-ms* 1000)))
+              (do (stdout/error (format "port-forward to %s did not report 127.0.0.1:%d bound within %d seconds"
+                                        resource local-port (quot *forward-start-ms* 1000)))
                   false)
 
               :else (do (Thread/sleep 100)
@@ -1180,19 +1180,23 @@
    starts only once kubectl itself reported 127.0.0.1:local-port bound and is
    still running, and a forward that exited while f ran turns f's result into
    a failure, since its port may by then belong to another program. A step
-   inside f that talks to the port repeatedly checks port-forward-alive?."
-  [{:keys [context namespace service local-port remote-port]} f]
-  (cond
-    (nil? remote-port)
-    (do (stdout/error (format "service/%s has no resolvable port to forward" service)) false)
+   inside f that talks to the port repeatedly checks port-forward-alive?.
 
-    (nil? local-port)
-    (do (stdout/error "no local port to forward to - pass one with --port") false)
+   The forward goes to :service, through whichever pod kubectl picks behind
+   it, or to the one :pod when that is given."
+  [{:keys [context namespace service pod local-port remote-port]} f]
+  (let [resource (if pod (str "pod/" pod) (str "service/" service))]
+    (cond
+      (nil? remote-port)
+      (do (stdout/error (format "%s has no resolvable port to forward" resource)) false)
 
-    :else
-    (if-let [problem (local-port-problem local-port)]
-      (do (stdout/error problem) false)
-      (forward-and-run context namespace service local-port remote-port f))))
+      (nil? local-port)
+      (do (stdout/error "no local port to forward to - pass one with --port") false)
+
+      :else
+      (if-let [problem (local-port-problem local-port)]
+        (do (stdout/error problem) false)
+        (forward-and-run context namespace resource local-port remote-port f)))))
 
 (defn unused-pvc-candidates
   "Namespace/name of every PersistentVolumeClaim no pod refers to. Throws

@@ -316,7 +316,9 @@ and current list.
    only one that promises its post-checks held (with `; skipped as already
    done: …` naming the steps it found done), `DONE - applied, NOT confirmed
    (best effort): <check>` exits 0 but names a `:soft?` post-check that ran
-   out its time without holding, so confirm that by hand, `DONE - already done, nothing
+   out its time without holding, or an outcome nothing records (cnpg
+   `reload`: CloudNativePG writes nothing when it acts on one), so confirm
+   that by hand, `DONE - already done, nothing
    was changed - skipped: …` changed nothing because every change was
    already done, and the run's `recordings/…/meta.edn` lists those steps
    under `:skipped`; `DONE - applied; this book has
@@ -484,7 +486,11 @@ mostly data:
   at its timeout instead of holding on the nil a failed read returns, while
   a `NotFound` answer still reads nil and confirms a deletion. A `:soft?`
   check still turns that timeout into a warning, and the run's banner then
-  says the change was not confirmed instead of verified. Reads over SSH, among them
+  says the change was not confirmed instead of verified. An outcome the
+  system records nowhere is declared with `(verify/unobservable "<what>"
+  "<why>")` beside the checks that can be observed: a `:soft?` check that
+  never holds, so the banner says NOT confirmed instead of a check passing
+  on the change's own write. Reads over SSH, among them
   every `gumshoe.ceph` read, ignore the binding, so a check built on them
   still has to tell a failed read from an empty one itself
   (`ceph/ceph-json-result` returns `{:ok? :doc}` for that, and

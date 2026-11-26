@@ -55,6 +55,7 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.playbook :as playbook]
             [gumshoe.select :as select]
+            [gumshoe.shell :as shell]
             [gumshoe.steps.flux :as flux-steps]
             [gumshoe.steps.objects :as objects]
             [gumshoe.stdout :as stdout]
@@ -92,6 +93,25 @@
            {:kind kind :type (owner-types kind)
             :namespace (kubectl/namespace-of object) :name (kubectl/name-of object)
             :object object}))))
+
+(defn can-patch-owner?
+  "Whether the current user may patch the owner {:type :namespace :name}
+   itself, as kubectl auth can-i answers for that one object. Any answer but
+   yes, an unreachable API server included, is no."
+  [context {:keys [type namespace name]}]
+  (zero? (shell/exit-code-of "kubectl" (str "--context=" context) "auth" "can-i" "patch"
+                             (str type "/" name) (str "--namespace=" namespace) "--quiet")))
+
+(defn owner-patch-refusal
+  "Why the owner {:kind :type :namespace :name} cannot be suspended or
+   resumed by this user, judged by `can-patch?` (owner -> boolean), or nil.
+   The owner is a Kustomization or a ResourceSet, so a prerequisite fixed to
+   one kind would check the wrong rights for the other; this asks for the
+   object found. No owner needs no rights."
+  [can-patch? {:keys [kind namespace name] :as owner}]
+  (when (and owner (not (can-patch? owner)))
+    (format "you may not patch %s %s/%s, or it could not be confirmed (kubectl auth can-i patch %s/%s --namespace=%s) - it could be neither suspended nor resumed"
+            kind namespace name (:type owner) name namespace)))
 
 (defn owner-interval-seconds
   "How often the owner reconciles: a Kustomization's spec.interval, a
@@ -445,7 +465,10 @@
      [nil
       (change
        {:title "⏸  Suspend the owner (Kustomization or ResourceSet) that renders the HelmRelease"
-        :prerequisites {:kubectl-can-patch [flux/kustomization-type]}
+        ;; the rights are checked on the owner found, whose kind varies
+        :prerequisites {}
+        :refusal (fn [{:keys [context observed]}]
+                   (owner-patch-refusal #(can-patch-owner? context %) (:owner observed)))
         :confirm {:action "suspend the owner that renders the HelmRelease" :destructive? false}
         :precondition (fn [{:keys [observed]}] (readable? observed))
         :items (unless-unread
@@ -528,7 +551,9 @@
      [:after-resume
       (change
        {:title "▶  Resume the owner (Kustomization or ResourceSet)"
-        :prerequisites {:kubectl-can-patch [flux/kustomization-type]}
+        :prerequisites {}
+        :refusal (fn [{:keys [context observed]}]
+                   (owner-patch-refusal #(can-patch-owner? context %) (:known-owner observed)))
         :confirm {:action "resume the owner that renders the HelmRelease" :destructive? false}
         :precondition (fn [{:keys [observed]}] (or (some? (:known-owner observed)) (readable? observed)))
         :items (fn [{:keys [observed]}]

@@ -121,7 +121,19 @@
                   (= (count mine) (-> cluster :spec :instances))
                   (every? #(= stamp (annotation % restart-annotation)) mine)))))
 
+(def reload-unobservable
+  "What a reload asks of the operator and why it cannot be observed:
+   CloudNativePG reads the cnpg.io/reloadedAt annotation nowhere. Writing it
+   changes the Cluster, which only queues a reconcile, and a reconcile that
+   finds nothing to roll out writes no status, condition or pod change of
+   its own, so nothing tells a handled request from an ignored one."
+  ["the operator reconciled %s after the reload request"
+   "CloudNativePG records nothing when it acts on a reload request: the annotation only queues a reconcile, which writes nothing when no configuration changed - check the operator's log if in doubt"])
+
 (defn reloaded?
+  "Whether the reload annotation carries this run's stamp and the cluster is
+   healthy. The stamp is the run's own write, so this says the request
+   landed on a healthy cluster, not that the operator acted on it."
   [cluster stamp]
   (boolean (and (= stamp (annotation cluster reload-annotation)) (healthy? cluster))))
 

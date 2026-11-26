@@ -211,9 +211,7 @@
      "daemonsets"
      "jobs"
      "cronjobs"],
-    :kubectl-can-patch
-    ["kustomizations.kustomize.toolkit.fluxcd.io"
-     "helmreleases.helm.toolkit.fluxcd.io"],
+    :kubectl-can-patch ["helmreleases.helm.toolkit.fluxcd.io"],
     :kubectl-can-delete
     ["deployments"
      "statefulsets"
@@ -250,7 +248,7 @@
     "Needs:"
     "  tools: kubectl, fzf"
     "  kubectl get: helmreleases.helm.toolkit.fluxcd.io, kustomizations.kustomize.toolkit.fluxcd.io, persistentvolumeclaims, deployments, statefulsets, daemonsets, jobs, cronjobs"
-    "  kubectl patch: kustomizations.kustomize.toolkit.fluxcd.io, helmreleases.helm.toolkit.fluxcd.io"
+    "  kubectl patch: helmreleases.helm.toolkit.fluxcd.io"
     "  kubectl delete: deployments, statefulsets, daemonsets, jobs, cronjobs, persistentvolumeclaims, databases.kinda.rocks, secrets"
     "  cluster capabilities: flux"]}},
  "playbooks/kubernetes/node_maintenance.clj"
@@ -1591,9 +1589,7 @@
      "daemonsets"
      "jobs"
      "cronjobs"],
-    :kubectl-can-patch
-    ["kustomizations.kustomize.toolkit.fluxcd.io"
-     "helmreleases.helm.toolkit.fluxcd.io"],
+    :kubectl-can-patch ["helmreleases.helm.toolkit.fluxcd.io"],
     :kubectl-can-delete
     ["deployments"
      "statefulsets"
@@ -1627,7 +1623,7 @@
     "Needs:"
     "  tools: kubectl, fzf"
     "  kubectl get: helmreleases.helm.toolkit.fluxcd.io, kustomizations.kustomize.toolkit.fluxcd.io, persistentvolumeclaims, deployments, statefulsets, daemonsets, jobs, cronjobs"
-    "  kubectl patch: kustomizations.kustomize.toolkit.fluxcd.io, helmreleases.helm.toolkit.fluxcd.io"
+    "  kubectl patch: helmreleases.helm.toolkit.fluxcd.io"
     "  kubectl delete: deployments, statefulsets, daemonsets, jobs, cronjobs, persistentvolumeclaims, secrets"
     "  cluster capabilities: flux"]},
   :two-owners

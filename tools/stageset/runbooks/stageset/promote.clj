@@ -2,8 +2,14 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns runbooks.stageset.promote
-  "Manually promotes a StageSet stage that is held on a manual gate
-   (AwaitingPromotion), via stagesetctl."
+  "Manually promotes a StageSet stage that is held at its promotion gate at
+   the revision being rolled out (soaking, analysing, blocked or awaiting a
+   manual promotion), via stagesetctl. Only such a stage is offered or
+   accepted: a promote token addressed to any other stage is not consumed
+   and stays armed, promoting the stage past every gate whenever the
+   controller next holds it there. When the post-check fails, the guidance
+   says whether the token is still armed and how to remove it; the book
+   does not remove it itself."
   (:require [gumshoe.effect :as effect]
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
@@ -29,12 +35,12 @@
                   :kubectl-can-get [stageset/stageset-type]}
   :select selection
   :subject {:type stageset/stageset-type}
-  ;; a held stage is picked by name among those the StageSet declares
+  ;; a stage is picked by name among those held at their gate now
   :values {:stage (fn [{:keys [object opts]}]
-                    (interact/choose-one "Stage" (stageset/declared-stages object) (:stage opts)))}
+                    (interact/choose-one "Stage held at its gate" (stageset/held-stages object) (:stage opts)))}
   :refusal (fn [{:keys [target object stage opts]}]
              (stageset/promotion-refusal target object stage (:stage opts)))
-  :confirm {:action "promote a StageSet stage" :destructive? false}
+  :confirm {:action "promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate" :destructive? false}
   :announce (fn [{:keys [target stage]}] (format "Promote stage %s of StageSet %s" stage target))
   :effect (fn [{:keys [ref stage]}]
             (if stage
@@ -48,4 +54,10 @@
                 :timeout 300 :interval 5
                 :check #(stageset/promotion-handled?
                          (kubectl/get-namespaced-resource context namespace stageset/stageset-type name)
-                         stage)}]))})
+                         stage)}]))
+  :recovery (fn [{:keys [context target stage]}]
+              (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
+                (stageset/promotion-recovery
+                 context target
+                 (kubectl/get-namespaced-resource context namespace stageset/stageset-type name)
+                 stage)))})

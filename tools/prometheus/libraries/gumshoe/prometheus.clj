@@ -5,6 +5,7 @@
   "Prometheus-operator specifics for storage resizes; the generic planning
    and validation lives in gumshoe.storage."
   (:require [clojure.string :as str]
+            [gumshoe.conditions :as conditions]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.storage :as storage]))
@@ -46,12 +47,16 @@
 
 (defn resize-plan
   "One entry per prometheus pod: which PVC changes from what to what, and
-   whether its storage class allows it."
+   whether its storage class allows it. A pod mounts a claim of its own
+   namespace, so the claim is matched by namespace and name: two Prometheus
+   of one name in different namespaces have claims of the same name."
   [{:keys [pods volume-name pvcs storage-classes capacity]}]
   (vec
    (for [pod (sort-by kubectl/name-of (kubectl/items-of pods))
          :let [pvc-name (pvc-of-pod pod volume-name)
-               pvc (first (filter #(= pvc-name (kubectl/name-of %)) (kubectl/items-of pvcs)))
+               pvc (first (filter #(and (= pvc-name (kubectl/name-of %))
+                                        (= (kubectl/namespace-of pod) (kubectl/namespace-of %)))
+                                  (kubectl/items-of pvcs)))
                class-name (-> pvc :spec :storageClassName)
                class (first (filter #(= class-name (kubectl/name-of %)) (kubectl/items-of storage-classes)))]
          :when pvc-name]
@@ -74,6 +79,89 @@
   [context namespace name]
   {:items (filter #(= namespace (kubectl/namespace-of %))
                   (kubectl/items-of (kubectl/get-selected context "pods" (pods-selector name))))})
+
+(defn selected-by?
+  "Whether service selects pod: the pod carries every label of the service's
+   selector. A service without a selector selects nothing."
+  [service pod]
+  (let [selector (-> service :spec :selector)
+        labels (-> pod :metadata :labels)]
+    (boolean (and (seq selector)
+                  (every? (fn [[k v]] (= v (get labels k))) selector)))))
+
+(defn pod-api-port
+  "The container port of pod that the service's port named port-name
+   forwards to: its targetPort when that is a number, the pod's container
+   port of that name when it is a name, and the service port itself when it
+   sets none. nil when it cannot be resolved."
+  [service port-name pod]
+  (when-let [port (first (filter #(= port-name (:name %)) (-> service :spec :ports)))]
+    (let [target (:targetPort port)]
+      (cond
+        (nil? target) (:port port)
+        (integer? target) target
+        (re-matches #"\d+" (str target)) (parse-long (str target))
+        :else (->> (-> pod :spec :containers)
+                   (mapcat :ports)
+                   (filter #(= target (:name %)))
+                   first
+                   :containerPort)))))
+
+(defn delete-targets
+  "The pods a metric deletion must reach for the Prometheus named prometheus
+   behind service, each with the port its API listens on, as
+   {:targets [{:pod <name> :port <port>}]}, or {:refusal <why>}. pods are
+   the Prometheus' own pods, read by its pod selector; only those carrying
+   its instance label (`instance`, the Prometheus' name) that the service
+   selects count, so a pod of another Prometheus is never among them. Every replica and every shard holds its own TSDB, so
+   deleting from fewer than all of them leaves the metric queryable, and a
+   pod that is not ready, or whose port cannot be resolved, refuses the
+   whole deletion rather than skip it."
+  [{:keys [service port-name prometheus instance pods]}]
+  (let [mine (sort-by kubectl/name-of (filter #(and (selected-by? service %)
+                                                    (= instance (get-in % [:metadata :labels :app.kubernetes.io/instance])))
+                                              (kubectl/items-of pods)))
+        unready (remove #(and (= "Running" (-> % :status :phase)) (conditions/ready? %)) mine)
+        targets (mapv (fn [pod] {:pod (kubectl/name-of pod) :port (pod-api-port service port-name pod)}) mine)]
+    (cond
+      (nil? pods)
+      {:refusal (format "could not read the pods of Prometheus %s" prometheus)}
+
+      (empty? mine)
+      {:refusal (format "service %s selects no pod of Prometheus %s" (kubectl/name-of service) prometheus)}
+
+      (seq unready)
+      {:refusal (format "pod(s) %s of Prometheus %s are not ready, so the metric could not be deleted from every replica"
+                        (str/join ", " (map kubectl/name-of unready)) prometheus)}
+
+      (some (comp nil? :port) targets)
+      {:refusal (format "the port '%s' of service %s cannot be resolved on pod(s) %s - check --port-name"
+                        port-name (kubectl/name-of service)
+                        (str/join ", " (map :pod (filter (comp nil? :port) targets))))}
+
+      :else {:targets targets})))
+
+(defn delete-on-every-pod!
+  "Deletes from every target in turn and reports each: `on-pod!` is
+   (fn [target record!] -> truthy) and runs the deletion and its post-check
+   on one pod, calling (record! k v) as each is known: :deleted? when the
+   pod accepted the deletion, :verified? with the post-check's verdict (a
+   best-effort check that ran out its time counts, as verify/all counts it)
+   and :confirmed? when the pod answered that no series is left. A pod whose
+   forward fails part-way so still reports what it did, and an on-pod! that
+   returns falsy is not verified whatever it recorded. Returns
+   {:results [{:pod :deleted? :verified? :confirmed?}] :ok? <every pod
+   deleted and verified>}. Each pod is tried even after one fails: the
+   operator confirmed the deletion on all of them, and the report names
+   which ones kept the metric."
+  [targets on-pod!]
+  (let [results (mapv (fn [{:keys [pod] :as target}]
+                        (let [seen (atom {:pod pod :deleted? false :verified? false :confirmed? false})
+                              finished (on-pod! target (fn [k v] (swap! seen assoc k v)))]
+                          (cond-> @seen (not finished) (assoc :verified? false))))
+                      targets)]
+    {:results results
+     :ok? (boolean (and (seq results) (every? #(and (:deleted? %) (:verified? %)) results)))}))
 
 (defn statefulset-selector
   "The label selector of the StatefulSets prometheus-operator runs for the

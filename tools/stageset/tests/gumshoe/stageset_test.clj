@@ -176,7 +176,12 @@
   (is (= [] (stageset/declared-stages nil))))
 
 (deftest a-promotion-is-refused-unless-the-stageset-declares-the-stage
-  (let [site (with-stages ["dev" "prod"] nil)]
+  (let [site (-> (with-stages ["dev" "prod"] nil)
+                 (assoc-in [:spec :stages 1 :promotion] {:requireManualPromotion true})
+                 (assoc-in [:spec :stages 1 :sourceRef] {:name "site"})
+                 (assoc :status {:conditions [{:type "Ready" :status "False" :reason "AwaitingPromotion"}]
+                                 :lastAttemptedRevisions {:apps/site "r2"}
+                                 :stages [{:name "dev"} {:name "prod" :appliedRevision "r2" :promotionState {:phase "AwaitingManual"}}]}))]
     (is (nil? (stageset/promotion-refusal "apps/site" site "prod" "prod")))
     (is (nil? (stageset/promotion-refusal "apps/site" site "prod" nil)) "a stage picked interactively")
     (is (= "StageSet apps/site no longer exists" (stageset/promotion-refusal "apps/site" nil "prod" "prod")))
@@ -184,7 +189,7 @@
            (stageset/promotion-refusal "apps/site" (with-stages [] nil) nil "prod")))
     (is (= "StageSet apps/site declares no stage qa, only dev, prod"
            (stageset/promotion-refusal "apps/site" site nil "qa")))
-    (is (= "no stage was chosen" (stageset/promotion-refusal "apps/site" site nil nil)))
+    (is (= "no stage of StageSet apps/site is held at its promotion gate" (stageset/promotion-refusal "apps/site" site nil nil)))
     (is (= "StageSet apps/site no longer declares stage qa"
            (stageset/promotion-refusal "apps/site" site "qa" nil)))))
 

@@ -9,6 +9,7 @@
   (:require [clojure.string :as str]
             [gumshoe.cnpg-console :as console]
             [gumshoe.cnpg.instances :as inst]
+            [gumshoe.cnpg.operations :as operations]
             [gumshoe.command :as command]
             [gumshoe.detectives.cnpg :as cnpg]
             [gumshoe.effect :as effect]
@@ -87,6 +88,14 @@
                         instance))
    (effect/kubectl-plugin context "cnpg" "promote" (str "--namespace=" namespace) cluster instance)))
 
+(defn promote-refusal
+  "Why --promote must not run for instance of the cluster object read as
+   cluster, among the instance pods instances, or nil."
+  [cluster instances instance]
+  (if-not (some #{instance} instances)
+    (format "%s is not an instance of %s" instance (kubectl/namespace-name-of cluster))
+    (operations/console-promote-refusal cluster instance)))
+
 (defn- promote!
   [context namespace cluster instance proposal]
   (if-not (command/installed? "kubectl-cnpg")
@@ -95,7 +104,14 @@
                              namespace cluster instance))
         false)
     (flow/change!
-     {:confirmation {:action "promote a Postgres instance to primary"
+     {:precondition (fn []
+                      ;; read again after the confirmation: a switchover or
+                      ;; fence that began meanwhile refuses the promotion
+                      (let [live (kubectl/get-namespaced-resource context namespace cnpg/cluster-type cluster)]
+                        (if-let [why (operations/console-promote-refusal live instance)]
+                          (do (stdout/error (format "refusing to promote %s - %s" instance why)) false)
+                          true)))
+      :confirmation {:action "promote a Postgres instance to primary"
                      :target (format "%s/%s" namespace cluster)
                      :items (into [(format "promote %s" instance)]
                                   (console/proposal-lines proposal))
@@ -150,8 +166,8 @@
             (stdout/print-section "Promotion proposal")
             (doseq [line (console/proposal-lines proposal)] (stdout/warn line))
             (if-let [instance (:promote opts)]
-              (if-not (some #{instance} instances)
-                (do (stdout/error (format "%s is not an instance of %s" instance chosen)) false)
+              (if-let [why (promote-refusal cluster instances instance)]
+                (do (stdout/error (format "refusing to promote %s - %s" instance why)) false)
                 (promote! context namespace name instance proposal))
               (do (stdout/ok "read-only run - nothing was changed")
                   true))))))))

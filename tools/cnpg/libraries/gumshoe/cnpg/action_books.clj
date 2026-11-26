@@ -13,7 +13,8 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
             [gumshoe.select :as select]
-            [gumshoe.toggle :as toggle]))
+            [gumshoe.toggle :as toggle]
+            [gumshoe.verify :as verify]))
 
 (defn- cluster-picks
   [context refusal]
@@ -40,8 +41,11 @@
 
 (defn- cluster-annotation-book
   "A book that writes one annotation on a Cluster: the shape restart, reload
-   and hibernation share."
-  [{:keys [verb empty-message confirm refusal items arg verify-description verify-timeout applied? pods? stamp?]}]
+   and hibernation share. :unobservable, when given, is [description why]
+   of what the operator does with the annotation but records nowhere; it
+   becomes a verify/unobservable check after the observable one, so the
+   banner says it is NOT confirmed."
+  [{:keys [verb empty-message confirm refusal items arg verify-description verify-timeout applied? pods? stamp? unobservable]}]
   {:options cluster-option
    :prerequisites (prerequisites cnpg/cluster-type :list-pods? pods?)
    :select (assoc cluster-select :candidates (fn [context] (cluster-picks context refusal)))
@@ -56,11 +60,13 @@
              (effect/plan (effect/kubectl context (str "--namespace=" (:namespace ref)) "annotate" cnpg/cluster-type
                                           (:name ref) "--overwrite" (arg stamp))))
    :verify (fn [{:keys [context ref target stamp] :as ctx}]
-             [{:description (format verify-description target)
-               :timeout verify-timeout :interval 10
-               :check (fn [] (applied? (mutation/read-subject ctx)
-                                       (when pods? (kubectl/get-namespaced context (:namespace ref) "pods"))
-                                       stamp))}])})
+             (cond-> [{:description (format verify-description target)
+                       :timeout verify-timeout :interval 10
+                       :check (fn [] (applied? (mutation/read-subject ctx)
+                                               (when pods? (kubectl/get-namespaced context (:namespace ref) "pods"))
+                                               stamp))}]
+               unobservable (conj (let [[description why] unobservable]
+                                    (verify/unobservable (format description target) why)))))})
 
 (def restart
   (cluster-annotation-book
@@ -84,9 +90,10 @@
     :items actions/reload-items
     :arg #(actions/stamp-arg actions/reload-annotation %)
     :stamp? true
-    :verify-description "%s took the reload and is healthy"
+    :verify-description "the reload request on %s carries this run's stamp and the cluster is healthy"
     :verify-timeout 600
-    :applied? (fn [cluster _ stamp] (actions/reloaded? cluster stamp))}))
+    :applied? (fn [cluster _ stamp] (actions/reloaded? cluster stamp))
+    :unobservable actions/reload-unobservable}))
 
 (defn hibernation
   [wanted]

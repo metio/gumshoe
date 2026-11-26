@@ -185,6 +185,9 @@
     (cond
       (not answering?) unanswered
       (some #{"get"} argv) (read-answer @cluster argv)
+      ;; kubectl auth can-i asks for rights and writes nothing: yes, unless
+      ;; the scenario's :denied matches
+      (some #{"auth"} argv) {:exit (if (some-> (:denied @cluster) (apply [argv])) 1 0) :out "" :err ""}
       :else {:exit (write! cluster argv) :out "" :err ""})))
 
 ;; --- running a playbook --------------------------------------------------------------
@@ -211,12 +214,14 @@
 (defn transcript
   "What the playbook does in one scenario: argv its command line, parsed by
    the options the book declares, :objects the cluster, :answers what the
-   operator answers to each confirmation in turn (yes when they run out)."
-  [spec {:keys [objects argv answers attended? answering? frozen? fail react dry-run?]
+   operator answers to each confirmation in turn (yes when they run out),
+   :denied a predicate over the argv of a kubectl auth can-i it answers no."
+  [spec {:keys [objects argv answers attended? answering? frozen? fail react dry-run? denied]
          :or {answering? true}}]
   (let [{:keys [options action]} (book-config spec)
         opts (cli/parse-opts argv {:spec options})
-        cluster (atom {:objects objects :answering? answering? :frozen? frozen? :fail fail :react react :writes []})
+        cluster (atom {:objects objects :answering? answering? :frozen? frozen? :fail fail :react react :writes []
+                       :denied denied})
         asked (atom [])
         answers (atom answers)
         waited (atom [])
