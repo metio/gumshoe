@@ -9,6 +9,7 @@
    running system is confirmed by the user before it happens."
   (:require [clojure.string :as str]
             [gumshoe.command :as command]
+            [gumshoe.config :as config]
             [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.shell :as shell]
             [gumshoe.outcome :as outcome]
@@ -144,6 +145,130 @@
   []
   (zero? (shell/run-with-output "gum" "confirm" "--default=false" "Proceed?")))
 
+;; --- the destructive picker, an estate opt-in -------------------------------
+
+(def destructive-setting
+  "Where env.edn opts an estate in to the picker for destructive actions:
+   top-level `:confirmations {:destructive :picker}`. Read with config/value,
+   never per environment and never from the request, so neither a book nor the
+   cluster a run points at can change how a destructive action is confirmed."
+  [:confirmations :destructive])
+
+(defn destructive-mode
+  "Pure: how a destructive action is confirmed for an env.edn setting - :picker
+   only for exactly the keyword :picker, :typed for anything else, an absent,
+   misspelt or mistyped value included, so a mistake keeps the typed word."
+  [setting]
+  (if (= :picker setting) :picker :typed))
+
+(def ^:private label-limit
+  "The longest action a consequence label quotes before it is cut short; the
+   whole action is printed in the confirmation summary above the picker."
+  72)
+
+(defn printable
+  "Pure: s with every terminal escape sequence removed and every other control,
+   format (bidirectional overrides, zero-width characters) and line or paragraph
+   separator character turned into a space, runs of whitespace collapsed and the
+   ends trimmed. A label drawn from a book's text can then neither move the
+   cursor, recolour nor reorder what the operator reads next to it."
+  [s]
+  (-> (str s)
+      (str/replace #"\u001b\[[0-?]*[ -/]*[@-~]" "")
+      (str/replace #"\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?" "")
+      (str/replace #"[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]" " ")
+      (str/replace #"\s+" " ")
+      str/trim))
+
+(defn consequence-label
+  "Pure: the affirmative option of a destructive picker, naming what approving
+   does - \"Yes, <action>\", with \" (N items)\" when the request lists more
+   than one item - or nil when the request names no action, which leaves the
+   picker nothing to name. Control characters are stripped (see printable) and
+   a long action is cut short with an ellipsis."
+  [{:keys [action items]}]
+  (let [action (printable action)
+        n (count items)]
+    (when-not (str/blank? action)
+      (str "Yes, "
+           (if (> (count action) label-limit)
+             (str (str/trimr (subs action 0 (dec label-limit))) "…")
+             action)
+           (when (> n 1) (format " (%d items)" n))))))
+
+(defn- fd-target
+  [fd]
+  (try
+    (str (java.nio.file.Files/readSymbolicLink
+          (.toPath (java.io.File. (str "/proc/self/fd/" fd)))))
+    (catch Exception _ nil)))
+
+(defn terminal-device?
+  "Pure: whether a file descriptor's /proc target is a terminal device.
+   /dev/null and other devices, pipes, sockets and files are not."
+  [target]
+  (boolean (some #(str/starts-with? (str target) %) ["/dev/pts/" "/dev/tty" "/dev/console"])))
+
+(defn- attended?
+  "Whether the operator answers at a terminal: stdin and stderr, where a
+   picker reads keys and draws itself, are both terminal devices. /dev/null
+   and pipes are not. Where /proc does not say, only a console counts."
+  []
+  (let [in (fd-target 0) err (fd-target 2)]
+    (if (and in err)
+      (and (terminal-device? in) (terminal-device? err))
+      (some? (System/console)))))
+
+(defn- confirm-options
+  "The options map a backend declaring :confirm-options? receives."
+  [destructive? affirmative]
+  {:prompt "Proceed?"
+   :affirmative affirmative
+   :negative "No"
+   :default false
+   :destructive? destructive?})
+
+(defn- gum-destructive-yes?
+  "gum's picker for a destructive action: No selected, the affirmative option
+   naming the consequence, and no timeout, so an inherited GUM_CONFIRM_TIMEOUT
+   can never answer for the operator."
+  [affirmative]
+  (zero? (shell/run-with-output "gum" "confirm" "--default=false" "--timeout=0s"
+                                (str "--affirmative=" affirmative) "--negative=No"
+                                "Proceed?")))
+
+(defn- destructive-approved?
+  "Asks for a destructive action. The typed word is the default and the
+   fallback; the picker is used only when the estate opted in, the request
+   names a consequence, the operator is at a terminal and a picker can honour
+   a default of No: a backend declaring :confirm-options?, or gum when no
+   backend overrides :confirm. A backend that does not declare it may ignore
+   the default, so it gets the typed word, as does every other case."
+  [request]
+  (let [label (consequence-label request)
+        backend (ui/backend :confirm)]
+    (cond
+      (not= :picker (destructive-mode (config/value destructive-setting))) (typed-yes?)
+      (nil? label) (typed-yes?)
+      (not (attended?)) (typed-yes?)
+      backend (if (true? (ui/backend :confirm-options?))
+                (true? (backend (confirm-options true label)))
+                (typed-yes?))
+      (command/installed? "gum") (gum-destructive-yes? label)
+      :else (typed-yes?))))
+
+(defn- change-approved?
+  "Asks for a change that is not destructive: the backend's yes/no, gum's, or
+   the typed word."
+  []
+  (if-let [backend (ui/backend :confirm)]
+    (if (true? (ui/backend :confirm-options?))
+      (true? (backend (confirm-options false "Yes")))
+      (backend))
+    (if (command/installed? "gum")
+      (gum-yes?)
+      (typed-yes?))))
+
 (defn rehearsing?
   "Whether this run is a --dry-run. The harness binds gumshoe.flow/*dry-run*,
    and flow requires this namespace, so the var is looked up at call time; a
@@ -169,13 +294,13 @@
     (stdout/print-banner stdout/red "💥 DESTRUCTIVE ACTION - this cannot be undone automatically")
     (stdout/banner :finding "You are about to change a running system"))
   (stdout/err-println (confirmation-message request))
-  ;; destructive actions always require the literal word 'yes', whatever the UI
-  ;; backend - the deliberate friction is the point, not a widget's convenience
-  (let [approved (cond
-                   destructive? (typed-yes?)
-                   (ui/backend :confirm) ((ui/backend :confirm))
-                   (command/installed? "gum") (gum-yes?)
-                   :else (typed-yes?))]
+  ;; A destructive action asks for the typed word 'yes' unless env.edn opts the
+  ;; estate in to the picker, and even then only where a picker can start on No
+  ;; and name the consequence on its affirmative option; everywhere else the
+  ;; typed word stays. Other changes take the backend's or gum's yes/no.
+  (let [approved (if destructive?
+                   (destructive-approved? request)
+                   (change-approved?))]
     (record-only! (str "confirm: " (:action request)) (if approved "approved" "aborted"))
     (or approved
         (do (outcome/aborted! "declined at the confirmation")
@@ -184,9 +309,12 @@
 
 (defn confirm!
   "Second verification before touching a running system: states exactly what
-   is about to happen and asks for approval. Destructive actions always
-   require the literal word 'yes'; other changes use gum's yes/no picker when
-   gum is installed. Returns true only when the user approves.
+   is about to happen and asks for approval. Destructive actions require the
+   literal word 'yes', unless env.edn sets `:confirmations {:destructive
+   :picker}`: then a picker that starts on No and names the consequence asks
+   instead, where one is available at a terminal. Other changes use the UI
+   backend's or gum's yes/no picker when there is one. Returns true only when
+   the user approves.
 
    Under --dry-run it asks nothing and returns false, so a book whose change
    is gated only by this confirmation never acts in a rehearsal. A change

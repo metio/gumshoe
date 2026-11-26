@@ -21,7 +21,15 @@
    :select-multi (fn [prompt values]       -> [chosen] or nil)
    :ask-text     (fn [prompt]              -> string or nil)
    :confirm      (fn []                    -> boolean).
-   A primitive it does not provide falls back to the built-in fzf/gum."
+   A primitive it does not provide falls back to the built-in fzf/gum.
+
+   A provider that sets :confirm-options? true promises that its :confirm
+   takes one options map instead - {:prompt s :affirmative s :negative s
+   :default false :destructive? bool} - starts on the :negative option, and
+   returns true only when the operator chose :affirmative. Only such a
+   provider is offered a destructive action under env.edn's
+   `:confirmations {:destructive :picker}`; one that does not declare it keeps
+   its zero-argument :confirm and destructive actions ask for the typed word."
   [provider]
   (swap! providers assoc (:name provider) provider))
 
@@ -38,6 +46,6 @@
 
 (defn backend
   "The active provider's override for op (:select-one/:select-multi/:ask-text/
-   :confirm), or nil to use the built-in."
+   :confirm), its :confirm-options? declaration, or nil to use the built-in."
   [op]
   (get @active op))
