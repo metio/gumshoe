@@ -25,7 +25,7 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: the fire is out: the evpn-static-fdb detective no longer reports it"]},
+    "  ✅ verified: the fire is out: the evpn-static-fdb detective no longer reports it"]},
   :extinguish-already-out
   {:result true,
    :confirmations
@@ -49,7 +49,7 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: the fire is out: the evpn-static-fdb detective no longer reports it"]},
+    "  ✅ verified: the fire is out: the evpn-static-fdb detective no longer reports it"]},
   :extinguish-dry-run
   {:result true,
    :confirmations [],
@@ -92,7 +92,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire is out: the evpn-static-fdb detective no longer reports it - the last read did not answer: the evpn-static-fdb detective reads only an empty evpn-fdb, and an empty reading never shows the fire is out"]},
+    "  ❌ the fire is out: the evpn-static-fdb detective no longer reports it"
+    "    NOT verified within 0s: the fire is out: the evpn-static-fdb detective no longer reports it - the last read did not answer: the evpn-static-fdb detective reads only an empty evpn-fdb, and an empty reading never shows the fire is out"]},
   :extinguish-fdb-unread
   {:result false,
    :confirmations
@@ -141,7 +142,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire is out: the evpn-static-fdb detective no longer reports it"]},
+    "  ❌ the fire is out: the evpn-static-fdb detective no longer reports it"
+    "    NOT verified within 0s: the fire is out: the evpn-static-fdb detective no longer reports it"]},
   :extinguish-unanswered
   {:result false,
    :confirmations
@@ -206,7 +208,7 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: the fire is burning: the evpn-static-fdb detective reports it"
+    "  ✅ verified: the fire is burning: the evpn-static-fdb detective reports it"
     "🔶 the fire is lit - find it with 'bb run runbooks/detectives/fabric.clj --vni 4208', and put it out with --extinguish"]},
   :ignite-declined
   {:result false,
@@ -287,7 +289,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire is burning: the evpn-static-fdb detective reports it - the last read did not answer: hv1: host is not reachable over ssh"]},
+    "  ❌ the fire is burning: the evpn-static-fdb detective reports it"
+    "    NOT verified within 0s: the fire is burning: the evpn-static-fdb detective reports it - the last read did not answer: hv1: host is not reachable over ssh"]},
   :ignite-unseen
   {:result false,
    :confirmations
@@ -317,7 +320,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire is burning: the evpn-static-fdb detective reports it"]},
+    "  ❌ the fire is burning: the evpn-static-fdb detective reports it"
+    "    NOT verified within 0s: the fire is burning: the evpn-static-fdb detective reports it"]},
   :surface
   {:description
    "Firebook: pins a static fdb entry for the team to find",
@@ -368,8 +372,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: the fire-drill namespace is gone"
-    "✅ verified: the fire is out: the pods, stuck-pods detectives no longer report it"]},
+    "  ✅ verified: the fire-drill namespace is gone"
+    "  ✅ verified: the fire is out: the pods, stuck-pods detectives no longer report it"]},
   :extinguish-delete-fails
   {:result false,
    :confirmations
@@ -449,8 +453,10 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire-drill namespace is gone"
-    "❌ NOT verified within 0s: the fire is out: the pods, stuck-pods detectives no longer report it"]},
+    "  ❌ the fire-drill namespace is gone"
+    "    NOT verified within 0s: the fire-drill namespace is gone"
+    "  ❌ the fire is out: the pods, stuck-pods detectives no longer report it"
+    "    NOT verified within 0s: the fire is out: the pods, stuck-pods detectives no longer report it"]},
   :extinguish-unanswered
   {:result false,
    :confirmations [],
@@ -483,7 +489,7 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: the fire is burning: the pods, stuck-pods detectives report it"
+    "  ✅ verified: the fire is burning: the pods, stuck-pods detectives report it"
     "✅ fire started in namespace fire-drill"
     "🔥 Let the team find it with the detectives, e.g.:"
     "   bb run runbooks/detectives/cluster.clj"
@@ -592,7 +598,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire is burning: the pods, stuck-pods detectives report it"]},
+    "  ❌ the fire is burning: the pods, stuck-pods detectives report it"
+    "    NOT verified within 0s: the fire is burning: the pods, stuck-pods detectives report it"]},
   :surface
   {:description
    "Firebook: starts a crash-looping deployment for the team to find",
@@ -634,8 +641,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: the fire-drill namespace is gone"
-    "✅ verified: the fire is out: the pods, stuck-pods detectives no longer report it"]},
+    "  ✅ verified: the fire-drill namespace is gone"
+    "  ✅ verified: the fire is out: the pods, stuck-pods detectives no longer report it"]},
   :extinguish-delete-fails
   {:result false,
    :confirmations
@@ -715,8 +722,10 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire-drill namespace is gone"
-    "❌ NOT verified within 0s: the fire is out: the pods, stuck-pods detectives no longer report it"]},
+    "  ❌ the fire-drill namespace is gone"
+    "    NOT verified within 0s: the fire-drill namespace is gone"
+    "  ❌ the fire is out: the pods, stuck-pods detectives no longer report it"
+    "    NOT verified within 0s: the fire is out: the pods, stuck-pods detectives no longer report it"]},
   :extinguish-unanswered
   {:result false,
    :confirmations [],
@@ -750,7 +759,7 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: the fire is burning: the pods, stuck-pods detectives report it"
+    "  ✅ verified: the fire is burning: the pods, stuck-pods detectives report it"
     "✅ fire started in namespace fire-drill"
     "🔥 Let the team find it with the detectives, e.g.:"
     "   bb run runbooks/detectives/cluster.clj"
@@ -862,7 +871,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire is burning: the pods, stuck-pods detectives report it"]},
+    "  ❌ the fire is burning: the pods, stuck-pods detectives report it"
+    "    NOT verified within 0s: the fire is burning: the pods, stuck-pods detectives report it"]},
   :surface
   {:description
    "Firebook: starts a deployment with an unpullable image for the team to find",
@@ -907,8 +917,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: the fire-drill namespace is gone"
-    "✅ verified: the fire is out: the storage detective no longer reports it"]},
+    "  ✅ verified: the fire-drill namespace is gone"
+    "  ✅ verified: the fire is out: the storage detective no longer reports it"]},
   :extinguish-delete-fails
   {:result false,
    :confirmations
@@ -991,8 +1001,10 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire-drill namespace is gone"
-    "❌ NOT verified within 0s: the fire is out: the storage detective no longer reports it"]},
+    "  ❌ the fire-drill namespace is gone"
+    "    NOT verified within 0s: the fire-drill namespace is gone"
+    "  ❌ the fire is out: the storage detective no longer reports it"
+    "    NOT verified within 0s: the fire is out: the storage detective no longer reports it"]},
   :extinguish-unanswered
   {:result false,
    :confirmations [],
@@ -1029,7 +1041,7 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "✅ verified: the fire is burning: the storage detective reports it"
+    "  ✅ verified: the fire is burning: the storage detective reports it"
     "✅ fire started in namespace fire-drill"
     "🔥 Let the team find it with the detectives, e.g.:"
     "   bb run runbooks/detectives/cluster.clj"
@@ -1144,7 +1156,8 @@
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the fire is burning: the storage detective reports it"]},
+    "  ❌ the fire is burning: the storage detective reports it"
+    "    NOT verified within 0s: the fire is burning: the storage detective reports it"]},
   :surface
   {:description
    "Firebook: creates a PersistentVolumeClaim that can never bind",

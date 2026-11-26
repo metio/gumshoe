@@ -31,6 +31,7 @@
   (:require [clojure.string :as str]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.outcome :as outcome]
+            [gumshoe.progress :as progress]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
@@ -81,6 +82,13 @@
   (when-let [text (when detail (try (detail) (catch Exception _ nil)))]
     (stdout/err-println (str "  last seen: " text))))
 
+(defn- verdict!
+  "Prints how a check ended. Inside a task list the check's row carries the
+   mark, so the line underneath is plain text; elsewhere it carries the
+   outcome's mark."
+  [outcome text]
+  (if (progress/in-step?) (stdout/note text) (stdout/line outcome text)))
+
 (defn eventually
   "Retries check until it returns truthy or timeout (seconds) elapses on the
    wall clock, counting the time each attempt takes. Exceptions inside check
@@ -100,7 +108,7 @@
    held names what it last saw instead of only what it waited for."
   [{:keys [description check timeout interval soft? watch abort detail] :or {timeout 60 interval 5}}]
   (if-not (and (string? description) (fn? check))
-    (do (stdout/error "refusing a malformed post-check: it needs a :description string and a :check function")
+    (do (verdict! :failure "refusing a malformed post-check: it needs a :description string and a :check function")
         false)
     (let [start (System/currentTimeMillis)
           deadline (+ start (* 1000 timeout))
@@ -116,26 +124,28 @@
               now (System/currentTimeMillis)]
           (cond
             (true? result)
-            (do (stdout/ok (str "verified: " description))
+            ;; inside a task list the row itself says verified
+            (do (when-not (progress/in-step?) (stdout/ok (str "verified: " description)))
                 true)
 
             reason
-            (do (stdout/error (format "NOT verified: %s - %s" description reason))
+            (do (verdict! :failure (format "NOT verified: %s - %s" description reason))
                 false)
 
             (>= now deadline)
             (if soft?
-              (do (stdout/warn (format "could not confirm within %ds (best effort): %s%s" timeout description (str unread)))
+              (do (verdict! :finding (format "could not confirm within %ds (best effort): %s%s" timeout description (str unread)))
                   (print-detail! detail)
-                  (stdout/warn "the operation itself reported no error - confirm by hand if in doubt")
+                  (verdict! :finding "the operation itself reported no error - confirm by hand if in doubt")
                   (outcome/unconfirmed! description)
+                  (progress/caveat!)
                   true)
-              (do (stdout/error (format "NOT verified within %ds: %s%s" timeout description (str unread)))
+              (do (verdict! :failure (format "NOT verified within %ds: %s%s" timeout description (str unread)))
                   (print-detail! detail)
                   false))
 
             :else
-            (do (stdout/item :in-progress (format "waiting for: %s (%d/%ds)" description (quot (- now start) 1000) timeout))
+            (do (progress/status! (format "waiting for: %s (%d/%ds)" description (quot (- now start) 1000) timeout))
                 (Thread/sleep (long (min interval-ms (max 0 (- deadline now)))))
                 (let [fresh (when watch
                               (try (seq (remove seen (watch))) (catch Exception _ nil)))]
@@ -155,12 +165,27 @@
    :check (constantly false)
    :detail (constantly why)})
 
+(defn- check-step
+  "A post-check as a row of a task list: it runs through eventually, and
+   settles as \"verified: …\" only when eventually returned true without a
+   caveat. A check that throws or returns anything else is a failed row."
+  [{:keys [description] :as check}]
+  {:label (if (string? description) description "a malformed post-check")
+   :run (fn []
+          (let [held (eventually check)]
+            (cond
+              (not (true? held)) {:ok? false :value held}
+              (progress/caveated?) {:ok? true :value held}
+              :else {:ok? true :value held :label (str "verified: " description)})))})
+
 (defn all
-  "Runs every post-check in order; all of them must hold. A :soft? check that
-   times out still counts as held, and is recorded as unconfirmed, so the
-   banner names it instead of claiming verification."
+  "Runs every post-check in order, as a task list each row of which fills in
+   as its check resolves; all of them must hold. A :soft? check that times out
+   still counts as held, draws as a caveat, and is recorded as unconfirmed, so
+   the banner names it instead of claiming verification."
   [checks]
-  (let [held? (every? true? (mapv eventually checks))]
+  (let [results (progress/run-steps (mapv check-step checks) {:stop-on-failure? false})
+        held? (every? #(true? (:value %)) results)]
     (outcome/verified! held?)
     held?))
 

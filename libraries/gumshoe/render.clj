@@ -134,11 +134,15 @@
 
 (def task-outcomes
   "The outcome a live task list draws for each state of a task. A running task
-   draws a spinner frame instead while the list repaints in place."
+   draws a spinner frame instead while the list repaints in place. An :unread
+   task could not learn its answer and draws :not-yet, so it never reads as
+   done; a :warned one finished with a caveat and draws :finding."
   {:pending :not-yet
    :running :in-progress
    :done :done
    :failed :failure
+   :unread :not-yet
+   :warned :finding
    :skipped :skipped})
 
 (defn task
@@ -152,6 +156,36 @@
           (spinner-frame ctx frame)
           (mark ctx (get task-outcomes status :not-yet)))
         " " label)))
+
+(defn- fit
+  "line cut to width visible columns, colour removed first when it must be cut,
+   so a cut never splits an escape. No width leaves the line whole."
+  [width line]
+  (if (and width (> (visible-width line) width))
+    (elide width (strip-colors line))
+    line))
+
+(defn step-lines
+  "The lines of one row of a task list, as the list draws it: the task line,
+   then, one level further in, the reason it did not finish, the text its
+   work printed and, while it runs, its latest status note. A row is
+
+     {:label \"…\" :status :pending|:running|:done|:failed|:unread|:warned|:skipped
+      :reason \"…\" :output \"text the step printed\" :note \"…\"}
+
+   Options: :frame draws a running task's spinner frame, :tail keeps only the
+   last n lines of the output, and :width cuts every line to that many
+   columns (a repainted list must not wrap, or the repaint loses count)."
+  ([ctx row] (step-lines ctx row {}))
+  ([ctx {:keys [label status reason output note]} {:keys [frame tail width]}]
+   (let [printed (when-not (str/blank? output) (str/split-lines (str/trimr output)))
+         printed (if (and tail (> (count printed) tail)) (take-last tail printed) printed)]
+     (mapv (partial fit width)
+           (concat [(task ctx status label frame)]
+                   (when-not (str/blank? reason) [(str "    " reason)])
+                   (map #(str "    " %) printed)
+                   (when (and (= :running status) (not (str/blank? note)))
+                     [(str "    " (paint ctx :dim note))]))))))
 
 (defn command
   "The echo of a command about to run: $ and the words."

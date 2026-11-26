@@ -158,7 +158,8 @@
     "  ✅ can connect to mgr-1"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: the 2 confirmed crash report(s) are archived"],
+    "  ❌ the 2 confirmed crash report(s) are archived"
+    "    NOT verified within 0s: the 2 confirmed crash report(s) are archived"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery []},
@@ -407,7 +408,8 @@
     "▸ OSD: osd.3"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
-    "❌ NOT verified within 0s: osd.3 is marked in"],
+    "  ❌ osd.3 is marked in"
+    "    NOT verified within 0s: osd.3 is marked in"],
    :banner
    "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
    :recovery
