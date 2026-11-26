@@ -38,7 +38,8 @@
    :scheduled-backup :s
    :service :s
    :statefulset :s
-   :volumes :v})
+   :volumes :v
+   :vtep :V})
 
 (def deprecated
   "The short aliases an option answered to before the convention, by option."

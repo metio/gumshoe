@@ -147,9 +147,10 @@
     (is (= (str cobra "/" dead) (:component finding)))
     (is (= [(mac 4208 0x20)] (:macs finding)))
     (is (= [] (:local-tap-macs finding)))
-    (testing "the hint says how to clear the rows without naming a book"
-      (is (str/includes? (:hint finding) "leave every tap row in place"))
-      (is (not (re-find #"(?i)\bbook\b" (:hint finding)))))))
+    (testing "the hint names the change book that clears the rows, and what it keeps"
+      (is (str/includes? (:hint finding)
+                         (str "`bb run runbooks/fabric/clear_orphan_fdb.clj --vtep " dead " --hosts " cobra "`")))
+      (is (str/includes? (:hint finding) "leaves every tap row and static pin in place")))))
 
 (deftest a-pin-counts-one-row-naming-the-vtep-and-carries-its-bridge-rows-test
   (let [finding (first (evpn/detect-orphan-fdb {"evpn-fdb" (vec (table emu (remote-pin 4208 0x01 dead)))

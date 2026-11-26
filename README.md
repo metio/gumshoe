@@ -374,7 +374,12 @@ its destination VTEP and the rows behind it; see
 `runbooks/detectives/fabric.clj`). Its hosts, VNIs, gateway VTEPs and guest MAC
 prefixes come from `--hosts`, `--vni`, `--gateway-vteps` and
 `--guest-mac-prefixes`, else from env.edn's `:evpn` block; without gateway VTEPs
-the gateway check is reported as unjudged, never as clean.
+the gateway check is reported as unjudged, never as clean. The learned rows
+naming a VTEP no BGP path advertises - what an emptied hypervisor leaves on
+its peers - are cleared by `runbooks/fabric/clear_orphan_fdb.clj --vtep
+<address>`, on the hosts `--hosts` names or on every host in `:evpn :hosts`,
+after one confirmation and only where BGP answered that nothing advertises the
+VTEP.
 The findings map onto the canonical
 [kube-prometheus runbook](https://runbooks.prometheus-operator.dev/) alerts
 (KubeControllerManagerDown, KubeQuotaFullyUsed, KubeCPUOvercommit, and so on)
