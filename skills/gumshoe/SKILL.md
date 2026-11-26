@@ -145,9 +145,13 @@ otherwise ask for:
   with exit 1. A json or edn run, or one without a console, never asks to
   share its findings.
 - **Read the exit code.** `0` means success or nothing critical; `1` means a
-  critical finding, a failure, an abort after something changed, or a failed
-  post-check. The final banner agrees with it: a green `DONE` only exits 0,
-  and a `FAILED`, `NOT VERIFIED` or `DRY RUN failed` banner only exits 1.
+  critical finding, a failure, any abort, or a failed post-check. Every abort
+  exits 1 whether or not anything changed: a declined confirmation, a
+  precondition that no longer held after it, or a confirmation refused under
+  `--dry-run`. The final banner agrees with it: a green `DONE` only exits 0,
+  and a `FAILED`, `NOT VERIFIED`, `ABORTED` or `DRY RUN failed` banner only
+  exits 1. `ABORTED` is yellow when nothing was changed and red after a
+  change had run.
 - **Skip the interactive front doors.** `./gumshoe`, `./detect`,
   `./investigate` and `./run` without `--list` are fzf menus for people. The
   drill-down of `./investigate` follows one object to the next by asking at
