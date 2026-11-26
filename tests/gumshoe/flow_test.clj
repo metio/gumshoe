@@ -2,7 +2,8 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.flow-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [gumshoe.effect :as effect]
             [gumshoe.flow :as flow]
             [gumshoe.outcome :as outcome]
@@ -85,6 +86,28 @@
                 outcome/*record* record]
         (flow/change! (assoc valid :precondition (constantly true))))
       (is (nil? (:unmet @record))))))
+
+(deftest a-legacy-step-is-recorded-as-not-rehearsed-and-the-rehearsal-goes-on-test
+  (let [record (outcome/fresh)
+        ran (atom [])
+        err (java.io.StringWriter.)
+        legacy (fn [action]
+                 (flow/change! {:confirmation {:action action :target "prod" :items ["x"]}
+                                :execute! (fn [] (swap! ran conj action) true)}))]
+    (binding [flow/*dry-run* true
+              outcome/*record* record
+              *err* err]
+      (is (true? (legacy "ratchet the release")) "a playbook rehearsal keeps showing the steps after it")
+      (is (true? (flow/change! {:confirmation {:action "label" :target "prod" :items ["x"]}
+                                :effect [(effect/kubectl "prod" "label" "x" "a=b")]})))
+      (is (true? (flow/change! {:confirmation {:action "start" :target "prod" :items ["x"]}
+                                :step "start the upgrade"
+                                :execute! (fn [] (swap! ran conj "start") true)}))))
+    (is (= [] @ran) "a thunk is never called under --dry-run")
+    (is (= ["ratchet the release" "start the upgrade"] (:unrehearsed @record)))
+    (is (nil? (:thunk @record)))
+    (is (= 1 (outcome/exit-code :ok @record)))
+    (is (str/includes? (str err) "step \"ratchet the release\" cannot be rehearsed") (str err))))
 
 (defn- unknown-op-change
   "A change whose plan cordons a node through a known op and then calls one

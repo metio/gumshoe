@@ -428,7 +428,9 @@
                   outcome (try
                             (binding [flow/*dry-run* (boolean (:dry-run opts))
                                       outcome/*record* record]
-                              (if (action opts ctx) :ok :failed))
+                              ;; a rehearsal that passed a step it could not
+                              ;; show did not succeed, whatever the action returned
+                              (if (and (action opts ctx) (empty? (:unrehearsed @record))) :ok :failed))
                             ;; Throwable, not Exception: an Error from the action
                             ;; must still land on the red banner and the recording,
                             ;; not skip them with a raw stack trace.
