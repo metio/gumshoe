@@ -4248,7 +4248,7 @@
    {:desc "The stage to promote - interactive selection when omitted",
     :coerce :string}},
   :help
-  ["Manually promotes a held StageSet stage via stagesetctl"
+  ["Manually promotes a held StageSet stage, bound to the revision it is held at"
    ""
    "What it does:"
    "  picks one StageSet by namespace and name (--namespace and --name, or interactively)"
@@ -4258,8 +4258,9 @@
    "  verifies the result before it reports success"
    ""
    "Needs:"
-   "  tools: stagesetctl, kubectl, fzf"
+   "  tools: kubectl, fzf"
    "  kubectl get: stagesets.stages.metio.wtf"
+   "  kubectl patch: stagesets.stages.metio.wtf"
    "  cluster capabilities: stageset"
    ""
    "Usage:"

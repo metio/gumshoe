@@ -5920,8 +5920,8 @@
     "  🔍 DRY RUN - nothing will be changed"
     "────────────────────────────────────────────────────────────────────────────────"
     "This will promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate on 'cluster':"
-    "  - apps/site"
-    "  would run: stagesetctl promote site --stage prod --namespace=apps"],
+    "  - stage prod of StageSet apps/site at revision sha256:abc"
+    "  would run: kubectl --namespace=apps annotate stagesets.stages.metio.wtf site stages.metio.wtf/promote=prod@<instant> stages.metio.wtf/promote-revision=sha256:abc --overwrite"],
    :banner "DONE - nothing was changed",
    :recovery []},
   :empty {:result false, :out "❌ no StageSet apps/site - not found"},
@@ -5932,7 +5932,7 @@
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ stagesetctl promote site --stage prod --namespace=apps"],
    :banner
-   "FAILED at the first effect: stagesetctl promote site --stage prod --namespace=apps - nothing was changed",
+   "FAILED at the first effect: kubectl --namespace=apps annotate stagesets.stages.metio.wtf site stages.metio.wtf/promote=prod@<instant> stages.metio.wtf/promote-revision=sha256:abc --overwrite - nothing was changed",
    :recovery
    ["Recovery:"
     "  StageSet apps/site carries no promote annotation, so nothing is left armed."]},
@@ -5941,24 +5941,28 @@
   :permitted
   {:checks
    [{:description
-     "stage prod of StageSet apps/site acted on the promotion",
+     "stage prod of StageSet apps/site acted on the promotion of revision sha256:abc",
      :timeout 300,
      :interval 5,
-     :holds false}],
+     :holds false,
+     :abort nil}],
    :destructive? false,
-   :announce "Promote stage prod of StageSet apps/site",
+   :announce
+   "Promote stage prod of StageSet apps/site at revision sha256:abc",
    :out "▸ Stage held at its gate: prod",
    :action
    "promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate",
-   :items ["apps/site"],
+   :items ["stage prod of StageSet apps/site at revision sha256:abc"],
    :plan
-   [[:cmd
-     "stagesetctl"
-     "promote"
+   [[:kubectl
+     "ctx"
+     "--namespace=apps"
+     "annotate"
+     "stagesets.stages.metio.wtf"
      "site"
-     "--stage"
-     "prod"
-     "--namespace=apps"]],
+     "stages.metio.wtf/promote=prod@<instant>"
+     "stages.metio.wtf/promote-revision=sha256:abc"
+     "--overwrite"]],
    :step
    "promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate",
    :precondition {:result true, :out ""}},
@@ -5967,39 +5971,45 @@
    :out "▸ StageSet: apps/site\n▸ Stage held at its gate: prod",
    :action
    "promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate",
-   :items ["apps/site"],
+   :items ["stage prod of StageSet apps/site at revision sha256:abc"],
    :plan
-   [[:cmd
-     "stagesetctl"
-     "promote"
+   [[:kubectl
+     "ctx"
+     "--namespace=apps"
+     "annotate"
+     "stagesets.stages.metio.wtf"
      "site"
-     "--stage"
-     "prod"
-     "--namespace=apps"]]},
+     "stages.metio.wtf/promote=prod@<instant>"
+     "stages.metio.wtf/promote-revision=sha256:abc"
+     "--overwrite"]]},
   :refused
   {:stopped
    "refusing: StageSet apps/site: stage prod is not held at its promotion gate (phase Promoted)"},
   :spec-changed
   {:checks
    [{:description
-     "stage prod of StageSet apps/site acted on the promotion",
+     "stage prod of StageSet apps/site acted on the promotion of revision sha256:abc",
      :timeout 300,
      :interval 5,
-     :holds false}],
+     :holds false,
+     :abort nil}],
    :destructive? false,
-   :announce "Promote stage prod of StageSet apps/site",
+   :announce
+   "Promote stage prod of StageSet apps/site at revision sha256:abc",
    :out "▸ Stage held at its gate: prod",
    :action
    "promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate",
-   :items ["apps/site"],
+   :items ["stage prod of StageSet apps/site at revision sha256:abc"],
    :plan
-   [[:cmd
-     "stagesetctl"
-     "promote"
+   [[:kubectl
+     "ctx"
+     "--namespace=apps"
+     "annotate"
+     "stagesets.stages.metio.wtf"
      "site"
-     "--stage"
-     "prod"
-     "--namespace=apps"]],
+     "stages.metio.wtf/promote=prod@<instant>"
+     "stages.metio.wtf/promote-revision=sha256:abc"
+     "--overwrite"]],
    :step
    "promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate",
    :precondition
@@ -6008,7 +6018,7 @@
     "refusing: StageSet apps/site: the controller has not observed the StageSet's current spec yet"}},
   :surface
   {:description
-   "Manually promotes a held StageSet stage via stagesetctl",
+   "Manually promotes a held StageSet stage, bound to the revision it is held at",
    :options
    {:namespace
     {:desc
@@ -6024,9 +6034,10 @@
     {:desc "The stage to promote - interactive selection when omitted",
      :coerce :string}},
    :prerequisites
-   {:installed-tools ["stagesetctl" "kubectl" "fzf"],
+   {:installed-tools ["kubectl" "fzf"],
     :cluster-capabilities [:stageset],
-    :kubectl-can-get ["stagesets.stages.metio.wtf"]},
+    :kubectl-can-get ["stagesets.stages.metio.wtf"],
+    :kubectl-can-patch ["stagesets.stages.metio.wtf"]},
    :select
    {:mode :namespaced,
     :label "StageSet",
@@ -6046,31 +6057,36 @@
     "  verifies the result before it reports success"
     ""
     "Needs:"
-    "  tools: stagesetctl, kubectl, fzf"
+    "  tools: kubectl, fzf"
     "  kubectl get: stagesets.stages.metio.wtf"
+    "  kubectl patch: stagesets.stages.metio.wtf"
     "  cluster capabilities: stageset"],
    :candidates {:permitted ["apps/site"], :refused ["apps/site"]}},
   :unanswered
   {:checks
    [{:description
-     "stage prod of StageSet apps/site acted on the promotion",
+     "stage prod of StageSet apps/site acted on the promotion of revision sha256:abc",
      :timeout 300,
      :interval 5,
-     :holds false}],
+     :holds false,
+     :abort nil}],
    :destructive? false,
-   :announce "Promote stage prod of StageSet apps/site",
+   :announce
+   "Promote stage prod of StageSet apps/site at revision sha256:abc",
    :out "▸ Stage held at its gate: prod",
    :action
    "promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate",
-   :items ["apps/site"],
+   :items ["stage prod of StageSet apps/site at revision sha256:abc"],
    :plan
-   [[:cmd
-     "stagesetctl"
-     "promote"
+   [[:kubectl
+     "ctx"
+     "--namespace=apps"
+     "annotate"
+     "stagesets.stages.metio.wtf"
      "site"
-     "--stage"
-     "prod"
-     "--namespace=apps"]],
+     "stages.metio.wtf/promote=prod@<instant>"
+     "stages.metio.wtf/promote-revision=sha256:abc"
+     "--overwrite"]],
    :step
    "promote a StageSet stage held at its gate - it skips the rest of its soak, analysis or manual gate",
    :precondition
