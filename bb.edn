@@ -230,6 +230,7 @@
                    [gumshoe.plugin-test]
                    [gumshoe.plugins-test]
                    [gumshoe.reproducer-test]
+                   [gumshoe.kuberc-test]
                    [gumshoe.recording-test]
                    [gumshoe.upload-test]
                    [gumshoe.upload-evidence-test]
@@ -520,6 +521,7 @@
                                                          'gumshoe.plugin-test
                                                          'gumshoe.plugins-test
                                                          'gumshoe.reproducer-test
+                                                         'gumshoe.kuberc-test
                                                          'gumshoe.runbook-test
                                                          'gumshoe.recording-test
                                                          'gumshoe.upload-test

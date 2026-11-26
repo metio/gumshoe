@@ -168,6 +168,16 @@ change write none. Every run also leaves an audit trail
 under `recordings/<book>/<timestamp>/` with its inputs, selections, commands,
 and outcome; the path is printed after the final banner.
 
+Every command a book starts runs with `KUBERC=off`, kubectl plugins and
+kubectl started by a shell included, so the user's kuberc (the file `KUBERC`
+names, or `~/.kube/kuberc`) can neither alias a command nor default a flag
+such as delete's `--interactive` or `--force`. A `--dry-run` plan is the same
+with and without a kuberc, the confirmed plan is what runs, and a delete never
+prompts. There is no opt-out. The reproducer and the recording's
+`commands.sh` start with `export KUBERC=off`; the `would run:` lines leave it
+out, so a command handed to the human from a plan reads their kuberc unless
+written as `KUBERC=off kubectl …`.
+
 ## Reading findings
 
 ```json

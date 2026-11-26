@@ -61,6 +61,7 @@
       (spit (str (fs/path dir "commands.sh"))
             (str "#!/usr/bin/env sh\n"
                  "# CLI calls made by this run - review before replaying.\n\n"
+                 (shell/replay-preamble)
                  (str/join "\n" (shell/recording))
                  "\n"))
       (str dir))

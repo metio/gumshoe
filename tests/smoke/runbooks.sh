@@ -13,7 +13,7 @@
 # that is deleted at the end.
 set -uo pipefail
 
-export KUBERC=/dev/null   # a kuberc may make kubectl delete interactive
+export KUBERC=off   # the checks below call kubectl directly; a kuberc may make delete interactive
 context="$(kubectl config current-context 2>/dev/null)"
 case "${context}" in
   kind-*) ;;

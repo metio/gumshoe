@@ -1212,14 +1212,14 @@
   "with-port-forward once local-port passed its checks."
   [context namespace resource local-port remote-port f]
   (let [forward (try
-                  ;; babashka.process takes the options first and the
+                  ;; shell/start takes the options first and the
                   ;; command as separate strings; a vector after the
                   ;; options would be run as one program named "[kubectl".
                   ;; Tracked, so a SIGTERM that halts the JVM before the
                   ;; finally below runs still takes the forward down
                   ;; instead of leaving it holding local-port.
                   (shell/track-child!
-                   (apply process/process {:out :stream :err :inherit}
+                   (apply shell/start {:out :stream :err :inherit}
                           ["kubectl" (str "--context=" context) (str "--namespace=" namespace)
                            "port-forward" resource
                            (str local-port ":" remote-port)]))
