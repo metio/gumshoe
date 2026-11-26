@@ -968,13 +968,14 @@
    effects of `plan`, counting from `applied-before`, the effects the run had
    applied when the change began; nil when none of its effects that ran
    changes anything, and outside a run, which records nothing. effect/run!
-   applies a plan in order and stops at the first failure, so the applied
-   effects are the plan's first ones."
+   applies a plan in order, stops at the first failure and counts only the
+   effects that may change something, so the applied effects are the
+   plan's first such ones."
   [{:keys [select announce] :as spec} {:keys [cluster target]} plan applied-before]
   (let [{:keys [applied stopped verified]} (outcome/current)
         changed (->> (when applied plan)
+                     (filter effect/changes-state?)
                      (take (- (or applied 0) applied-before))
-                     (remove #(= :note (first %)))
                      (mapv effect/describe))]
     (when (seq changed)
       (fallback-guidance {:applied changed

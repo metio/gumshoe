@@ -356,6 +356,23 @@
                (contains? config :change?) declared
                :else announce?))))
 
+(defn verdict
+  "Pure: the final banner and the exit code of a finished run of the book
+   described by config, with the parsed opts, the outcome of its action, the
+   record of what it did and whether it captured findings, as
+   {:banner {:tone .. :text ..} :exit 0|1}. Whether the run may change
+   things comes from change-book?, which honours :change?, so a change book
+   that posts nothing is bannered as a change. Both halves are judged from
+   the same outcome and record, so the banner never contradicts the exit
+   code."
+  [config opts outcome record findings?]
+  {:banner (outcome/banner {:dry-run? (boolean (:dry-run opts))
+                            :changes? (change-book? config opts)
+                            :outcome outcome
+                            :findings? (boolean findings?)}
+                           record)
+   :exit (outcome/exit-code outcome record)})
+
 (defn execute!
   "Runs a runbook described by a config map:
 
@@ -443,14 +460,10 @@
                                                    :opts opts
                                                    :outcome outcome
                                                    :skipped (:skipped @record)
-                                                   :meta (:announcement-data ctx)})]
+                                                   :meta (:announcement-data ctx)})
+                  final (verdict config opts outcome @record (summary/captured?))]
               ;; the final banner leaves no doubt about the outcome, even at 3am
-              (print-outcome! (outcome/banner {:dry-run? (boolean (:dry-run opts))
-                                               :changes? (boolean announce?)
-                                               :outcome outcome
-                                               :findings? (summary/captured?)}
-                                              @record)
-                              @record)
+              (print-outcome! (:banner final) @record)
               ;; run summary: where the record is, how to reproduce, how to dig in together
               (when recording-path
                 (stdout/err-println (format "📼 Recording: %s" (stdout/shorten-path recording-path))))
@@ -471,4 +484,4 @@
                                       :outcome outcome
                                       :recording-path recording-path
                                       :meta (:announcement-data ctx)})
-              (System/exit (outcome/exit-code outcome @record)))))))))
+              (System/exit (:exit final)))))))))

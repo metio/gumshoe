@@ -89,6 +89,13 @@
   [held?]
   (record! update :verified #(if (false? %) false (boolean held?))))
 
+(defn unconfirmed!
+  "A :soft? post-check ran out its time without holding; `description` names
+   it. The run still counts as successful, since the book declared the check
+   best effort, but its banner may not claim verification."
+  [description]
+  (record! update :unconfirmed (fnil conj []) description))
+
 (defn changed-so-far?
   "Whether the current run has changed anything yet; false outside a run."
   []
@@ -168,57 +175,111 @@
         (:text recovery)
         (into ["Recovery:"] (map #(str "  " %) (str/split-lines (:text recovery))))))))
 
-(defn exit-code
-  "The exit code of a run: 0 only for :ok. A rehearsal that found an unmet
-   precondition exits 1 so a script sees that the real run would stop, and
-   one that passed a step it could not rehearse exits 1 so it never reads
-   as a plan that was shown in full."
-  [outcome record]
-  (if (and (= :ok outcome) (empty? (:unmet record)) (empty? (:unrehearsed record))) 0 1))
+;; ---------------------------------------------------------------------------
+;; the verdict: the banner and the exit code come from one judgement
 
 (defn- changed?
   [{:keys [applied thunk]}]
-  (or (pos? applied) (some? thunk)))
+  (or (pos? (or applied 0)) (some? thunk)))
+
+(defn failed?
+  "Pure: whether the record and the outcome make the run a failure: the action
+   failed or threw, a rehearsal found an unmet precondition or a step it
+   could not rehearse, an effect stopped, a post-check did not hold, a legacy
+   thunk reported a failure, or a run aborted after it had changed something.
+   A failure recorded anywhere in the run fails it, whatever the action
+   returned, so no banner can call a run done that exits 1, and none can
+   call it failed while it exits 0."
+  [outcome {:keys [unmet unrehearsed stopped verified thunk aborted] :as record}]
+  (boolean (or (not= :ok outcome)
+               (seq unmet)
+               (seq unrehearsed)
+               (some? stopped)
+               (false? verified)
+               (= :failed thunk)
+               (and aborted (changed? record)))))
+
+(defn exit-code
+  "The exit code of a run: 0 unless `failed?` holds. A rehearsal that found an
+   unmet precondition exits 1 so a script sees that the real run would stop,
+   and one that passed a step it could not rehearse exits 1 so it never
+   reads as a plan that was shown in full. A :soft? post-check that ran out
+   its time unconfirmed does not fail the run: the book declared it best
+   effort, and the banner says it was not confirmed."
+  [outcome record]
+  (if (failed? outcome record) 1 0))
 
 (defn- effects
   [n]
   (if (= 1 n) "1 effect" (str n " effects")))
+
+(def ^:private unknown-step
+  "a step whose effects are unknown")
+
+(defn- made
+  "What the run changed, as a phrase for a failed banner, or nil when
+   nothing ran: a legacy thunk changes things the record cannot count, so
+   it is named rather than counted."
+  [{:keys [applied thunk]}]
+  (let [applied (or applied 0)]
+    (cond
+      (and (pos? applied) thunk) (str (effects applied) " had been applied and " unknown-step " had run")
+      (pos? applied) (str (effects applied) " had been applied")
+      thunk (str unknown-step " had run"))))
 
 (defn- skipped-suffix
   [skipped]
   (when (seq skipped)
     (str "; skipped as already done: " (str/join ", " skipped))))
 
+(defn- unconfirmed-suffix
+  [unconfirmed]
+  (str ", NOT confirmed (best effort): " (str/join ", " unconfirmed)))
+
 (defn banner
   "The final banner for a run, as {:tone :ok|:neutral|:error :text}.
 
    :dry-run?  the run was a rehearsal of a change
-   :changes?  the book changes things (it announces) rather than only reading
+   :changes?  the run may change things (runbook/change-book?) rather than
+              only reading
    :outcome   :ok, :failed, or :error (an unexpected exception)
    :findings? a read-only book captured findings for its report
    record     the facts recorded during the run (see the recording functions)
 
    A successful run names the changes it skipped as already done.
 
-   Only a run whose post-checks all ran and held may claim verification."
+   Only a run whose post-checks all ran and held may claim verification; a
+   :soft? check that ran out its time is named as not confirmed.
+
+   The tone agrees with `exit-code`: :ok only when it is 0, :error only
+   when it is 1."
   [{:keys [dry-run? changes? outcome findings?]} record]
-  (let [{:keys [aborted applied paused stopped thunk verified unmet unrehearsed skipped]} record]
+  (let [{:keys [aborted applied paused stopped thunk verified unmet unrehearsed skipped unconfirmed]} record
+        applied (or applied 0)
+        failed (failed? outcome record)]
     (cond
       ;; a rehearsal that threw never showed the plans after the throw
       (and dry-run? changes? (= :error outcome))
       {:tone :error
        :text "DRY RUN stopped by an unexpected error - nothing was changed - read the messages above"}
 
-      ;; recorded only under --dry-run, whether or not the book announces
-      (or (and dry-run? changes? (seq unmet)) (and dry-run? (seq unrehearsed)))
+      ;; recorded only under --dry-run, whether or not the book changes things
+      (or (seq unmet) (seq unrehearsed))
       {:tone :error
-       :text (str "DRY RUN - nothing was changed"
-                  (when (and changes? (seq unmet))
+       :text (str (cond dry-run? "DRY RUN - nothing was changed"
+                        (changed? record) (str "FAILED - " (made record))
+                        :else "FAILED - nothing was changed")
+                  (when (seq unmet)
                     (str "; the precondition of " (str/join ", " unmet)
                          " does not hold against the current state"))
                   (when (seq unrehearsed)
                     (str "; not rehearsed: " (str/join ", " unrehearsed)
                          " - a real run would do there what this rehearsal could not show")))}
+
+      ;; a rehearsal that failed before it showed its plan rehearsed nothing
+      (and dry-run? changes? failed)
+      {:tone :error
+       :text "DRY RUN failed - nothing was changed, and the plan was not shown in full - read the messages above"}
 
       ;; a read-only book reads and reports under --dry-run too
       (and dry-run? changes?)
@@ -227,8 +288,7 @@
       (= :error outcome)
       {:tone :error
        :text (str "FAILED - an unexpected error stopped the run"
-                  (when (changed? record)
-                    (str "; " (effects applied) " had been applied before it"))
+                  (when-let [m (made record)] (str "; " m " before it"))
                   " - read the messages above")}
 
       ;; a playbook can abort at a later step, after earlier ones applied
@@ -245,23 +305,29 @@
       paused
       {:tone :neutral
        :text (str "PAUSED"
-                  (when (changed? record) (str " after " (effects applied)))
+                  (cond (pos? applied) (str " after " (effects applied))
+                        thunk (str " after " unknown-step " had run"))
                   " - " paused)}
 
       (not changes?)
       (cond
         ;; a healthy scan has nothing critical, and may still have reported
         ;; warnings and info findings
-        (and (= :ok outcome) findings?) {:tone :ok :text "DONE - nothing critical; read the findings above"}
-        (= :ok outcome) {:tone :ok :text "DONE - no findings"}
+        (and (not failed) findings?) {:tone :ok :text "DONE - nothing critical; read the findings above"}
+        (not failed) {:tone :ok :text "DONE - no findings"}
         findings? {:tone :neutral :text "FINDINGS - read the report above"}
         :else {:tone :error :text "FAILED - read the messages above"})
 
       stopped
       {:tone :error
-       :text (if (pos? applied)
+       :text (cond
+               (pos? applied)
                (str "FAILED after " (effects applied) " - stopped at: " stopped
-                    " - the effects before it stay applied")
+                    " - the effects before it stay applied"
+                    (when thunk (str ", and " unknown-step " had run")))
+               thunk
+               (str "FAILED at the first effect: " stopped " - but " unknown-step " had already run")
+               :else
                (str "FAILED at the first effect: " stopped " - nothing was changed"))}
 
       (false? verified)
@@ -272,18 +338,22 @@
       (= :failed thunk)
       {:tone :error :text "FAILED - the change reported a failure - read the messages above"}
 
-      (= :failed outcome)
+      failed
       {:tone :error
        :text (str "FAILED - read the messages above"
-                  (if (changed? record)
-                    (str "; " (effects applied) " had been applied")
-                    "; nothing was changed"))}
+                  (if-let [m (made record)] (str "; " m) "; nothing was changed"))}
+
+      (and (true? verified) (changed? record) (seq unconfirmed))
+      {:tone :neutral :text (str "DONE - applied" (unconfirmed-suffix unconfirmed) (skipped-suffix skipped))}
 
       (and (true? verified) (changed? record))
       {:tone :ok :text (str "DONE - applied and verified" (skipped-suffix skipped))}
 
       (changed? record)
       {:tone :ok :text (str "DONE - applied; this book has no post-checks" (skipped-suffix skipped))}
+
+      (and (true? verified) (seq unconfirmed))
+      {:tone :neutral :text (str "DONE - nothing needed changing" (unconfirmed-suffix unconfirmed) (skipped-suffix skipped))}
 
       (true? verified)
       {:tone :ok :text (str "DONE - verified, nothing needed changing" (skipped-suffix skipped))}

@@ -88,8 +88,8 @@
    Each attempt gets the time left before the deadline, and at least one
    interval, so a check that hangs ends the wait at most one interval late. A
    malformed post-check is refused. Returns the verdict - true when verified,
-   true-with-a-warning when a :soft? check times out, false when a hard check
-   times out.
+   true-with-a-warning when a :soft? check times out (recorded with
+   outcome/unconfirmed!), false when a hard check times out.
 
    :abort (fn [] -> reason or nil) names a state the check can no longer reach
    from, such as an operation that failed: the wait ends at once with the
@@ -128,6 +128,7 @@
               (do (stdout/warn (format "could not confirm within %ds (best effort): %s%s" timeout description (str unread)))
                   (print-detail! detail)
                   (stdout/warn "the operation itself reported no error - confirm by hand if in doubt")
+                  (outcome/unconfirmed! description)
                   true)
               (do (stdout/error (format "NOT verified within %ds: %s%s" timeout description (str unread)))
                   (print-detail! detail)
@@ -143,8 +144,9 @@
                   (recur (into seen fresh))))))))))
 
 (defn all
-  "Runs every post-check in order; all of them must hold (a :soft? check that
-   times out still counts as held)."
+  "Runs every post-check in order; all of them must hold. A :soft? check that
+   times out still counts as held, and is recorded as unconfirmed, so the
+   banner names it instead of claiming verification."
   [checks]
   (let [held? (every? true? (mapv eventually checks))]
     (outcome/verified! held?)
