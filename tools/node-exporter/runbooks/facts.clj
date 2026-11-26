@@ -57,10 +57,11 @@
                                    (promql/credentials url opts)))
         answers (hosts/read! ep {:host-label host-label :selector selector :job job})
         rows (hosts/rows host-label answers)
-        evidence (cond-> {:now (java.time.Instant/now)
-                          "source" url
-                          "hosts" rows
-                          "failed" (hosts/failures answers)}
+        evidence (cond-> (merge {:now (java.time.Instant/now)
+                                 "source" url
+                                 "hosts" rows
+                                 "failed" (hosts/failures answers)}
+                                (hosts/answered answers))
                    declared (assoc "declared" (hosts/declared-hosts (slurp declared))))]
     (when (= "text" (or output "text"))
       (stdout/print-section (format "🖥️  Hosts (%d)" (count rows)))

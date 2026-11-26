@@ -26,34 +26,50 @@
   420)
 
 (defn parse-snapshot
-  "Rows of `rolname|md5` into a map of role name to verifier digest. Blank and
-   malformed lines are dropped, so a psql notice in the output cannot become a
-   role."
+  "Rows of `rolname|md5` into a map of role name to verifier digest, or nil
+   when the read did not answer (nil text), so a failed read is never a
+   cluster without roles. Blank and malformed lines are dropped, so a psql
+   notice in the output cannot become a role."
   [text]
-  (into {}
-        (for [line (str/split-lines (or text ""))
-              :let [[role digest] (str/split (str/trim line) #"\|")]
-              :when (and (not (str/blank? role))
-                         (not (str/blank? digest)))]
-          [role digest])))
+  (when (some? text)
+    (into {}
+          (for [line (str/split-lines text)
+                :let [[role digest] (str/split (str/trim line) #"\|")]
+                :when (and (not (str/blank? role))
+                           (not (str/blank? digest)))]
+            [role digest]))))
 
 (defn compare-snapshots
   "What changed between two readings of the same cluster: roles whose verifier
-   moved, and roles that only exist in one of them."
+   moved, and roles that only exist in one of them. A reading that did not
+   answer (nil) makes the comparison :unread."
   [before after]
-  (let [shared (filter #(contains? after %) (keys before))]
-    {:total (count before)
-     :moved (vec (sort (filter #(not= (get before %) (get after %)) shared)))
-     :appeared (vec (sort (remove #(contains? before %) (keys after))))
-     :vanished (vec (sort (remove #(contains? after %) (keys before))))}))
+  (if (or (nil? before) (nil? after))
+    {:unread true :total (count before)}
+    (let [shared (filter #(contains? after %) (keys before))]
+      {:total (count before)
+       :shared (count shared)
+       :moved (vec (sort (filter #(not= (get before %) (get after %)) shared)))
+       :appeared (vec (sort (remove #(contains? before %) (keys after))))
+       :vanished (vec (sort (remove #(contains? after %) (keys before))))})))
 
 (defn verdict
   "Reads a comparison. A single moved verifier is enough to report churn: the
-   fault needs one re-derivation per pooled session, not a majority of roles."
-  [{:keys [total moved appeared vanished]}]
+   fault needs one re-derivation per pooled session, not a majority of roles.
+   Stability needs at least one role read in both readings; with none shared,
+   nothing was compared."
+  [{:keys [unread total shared moved appeared vanished]}]
   (cond
+    unread {:verdict :unread
+            :summary "a reading of the verifiers did not answer, so nothing was compared"}
     (zero? total) {:verdict :no-roles
                    :summary "no login roles with a password were read"}
+    (zero? shared) {:verdict :incomparable
+                    :total total
+                    :summary (format "none of the %d role%s read first was read again"
+                                     total (if (= 1 total) "" "s"))
+                    :note (format "%d role(s) appeared and %d vanished between the readings"
+                                  (count appeared) (count vanished))}
     (seq moved) {:verdict :churning
                  :moved (count moved)
                  :total total
@@ -88,5 +104,13 @@
     :no-roles
     [(str "nothing was read, so this says nothing about churn - check the connection "
           "and that the cluster has login roles with passwords")]
+
+    :unread
+    [(str "a reading did not answer - the exec or psql failed, or the pod restarted or "
+          "failed over during the window - so this says nothing about churn; run it again")]
+
+    :incomparable
+    [(str "every role read first is gone from the second reading, so no verifier could be "
+          "compared - check whether the primary changed or the roles were replaced")]
 
     []))

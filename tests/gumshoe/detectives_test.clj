@@ -151,14 +151,19 @@
     (is (not (detective/healthy? [{:severity :critical}])))))
 
 (deftest run-detectives-test
-  (testing "findings are tagged with their detective and missing evidence is fine"
+  (testing "findings are tagged with their detective"
     (let [detectives [{:name "always" :requires ["nothing"]
                        :detect (fn [_] [{:severity :info :component "x" :summary "hello"}])}
                       {:name "empty" :requires ["nothing"]
                        :detect (fn [_] [])}]
-          findings (detective/run-detectives detectives {})]
+          findings (detective/run-detectives detectives {"nothing" {:items []}})]
       (is (= [{:severity :info :component "x" :summary "hello" :detective "always"}]
-             findings)))))
+             findings))))
+  (testing "a detective whose required evidence is missing is not run"
+    (is (= [] (detective/run-detectives
+               [{:name "always" :requires ["nothing"]
+                 :detect (fn [_] [{:severity :info :component "x" :summary "hello"}])}]
+               {})))))
 
 (deftest when-to-run-test
   (testing "prints the orientation to stderr, indented"

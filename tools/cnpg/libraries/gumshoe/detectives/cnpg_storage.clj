@@ -4,10 +4,12 @@
 (ns gumshoe.detectives.cnpg-storage
   "A detective for a volume enlargement that was asked for and never happened.
 
-   The operator does not resize a PVC. It reports that the PVC group needs
-   enlarging and waits, so a cluster can sit indefinitely with a spec that says
-   one size and volumes that are another - while the instance it cannot start
-   for want of room keeps restarting."
+   The operator patches each claim's request to the Cluster's size itself
+   unless spec.storage.resizeInUseVolumes is false. A request that stays below
+   the spec while resizing is on means that patch failed, and the cluster can
+   sit indefinitely with a spec that says one size and volumes that are
+   another - while the instance it cannot start for want of room keeps
+   restarting."
   (:require [gumshoe.cnpg.retention :as retention]
             [gumshoe.cnpg.storage :as storage]
             [gumshoe.detectives.cnpg :as cnpg]
@@ -25,9 +27,19 @@
      {:severity :critical
       :summary (format "the cluster asks for %s and this volume requests %s"
                        (size desired) (size requested))
-      :hint (str "the operator does not enlarge a volume: patch the claim's "
-                 "spec.resources.requests.storage to match, on every volume of the "
-                 "cluster, or postgres keeps running out of room at the old size")}
+      :hint (str "the operator patches the claim's request itself while resizeInUseVolumes "
+                 "is unset or true, so a request still below the spec means its patch failed: "
+                 "read the operator log, and check that the StorageClass sets "
+                 "allowVolumeExpansion - a class without it refuses a hand patch as well")}
+     :awaiting-recreate
+     {:severity :info
+      :summary (format (str "the cluster asks for %s and this volume requests %s, and "
+                            "resizeInUseVolumes is false")
+                       (size desired) (size requested))
+      :hint (str "the operator leaves existing claims alone, which is CloudNativePG's re-create "
+                 "procedure: one instance at a time on a cluster of more than one instance, "
+                 "delete the instance's claims (data, and -wal when present) and its pod, and "
+                 "the operator re-creates it at the new size")}
      :resizing
      {:severity :warning
       :summary (format "this volume requests %s and has %s"

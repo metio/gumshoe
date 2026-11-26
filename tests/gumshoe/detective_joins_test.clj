@@ -316,11 +316,17 @@
 
 (deftest the-property-catches-a-detect-function-that-judges-a-missing-read
   ;; positive control for the guard inside each detect function: with it
-  ;; disabled, an unread check still reports, and run-detectives runs it
+  ;; disabled, the detect function reports on a missing joined read
   (with-redefs [evidence/joined? (constantly true)]
     (doseq [case cases]
       (testing (label case)
-        (is (not (:pass? (tc/quick-check trials (joins/no-missing-joined-read-judges [case]) :seed seed))))))))
+        (is (not (:pass? (tc/quick-check trials (joins/no-missing-joined-read-detects [case]) :seed seed))))))))
+
+(deftest run-detectives-holds-back-an-unread-check-whose-guard-is-disabled
+  ;; the engine runs no unread check, so the property holds even with every
+  ;; guard inside the detect functions disabled
+  (with-redefs [evidence/joined? (constantly true)]
+    (is (:pass? (tc/quick-check trials (joins/no-missing-joined-read-judges cases) :seed seed)))))
 
 (deftest the-generated-evidence-is-not-vacuous
   ;; the same generator with every read answered reaches findings for every

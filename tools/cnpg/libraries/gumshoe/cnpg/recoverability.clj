@@ -11,17 +11,31 @@
 
    Three shapes configure a destination: barmanObjectStore or volumeSnapshot
    under spec.backup, and a WAL archiver plugin under spec.plugins. A plugin
-   that does not declare itself the WAL archiver is not read as one."
+   counts only when it declares itself the WAL archiver and is not disabled,
+   as CloudNativePG's GetEnabledWALArchivePluginName decides."
   (:require [gumshoe.kubectl :as kubectl]))
 
 (def ^:private completed-phase "completed")
 
+(defn wal-archiver-plugin?
+  "A spec.plugins entry that archives WAL: isWALArchiver true and enabled not
+   false (enabled defaults to true)."
+  [plugin]
+  (and (true? (:isWALArchiver plugin))
+       (not (false? (:enabled plugin)))))
+
+(defn archives-wal?
+  "Whether the cluster ships WAL somewhere: a barmanObjectStore or an enabled
+   WAL archiver plugin. A volumeSnapshot backup alone archives no WAL."
+  [cluster]
+  (boolean (or (get-in cluster [:spec :backup :barmanObjectStore])
+               (some wal-archiver-plugin? (get-in cluster [:spec :plugins])))))
+
 (defn destination?
   "Whether the spec names somewhere for a backup to go."
   [cluster]
-  (boolean (or (get-in cluster [:spec :backup :barmanObjectStore])
-               (get-in cluster [:spec :backup :volumeSnapshot])
-               (some :isWALArchiver (get-in cluster [:spec :plugins])))))
+  (boolean (or (archives-wal? cluster)
+               (get-in cluster [:spec :backup :volumeSnapshot]))))
 
 (defn backups-of
   [backups namespace cluster]

@@ -9,7 +9,6 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.runbook :as runbook]
             [gumshoe.select :as select]
-            [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
 (def cluster-select
@@ -38,10 +37,10 @@
     where rolcanlogin and rolpassword is not null order by rolname")
 
 (defn- read-verifiers
+  "The query's output, nil unless the exec and psql exited 0."
   [context namespace pod]
-  (shell/stdout-of "kubectl" (str "--context=" context) (str "--namespace=" namespace)
-                   "exec" pod "-c" "postgres" "--"
-                   "psql" "-At" "-c" verifier-sql))
+  (kubectl/exec-answer context namespace pod "postgres"
+                       ["psql" "-At" "-v" "ON_ERROR_STOP=1" "-c" verifier-sql]))
 
 (defn- snapshot
   [context namespace pod]
@@ -65,8 +64,9 @@
                                       :primary primary
                                       :roles (count before)
                                       :window (format "%ds" window)})
-            (if (zero? (count before))
-              (do (doseq [line (churn/guidance {:verdict :no-roles})] (stdout/warn line))
+            (if (empty? before)
+              (do (doseq [line (churn/guidance (churn/verdict (churn/compare-snapshots before {})))]
+                    (stdout/warn line))
                   false)
               (do
                 (stdout/with-spinner
@@ -84,8 +84,8 @@
                     (when (> (count (:moved changes)) 20)
                       (println (format "... and %d more" (- (count (:moved changes)) 20)))))
                   (doseq [line (churn/guidance result)]
-                    (if (= :churning (:verdict result)) (stdout/warn line) (stdout/ok line)))
-                  (not= :churning (:verdict result)))))))))))
+                    (if (= :stable (:verdict result)) (stdout/ok line) (stdout/warn line)))
+                  (= :stable (:verdict result)))))))))))
 
 (runbook/execute!
  {:description "Reads a cluster's password verifiers twice and says whether something re-derives them"

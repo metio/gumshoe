@@ -87,6 +87,8 @@
                                 (pr-str (:severity finding)))
                         (when-let [hint (:hint finding)] (str " - " hint)))))))
 
+(declare unread?)
+
 (defn run-detectives
   "Applies every detective to already-collected evidence. A detective that
    throws on unexpected data does not take down the whole investigation: it
@@ -94,24 +96,35 @@
    every other detective's results still reach the operator and the run fails,
    since a check that could not judge its evidence has not passed. A pod finding
    that follows from a finding about its workload or node carries that one as
-   :parent."
+   :parent.
+
+   A detective that read nothing (marked :unread, or unread? over this
+   evidence) contributes only the findings it marks :reports-unread true -
+   those that say which read did not answer and why. Anything else it
+   concluded rests on a read that did not answer, where a missing list reads
+   as nothing there, so it is dropped; the report names the check among those
+   that read nothing instead. The marker itself is removed from every finding."
   [detectives evidence]
   (correlation/correlate
-   (mapcat (fn [{:keys [name detect]}]
-             (try
-               ;; detectives are lazy for-comprehensions - realize them HERE,
-               ;; inside the try, or a throw during realization would escape
-               (doall (map #(normalize-finding (assoc % :detective name)) (detect evidence)))
-               ;; Throwable, not Exception: an assert, a :pre condition or a
-               ;; StackOverflowError in one detective must not discard every
-               ;; other detective's findings.
-               (catch Throwable e
-                 [{:severity :critical
-                   :crashed true
-                   :detective name
-                   :component name
-                   :summary crashed-summary
-                   :hint (or (ex-message e) (str e))}])))
+   (mapcat (fn [{:keys [name detect unread] :as detective}]
+             (let [blind? (or unread (unread? detective evidence))
+                   findings (try
+                              ;; detectives are lazy for-comprehensions - realize them HERE,
+                              ;; inside the try, or a throw during realization would escape
+                              (doall (map #(normalize-finding (assoc % :detective name)) (detect evidence)))
+                              ;; Throwable, not Exception: an assert, a :pre condition or a
+                              ;; StackOverflowError in one detective must not discard every
+                              ;; other detective's findings.
+                              (catch Throwable e
+                                [{:severity :critical
+                                  :crashed true
+                                  :detective name
+                                  :component name
+                                  :summary crashed-summary
+                                  :hint (or (ex-message e) (str e))}]))]
+               (->> findings
+                    (filter #(or (not blind?) (:crashed %) (:reports-unread %)))
+                    (map #(dissoc % :reports-unread)))))
            detectives)
    evidence))
 

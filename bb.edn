@@ -154,6 +154,15 @@
                    gumshoe.pooler-console-test
                    [gumshoe.cnpg-volumes-test]
                    [gumshoe.cnpg-console-test]
+                   [gumshoe.cnpg-console-ranking-test]
+                   [gumshoe.cnpg-unread-reads-test]
+                   [gumshoe.cnpg-spec-semantics-test]
+                   [gumshoe.external-dns-partial-answer-test]
+                   [gumshoe.hosts-failed-query-test]
+                   [gumshoe.ceph-pg-states-test]
+                   [gumshoe.loki-unread-mode-test]
+                   [gumshoe.postgres-own-backend-test]
+                   [gumshoe.unread-detectives-engine-test]
                    [gumshoe.cnpg-retention-test]
                    [gumshoe.cnpg-storage-test]
                    [gumshoe.cnpg-recoverability-test]
@@ -398,6 +407,15 @@
                                                          'gumshoe.pooler-console-test
                                                          'gumshoe.cnpg-volumes-test
                                                          'gumshoe.cnpg-console-test
+                                                         'gumshoe.cnpg-console-ranking-test
+                                                         'gumshoe.cnpg-unread-reads-test
+                                                         'gumshoe.cnpg-spec-semantics-test
+                                                         'gumshoe.external-dns-partial-answer-test
+                                                         'gumshoe.hosts-failed-query-test
+                                                         'gumshoe.ceph-pg-states-test
+                                                         'gumshoe.loki-unread-mode-test
+                                                         'gumshoe.postgres-own-backend-test
+                                                         'gumshoe.unread-detectives-engine-test
                                                          'gumshoe.cnpg-retention-test
                                                          'gumshoe.cnpg-storage-test
                                                          'gumshoe.cnpg-recoverability-test

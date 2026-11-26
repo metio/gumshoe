@@ -32,52 +32,107 @@
     (< bytes 1073741824) (format "%.1fMiB" (/ (double bytes) 1048576))
     :else (format "%.2fGiB" (/ (double bytes) 1073741824))))
 
-(defn- position-of [reading] (parse-lsn (:receive-lsn reading)))
+(defn effective-lsn
+  "The position a standby is ranked by, as CloudNativePG's instance manager
+   computes it: the received LSN, replaced by the replayed one when that is
+   further or the received one is empty. WAL restored from the archive
+   advances replay but not receive, so a standby that fell back to
+   restore_command can sit beyond its own receive LSN, or have none. The
+   value is {:bytes :lsn}, nil when neither position parses."
+  [{:keys [receive-lsn replay-lsn]}]
+  (let [received (parse-lsn receive-lsn)
+        replayed (parse-lsn replay-lsn)]
+    (cond
+      (and (nil? received) (nil? replayed)) nil
+      (< (or received 0) (or replayed 0)) {:bytes replayed :lsn (str/trim replay-lsn)}
+      :else {:bytes received :lsn (str/trim receive-lsn)})))
+
+(defn- position-of [reading] (:bytes (effective-lsn reading)))
+
+(defn- primary? [reading] (false? (:in-recovery? reading)))
+
+(defn- compare-readings
+  "The order CloudNativePG elects in (status.go, PostgresqlStatusList Less): an
+   instance not in recovery first, by pod name; then standbys by effective
+   position, then replayed position, furthest first; then by pod name."
+  [a b]
+  (cond
+    (and (primary? a) (primary? b)) (compare (:instance a) (:instance b))
+    (primary? a) -1
+    (primary? b) 1
+    :else (let [by-position (compare (position-of b) (position-of a))
+                by-replay (compare (or (parse-lsn (:replay-lsn b)) 0)
+                                   (or (parse-lsn (:replay-lsn a)) 0))]
+            (cond
+              (not (zero? by-position)) by-position
+              (not (zero? by-replay)) by-replay
+              :else (compare (:instance a) (:instance b))))))
 
 (defn positioned
-  "Readings that reported a usable WAL position, furthest ahead first."
+  "Readings that reported a usable WAL position, in the order a promotion
+   would prefer them."
   [readings]
   (->> readings
+       (filter :readable?)
        (filter position-of)
-       (sort-by position-of >)))
+       (sort compare-readings)))
+
+(defn- unpositioned
+  "Readable instances that reported no position at all. They cannot be ranked,
+   and leaving them out would read as if they did not exist."
+  [readings]
+  (mapv :instance (filter #(and (:readable? %) (nil? (position-of %))) readings)))
+
+(defn- tied?
+  "Two instances holding WAL up to the same point: promoting either discards
+   the same, though the election order still prefers the one replayed further."
+  [a b]
+  (= (position-of a) (position-of b)))
 
 (defn- rank
-  "The positions alone, furthest ahead first, with the cost of each alternative."
+  "The positions alone, in election order, with the cost of each alternative.
+   :behind holds every other positioned instance with the bytes choosing it
+   would discard; a negative count is an instance further ahead than a
+   candidate that ranks first only because it is not in recovery."
   [readings]
   (let [ranked (positioned readings)
         best (first ranked)
-        unreadable (remove :readable? readings)]
+        unreadable (mapv :instance (remove :readable? readings))
+        without-position (unpositioned readings)]
     (if (nil? best)
       {:candidate nil
-       :unreadable (mapv :instance unreadable)
+       :unreadable unreadable
+       :unpositioned without-position
        :reason (if (seq readings)
                  "no instance reported a WAL position, so nothing here can rank them"
                  "no instance was read")}
       (let [top (position-of best)]
         {:candidate (:instance best)
-         :lsn (:receive-lsn best)
+         :lsn (:lsn (effective-lsn best))
          :in-recovery? (:in-recovery? best)
-         :ties (mapv :instance (filter #(= top (position-of %)) (rest ranked)))
+         :ties (mapv :instance (filter #(tied? best %) (rest ranked)))
          :behind (mapv (fn [reading]
                          {:instance (:instance reading)
                           :bytes (- top (position-of reading))})
                        (rest ranked))
-         :unreadable (mapv :instance unreadable)}))))
+         :unreadable unreadable
+         :unpositioned without-position}))))
 
 (defn proposal
   "What the positions suggest, with the cost of acting on it.
 
    A cluster whose operator reports a healthy primary gets no candidate at all.
-   Promoting a standby over a working primary is not a repair, and the positions
-   invite exactly that: a primary is not in recovery, so it has no receive LSN
-   and ranks below every standby that does.
+   Promoting a standby over a working primary is not a repair, whatever the
+   positions say.
 
-   Otherwise :candidate is the instance furthest ahead - the one promotion
-   discards least from, not the one that is safe to promote. Promoting it
+   Otherwise :candidate is the instance ranked first in the order
+   CloudNativePG itself elects in - the one promotion discards least from, not
+   the one that is safe to promote. Standbys are ranked by `effective-lsn`. Promoting it
    discards nothing by construction, so the number worth stating is the other
    direction: :behind says what choosing each alternative instead would throw
    away. :ties names instances sharing the candidate's position, where the
-   positions alone cannot choose."
+   positions alone cannot choose, and :unpositioned the readable instances
+   that reported no position at all."
   ([readings] (proposal readings nil))
   ([readings primary]
    (if (and (:name primary) (:healthy? primary))
@@ -91,29 +146,41 @@
 
 (defn proposal-lines
   "The proposal as lines for an operator to read. It states what is unknown as
-   plainly as what is known: an unread instance may hold the furthest position
-   of all, which would make the candidate below the wrong one."
-  [{:keys [candidate lsn ties behind unreadable reason in-recovery?]}]
+   plainly as what is known: an unread instance, or one that answered without
+   a position, may hold the furthest position of all, which would make the
+   candidate below the wrong one."
+  [{:keys [candidate lsn ties behind unreadable unpositioned reason in-recovery?]}]
   (if (nil? candidate)
     [(str "no promotion candidate: " reason)]
-    (into
-     (cond-> [(format "furthest ahead: %s at %s" candidate lsn)]
-       (seq ties)
-       (conj (format "tied at the same position: %s - the positions cannot choose between them"
-                     (str/join ", " ties)))
-       (not in-recovery?)
-       (conj (str candidate " does not report itself in recovery, so it may not be a standby - "
-                  "check what it is before treating it as one")))
-     (concat
-      (for [{:keys [instance bytes]} behind
-            :when (pos? bytes)]
-        (format "promoting %s instead would discard %s that %s already received"
-                instance (describe-bytes bytes) candidate))
-      (when (seq unreadable)
-        [(format "%s could not be read, and an unread instance may sit further ahead than %s"
-                 (str/join ", " unreadable) candidate)])
-      ["this is a proposal from WAL positions alone - it weighs no application, "
-       "no backup and no disk headroom, and promoting is a write that needs your approval"]))))
+    (let [ahead (filter #(neg? (:bytes %)) behind)
+          gaps (concat
+                (when (seq unreadable)
+                  [(format "%s could not be read, and an unread instance may sit further ahead than %s"
+                           (str/join ", " unreadable) candidate)])
+                (when (seq unpositioned)
+                  [(format (str "%s answered without a received or replayed WAL position, so it "
+                                "cannot be ranked and may sit further ahead than %s")
+                           (str/join ", " unpositioned) candidate)]))]
+      (into
+       (cond-> [(format (if (seq ahead) "ranked first: %s at %s" "furthest ahead: %s at %s")
+                        candidate lsn)]
+         (seq ties)
+         (conj (format "tied at the same position: %s - the positions cannot choose between them"
+                       (str/join ", " ties)))
+         (not in-recovery?)
+         (conj (str candidate " does not report itself in recovery, so it may not be a standby - "
+                    "check what it is before treating it as one")))
+       (concat
+        (for [{:keys [instance bytes]} ahead]
+          (format "%s sits %s further ahead than %s, which ranks first only because it is not in recovery"
+                  instance (describe-bytes (- bytes)) candidate))
+        (for [{:keys [instance bytes]} behind
+              :when (pos? bytes)]
+          (format "promoting %s instead would discard %s that %s already holds"
+                  instance (describe-bytes bytes) candidate))
+        gaps
+        ["this is a proposal from WAL positions alone - it weighs no application, "
+         "no backup and no disk headroom, and promoting is a write that needs your approval"])))))
 
 (defn current-primary
   "The instance a cluster reports as its primary, looked up by \"namespace/name\"

@@ -89,11 +89,15 @@ The CloudNativePG tool package for [gumshoe](../../README.md).
   repair is still a parameter change. Postgres sizes are its own binary units
   (`kB`, `MB`, `GB`), so a Kubernetes quantity like `10Gi` is reported as
   unreadable rather than taken as safe.
-- **Pending storage detective** - the operator does not enlarge a volume. It
-  reports that the claim group needs enlarging and waits, so a cluster can sit
+- **Pending storage detective** - the operator patches each claim's request up
+  to the Cluster's size unless `spec.storage.resizeInUseVolumes` is false. A
+  claim that stays below the spec while resizing is on means that patch failed
+  (typically a StorageClass without `allowVolumeExpansion`), so a cluster can sit
   with a spec that says one size and claims that say another while the instance
-  it cannot start for want of room keeps restarting. A claim below the spec is
-  critical and names the patch; a claim above its own capacity is the driver
+  it cannot start for want of room keeps restarting; that is critical and points
+  at the operator log and the StorageClass. With resizing off the small claims
+  are CloudNativePG's re-create procedure, reported as info with its steps. A
+  claim above its own capacity is the driver
   still expanding, which stops until the pod restarts where the filesystem
   needs it. Claims are matched by `cnpg.io/cluster` or by the name prefix, so
   one the operator adopted without the label is still compared.

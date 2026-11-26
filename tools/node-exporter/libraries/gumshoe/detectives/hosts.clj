@@ -7,9 +7,12 @@
    difference between the hosts somebody declared and the hosts that report.
 
    Evidence keys: \"source\" (the URL read), \"hosts\" (the rows of
-   gumshoe.hosts/rows), \"failed\" ({query error}), and \"declared\" (host
-   names, absent when none were given)."
+   gumshoe.hosts/rows), \"failed\" ({query error}), \"declared\" (host
+   names, absent when none were given), and the markers of
+   gumshoe.hosts/answer-keys, nil when the query behind a check's facts
+   failed."
   (:require [clojure.string :as str]
+            [gumshoe.evidence :as evidence]
             [gumshoe.hosts :as hosts]))
 
 (defn detect-failed-queries
@@ -18,11 +21,16 @@
     {:severity :critical
      :component (get evidence "source")
      :summary (format "the %s query failed" (name q))
-     :hint (str error " - the facts it reads are missing from every row, so do not read them as absent")}))
+     :hint (str error " - the facts it reads are missing from every row, so do not read them as absent")
+     :reports-unread true}))
+
+(def ^:private up-joins [(hosts/answer-keys :up)])
+
+(def ^:private facts-joins [(hosts/answer-keys :cores) (hosts/answer-keys :memory)])
 
 (defn detect-down
   [evidence]
-  (for [{:keys [host up]} (get evidence "hosts")
+  (for [{:keys [host up]} (when (evidence/joined? evidence up-joins) (get evidence "hosts"))
         :when (false? up)]
     {:severity :critical
      :component host
@@ -31,7 +39,8 @@
 
 (defn detect-incomplete
   [evidence]
-  (for [{:keys [host up cores memory-bytes]} (get evidence "hosts")
+  (for [{:keys [host up cores memory-bytes]} (when (evidence/joined? evidence facts-joins)
+                                               (get evidence "hosts"))
         :when (not (false? up))
         :let [missing (cond-> [] (nil? cores) (conj "CPU count") (nil? memory-bytes) (conj "memory"))]
         :when (seq missing)]
@@ -72,10 +81,12 @@
    {:name "host-exporters-up"
     :description "Every host's node_exporter is up"
     :judges ["hosts"]
+    :joins up-joins
     :detect detect-down}
    {:name "host-facts-complete"
     :description "Every host reports its CPU count and memory"
     :judges ["hosts"]
+    :joins facts-joins
     :detect detect-incomplete}
    {:name "declared-hosts-report"
     :description "Every declared host reports facts"

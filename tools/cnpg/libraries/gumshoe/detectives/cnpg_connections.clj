@@ -161,7 +161,8 @@
   {:severity :warning
    :component (kubectl/namespace-name-of cluster)
    :summary (str "connections unread: " (unread-summary row))
-   :hint (unread-hint row)})
+   :hint (unread-hint row)
+   :reports-unread true})
 
 (defn detect-connection-ceiling
   "Clusters whose client backends are at or above the ceiling ordinary roles

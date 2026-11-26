@@ -36,11 +36,15 @@
          :hint "out OSDs no longer hold data - rebalancing may be in progress"}]))))
 
 (defn detect-pg-problems
+  "Placement groups in a critical state, then those not active+clean. The
+   critical patterns are tested first: Ceph reports a PG with scrub errors as
+   active+clean+inconsistent, which starts with active+clean."
   [evidence]
   (for [pg-state (-> (get evidence "status") :pgmap :pgs_by_state)
-        :let [state (:state_name pg-state)]
-        :when (not (str/starts-with? (str state) "active+clean"))]
-    {:severity (if (re-find critical-pg-states (str state)) :critical :warning)
+        :let [state (str (:state_name pg-state))
+              critical? (boolean (re-find critical-pg-states state))]
+        :when (or critical? (not (str/starts-with? state "active+clean")))]
+    {:severity (if critical? :critical :warning)
      :component "pgs"
      :summary (format "%d PGs are %s" (:count pg-state) state)}))
 

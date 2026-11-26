@@ -148,7 +148,8 @@
           :component (get evidence "host")
           :summary (format "could not read the federation destinations (%s)"
                            (if (:reachable response) (str "HTTP " (:status response)) "unreachable"))
-          :hint "check the admin token and that /_synapse/admin is reachable through the proxy"}]
+          :hint "check the admin token and that /_synapse/admin is reachable through the proxy"
+          :reports-unread true}]
         (federation-failures response)))))
 
 (def detectives

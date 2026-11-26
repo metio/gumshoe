@@ -134,19 +134,29 @@
 
 (def ^:private scheduled-backup-select {:mode :one :label "ScheduledBackup" :flag :scheduled-backup})
 
+(defn- backed-up-cluster
+  "The :reads entry of the Cluster a ScheduledBackup backs up, nil when the
+   ScheduledBackup or the Cluster does not exist. The suspend confirmation
+   states from it whether WAL archiving goes on."
+  [{:keys [context ref object]}]
+  (when-let [cluster (-> object :spec :cluster :name)]
+    (kubectl/get-namespaced-resource context (:namespace ref) cnpg/cluster-type cluster)))
+
 (def scheduled-backup-suspending
   "The suspend and resume books of a ScheduledBackup, as {:on :off} (see
    gumshoe.toggle)."
   (toggle/pair
    {:spec {:options (select/options scheduled-backup-select
                                     {:scheduled-backup {:desc "\"<namespace>/<name>\" - interactive selection when omitted"}})
-           :prerequisites (prerequisites cnpg/scheduled-backup-type)
+           :prerequisites (update (prerequisites cnpg/scheduled-backup-type)
+                                  :kubectl-can-get conj cnpg/cluster-type)
            :select scheduled-backup-select
            :subject {:type cnpg/scheduled-backup-type
                      :parse actions/parse-pick
-                     :invalid "the pick is not \"<namespace>/<name>\""}}
+                     :invalid "the pick is not \"<namespace>/<name>\""}
+           :reads {:backed-up-cluster backed-up-cluster}}
     :refusal actions/suspend-refusal
-    :items (fn [{:keys [object]} wanted] (actions/suspend-items object wanted))
+    :items (fn [{:keys [object backed-up-cluster]} wanted] (actions/suspend-items object wanted backed-up-cluster))
     :patch actions/suspend-patch
     :applied? (fn [scheduled-backup wanted] (= wanted (actions/suspended? scheduled-backup)))
     :verify {:timeout 30 :interval 3}

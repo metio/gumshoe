@@ -11,6 +11,7 @@
   (:require [cheshire.core :as json]
             [clojure.string :as str]
             [gumshoe.cnpg.instances :as instances]
+            [gumshoe.cnpg.recoverability :as recoverability]
             [gumshoe.conditions :as conditions]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.pick :as pick]))
@@ -201,15 +202,40 @@
     (= wanted (suspended? scheduled-backup)) (if wanted "it is suspended already" "it is not suspended")
     :else nil))
 
+(defn- archiving-item
+  "What suspending the schedule does to the cluster's recovery points, from
+   the Cluster read live (nil when it does not exist). With WAL archived, the
+   newest recovery point keeps advancing and only the base backup ages;
+   without, the newest backup is the newest recovery point."
+  [cluster-name cluster]
+  (cond
+    (nil? cluster)
+    (format (str "cluster %s was not found, so whether it archives WAL is unknown - "
+                 "without archiving, its newest backup is its newest recovery point and ages from now on")
+            cluster-name)
+
+    (recoverability/archives-wal? cluster)
+    (format (str "cluster %s archives WAL, so its newest recovery point keeps advancing; its newest "
+                 "base backup ages from now on, and a restore replays more WAL the older it gets")
+            cluster-name)
+
+    :else
+    (format (str "cluster %s archives no WAL, so its newest recovery point is its newest backup, "
+                 "which ages from now on")
+            cluster-name)))
+
 (defn suspend-items
-  [scheduled-backup wanted]
+  "The confirmation items of suspending (wanted true) or resuming a
+   ScheduledBackup. cluster is the Cluster it backs up, read live, or nil when
+   that Cluster does not exist."
+  [scheduled-backup wanted cluster]
   (let [target (kubectl/namespace-name-of scheduled-backup)
-        cluster (-> scheduled-backup :spec :cluster :name)
+        cluster-name (-> scheduled-backup :spec :cluster :name)
         schedule (-> scheduled-backup :spec :schedule)]
     (if wanted
-      [(format "suspend ScheduledBackup %s - no backup of cluster %s starts on its schedule %s until it is resumed" target cluster schedule)
-       "the cluster's newest recovery point ages from now on; WAL archiving continues"]
-      [(format "resume ScheduledBackup %s - backups of cluster %s start again on its schedule %s" target cluster schedule)])))
+      [(format "suspend ScheduledBackup %s - no backup of cluster %s starts on its schedule %s until it is resumed" target cluster-name schedule)
+       (archiving-item cluster-name cluster)]
+      [(format "resume ScheduledBackup %s - backups of cluster %s start again on its schedule %s" target cluster-name schedule)])))
 
 (defn suspend-patch
   [wanted]

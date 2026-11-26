@@ -8,7 +8,8 @@
    (read/write/backend) is retired; a deployment still running it is flagged to
    migrate. A ring member that is not ACTIVE means a degraded component; an
    UNHEALTHY member is losing writes."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [gumshoe.evidence :as evidence]))
 
 (def essential-components
   "Without every one of these the read or write path is broken - a missing one
@@ -35,10 +36,13 @@
       :else :microservice)))
 
 (defn detect-deployment-mode
+  "The mode the workloads show. Nothing is judged when the workload read did
+   not answer, since a missing list would read as no Loki components."
   [evidence]
   (let [workloads (get evidence "workloads")
         namespace (get evidence "namespace")]
-    (case (deployment-mode workloads)
+    (case (when (evidence/joined? evidence ["workloads"]) (deployment-mode workloads))
+      nil []
       :none
       [{:severity :critical
         :component namespace

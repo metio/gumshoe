@@ -25,17 +25,27 @@
 
 (defn collect
   "One row per pooler pod: its namespace, name, whether its log was read, and
-   the log itself."
+   the log itself. nil when the pod list did not answer (list-pooler-pods
+   returned nil), so a failed list leaves the evidence unread rather than
+   reading as a cluster without poolers."
   [list-pooler-pods read-log]
-  (vec (for [pod (list-pooler-pods)
-             :let [namespace (kubectl/namespace-of pod)
-                   name (kubectl/name-of pod)]]
-         (merge {:namespace namespace :pod name}
-                (read-log namespace name)))))
+  (when-some [pods (list-pooler-pods)]
+    (vec (for [pod pods
+               :let [namespace (kubectl/namespace-of pod)
+                     name (kubectl/name-of pod)]]
+           (merge {:namespace namespace :pod name}
+                  (read-log namespace name))))))
+
+(defn- list-pooler-pods
+  "The pooler pods, nil unless the list read answered."
+  [context]
+  (let [{:keys [ok? doc]} (kubectl/get-json-result context "pods" "--all-namespaces"
+                                                   (str "--selector=" pooler-role-selector))]
+    (when ok? (vec (kubectl/items-of doc)))))
 
 (defn collector
   "The evidence collector, for registration through the plugin seam."
   [context _key]
-  (collect #(kubectl/items-of (kubectl/get-selected context "pods" pooler-role-selector))
+  (collect #(list-pooler-pods context)
            (fn [namespace pod]
              (kubectl/container-logs context namespace pod "pgbouncer" tail-lines))))

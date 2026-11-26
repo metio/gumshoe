@@ -103,6 +103,15 @@
   (prop/for-all [[check evidence] (gen-missing-joined-read cases)]
     (judges-nothing? check evidence)))
 
+(defn no-missing-joined-read-detects
+  "The property that no evidence with a missing joined read makes a case's
+   detect function report, called directly. run-detectives never runs an
+   unread check, so the guard inside a detect function is only visible here;
+   a positive control for that guard disables it and expects this to fail."
+  [cases]
+  (prop/for-all [[check evidence] (gen-missing-joined-read cases)]
+    (empty? ((:detect check) evidence))))
+
 (defn gen-answered
   "[check evidence] for one of the cases with every read answered and the
    list documents thinned, the evidence the property withholds reads from."

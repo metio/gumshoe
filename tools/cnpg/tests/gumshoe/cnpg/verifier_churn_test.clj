@@ -14,7 +14,7 @@
          (churn/parse-snapshot "app|aaa\n\nNOTICE: something\n|\n"))))
 
 (deftest parse-snapshot-of-nothing-is-empty-test
-  (is (= {} (churn/parse-snapshot nil)))
+  (is (nil? (churn/parse-snapshot nil)) "a read that did not answer is unread")
   (is (= {} (churn/parse-snapshot ""))))
 
 (deftest a-moved-verifier-is-reported-by-role-test

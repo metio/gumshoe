@@ -37,8 +37,9 @@
   (let [{:keys [behind]} (console/proposal readings)
         one (first (filter #(str/ends-with? (:instance %) "-1") behind))]
     (is (pos? (:bytes one)))
-    (is (= (- (console/parse-lsn "125/27000000") (console/parse-lsn "120/5A000000"))
-           (:bytes one)))
+    (is (= (- (console/parse-lsn "125/27000000") (console/parse-lsn "120/5A0000A0"))
+           (:bytes one))
+        "-1 replayed past its received position, so it is ranked by the replayed one")
     (is (some #(str/includes? % "promoting cloudnative-pg-cluster-general-1 instead would discard")
               (console/proposal-lines (console/proposal readings))))))
 

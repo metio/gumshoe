@@ -4,16 +4,19 @@
 (ns gumshoe.cnpg.storage
   "Comparing a cluster's requested volume size against the volumes it has.
 
-   The operator does not enlarge a PVC. Raising storage.size on the Cluster is
-   necessary and inert on its own: the operator reports that the PVC group needs
-   enlarging and waits for a human to patch the requests. Until that happens the
-   spec says one size, the volumes are another, and nothing in the cluster's
-   phase or ready count says so.
+   The operator patches every claim's request up to the Cluster's size itself
+   unless spec.storage.resizeInUseVolumes is false (CloudNativePG's
+   ShouldResizeInUseVolumes reads that one flag for every volume role). Until
+   the volumes follow, the spec says one size, the volumes are another, and
+   nothing in the cluster's phase or ready count says so.
 
-   Two distinct states follow, and they need different answers. A request below
-   the spec means nobody has patched it and nothing is in motion. A capacity
-   below the request means the CSI driver is resizing, or has resized and is
-   waiting on the filesystem."
+   Three states follow, and they need different answers. A request below the
+   spec with resizing on means the operator's patch failed - typically a
+   StorageClass without allowVolumeExpansion, which refuses a hand patch as
+   well. A request below the spec with resizing off is the documented
+   re-create procedure: the old claims stay small on purpose until each
+   instance is re-created. A capacity below the request means the CSI driver
+   is resizing, or has resized and is waiting on the filesystem."
   (:require [gumshoe.cnpg.instances :as inst]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.quantity :as quantity]))
@@ -65,25 +68,35 @@
                     (operator-name? cluster (kubectl/name-of %)))))
           pvcs))
 
+(defn resizes-in-use-volumes?
+  "Whether the operator enlarges existing claims: true unless
+   spec.storage.resizeInUseVolumes is false, as the field defaults to true."
+  [cluster]
+  (not (false? (get-in cluster [:spec :storage :resizeInUseVolumes]))))
+
 (defn assess-volume
-  "One volume against the size the cluster asks for."
-  [desired pvc]
-  (let [requested (requested-bytes pvc)
-        capacity (capacity-bytes pvc)
-        row {:pvc (kubectl/name-of pvc)
-             :desired desired :requested requested :capacity capacity}]
-    (cond
-      (not (and desired requested)) (assoc row :state :unknown)
-      (> desired requested) (assoc row :state :unrequested)
-      (and capacity (> requested capacity)) (assoc row :state :resizing)
-      :else (assoc row :state :matched))))
+  "One volume against the size the cluster asks for. With `resizes?` false a
+   request below the spec is :awaiting-recreate rather than :unrequested."
+  ([desired pvc] (assess-volume desired pvc true))
+  ([desired pvc resizes?]
+   (let [requested (requested-bytes pvc)
+         capacity (capacity-bytes pvc)
+         row {:pvc (kubectl/name-of pvc)
+              :desired desired :requested requested :capacity capacity}]
+     (cond
+       (not (and desired requested)) (assoc row :state :unknown)
+       (> desired requested) (assoc row :state (if resizes? :unrequested :awaiting-recreate))
+       (and capacity (> requested capacity)) (assoc row :state :resizing)
+       :else (assoc row :state :matched)))))
 
 (defn assess
   [cluster pvcs]
   (let [namespace (kubectl/namespace-of cluster)
-        name (kubectl/name-of cluster)]
-    (map #(assess-volume (desired-bytes cluster %) %) (cluster-pvcs pvcs namespace name))))
+        name (kubectl/name-of cluster)
+        resizes? (resizes-in-use-volumes? cluster)]
+    (map #(assess-volume (desired-bytes cluster %) % resizes?)
+         (cluster-pvcs pvcs namespace name))))
 
 (defn pending?
   [row]
-  (contains? #{:unrequested :resizing} (:state row)))
+  (contains? #{:unrequested :awaiting-recreate :resizing} (:state row)))

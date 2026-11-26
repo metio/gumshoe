@@ -9,7 +9,8 @@
    container with kubectl exec. The primary is the pod the Cluster names in
    status.currentPrimary, or, when it names none, the pod of that cluster
    carrying cnpg.io/instanceRole=primary. A pod that answers from recovery
-   was not the primary when it answered.
+   was not the primary when it answered, except in a replica cluster, whose
+   designated primary is always in recovery.
 
    The evidence is {:items <one row per cluster read> :unread <one row per
    cluster not read, with its :reason>}, so a cluster that could not be read
@@ -46,15 +47,31 @@
         (when (= 1 (count labelled))
           (kubectl/name-of (first labelled))))))
 
+(defn replica-cluster?
+  "Whether a Cluster replicates from another cluster, as CloudNativePG's
+   Cluster.IsReplica decides it: spec.replica.enabled when set, otherwise
+   whether the cluster (spec.replica.self, defaulting to its name) differs
+   from spec.replica.primary. Every instance of such a cluster is in
+   recovery, its designated primary in status.currentPrimary included."
+  [cluster]
+  (let [replica (get-in cluster [:spec :replica])]
+    (cond
+      (nil? replica) false
+      (some? (:enabled replica)) (true? (:enabled replica))
+      :else (not= (or (not-empty (:self replica)) (kubectl/name-of cluster))
+                  (:primary replica)))))
+
 (defn classify
   "Rows of {:namespace :cluster :pod :reading} or {:namespace :cluster
    :reason}, split into the clusters read and those not read. A missing
-   reading is :no-answer and a reading from a standby is :in-recovery."
+   reading is :no-answer and a reading from a standby is :in-recovery, unless
+   the row is of a replica cluster (:replica? true), whose designated primary
+   answers from recovery by design."
   [rows]
-  (let [reason (fn [{:keys [reading] :as row}]
+  (let [reason (fn [{:keys [reading replica?] :as row}]
                  (cond (:reason row) (:reason row)
                        (nil? reading) :no-answer
-                       (:in-recovery? reading) :in-recovery))
+                       (and (:in-recovery? reading) (not replica?)) :in-recovery))
         {read false unread true} (group-by #(boolean (reason %)) rows)]
     {:items (vec read)
      :unread (mapv #(-> % (assoc :reason (reason %)) (dissoc :reading)) unread)}))
@@ -69,7 +86,9 @@
   (when clusters
     (let [labelled (delay (read-labelled))
           targets (for [cluster (kubectl/items-of clusters)
-                        :let [row {:namespace (kubectl/namespace-of cluster) :cluster (kubectl/name-of cluster)}
+                        :let [row (cond-> {:namespace (kubectl/namespace-of cluster)
+                                           :cluster (kubectl/name-of cluster)}
+                                    (replica-cluster? cluster) (assoc :replica? true))
                               named (not-empty (-> cluster :status :currentPrimary))]]
                     (cond
                       named (assoc row :pod named)
