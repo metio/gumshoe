@@ -2,11 +2,11 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.progress
-  "Live task lists for the books - the kind you watch fill in. Each row shows
-   the :not-yet mark until its work starts, a spinner while it runs, and the
-   mark of how it ended: :done, :failure, :not-yet with the reason when it
-   could not read its answer, or :finding when it finished with a caveat. The
-   list writes to stderr, so a captured result stays clean.
+  "Live task lists for the books - the kind you watch fill in. Each row is
+   printed with the mark of how it ended: :done, :failure, :not-yet with the
+   reason when it could not read its answer or never started, or :finding
+   when it finished with a caveat. The list writes to stderr, so a captured
+   result stays clean.
 
    `run-steps` runs a static list of steps one after another and returns what
    each step returned. A book whose phases are not a static list opens a board
@@ -15,12 +15,17 @@
    parallel, and `checklist` is run-steps for [label thunk] pairs, answering
    whether every step held.
 
-   What a step prints while the list is open is kept and drawn under its row,
-   so a repaint never overwrites it; `status!` replaces the row's transient
-   status line (\"waiting for … (10/60s)\"). Off a terminal, under NO_COLOR or
-   --no-color, a row prints once when it settles, followed by what its step
-   printed, with no cursor movement and no colour. The rows are drawn by the
-   pure gumshoe.render/step-lines."
+   On a terminal a row is printed for good once it settles, followed by what
+   its step printed, and never repainted. Only one line is: a spinner and what
+   is still in flight (\"3 running: a, b, c\"), cut to the terminal's width,
+   which `status!` replaces with the running step's status (\"waiting for …
+   (10/60s)\"). A repaint therefore costs the same however many rows the
+   list holds. Rows print in the order they were added, so a row that
+   settles behind one still running waits for it. Off a terminal, under
+   NO_COLOR or --no-color, a row prints once when it settles, followed by what
+   its step printed, with no cursor movement and no colour. What a paint
+   writes is decided by the pure `board-frame`, over gumshoe.render/step-lines
+   and gumshoe.render/live-line."
   (:refer-clojure :exclude [run!])
   (:require [clojure.string :as str]
             [gumshoe.render :as render]
@@ -66,48 +71,6 @@
   (animate? {:stderr-terminal? (terminal? 2)
              :no-color? (not (str/blank? (System/getenv "NO_COLOR")))
              :no-color-flag? (stdout/no-color-requested?)}))
-
-(defn- line
-  [status frame label]
-  (render/task (stdout/context) status label frame))
-
-(defn- redraw!
-  "Repaints the whole board in place: move the cursor up over the previous
-   render, then clear and rewrite each line. The first paint just writes the
-   lines (there is nothing above to move over)."
-  [lines first?]
-  (binding [*out* *err*]
-    (when (and (not first?) (pos? (count lines)))
-      (print (str "[" (count lines) "A")))
-    (doseq [l lines]
-      (print (str "\r[K" l "\n")))
-    (flush)))
-
-(defn watch-futures!
-  "Animates a task list while a set of labelled futures complete in parallel -
-   each flips from a spinner to the :done mark as it resolves - and returns the futures'
-   values in order once all are done. `labelled` is a seq of [label future]."
-  [labelled]
-  (let [labels (mapv first labelled)
-        futures (mapv second labelled)]
-    (cond
-      (empty? labelled) []
-
-      (and (nil? *board*) (live?))
-      (do
-        (loop [frame 0 first? true]
-          (redraw! (mapv (fn [label fut] (line (if (realized? fut) :done :running) frame label))
-                         labels futures)
-                   first?)
-          (when-not (every? realized? futures)
-            (Thread/sleep 90)
-            (recur (inc frame) false)))
-        (redraw! (mapv #(line :done 0 %) labels) false)
-        (mapv deref futures))
-
-      :else
-      (do (doseq [label labels] (stdout/item :info label))
-          (mapv deref futures)))))
 
 (def ^:private settled #{:done :failed :unread :warned :skipped})
 
@@ -166,51 +129,76 @@
   [^java.io.Writer w lines]
   (doseq [l lines] (.write w (str l "\n"))))
 
-(defn- commit
-  "Splits the board state into what may be printed for good - text printed
-   outside any step and the longest run of settled rows from the top, or every
-   row once the board closes - and what stays in the repainted region."
-  [{:keys [rows committed loose]} closing?]
+(defn board-frame
+  "Pure: what a paint of the board writes, from its state,
+
+     {:loose \"text printed outside any step\" :loose-rest \"…\"
+      :commit [lines printed for good] :upto n :live line-or-nil}
+
+   :loose holds the whole lines printed outside any step, and :loose-rest
+   the unfinished last line, kept back until its newline arrives, so it is
+   never cleared with the live line; a closing board prints it, ended.
+   :commit holds the rows from the first not yet printed up to the first that
+   has not settled, each followed by its reason and what its step printed,
+   or every remaining row once the board is :closing?. A row that settles
+   behind an unsettled one waits for it, so the rows print in the order they
+   were added and each step's text lands under its own row. :upto is the
+   index of the first row still to print. :live is the one line a live board
+   repaints (gumshoe.render/live-line) and nil off a terminal, where the
+   committed lines lose their colour as well. Options: :live?, :closing?,
+   :frame (the spinner frame) and :width (the columns the live line must
+   fit)."
+  [ctx {:keys [rows committed loose]} {:keys [live? closing? frame width]}]
   (let [upto (if closing?
                (count rows)
-               (+ committed (count (take-while #(settled (:status %)) (drop committed rows)))))]
-    {:loose loose
-     :rows (subvec rows committed upto)
+               (+ committed (count (take-while #(settled (:status %)) (drop committed rows)))))
+        lines (mapcat #(render/step-lines ctx %) (subvec rows committed upto))
+        text (apply str loose)
+        cut (if closing?
+              (count text)
+              (if-let [at (str/last-index-of text "\n")] (inc at) 0))
+        out (subs text 0 cut)]
+    {:loose (if (or (empty? out) (str/ends-with? out "\n")) out (str out "\n"))
+     :loose-rest (subs text cut)
+     :commit (vec (if live? lines (map render/strip-colors lines)))
      :upto upto
-     :region (subvec rows upto)}))
+     :live (when (and live? (not closing?))
+             (render/live-line ctx (subvec rows upto) {:frame frame :width width}))}))
 
 (defn- paint!
-  "Draws what changed. Live: move up over the region drawn last time, clear
-   to the end of the screen, print what is committed, then draw the region
-   again, each line cut to the terminal width. Plain: print only what is
-   committed, uncoloured; nothing is ever redrawn."
+  "Writes what board-frame says. Live: go up over the live line drawn last
+   time and clear it - one line at most, so a repaint costs the same however
+   many rows the board holds - print what is committed, then the live line
+   again. Every write ends a line, so with no live line drawn the cursor
+   already stands at the start of an empty one. Plain: print only what is
+   committed; nothing is ever redrawn."
   ([board] (paint! board false))
   ([{:keys [state live? ^java.io.Writer err lock] :as board} closing?]
    (locking lock
      (let [s @state
-           {:keys [loose rows upto region]} (commit s closing?)
-           ctx (board-context board)
-           width (when live? (stdout/width))
-           frame (:frame s)
-           settled-lines (mapcat #(render/step-lines ctx %) rows)
-           settled-lines (if live? settled-lines (map render/strip-colors settled-lines))]
+           {:keys [loose loose-rest commit upto live]}
+           (board-frame (board-context board) s {:live? live? :closing? closing?
+                                                 :frame (:frame s)
+                                                 :width (when live? (dec (stdout/terminal-columns)))})]
        (if live?
-         (do (when (pos? (:height s)) (.write err (str "\u001b[" (:height s) "A")))
-             (.write err "\r\u001b[J")
-             (when (seq loose) (.write err (apply str loose)))
-             (write-lines! err settled-lines)
-             (let [region-lines (vec (mapcat #(render/step-lines ctx % {:frame frame :tail 8 :width width}) region))]
-               (write-lines! err region-lines)
-               (swap! state assoc :height (count region-lines))))
-         (write-lines! err settled-lines))
-       (swap! state assoc :committed upto :loose [])
+         (do (when (pos? (:height s)) (.write err "\u001b[1A\r\u001b[J"))
+             (.write err ^String loose)
+             (write-lines! err commit)
+             (when live (.write err (str live "\n")))
+             (swap! state assoc :height (if live 1 0)))
+         (write-lines! err commit))
+       ;; text printed outside a step since the read above stays queued
+       (let [consumed (- (count (apply str (:loose s))) (count loose-rest))]
+         (swap! state (fn [now]
+                        (let [left (subs (apply str (:loose now)) consumed)]
+                          (assoc now :committed upto :loose (if (empty? left) [] [left]))))))
        (.flush err)))))
 
 (defn- capture-writer
   "A writer for the body of a board: text written while one of its steps runs
    on this thread joins that row's output; other text goes out as it comes,
-   uncoloured in plain mode, and in live mode is printed above the region at
-   the next paint."
+   uncoloured in plain mode, and in live mode is printed above the live line
+   at the next paint."
   [{:keys [state live? ^java.io.Writer err] :as board}]
   (let [take-text (fn [text]
                     (let [[b i] *step*]
@@ -284,10 +272,10 @@
 
 (defn status!
   "Says how the running step is getting on - \"waiting for: … (10/60s)\",
-   \"12 of 48 reads\". In a live list it replaces the row's transient status
-   line, which disappears when the row settles. Elsewhere, a plain list
-   included, it prints as an :in-progress item at once, so a log shows the
-   wait as it happens."
+   \"12 of 48 reads\". In a live list it replaces the text of the list's live
+   line until the step settles, and is never printed for good. Elsewhere, a
+   plain list included, it prints as an :in-progress item at once, so a log
+   shows the wait as it happens."
   [text]
   (let [[{:keys [state live? ^java.io.Writer err]} i] *step*]
     (cond
@@ -339,6 +327,37 @@
            (reset! running false)
            (when animation (deref animation 1000 nil))
            (paint! board true)))))))
+
+(defn watch-futures!
+  "Draws a task list while a set of labelled futures complete in parallel -
+   each row flips from a spinner to the :done mark as its future resolves -
+   and returns the futures' values in order once all are done. `labelled` is
+   a seq of [label future]. Live, it is a board whose rows settle as their
+   futures do; elsewhere, inside another list included, each label prints
+   once at the start."
+  [labelled]
+  (let [labels (mapv first labelled)
+        futures (mapv second labelled)]
+    (cond
+      (empty? labelled) []
+
+      (and (nil? *board*) (live?))
+      (call-with-board
+       {:live? true}
+       (fn [board]
+         (let [rows (mapv #(add! board %) labels)]
+           (doseq [i rows] (start! board i))
+           (loop [left rows]
+             (let [{done true left false} (group-by #(realized? (nth futures %)) left)]
+               (doseq [i done] (settle! board i true))
+               (when (seq left)
+                 (Thread/sleep 90)
+                 (recur left))))
+           (mapv deref futures))))
+
+      :else
+      (do (doseq [label labels] (stdout/item :info label))
+          (mapv deref futures)))))
 
 (defmacro with-board
   "(with-board [b] body…) or (with-board [b {:live? false}] body…): runs body

@@ -114,6 +114,31 @@
    known destination bind it."
   nil)
 
+(defn choose-terminal-columns
+  "The columns of a live terminal as they are known, unclamped: the override,
+   else COLUMNS, else what stty reports, else nil. A repainted line must fit
+   the real terminal, so a terminal narrower than the clamped width counts
+   as it is."
+  [{:keys [override columns stty]}]
+  (some #(when-let [w (parse-width %)] (when (pos? w) w)) [override columns stty]))
+
+(def ^:private stderr-columns
+  (delay (when (and (fd-target 2) (terminal? 2))
+           (choose-terminal-columns {:override (System/getenv "GUMSHOE_WIDTH")
+                                     :columns (System/getenv "COLUMNS")
+                                     :stty (stty-columns)}))))
+
+(def unknown-terminal-columns
+  "The columns a repainted line keeps to when the terminal's are unknown:
+   narrow enough for any terminal still in use."
+  40)
+
+(defn terminal-columns
+  "The columns a line repainted in place on stderr must fit: *width* when
+   bound, else the terminal's own, else unknown-terminal-columns."
+  []
+  (or *width* @stderr-columns unknown-terminal-columns))
+
 (defn width
   "The width rules, banners and wrapped prose on stderr fill."
   []

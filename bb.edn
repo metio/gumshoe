@@ -272,6 +272,7 @@
                    [gumshoe.postgres-connections-test]
                    [gumshoe.progress-test]
                    [gumshoe.progress-steps-test]
+                   [gumshoe.progress-live-line-test]
                    [gumshoe.prometheus-test]
                    [gumshoe.prometheus-recreate-test]
                    [gumshoe.statefulset-guard-test]
@@ -574,6 +575,7 @@
                                                          'gumshoe.postgres-connections-test
                                                          'gumshoe.progress-test
                                                          'gumshoe.progress-steps-test
+                                                         'gumshoe.progress-live-line-test
                                                          'gumshoe.prometheus-test
                                                          'gumshoe.prometheus-recreate-test
                                                          'gumshoe.statefulset-guard-test
