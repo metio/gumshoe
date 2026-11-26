@@ -456,26 +456,59 @@
                             (.format instant (java.time.format.DateTimeFormatter/ofPattern "yyyyMMdd-HHmmss-SSS"))
                             ".edn.bak"))))))
 
+(def ^:private io-wording
+  "How the reason of a JDK file exception reads, by its class name: their
+   message is often only the path. Matched by name, since babashka does not
+   expose every one of these classes."
+  {"java.nio.file.AccessDeniedException" "permission denied on %s"
+   "java.nio.file.FileAlreadyExistsException" "%s already exists"
+   "java.nio.file.NoSuchFileException" "%s does not exist"
+   "java.nio.file.NotDirectoryException" "%s is not a directory"})
+
+(defn- io-reason
+  "What an IOException from the file system says went wrong, in words."
+  [^java.io.IOException e]
+  (let [message (or (ex-message e) (str e))]
+    (if-let [wording (io-wording (.getName (class e)))]
+      (format wording message)
+      message)))
+
+(defn backup-refusal
+  "Why env.edn was left unchanged when keeping its backup in dir failed with
+   the IOException e."
+  [dir e]
+  (format "could not keep a backup of env.edn in %s: %s. env.edn was not changed. Set XDG_STATE_HOME to a writable directory and run again."
+          dir (io-reason e)))
+
 (defn- keep-backup!
   "Copies the file at path to backup, creating backup with mode 0600 before
    any content goes in and its directory with mode 0700, so no other user
    can read a copy of a secret at any moment. Refuses to overwrite an
-   existing file at backup."
+   existing file at backup. Throws ex-info with ::backup-refused and
+   backup-refusal as its message when any step fails, after removing a
+   backup file it created but could not fill."
   [path backup]
-  (let [dir (fs/parent backup)]
-    (fs/create-dirs dir {:posix-file-permissions "rwx------"})
-    (fs/set-posix-file-permissions dir "rwx------")
-    (fs/create-file backup {:posix-file-permissions "rw-------"})
-    (fs/write-bytes backup (fs/read-all-bytes path))
-    backup))
+  (let [dir (fs/parent backup)
+        created (volatile! false)]
+    (try
+      (fs/create-dirs dir {:posix-file-permissions "rwx------"})
+      (fs/set-posix-file-permissions dir "rwx------")
+      (fs/create-file backup {:posix-file-permissions "rw-------"})
+      (vreset! created true)
+      (fs/write-bytes backup (fs/read-all-bytes path))
+      backup
+      (catch java.io.IOException e
+        (when @created (fs/delete-if-exists backup))
+        (throw (ex-info (backup-refusal (str dir) e) {::backup-refused true :backup backup} e))))))
 
 (defn write!
   "Writes an env.edn map to path (the primary path by default) and returns
    {:path path :backup <where the previous file was copied, or nil>}. A file
    already at path is copied to backup (backup-path for now by default)
    first and never overwritten, so a write can always be undone; when the
-   copy fails nothing is written. A caller that names the backup in its
-   confirmation passes the same backup here."
+   copy fails nothing is written and write! throws ex-info with
+   ::backup-refused whose message says so. A caller that names the backup
+   in its confirmation passes the same backup here."
   ([config] (write! config primary-path))
   ([config path] (write! config path (backup-path path (java.time.LocalDateTime/now))))
   ([config path backup]

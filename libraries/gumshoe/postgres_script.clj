@@ -23,7 +23,9 @@
    judged in one pass without being held in memory. The few statements whose
    judgement depends on words past their opening (COPY ... FROM stdin, whose
    column list has no length bound, and REINDEX ... CONCURRENTLY) keep their
-   complete code text up to the terminating semicolon instead."
+   complete code text up to the terminating semicolon instead, bounded by
+   text-limit. A statement past that bound cannot be judged, so the scan
+   refuses the script rather than guess that it is safe."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]))
 
@@ -40,6 +42,14 @@
    statement makes its data rows read as SQL, which refuses a sound dump or
    hides a real breaker."
   #{"copy" "reindex"})
+
+(def ^:private text-limit
+  "Characters of code text kept for a statement opened by one of
+   full-text-openers. pg_dump's longest COPY header (1600 columns of 63-byte
+   quoted names) is about 100 KiB, so a statement past this bound is a
+   script missing its terminating semicolon, and the rest of the script
+   would otherwise be held in memory."
+  (* 1024 1024))
 
 (def breakers
   "Statement openings that cannot run inside the transaction psql
@@ -105,26 +115,38 @@
       (let [joined (str head s)]
         (subs joined 0 (min head-limit (count joined)))))))
 
+(defn- too-long
+  "The refusal thrown when the kept text of the statement starting at line
+   would grow past text-limit."
+  [line kept]
+  (ex-info (format "the statement starting at line %d is longer than %d characters; cannot verify the dump runs in one transaction"
+                   line text-limit)
+           {::too-long true :line line :limit text-limit :kept kept}))
+
 (defn- add
   "state with s appended to the statement's head and, for a statement judged
-   on its complete text, to that text."
-  [state s]
-  (cond-> (update state :head grow s)
-    (:text state) (update :text conj s)))
+   on its complete text, to that text. The text is a StringBuilder threaded
+   through the scan, which uses each state once, and stops at text-limit."
+  [state ^String s]
+  (when-let [^StringBuilder text (:text state)]
+    (when (> (+ (.length text) (.length s)) text-limit)
+      (throw (too-long (:stmt-line state) (.length text))))
+    (.append text s))
+  (update state :head grow s))
 
 (defn- open-text
   "state keeping the statement's complete text from here on when word is its
    first word and one of full-text-openers."
   [state word lower]
   (if (and (= "" (:head state)) (full-text-openers lower))
-    (assoc state :text [])
+    (assoc state :text (StringBuilder.))
     state))
 
 (defn- statement-text
   "The text a statement is judged by: its complete code text when it was
    kept, its head otherwise."
   [{:keys [head text]}]
-  (if text (apply str text) head))
+  (if text (str text) head))
 
 (defn- end-statement
   [{:keys [head line-no stmt-line] :as state}]
@@ -256,17 +278,32 @@
   "Every statement of the script `lines` that cannot run in one transaction,
    as [{:line <1-based line> :statement <what it is>}], in script order; empty
    when the whole script can. A statement the script leaves unterminated is
-   judged too."
+   judged too. Throws ex-info with ::too-long when a statement judged on its
+   complete text is longer than text-limit, since nothing then shows it is
+   safe."
   [lines]
   (let [state (reduce scan-line initial lines)]
     (:found (if (and (:head state) (not (:start? state))) (end-statement state) state))))
 
 (defn file-transaction-breakers
   "transaction-breakers of the script in file, read as UTF-8 line by line,
-   or {:unread <why>} when the file cannot be read."
+   {:unjudged <why>} when a statement is too long to judge, or {:unread <why>}
+   when the file cannot be read or scanned. Every outcome but an empty
+   vector refuses the restore, so a scan that fails in any way, an
+   OutOfMemoryError included, is reported as a refusal naming the dump."
   [file]
   (try
     (with-open [reader (io/reader (str file) :encoding "UTF-8")]
       (transaction-breakers (line-seq reader)))
+    (catch clojure.lang.ExceptionInfo e
+      (if (::too-long (ex-data e))
+        {:unjudged (ex-message e)}
+        {:unread (or (ex-message e) (str e))}))
+    ;; Throwable, so an Error thrown while scanning (OutOfMemoryError above
+    ;; all) refuses the restore instead of escaping as an unexpected error.
+    ;; The scan's state is unreachable once this frame unwinds, so the heap
+    ;; it held is free again by the time the refusal is printed.
     (catch Exception e
-      {:unread (or (ex-message e) (str e))})))
+      {:unread (or (ex-message e) (str e))})
+    (catch Throwable e
+      {:unread (str "scanning it failed with " e)})))

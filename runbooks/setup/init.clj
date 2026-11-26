@@ -171,11 +171,16 @@
           (refuse-to-rewrite config/primary-path (config/file-problems config/primary-path))
 
           :else
-          (let [{:keys [path backup]} (config/write! merged config/primary-path backup)]
-            (stdout/ok (format "wrote %s" path))
-            (when backup
-              (stdout/ok (format "the previous env.edn is kept as %s" backup)))
-            true))))))
+          (if-let [{:keys [path backup]} (try (config/write! merged config/primary-path backup)
+                                              (catch clojure.lang.ExceptionInfo e
+                                                (if (::config/backup-refused (ex-data e))
+                                                  (do (stdout/error (ex-message e)) nil)
+                                                  (throw e))))]
+            (do (stdout/ok (format "wrote %s" path))
+                (when backup
+                  (stdout/ok (format "the previous env.edn is kept as %s" backup)))
+                true)
+            false))))))
 
 (defn- init
   [_opts _ctx]
