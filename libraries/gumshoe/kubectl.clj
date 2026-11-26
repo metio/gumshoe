@@ -472,7 +472,7 @@
 
    The cached readers are those built on get-json, get-json-result and the
    namespaced reads: get-json, get-json-result, get-all, get-selected,
-   get-cluster-resource, get-namespaced, get-namespaced-result,
+   get-namespaced-selected, get-cluster-resource, get-namespaced, get-namespaced-result,
    get-namespaced-resource, confirmed-absent? and pods-on-node. The other
    readers always read.
 
@@ -823,8 +823,17 @@
      :log (str (:out result))}))
 
 (defn get-selected
+  "Every resource of a type matching a label selector, in every namespace."
   [context type selector]
   (get-json context type "--all-namespaces" (str "--selector=" selector)))
+
+(defn get-namespaced-selected
+  "Every resource of a type matching a label selector within one namespace. A
+   read that only concerns one namespace asks for that namespace, so a user
+   whose RBAC is a RoleBinding there can answer it where a cluster-scope list
+   is refused."
+  [context namespace type selector]
+  (get-json context type (str "--namespace=" namespace) (str "--selector=" selector)))
 
 (defn get-cluster-resource
   [context type name]

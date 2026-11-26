@@ -65,21 +65,25 @@
   "What the source of PHP's limits leaves open: values from the CLI or from
    php-fpm's ini without its pools may not be the ones php-fpm applies, and
    pools that disagree leave the serving pool's value unknown."
-  [{:keys [component php-source php-pools-differ?]}]
+  [{:keys [component php-source php-container php-pools-differ?]}]
   (concat
    (case php-source
      :cli
      [{:severity :warning
        :component component
        :summary "PHP's limits were read from the PHP CLI ('php -i'), whose values php-fpm may not apply"
-       :hint (str "no container answered 'php-fpm -i'; the CLI and php-fpm may load different php.ini files, "
+       :hint (str "no container answered 'php-fpm -i'"
+                  (when php-container (str ", the CLI was read in " php-container))
+                  "; the CLI and php-fpm may load different php.ini files, "
                   "and a php-fpm pool's php_value or php_admin_value never reaches the CLI - "
                   "read upload_max_filesize and post_max_size in the php-fpm container")}]
      :fpm-ini
      [{:severity :warning
        :component component
        :summary "php-fpm's pools were not read, so a pool's php_value or php_admin_value may override these PHP limits"
-       :hint "'php-fpm -tt' did not answer in the php-fpm container - read the pool configuration (php-fpm.d) for upload_max_filesize and post_max_size"}]
+       :hint (str "'php-fpm -tt' did not answer with a pool in "
+                  (or php-container "the php-fpm container")
+                  " - read the pool configuration (php-fpm.d) for upload_max_filesize and post_max_size")}]
      nil)
    (when php-pools-differ?
      [{:severity :warning

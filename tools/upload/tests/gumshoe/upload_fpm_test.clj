@@ -142,3 +142,74 @@
 
 (deftest no-php-answer-has-no-source
   (is (nil? (:php-source (phpstack/parse-evidence {:component "app" :nginx-config @nginx-64m})))))
+
+;; --- php-fpm is searched for everywhere before the CLI ---------------------------------
+
+(defn- fake-pods
+  "kubectl answering pods, a seq of [pod-name [container ..]], and each exec
+   from execs keyed by [pod container command]; anything else execs like a
+   missing command. Records every exec under commands."
+  [pods execs commands]
+  (fn [& argv]
+    (if (some #{"exec"} argv)
+      (let [[container command] (exec-command argv)
+            pod (second (drop-while #(not= "exec" %) argv))
+            target [pod container command]]
+        (swap! commands conj target)
+        (get execs target missing))
+      (answered (str "{\"items\":["
+                     (str/join "," (for [[pod containers] pods]
+                                     (format "{\"metadata\":{\"name\":\"%s\"},\"spec\":{\"containers\":[%s]}}"
+                                             pod (str/join "," (map #(format "{\"name\":\"%s\"}" %) containers)))))
+                     "]}")))))
+
+(defn- collect-pods
+  [pods execs commands]
+  (with-redefs [shell/execute (fake-pods pods execs commands)
+                stdout/print-section (fn [& _])
+                stdout/err-println (fn [& _])]
+    (phpstack/collect-evidence! "ctx" "moodle")))
+
+(deftest a-cli-only-pod-listed-first-never-stands-in-for-php-fpm
+  (let [commands (atom [])
+        evidence (collect-pods [["a-worker" ["worker"]] ["b-web" ["nginx" "fpm"]]]
+                               {["a-worker" "worker" ["php" "-i"]] (answered @cli-info)
+                                ["b-web" "nginx" ["nginx" "-T"]] (answered @nginx-64m)
+                                ["b-web" "fpm" (phpstack/fpm-command "-i")] (answered @fpm-info)
+                                ["b-web" "fpm" (phpstack/fpm-command "-tt")] (answered @fpm-pools)}
+                               commands)]
+    (is (= {:php-source :fpm :php-container "b-web/fpm" :upload-max 67108864 :post-max 83886080}
+           (select-keys evidence [:php-source :php-container :upload-max :post-max])))
+    (is (not-any? #(= ["php" "-i"] (nth % 2)) @commands) "the CLI is never asked once php-fpm answered")))
+
+(deftest a-cli-sidecar-listed-first-never-stands-in-for-php-fpm
+  (let [evidence (collect-pods [["app-0" ["cli" "fpm"]]]
+                               {["app-0" "cli" ["php" "-i"]] (answered @cli-info)
+                                ["app-0" "fpm" (phpstack/fpm-command "-i")] (answered @fpm-info)
+                                ["app-0" "fpm" (phpstack/fpm-command "-tt")] (answered @fpm-pools)}
+                               (atom []))]
+    (is (= {:php-source :fpm :php-container "app-0/fpm" :upload-max 67108864}
+           (select-keys evidence [:php-source :php-container :upload-max])))))
+
+(deftest the-cli-fallback-names-the-container-it-came-from
+  (let [evidence (collect-pods [["a-web" ["nginx"]] ["b-worker" ["worker"]]]
+                               {["a-web" "nginx" ["nginx" "-T"]] (answered @nginx-64m)
+                                ["b-worker" "worker" ["php" "-i"]] (answered @cli-info)}
+                               (atom []))
+        hints (mapv :hint (detective/run-detectives (detective/mark-unread upload/detectives evidence) evidence))]
+    (is (= {:php-source :cli :php-container "b-worker/worker"}
+           (select-keys evidence [:php-source :php-container])))
+    (is (some #(str/includes? (str %) "the CLI was read in b-worker/worker") hints))))
+
+;; --- a pool dump that names no pool ------------------------------------------------------
+
+(deftest an-empty-pool-dump-is-pools-not-read
+  (doseq [[case dump] [["empty" ""] ["no pool header" "[26-Nov-2026 10:00:00] WARNING: something\n"]]]
+    (testing case
+      (let [evidence (collect ["php"] {fpm-i (answered @fpm-info) fpm-tt (answered dump)})]
+        (is (= :fpm-ini (:php-source evidence)))
+        (is (some #(str/starts-with? % "php-fpm's pools were not read") (summaries evidence)))))))
+
+(deftest parse-evidence-reads-pools-without-a-pool-as-unread
+  (is (= :fpm-ini (:php-source (phpstack/parse-evidence {:component "app" :php-info @fpm-info :php-source :fpm
+                                                         :fpm-pools {}})))))

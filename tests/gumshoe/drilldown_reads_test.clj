@@ -176,7 +176,8 @@
     :unread ["the pods of this workload"]}
    {:case "a Service's routes, ingresses and backend pods" :subject (subject/subject "Service" "shop" "web")
     :object {:metadata {:namespace "shop" :name "web"} :spec {:selector {:app "web"}}}
-    :unread ["the routes and ingresses that expose this Service" "the backend pods of this Service"]}])
+    :unread ["the HTTPRoutes that expose this Service" "the Ingresses that expose this Service"
+             "the backend pods of this Service"]}])
 
 (deftest a-refused-lookup-is-unread-never-nothing-related
   (doseq [{:keys [case subject object unread]} cases]
@@ -232,3 +233,80 @@
           (captured #(investigation/investigate! "ctx" (subject/subject "Node" nil "worker-1"))))]
     (is (false? result))
     (is (str/includes? out "could not read the pods on this node"))))
+
+;; --- a user whose RBAC is one namespace ----------------------------------------------
+
+(def ^:private shop-pod
+  {:metadata {:namespace "shop" :name "web-1" :labels {:app "web"}}
+   :status {:phase "Running"}})
+
+(def ^:private shop-ingress
+  {:metadata {:namespace "shop" :name "web"}
+   :spec {:rules [{:http {:paths [{:backend {:service {:name "web"}}}]}}]}})
+
+(defn- namespace-scoped-cluster
+  "kubectl as a user bound to the shop namespace sees it: any read across
+   every namespace is refused, a read in shop answers with its pods and
+   ingresses. Records every argv."
+  [commands]
+  (fn [& argv]
+    (swap! commands conj (vec argv))
+    (cond
+      (some #{"--all-namespaces"} argv) forbidden
+      (not (some #{"--namespace=shop"} argv)) forbidden
+      (= "pods" (get-type argv)) (answered {:items [shop-pod]})
+      (= "ingresses" (get-type argv)) (answered {:items [shop-ingress]})
+      :else empty-list)))
+
+(deftest a-workloads-pods-are-read-in-its-namespace
+  (let [commands (atom [])
+        result (with-redefs [shell/execute (namespace-scoped-cluster commands)]
+                 (investigation/fetched-edges "ctx" (subject/subject "StatefulSet" "shop" "web")
+                                              {:metadata {:namespace "shop" :name "web"}
+                                               :spec {:selector {:matchLabels {:app "web"}}}}))]
+    (is (= [] (:unread result)))
+    (is (= [{:relation "pod" :subject (subject/subject "Pod" "shop" "web-1") :situation :ok}]
+           (:edges result)))
+    (is (some #(some #{"--selector=app=web"} %) @commands))))
+
+(deftest a-services-pods-and-ingresses-are-read-in-its-namespace
+  (with-redefs [shell/execute (namespace-scoped-cluster (atom []))]
+    (let [result (investigation/fetched-edges "ctx" (subject/subject "Service" "shop" "web")
+                                              {:metadata {:namespace "shop" :name "web"}
+                                               :spec {:selector {:app "web"}}})]
+      (is (= #{{:relation "exposed by" :subject (subject/subject "Ingress" "shop" "web")}
+               {:relation "backend pod" :subject (subject/subject "Pod" "shop" "web-1") :situation :ok}}
+             (set (:edges result)))
+          "a refused HTTPRoute list costs only the routes")
+      (is (= ["the HTTPRoutes that expose this Service"] (mapv :what (:unread result)))
+          "HTTPRoutes may reach across namespaces, so they are still read everywhere"))))
+
+(deftest a-refused-ingress-list-keeps-the-route-edges
+  (let [route {:metadata {:namespace "edge" :name "web"}
+               :spec {:rules [{:backendRefs [{:name "web" :namespace "shop"}]}]}}]
+    (with-redefs [shell/execute (fn [& argv]
+                                  (cond
+                                    (= "ingresses" (get-type argv)) forbidden
+                                    (str/starts-with? (str (get-type argv)) "httproutes") (answered {:items [route]})
+                                    :else empty-list))]
+      (let [result (investigation/fetched-edges "ctx" (subject/subject "Service" "shop" "web")
+                                                {:metadata {:namespace "shop" :name "web"} :spec {}})]
+        (is (= [{:relation "exposed by" :subject (subject/subject "HTTPRoute" "edge" "web")}] (:edges result)))
+        (is (= ["the Ingresses that expose this Service"] (mapv :what (:unread result))))))))
+
+(deftest a-workload-drill-down-of-a-namespace-scoped-user-ends-green
+  (let [{:keys [result out]}
+        (with-redefs [shell/execute (let [inner (namespace-scoped-cluster (atom []))]
+                                      (fn [& argv]
+                                        (if (and (= "statefulsets" (get-type argv)) (some #{"web"} argv))
+                                          (answered {:kind "StatefulSet"
+                                                     :metadata {:namespace "shop" :name "web" :generation 1}
+                                                     :spec {:replicas 1 :selector {:matchLabels {:app "web"}}}
+                                                     :status {:observedGeneration 1 :replicas 1 :readyReplicas 1
+                                                              :updatedReplicas 1 :currentReplicas 1}})
+                                          (apply inner argv))))
+                      investigation/save-trail! (fn [& _] nil)
+                      fuzzy/select-single (fn [_ _] "✓ done - end the investigation")]
+          (captured #(investigation/investigate! "ctx" (subject/subject "StatefulSet" "shop" "web"))))]
+    (is (true? result) out)
+    (is (not (str/includes? out "could not read")) out)))
