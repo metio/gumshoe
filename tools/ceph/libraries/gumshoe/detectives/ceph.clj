@@ -11,11 +11,21 @@
   #"down|incomplete|inconsistent|stale|peering|unknown")
 
 (defn detect-health-checks
+  "One finding per health check ceph reports. A muted check (`ceph health
+   mute`, reported with \"muted\": true) is left out of the cluster's health
+   status by ceph itself, so it is reported at info only, as acknowledged."
   [evidence]
-  (for [[check data] (-> (get evidence "status") :health :checks)]
-    {:severity (if (= "HEALTH_ERR" (:severity data)) :critical :warning)
-     :component (name check)
-     :summary (or (-> data :summary :message) "health check is failing")}))
+  (for [[check data] (-> (get evidence "status") :health :checks)
+        :let [summary (or (-> data :summary :message) "health check is failing")]]
+    (if (true? (:muted data))
+      {:severity :info
+       :component (name check)
+       :summary (str "muted: " summary)
+       :hint (str "ceph leaves a muted check out of the health status until it is unmuted or "
+                  "the mute expires - `ceph health unmute " (name check) "` restores it")}
+      {:severity (if (= "HEALTH_ERR" (:severity data)) :critical :warning)
+       :component (name check)
+       :summary summary})))
 
 (defn detect-osd-problems
   [evidence]

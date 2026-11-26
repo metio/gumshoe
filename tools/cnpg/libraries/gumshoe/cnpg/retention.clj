@@ -14,7 +14,7 @@
    segments are released. The standby then needs re-cloning, which is the trade -
    a standby to rebuild against a primary that cannot start."
   (:require [clojure.string :as str]
-            [gumshoe.quantity :as quantity]))
+            [gumshoe.cnpg.storage :as storage]))
 
 (def parameter "max_slot_wal_keep_size")
 
@@ -49,7 +49,7 @@
   [cluster]
   (let [section (if (get-in cluster [:spec :walStorage]) :walStorage :storage)]
     {:section section
-     :bytes (quantity/quantity->number (get-in cluster [:spec section :size]))}))
+     :bytes (storage/size-of (get-in cluster [:spec section]))}))
 
 (defn volume-bytes
   [cluster]

@@ -241,7 +241,7 @@
       (is (true? ((:check template-check)))))
     (with-redefs [shell/execute (answer statefulset)]
       (is (false? ((:check template-check)))))
-    (with-redefs [shell/execute (answer (assoc statefulset :status {:readyReplicas 2}))]
+    (with-redefs [shell/execute (answer (assoc statefulset :status {:readyReplicas 2 :observedGeneration 7}))]
       (is (true? ((:check pods-check)))))
     (with-redefs [shell/execute (answer (assoc statefulset :status {:readyReplicas 1}))]
       (is (false? ((:check pods-check)))))))

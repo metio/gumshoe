@@ -24,18 +24,33 @@
 (def ^:private role-label :cnpg.io/pvcRole)
 (def ^:private tablespace-label :cnpg.io/tablespaceName)
 
+(defn size-of
+  "The size a storage section (spec.storage, spec.walStorage or a
+   tablespace's storage) asks for, in bytes, as CloudNativePG's
+   StorageConfiguration.GetSizeOrNil reads it: size when it is not empty -
+   nil when it does not parse, with no fallback - and otherwise the storage request of
+   pvcTemplate. A section with neither, or a template without a storage
+   request (which GetSizeOrNil reads as zero), has no size here: nil, so the
+   volume is judged unknown rather than compared against zero."
+  [section]
+  (let [size (:size section)]
+    (if (seq (str size))
+      (quantity/quantity->number size)
+      (let [requested (quantity/quantity->number (get-in section [:pvcTemplate :resources :requests :storage]))]
+        (when (and requested (pos? requested)) requested)))))
+
 (defn desired-bytes
-  "The size the cluster asks for a volume of the pvc's role: the data size,
-   walStorage for a WAL volume, and the tablespace's own storage for a
-   tablespace volume. With one argument, the data size."
+  "The size the cluster asks for a volume of the pvc's role (size-of): the
+   data storage, walStorage for a WAL volume, and the tablespace's own
+   storage for a tablespace volume. With one argument, the data size."
   ([cluster]
-   (quantity/quantity->number (get-in cluster [:spec :storage :size])))
+   (size-of (get-in cluster [:spec :storage])))
   ([cluster pvc]
    (let [labels (-> pvc :metadata :labels)]
      (case (get labels role-label)
-       "PG_WAL" (quantity/quantity->number (get-in cluster [:spec :walStorage :size]))
+       "PG_WAL" (size-of (get-in cluster [:spec :walStorage]))
        "PG_TABLESPACE" (some #(when (= (get labels tablespace-label) (:name %))
-                                (quantity/quantity->number (get-in % [:storage :size])))
+                                (size-of (:storage %)))
                              (get-in cluster [:spec :tablespaces]))
        (desired-bytes cluster)))))
 

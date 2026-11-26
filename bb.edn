@@ -236,6 +236,13 @@
                    [gumshoe.postgres-connections-test]
                    [gumshoe.progress-test]
                    [gumshoe.prometheus-test]
+                   [gumshoe.prometheus-recreate-test]
+                   [gumshoe.statefulset-guard-test]
+                   [gumshoe.cnpg-pvc-template-size-test]
+                   [gumshoe.cnpg-terminated-pooler-test]
+                   [gumshoe.cnpg-unread-node-stats-test]
+                   [gumshoe.ceph-muted-and-daemon-list-test]
+                   [gumshoe.external-dns-invalid-name-test]
                    [gumshoe.rightsizing-test]
                    [gumshoe.rbac-test]
                    [gumshoe.rbac-public-identities-test]
@@ -493,6 +500,13 @@
                                                          'gumshoe.postgres-connections-test
                                                          'gumshoe.progress-test
                                                          'gumshoe.prometheus-test
+                                                         'gumshoe.prometheus-recreate-test
+                                                         'gumshoe.statefulset-guard-test
+                                                         'gumshoe.cnpg-pvc-template-size-test
+                                                         'gumshoe.cnpg-terminated-pooler-test
+                                                         'gumshoe.cnpg-unread-node-stats-test
+                                                         'gumshoe.ceph-muted-and-daemon-list-test
+                                                         'gumshoe.external-dns-invalid-name-test
                                                          'gumshoe.rightsizing-test
                                                          'gumshoe.rbac-test
                                                          'gumshoe.rbac-public-identities-test

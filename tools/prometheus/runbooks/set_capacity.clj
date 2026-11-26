@@ -7,8 +7,9 @@
    classes, no shrinking), the change runs as an effect plan (so --dry-run
    shows it), the Prometheus is pinned between the confirmation and the
    effect, a failure part-way prints what it left behind, and afterwards
-   every volume is verified to have the new capacity and Prometheus is
-   verified to be running again.
+   every volume is verified to have the new capacity, the operator to have
+   recreated the StatefulSet with the new template and every replica ready,
+   and every pod to run under that StatefulSet again.
 
    Steps: pause the Prometheus and patch its volumeClaimTemplate, resize the
    existing PVCs, delete the StatefulSet with orphaned pods, unpause so the
@@ -27,7 +28,7 @@
 (def prerequisites
   {:installed-tools ["kubectl" "fzf"]
    :cluster-capabilities []
-   :kubectl-can-get [prometheus-type "pods" "persistentvolumeclaims" "storageclasses"]
+   :kubectl-can-get [prometheus-type "pods" "persistentvolumeclaims" "storageclasses" "statefulsets"]
    :kubectl-can-patch [prometheus-type "persistentvolumeclaims"]
    :kubectl-can-delete ["statefulsets"]})
 

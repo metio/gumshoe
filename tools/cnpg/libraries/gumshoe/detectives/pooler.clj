@@ -50,6 +50,13 @@
                 (= pooler (get (labels-of %) inst/pooler-name-label)))
           pods))
 
+(defn- live-pooler-pods
+  "The pooler's pods that are not terminated (inst/terminated?). A terminated
+   pod caches no verifier and survives the rollout restart the stale-pooler
+   finding prescribes, so counting it would keep the finding after its fix."
+  [pods namespace pooler]
+  (remove inst/terminated? (pooler-pods pods namespace pooler)))
+
 (defn- ready?
   [pod]
   (conditions/ready? pod))
@@ -119,7 +126,8 @@
 
 (defn detect-stale-poolers
   "Pooler pods created before every instance pod of their cluster, which is what
-   a rebuild leaves behind. Quiet while the cluster itself is unhealthy.
+   a rebuild leaves behind; terminated pooler pods do not count. Quiet while
+   the cluster itself is unhealthy.
    Nothing is judged when a joined read did not answer."
   [evidence]
   (let [pods (kubectl/items-of (get evidence "pods"))
@@ -135,7 +143,7 @@
                 oldest (earliest instances)
                 stale (when oldest
                         (filter #(when-let [created (created-at %)] (.isBefore created oldest))
-                                (pooler-pods pods namespace (kubectl/name-of pooler))))]
+                                (live-pooler-pods pods namespace (kubectl/name-of pooler))))]
           :when (and (seq stale) (healthy? (cluster-named clusters namespace cluster)))]
       {:severity :warning
        :component (kubectl/namespace-name-of pooler)

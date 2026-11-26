@@ -180,6 +180,35 @@
   [connection]
   (ceph-json connection "orch" "ps"))
 
+(defn- list-answer
+  "A ceph command that answers a JSON list, read strictly: {:items [..]} when
+   ceph answered a list, an empty one included, and {:unread <why>} when it
+   did not answer or answered something else. kind and items name the list
+   and its items for the reason (\"crash\", \"crash reports\")."
+  [connection [kind items] & args]
+  (let [{:keys [ok? doc exit err]} (apply ceph-json-answer connection args)
+        command (str/join " " (cons "ceph" args))]
+    (cond
+      (and (some? exit) (not (zero? exit)))
+      {:unread (str command " failed: " (or (not-empty (str/trim (str err))) (str "exit " exit)))}
+
+      (not ok?)
+      {:unread (format "%s answered nothing a %s list parses from" command kind)}
+
+      (not (sequential? doc))
+      {:unread (format "%s answered a document that is no list of %s" command items)}
+
+      :else {:items (vec doc)})))
+
+(defn daemon-list
+  "The daemons `ceph orch ps` lists, read strictly: {:daemons [..]} when the
+   orchestrator answered, and {:unread <why>} when it did not (the
+   orchestrator module disabled, a mgr failing over, a denied command), so a
+   caller never reads an unanswered command as a cluster without daemons."
+  [connection]
+  (let [{:keys [items unread]} (list-answer connection ["daemon" "daemons"] "orch" "ps")]
+    (if unread {:unread unread} {:daemons items})))
+
 (defn osds
   [connection]
   (:osds (ceph-json connection "osd" "dump")))
@@ -194,18 +223,8 @@
    that is no list of crash reports. A caller never reads an unanswered
    command as \"no crash left\"."
   [connection]
-  (let [{:keys [ok? doc exit err]} (ceph-json-answer connection "crash" "ls-new")]
-    (cond
-      (and (some? exit) (not (zero? exit)))
-      {:unread (str "ceph crash ls-new failed: " (or (not-empty (str/trim (str err))) (str "exit " exit)))}
-
-      (not ok?)
-      {:unread "ceph crash ls-new answered nothing a crash list parses from"}
-
-      (not (sequential? doc))
-      {:unread "ceph crash ls-new answered a document that is no list of crash reports"}
-
-      :else {:crashes (vec doc)})))
+  (let [{:keys [items unread]} (list-answer connection ["crash" "crash reports"] "crash" "ls-new")]
+    (if unread {:unread unread} {:crashes items})))
 
 (defn crashes-refusal
   "Why a change resting on an unarchived-crashes result must not run, or

@@ -75,6 +75,12 @@
   {:items (filter #(= namespace (kubectl/namespace-of %))
                   (kubectl/items-of (kubectl/get-selected context "pods" (pods-selector name))))})
 
+(defn statefulset-selector
+  "The label selector of the StatefulSets prometheus-operator runs for the
+   Prometheus called name, one per shard."
+  [name]
+  (str "operator.prometheus.io/name=" name))
+
 (defn- patch-step
   [stage context namespace name patch]
   {:stage stage
@@ -101,7 +107,7 @@
       (conj {:stage :delete
              :effect (effect/kubectl context (str "--namespace=" namespace)
                                      "delete" "statefulset"
-                                     (str "--selector=operator.prometheus.io/name=" name)
+                                     (str "--selector=" (statefulset-selector name))
                                      "--cascade=orphan")}
             (patch-step :unpause context namespace name {:spec {:paused false}}))))
 
@@ -142,14 +148,58 @@
                  (storage/claims-left where)
                  ["Nothing was rolled back. The post-check messages above name what did not hold."]))))))
 
+(defn statefulsets-of
+  "The StatefulSets of the Prometheus namespace/name, as a list document, or
+   nil when the read did not answer."
+  [context namespace name]
+  (kubectl/get-json context "statefulsets" (str "--namespace=" namespace)
+                    (str "--selector=" (statefulset-selector name))))
+
+(defn recreated?
+  "Whether the operator runs the Prometheus again with the new template: it
+   is unpaused, it has at least one StatefulSet, and every one of them
+   requests capacity in the Prometheus' claim template with every replica
+   ready (storage/statefulset-resized?)."
+  [prometheus statefulsets capacity]
+  (let [sets (kubectl/items-of statefulsets)
+        volume-name (volume-name-of prometheus)]
+    (boolean (and (some? prometheus)
+                  (not (true? (-> prometheus :spec :paused)))
+                  (seq sets)
+                  (every? #(storage/statefulset-resized? % volume-name capacity) sets)))))
+
+(defn- controlled-by?
+  [uids pod]
+  (some #(and (= "StatefulSet" (:kind %)) (true? (:controller %)) (contains? uids (:uid %)))
+        (-> pod :metadata :ownerReferences)))
+
+(defn pods-adopted?
+  "Whether there are pods and every one is Running and controlled by one of
+   statefulsets, matched by uid. A pod orphaned by the delete keeps Running
+   with no controller until a recreated StatefulSet adopts it, so Running
+   alone says nothing about the change."
+  [pods statefulsets]
+  (let [uids (set (keep #(-> % :metadata :uid) (kubectl/items-of statefulsets)))
+        pods (kubectl/items-of pods)]
+    (boolean (and (seq pods)
+                  (every? #(and (= "Running" (-> % :status :phase)) (controlled-by? uids %)) pods)))))
+
 (defn resize-checks
-  "The post-checks of a Prometheus resize: the claims report capacity, and
-   every pod of the Prometheus is Running again."
+  "The post-checks of a Prometheus resize: the claims report capacity; the
+   operator recreated the StatefulSet with the new template and every replica
+   is ready; and every pod of the Prometheus is Running under that
+   StatefulSet again."
   [context cluster namespace name capacity plan]
   [(storage/claims-capacity-check context cluster namespace plan capacity)
-   {:description "every Prometheus pod is Running again"
+   {:description (format "the StatefulSet of Prometheus %s/%s exists again with the new template and every replica is ready"
+                         namespace name)
     :timeout 300 :interval 15
     :check (fn []
-             (let [pods (kubectl/items-of (pods-of context namespace name))]
-               (boolean (and (seq pods)
-                             (every? #(= "Running" (-> % :status :phase)) pods)))))}])
+             (recreated? (kubectl/get-namespaced-resource context namespace prometheus-type name)
+                         (statefulsets-of context namespace name)
+                         capacity))}
+   {:description "every Prometheus pod is Running again under its StatefulSet"
+    :timeout 300 :interval 15
+    :check (fn []
+             (pods-adopted? (pods-of context namespace name)
+                            (statefulsets-of context namespace name)))}])
