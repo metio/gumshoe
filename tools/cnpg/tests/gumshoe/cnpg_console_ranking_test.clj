@@ -6,6 +6,9 @@
    received LSN, replaced by the replayed one when that is further or empty."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [clojure.test.check :as tc]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
             [gumshoe.cnpg-console :as console]))
 
 ;; pg-2 streamed to 0/5000000; pg-3 never streamed and restored to 0/9000000
@@ -109,6 +112,66 @@
     (testing "the split brain is stated"
       (is (some #(str/starts-with? % "2 instances report themselves out of recovery: p-1, p-2 - more than one accepts writes")
                 lines)))))
+
+(def ^:private split-brain-candidate-ahead
+  [{:instance "p-1" :readable? true :in-recovery? false :receive-lsn "0/5000000" :replay-lsn ""}
+   {:instance "p-2" :readable? true :in-recovery? false :receive-lsn "0/3000000" :replay-lsn ""}])
+
+(deftest a-primary-behind-the-candidate-is-not-offered-for-promotion-test
+  (let [proposal (console/proposal split-brain-candidate-ahead unhealthy-primary)
+        lines (console/proposal-lines proposal)]
+    (is (= "p-1" (:candidate proposal)))
+    (is (= [{:instance "p-2" :bytes 0x2000000}] (:behind proposal)))
+    (is (some #{(str "p-2 also accepts writes and sits 32.0MiB behind p-1 - choosing p-2 as the "
+                     "survivor would discard those 32.0MiB")}
+              lines))
+    (is (not-any? #(str/includes? % "promoting p-2") lines))
+    (testing "a standby behind the same candidate keeps the promotion wording"
+      (let [readings (conj split-brain-candidate-ahead
+                           {:instance "s-3" :readable? true :in-recovery? true
+                            :receive-lsn "0/4000000" :replay-lsn "0/4000000"})
+            lines (console/proposal-lines (console/proposal readings unhealthy-primary))]
+        (is (some #{"promoting s-3 instead would discard 16.0MiB that p-1 already holds"} lines))
+        (is (not-any? #(str/includes? % "promoting p-2") lines))))))
+
+;; --- no line offers to promote an instance already out of recovery ---------------
+
+(def ^:private seed 20261126)
+
+(def ^:private gen-lsn
+  (gen/one-of [(gen/return "")
+               (gen/fmap #(format "0/%X" %) (gen/choose 0 0x10000000))]))
+
+(def ^:private gen-named-readings
+  (gen/let [readings (gen/vector (gen/let [readable? gen/boolean
+                                           in-recovery? gen/boolean
+                                           receive gen-lsn
+                                           replay gen-lsn]
+                                   {:readable? readable? :in-recovery? in-recovery?
+                                    :receive-lsn receive :replay-lsn replay})
+                                 1 5)
+            names (gen/shuffle ["pg-a" "pg-b" "pg-c" "pg-d" "pg-e"])]
+    (mapv #(assoc %1 :instance %2) readings names)))
+
+(def ^:private gen-primary
+  (gen/one-of [(gen/return nil)
+               (gen/let [name (gen/elements ["pg-a" "pg-b" "pg-z"]) healthy? gen/boolean]
+                 {:name name :healthy? healthy?})]))
+
+(deftest no-line-offers-to-promote-an-instance-out-of-recovery-test
+  (let [result (tc/quick-check
+                500
+                (prop/for-all [readings gen-named-readings
+                               primary gen-primary]
+                  (let [writable (->> readings
+                                      (filter #(false? (:in-recovery? %)))
+                                      (map :instance))
+                        lines (console/proposal-lines (console/proposal readings primary))]
+                    (every? (fn [instance]
+                              (not-any? #(str/includes? % (str "promoting " instance " ")) lines))
+                            writable)))
+                :seed seed)]
+    (is (:pass? result) (pr-str (:shrunk result)))))
 
 (deftest a-single-instance-out-of-recovery-states-no-split-brain-test
   (let [lines (console/proposal-lines

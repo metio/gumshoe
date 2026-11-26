@@ -191,8 +191,12 @@
                     instance (describe-bytes (- bytes)) candidate)))
         (for [{:keys [instance bytes]} behind
               :when (pos? bytes)]
-          (format "promoting %s instead would discard %s that %s already holds"
-                  instance (describe-bytes bytes) candidate))
+          (if (contains? writable instance)
+            (format (str "%s also accepts writes and sits %s behind %s - choosing %s as the "
+                         "survivor would discard those %s")
+                    instance (describe-bytes bytes) candidate instance (describe-bytes bytes))
+            (format "promoting %s instead would discard %s that %s already holds"
+                    instance (describe-bytes bytes) candidate)))
         gaps
         ["this is a proposal from WAL positions alone - it weighs no application, "
          "no backup and no disk headroom, and promoting is a write that needs your approval"])))))
