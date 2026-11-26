@@ -5930,7 +5930,7 @@
    :out
    ["▸ Stage held at its gate: prod"
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "  ▸ stagesetctl promote site --stage prod --namespace=apps"],
+    "  ▸ kubectl --namespace=apps annotate stagesets.stages.metio.wtf site stages.metio.wtf/promote=prod@<instant> stages.metio.wtf/promote-revision=sha256:abc --overwrite"],
    :banner
    "FAILED at the first effect: kubectl --namespace=apps annotate stagesets.stages.metio.wtf site stages.metio.wtf/promote=prod@<instant> stages.metio.wtf/promote-revision=sha256:abc --overwrite - nothing was changed",
    :recovery
