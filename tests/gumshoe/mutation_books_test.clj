@@ -43,6 +43,7 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
             [gumshoe.outcome :as outcome]
+            [gumshoe.select :as select]
             [gumshoe.shell :as shell]
             [gumshoe.ssh :as ssh]
             [gumshoe.stdout :as stdout]
@@ -1318,3 +1319,44 @@
           (is (false? result))
           (is (false? asked?))
           (is (not (str/includes? out "skipped")) out))))))
+
+;; --- a named target the candidates leave out ------------------------------------
+
+(defn- opts-naming
+  "The flags that name `target` in the book's select, over the scenario's
+   own opts."
+  [{:keys [mode flag namespace-flag name-flag]} target opts]
+  (merge opts
+         (case mode
+           :many {flag (if (string? target) [target] (vec target))}
+           :namespaced (let [[namespace name] (str/split target #"/" 2)]
+                         {namespace-flag namespace name-flag name})
+           {flag target})))
+
+(defn- left-out?
+  "Whether the select of spec, over objects, leaves out what opts name."
+  [spec objects opts]
+  (let [select (:select spec)]
+    (with-redefs [shell/execute (fn [& argv] (answer {:objects objects :answering? true} (vec argv)))]
+      (not (select/offered? select (select/named-target select opts)
+                            (:names (select/listed select "ctx")))))))
+
+(deftest a-named-target-the-candidates-leave-out-is-skipped-only-when-done
+  (binding [ssh/*user-config* nil]
+    (doseq [[path scenarios] (sort-by key books)
+            :let [spec (change/normalize (load-spec path))
+                  {:keys [objects target opts ssh]} (:refused scenarios)
+                  done? (= :refused (get skipping path))
+                  named (opts-naming (:select spec) target opts)]
+            :when (and (if (string? target) (not (str/blank? target)) (seq target))
+                       (with-book-redefs path #(left-out? spec objects named)))]
+      (testing path
+        (let [{:keys [result out action]} (with-book-redefs path #(pick-transcript spec {:objects objects :opts named :ssh ssh}))]
+          (is (nil? action) "a target the candidates leave out never reaches a confirmation")
+          (is (not (str/includes? out "please select")) out)
+          (if done?
+            (do (is (true? result) out)
+                (is (str/includes? out "skipped, already done") out))
+            (is (false? result) out))
+          (when (and (change/pick-subject spec) (not= :many (get-in spec [:select :mode])))
+            (is (not (str/includes? out "has no typed subject")) (str "a book with a :subject reads the named object\n" out))))))))

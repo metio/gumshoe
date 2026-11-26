@@ -39,7 +39,7 @@
   :empty
   {:result false,
    :out
-   "❌ Certificate shop/web-tls not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"},
+   "❌ Certificate shop/web-tls not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"},
   :failed-after-applying
   {:result false,
    :out
@@ -270,7 +270,7 @@
   :unpicked
   {:result false,
    :out
-   "🔶 Certificate [\"shop/nope\"] contains invalid choices, please select\n❌ no Certificate selected"}},
+   "❌ Certificate shop/nope not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"}},
  "runbooks/kubernetes/cronjobs/resume.clj"
  {:absent {:stopped "refusing: the CronJob no longer exists"},
   :failed-at-the-first-effect
@@ -436,7 +436,7 @@
   :empty
   {:result false,
    :out
-   "❌ CronJob batch/nightly not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"},
+   "❌ CronJob batch/nightly not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"},
   :failed-at-the-first-effect
   {:result false,
    :out
@@ -596,7 +596,7 @@
   :unpicked
   {:result false,
    :out
-   "🔶 no CronJob matches the given flags, please select from all instead\n🔶 CronJob 'batch/nope' is not a valid choice, please select one\n❌ no CronJob selected"}},
+   "❌ CronJob batch/nope not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"}},
  "runbooks/kubernetes/cronjobs/suspend.clj"
  {:absent {:stopped "refusing: the CronJob no longer exists"},
   :failed-after-applying
@@ -1157,10 +1157,7 @@
   {:result false,
    :out
    "❌ could not list the Namespace candidates - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
-  :unpicked
-  {:result false,
-   :out
-   "🔶 Namespace 'nope' is not a valid choice, please select one\n❌ no Namespace selected"}},
+  :unpicked {:result false, :out "❌ no Namespace nope - not found"}},
  "runbooks/kubernetes/nodes/cordon.clj"
  {:absent {:stopped "refusing: node n1 no longer exists"},
   :dry-run
@@ -1313,9 +1310,9 @@
    :out
    "❌ could not list the Node candidates - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
   :unpicked
-  {:result false,
+  {:result true,
    :out
-   "🔶 Node 'n2' is not a valid choice, please select one\n❌ no Node selected"}},
+   "✅ already holds: node n2 is unschedulable\n✅ skipped, already done: cordon (mark unschedulable) a node"}},
  "runbooks/kubernetes/nodes/drain.clj"
  {:absent {:stopped "refusing: node n1 no longer exists"},
   :done
@@ -1593,10 +1590,7 @@
   {:result false,
    :out
    "❌ could not list the Node candidates - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
-  :unpicked
-  {:result false,
-   :out
-   "🔶 Node 'n9' is not a valid choice, please select one\n❌ no Node selected"}},
+  :unpicked {:result false, :out "❌ no Node n9 - not found"}},
  "runbooks/kubernetes/nodes/restart_apiserver.clj"
  {:absent
   {:stopped
@@ -1850,7 +1844,7 @@
   :unpicked
   {:result false,
    :out
-   "🔶 Control-plane node 'w-1' is not a valid choice, please select one\n❌ no Control-plane node selected"},
+   "refusing: node w-1 carries no node-role.kubernetes.io/control-plane label"},
   :unreachable
   {:stopped
    "✗ can not connect to cp-1\nrefusing: its precondition does not hold"}},
@@ -1991,9 +1985,9 @@
    :out
    "❌ could not list the Node candidates - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"},
   :unpicked
-  {:result false,
+  {:result true,
    :out
-   "🔶 Node 'n1' is not a valid choice, please select one\n❌ no Node selected"}},
+   "✅ already holds: node n1 is schedulable\n✅ skipped, already done: uncordon (mark schedulable) a node"}},
  "runbooks/kubernetes/objects/delete.clj"
  {:absent {:stopped "refusing: the object no longer exists"},
   :invalid
@@ -2131,7 +2125,7 @@
   :empty
   {:result false,
    :out
-   "❌ Order shop/web-1 not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"},
+   "❌ Order shop/web-1 not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"},
   :failed-after-applying
   {:result false,
    :out
@@ -2271,7 +2265,7 @@
   :unpicked
   {:result false,
    :out
-   "🔶 Order [\"shop/web-2\"] contains invalid choices, please select\n❌ no Order selected"}},
+   "❌ Order shop/web-2 not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"}},
  "runbooks/kubernetes/volumes/delete_released.clj"
  {:absent
   {:stopped "refusing: PersistentVolume pv-1 no longer exists"},
@@ -2289,7 +2283,7 @@
   :empty
   {:result false,
    :out
-   "❌ PersistentVolume pv-1 not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"},
+   "❌ PersistentVolume pv-1 not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"},
   :failed-after-applying
   {:result false,
    :out
@@ -2431,7 +2425,7 @@
   :unpicked
   {:result false,
    :out
-   "🔶 PersistentVolume [\"pv-2\"] contains invalid choices, please select\n❌ no PersistentVolume selected"}},
+   "❌ PersistentVolume pv-2 not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"}},
  "runbooks/kubernetes/volumes/delete_unused.clj"
  {:absent
   {:stopped
@@ -2600,8 +2594,7 @@
    "▸ PersistentVolumeClaim: data\nrefusing: the pick \"data\" does not name a PersistentVolumeClaim"},
   :unpicked
   {:result false,
-   :out
-   "🔶 no PersistentVolumeClaim matches the given flags, please select from all instead\n🔶 PersistentVolumeClaim 'shop/nope' is not a valid choice, please select one\n❌ no PersistentVolumeClaim selected"}},
+   :out "❌ no PersistentVolumeClaim shop/nope - not found"}},
  "runbooks/kubernetes/workloads/pause.clj"
  {:absent {:stopped "refusing: the Deployment no longer exists"},
   :invalid
@@ -5197,7 +5190,7 @@
   :empty
   {:result false,
    :out
-   "❌ JsonnetSnippet apps/site not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"},
+   "❌ JsonnetSnippet apps/site not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"},
   :failed-after-applying
   {:result false,
    :out
@@ -5373,7 +5366,7 @@
   :unpicked
   {:result false,
    :out
-   "🔶 no JsonnetSnippet matches the given flags, please select from all instead\n🔶 JsonnetSnippet 'apps/nope' is not a valid choice, please select one\n❌ no JsonnetSnippet selected"}},
+   "❌ JsonnetSnippet apps/nope not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"}},
  "tools/jaas/runbooks/jaas/resume.clj"
  {:absent
   {:action "resume a JsonnetSnippet",
@@ -5400,7 +5393,7 @@
   :empty
   {:result false,
    :out
-   "❌ suspended JsonnetSnippet apps/site not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"},
+   "❌ suspended JsonnetSnippet apps/site not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"},
   :failed-after-applying
   {:result false,
    :out
@@ -5574,7 +5567,7 @@
   :unpicked
   {:result false,
    :out
-   "🔶 no suspended JsonnetSnippet matches the given flags, please select from all instead\n🔶 suspended JsonnetSnippet 'apps/nope' is not a valid choice, please select one\n❌ no suspended JsonnetSnippet selected"}},
+   "❌ suspended JsonnetSnippet apps/nope not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"}},
  "tools/jaas/runbooks/jaas/suspend.clj"
  {:absent
   {:action "suspend a JsonnetSnippet",
@@ -5603,7 +5596,7 @@
   :empty
   {:result false,
    :out
-   "❌ JsonnetSnippet apps/site not found among the candidates - this book cannot read it on its own to tell a missing one from one that needs no change"},
+   "❌ JsonnetSnippet apps/site not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"},
   :failed-after-applying
   {:result false,
    :out
@@ -5797,7 +5790,7 @@
   :unpicked
   {:result false,
    :out
-   "🔶 no JsonnetSnippet matches the given flags, please select from all instead\n🔶 JsonnetSnippet 'apps/nope' is not a valid choice, please select one\n❌ no JsonnetSnippet selected"}},
+   "❌ JsonnetSnippet apps/nope not found among the candidates - this book has no typed subject to read it by, or the name lacks its namespace, so a missing one cannot be told from one that needs no change"}},
  "tools/stageset/runbooks/stageset/promote.clj"
  {:absent {:stopped "refusing: StageSet apps/site no longer exists"},
   :dry-run
@@ -5983,9 +5976,7 @@
    :out
    "▸ StageSet: site\nrefusing: the pick \"site\" does not name a StageSet"},
   :unpicked
-  {:result false,
-   :out
-   "🔶 no StageSet matches the given flags, please select from all instead\n🔶 StageSet 'apps/nope' is not a valid choice, please select one\n❌ no StageSet selected"}},
+  {:result false, :out "❌ no StageSet apps/nope - not found"}},
  "tools/stageset/runbooks/stageset/reconcile.clj"
  {:absent {:stopped "refusing: StageSet apps/site no longer exists"},
   :empty {:result false, :out "❌ no StageSet apps/site - not found"},
@@ -6153,9 +6144,7 @@
    :out
    "▸ StageSet: site\nrefusing: the pick \"site\" does not name a StageSet"},
   :unpicked
-  {:result false,
-   :out
-   "🔶 no StageSet matches the given flags, please select from all instead\n🔶 StageSet 'apps/nope' is not a valid choice, please select one\n❌ no StageSet selected"}},
+  {:result false, :out "❌ no StageSet apps/nope - not found"}},
  "tools/velero/runbooks/backup.clj"
  {:absent {:stopped "refusing: the Schedule no longer exists"},
   :invalid

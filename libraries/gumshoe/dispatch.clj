@@ -31,7 +31,6 @@
             [gumshoe.playbook :as playbook]
             [gumshoe.prerequisites :as prerequisites]
             [gumshoe.runbook :as runbook]
-            [gumshoe.select :as select]
             [gumshoe.stdout :as stdout]))
 
 (defn playbook-of
@@ -95,20 +94,13 @@
           (playbook/run-on! (playbook-of route) target (with-defaults route opts) announcement-data)))))
 
 (defn run!
-  "Picks the subject, honouring the flags, and runs its route. Returns true
-   when there is nothing to pick, false when nothing was picked."
+  "Picks the subject, honouring the flags (see gumshoe.mutation/pick!), and
+   runs its route. Returns true when there is nothing to pick, false when
+   nothing was picked or the named target is not offered."
   [{:keys [select] :as dispatcher} opts announcement-data]
-  (let [{:keys [candidates target unread]} (select/resolve-target select opts (kubectl/current-context))]
-    (cond
-      unread (select/unread! select unread)
-
-      (empty? candidates)
-      (do (stdout/ok (or (:empty-message select) "nothing to do")) true)
-
-      (select/nothing-selected? (:mode select) target)
-      (do (stdout/error (format "no %s selected" (:label select))) false)
-
-      :else
+  (let [{:keys [target result] :as picked} (mutation/pick! {:select select} opts (kubectl/current-context))]
+    (if (contains? picked :result)
+      result
       (run-on! dispatcher target opts announcement-data))))
 
 (defn details

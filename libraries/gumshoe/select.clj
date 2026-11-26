@@ -48,12 +48,12 @@
   [mode target]
   (if (= :many mode) (vec target) [target]))
 
-(defn- list-candidates
-  "{:names [...]} or {:unread <reason>}. Candidates are read under strict
-   reads and realized inside the binding, so a lazy seq cannot run its reads
-   after it, and an unanswered read surfaces as its message instead of as an
-   empty list."
-  [candidates context]
+(defn listed
+  "{:names [...]} or {:unread <reason>}: the names the select's :candidates
+   function offers. Candidates are read under strict reads and realized
+   inside the binding, so a lazy seq cannot run its reads after it, and an
+   unanswered read surfaces as its message instead of as an empty list."
+  [{:keys [candidates]} context]
   (try
     {:names (binding [kubectl/*strict-reads* true] (into [] (candidates context)))}
     (catch clojure.lang.ExceptionInfo e
@@ -81,23 +81,44 @@
                       name))
       nil)))
 
+(defn offered?
+  "Pure: whether `named`, what named-target read from the flags, is among
+   the candidate `names`: the name for :one, every name for :many, and for
+   :namespaced the namespace/name, or, when only the name flag was given,
+   some candidate in any namespace with that name."
+  [{:keys [mode]} named names]
+  (let [offered (set names)]
+    (case mode
+      :many (every? offered named)
+      :namespaced (if (str/includes? named "/")
+                    (contains? offered named)
+                    (boolean (some #(str/ends-with? % (str "/" named)) names)))
+      (contains? offered named))))
+
+(defn choose
+  "The interactive pick among `names`, honouring the flags in opts: a target
+   the flags name exactly is taken without asking, anything else falls back
+   to the picker. Returns the pick, or nil/[] when nothing was chosen."
+  [{:keys [mode label flag namespace-flag name-flag preview]} names opts]
+  (case mode
+    :one (interact/choose-one label names (get opts flag) preview)
+    :many (interact/choose-many label names (get opts flag))
+    :namespaced (interact/choose-namespaced label names
+                                            (get opts namespace-flag)
+                                            (get opts name-flag))))
+
 (defn resolve-target
   "Runs the candidate query and the interactive pick for a select spec, returning
    {:candidates <names> :target <the pick, or nil/[] when nothing was chosen>},
    or {:unread <reason>} when a read behind the candidates did not answer.
-   The lowest-level primitive - use it when you need the raw candidate list too
-   (e.g. to distinguish 'nothing to pick' from 'nothing picked' yourself)."
-  [{:keys [mode label candidates flag namespace-flag name-flag preview]} opts context]
-  (let [{:keys [names unread]} (list-candidates candidates context)]
+   Composes listed and choose; a caller that has to judge the candidates
+   before anybody is asked (gumshoe.mutation/pick!) calls those two itself."
+  [spec opts context]
+  (let [{:keys [names unread]} (listed spec context)]
     (if unread
       {:unread unread}
       {:candidates names
-     :target (case mode
-               :one (interact/choose-one label names (get opts flag) preview)
-               :many (interact/choose-many label names (get opts flag))
-               :namespaced (interact/choose-namespaced label names
-                                                       (get opts namespace-flag)
-                                                       (get opts name-flag)))})))
+       :target (choose spec names opts)})))
 
 (defn pick
   "Discovers candidates for a select spec and lets the operator choose, returning
@@ -117,8 +138,10 @@
    the :candidates function derefs: pick realizes it under strict reads, and
    the book derefs it again after the pick without a second read.
 
-   mutation/book uses resolve-target instead, because it maps empty candidates to
-   its own success (nothing-to-do) rather than to nil."
+   A change book picks through gumshoe.mutation/pick! instead, because it
+   maps empty candidates to its own success (nothing-to-do) rather than to
+   nil, and refuses a target its flags name that the candidates do not
+   offer instead of asking for another."
   [{:keys [mode label empty-message on-empty] :as spec} opts context]
   (let [{:keys [candidates target unread]} (resolve-target spec opts context)
         empty! (if (= :fail on-empty) stdout/error stdout/ok)]
