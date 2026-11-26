@@ -7,7 +7,8 @@
    namespace carries a deny-all. These read the verdict rather than the traffic:
    what was denied and by which policy, and what a staged policy would decide
    differently."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [gumshoe.tally :as tally]))
 
 (defn- denied? [row] (= "Deny" (:action row)))
 
@@ -72,9 +73,10 @@
    port or selector - a pod-to-Service rule naming the Service port is matched
    after DNAT and never fires), and one that reaches the client as a timeout."
   [evidence]
-  (for [[[src dst port] rows] (->> (:flows evidence)
-                                   (filter denied?)
-                                   (group-by (juxt :source-namespace :dest-namespace :port)))
+  (for [{[src dst port] :key rows :items n :count}
+        (->> (:flows evidence)
+             (filter denied?)
+             (tally/tally (juxt :source-namespace :dest-namespace :port)))
         :let [policies (->> rows (keep :enforced-policy) distinct (str/join ", "))
               tiers (->> rows (filter no-rule-matched?) (keep :enforced-tier) distinct (str/join ", "))
               silent (filter silent? rows)]]
@@ -83,9 +85,7 @@
                         (if (str/blank? (str src)) "host" src)
                         (or dst "?")
                         (str (or port "?")))
-     :summary (if (= 1 (count rows))
-                "1 denied flow over the window"
-                (format "%d denied flows over the window" (count rows)))
+     :summary (str (tally/counted n "denied flow" "denied flows") " over the window")
      :hint (str/join "; "
                      (remove nil?
                              [(format "decided by %s"

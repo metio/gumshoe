@@ -369,7 +369,8 @@ ownership (guest MACs the fabric attributes to a VTEP that is not their host's,
 guest MACs no scanned host owns that only a gateway VTEP reaches, hosts holding both a local tap and a remote entry for one MAC - each with how
 long FRR has held the MAC local and whether a BGP route from the stale VTEP still
 stands behind it, so an orphan reads apart from a live misadvertisement - and
-static fdb entries that outrank what EVPN learns; see
+static fdb entries that outrank what EVPN learns, one finding per entry naming
+its destination VTEP and the rows behind it; see
 `runbooks/detectives/fabric.clj`). Its hosts, VNIs, gateway VTEPs and guest MAC
 prefixes come from `--hosts`, `--vni`, `--gateway-vteps` and
 `--guest-mac-prefixes`, else from env.edn's `:evpn` block; without gateway VTEPs

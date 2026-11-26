@@ -259,7 +259,7 @@ The detectives compose from one domain to the whole cluster:
 | `runbooks/detectives/observability.clj` | Prometheus, Alertmanager, ThanosRuler |
 | `runbooks/detectives/dns.clj` | nameservers, SOA replication, answer consistency |
 | `runbooks/detectives/mail.clj` | MX, SPF, DKIM, DMARC, rDNS, live SMTP/POP3/IMAP with TLS; without `--host` the services and rDNS checks are unread and no port is probed, without `--domain` the record checks are, and `mail-dkim` is unread when no selector answered |
-| `runbooks/detectives/fabric.clj` | EVPN-VXLAN MAC ownership, over SSH; each `evpn-fdb-conflict` finding carries `local-uptime`, `bgp-route` (`present`/`absent`/`unread`) and `classification` (`live-misadvertisement`/`orphan`/`unknown`); takes `--hosts`, `--vni`, `--gateway-vteps` and `--guest-mac-prefixes`, each overriding env.edn's `:evpn` value; when no host answered, the checks over the MAC and fdb tables are unread |
+| `runbooks/detectives/fabric.clj` | EVPN-VXLAN MAC ownership, over SSH; each `evpn-fdb-conflict` finding carries `local-uptime`, `bgp-route` (`present`/`absent`/`unread`) and `classification` (`live-misadvertisement`/`orphan`/`unknown`); each `evpn-static-fdb` finding is one entry with `host`, `dev`, `vni`, `mac`, `dst` and `destination` (`static`, `learned`, `local-port`, or `unread` when no row names a VTEP), its `rows` with how often one read printed each, and their `count`; takes `--hosts`, `--vni`, `--gateway-vteps` and `--guest-mac-prefixes`, each overriding env.edn's `:evpn` value; when no host answered, the checks over the MAC and fdb tables are unread |
 
 Posture findings describe risks that may be deliberate choices, so they run
 only when posture is asked for. A check that execs into a pod registers into
