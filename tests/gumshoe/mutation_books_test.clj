@@ -89,16 +89,26 @@
   (let [command (str/join " " (drop 2 (drop-while #(not= "--" %) argv)))]
     (merge {:exit 0 :out "" :err ""} (get ssh command))))
 
+(defn- discovery
+  "What kubectl api-resources lists as namespaced types: configmaps and the
+   type of every namespaced object the cluster holds."
+  [objects]
+  {:exit 0 :err ""
+   :out (str/join "\n" (distinct (cons "configmaps" (for [[t o] objects :when (-> o :metadata :namespace)] t))))})
+
 (defn- answer
   "What kubectl answers for argv against state {:objects [[type object]..]
-   :answering? :dry-run :ssh}. A pod read with a spec.nodeName field selector
-   lists the pods on that node only."
-  [{:keys [objects answering? dry-run ssh]} argv]
+   :answering? :dry-run :ssh :api-resources}. A pod read with a spec.nodeName
+   field selector lists the pods on that node only. A get may name several
+   types joined by commas. api-resources lists the namespaced types, or
+   answers :api-resources when the state holds one."
+  [{:keys [objects answering? dry-run ssh api-resources]} argv]
   (let [namespace (arg-value argv "--namespace=")
         node (arg-value (filter string? argv) "--field-selector=spec.nodeName=")
         [_ type name] (drop-while #(not= "get" %) argv)
         name (when (and name (not (str/starts-with? name "-"))) name)
-        matches (fn [[t o]] (and (= t type)
+        types (set (str/split (str type) #","))
+        matches (fn [[t o]] (and (contains? types t)
                                  (or (nil? namespace) (= namespace (-> o :metadata :namespace)))
                                  (or (nil? name) (= name (-> o :metadata :name)))
                                  (or (nil? node) (= node (-> o :spec :nodeName)))))]
@@ -106,6 +116,7 @@
       (not answering?) unanswered
       (= "ssh" (first argv)) (answer-ssh ssh argv)
       (some #{"--dry-run=server"} argv) (or dry-run {:exit 0 :out "deleted (server dry run)" :err ""})
+      (some #{"api-resources"} argv) (or api-resources (discovery objects))
       (not (some #{"get"} argv)) {:exit 0 :out "" :err ""}
       (and (= "secrets" type) (arg-value argv "--output=jsonpath="))
       {:exit 0 :out (helm-listing objects matches argv) :err ""}
@@ -157,8 +168,9 @@
    what the run printed on stderr, the config it handed flow/change! (nil
    when it stopped before), the cluster's state atom and what reached stdout
    (nil when nothing did)."
-  [spec {:keys [objects target opts dry-run ssh answering?] :or {answering? true}} f]
-  (let [state (atom {:objects objects :answering? answering? :dry-run dry-run :ssh ssh :commands []})
+  [spec {:keys [objects target opts dry-run ssh answering? api-resources] :or {answering? true}} f]
+  (let [state (atom {:objects objects :answering? answering? :dry-run dry-run :ssh ssh
+                     :api-resources api-resources :commands []})
         seen (atom nil)]
     (with-redefs [shell/execute (fn [& argv]
                                   (swap! state update :commands conj (vec argv))

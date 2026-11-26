@@ -77,31 +77,69 @@
           (doseq [line reading] (stdout/ok line))
           true))))
 
+(defn read-release
+  "{:release <the HelmRelease>} or {:unread <why>}: the HelmRelease read
+   strictly, so a read that did not answer is never taken for a release
+   without a Drifted condition, and one that no longer exists is said so."
+  [context namespace name target]
+  (try
+    (if-let [release (binding [kubectl/*strict-reads* true]
+                       (kubectl/get-namespaced-resource context namespace flux/helmrelease-type name))]
+      {:release release}
+      {:unread (format "HelmRelease %s no longer exists" target)})
+    (catch clojure.lang.ExceptionInfo e
+      (if (::kubectl/unread (ex-data e))
+        {:unread (format "could not read HelmRelease %s - %s" target (ex-message e))}
+        (throw e)))))
+
+(defn read-manifest
+  "{:manifest <text>} or {:unread <why>}: what Helm stored for the release.
+   A helm that failed reports its own error; only one that answered with
+   nothing is an absent manifest."
+  [context storage helm-name]
+  (let [{:keys [exit out err]} (shell/execute "helm" (str "--kube-context=" context)
+                                              "-n" storage "get" "manifest" helm-name)]
+    (cond
+      (not (zero? exit))
+      {:unread (format "helm get manifest %s in %s failed: %s" helm-name storage
+                       (or (not-empty (str/trim (str err))) (str "exit " exit)))}
+
+      (str/blank? out)
+      {:unread (format "helm has no manifest for release %s in %s" helm-name storage)}
+
+      :else {:manifest out})))
+
+(defn compare-release
+  "Reads the HelmRelease `target` and diffs what Helm stored for it against
+   what is live. Stops with the reason when the release or its manifest
+   could not be read, before printing anything about its drift."
+  [context target]
+  (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
+        {:keys [release unread]} (read-release context namespace name target)]
+    (if unread
+      (do (stdout/error unread) false)
+      ;; targetNamespace renames the release and moves its objects,
+      ;; while Helm's records stay in the storage namespace
+      (let [helm-name (flux/release-name release)
+            storage (flux/storage-namespace release)
+            objects (flux/release-namespace release)]
+        (stdout/print-section-marker)
+        (if-let [message (drift-message release)]
+          (stdout/ok (format "%s reports drift:%n%s" target message))
+          (stdout/ok (format "%s reports no drift - diffing anyway" target)))
+        (stdout/print-section-marker)
+        (let [{:keys [manifest unread]} (read-manifest context storage helm-name)]
+          (if unread
+            (do (stdout/error unread) false)
+            (report-diff context objects manifest)))))))
+
 (defn- show-drift
   [opts _ctx]
   (let [context (kubectl/current-context)
         target (select/pick (assoc helmrelease-select :candidates drifted-first) opts context)]
     (if (nil? target)
       false
-      (let [{:keys [namespace name]} (kubectl/namespace-name-map target)
-            release (kubectl/get-namespaced-resource context namespace flux/helmrelease-type name)
-            ;; targetNamespace renames the release and moves its objects,
-            ;; while Helm's records stay in the storage namespace
-            helm-name (flux/release-name release)
-            storage (flux/storage-namespace release)
-            objects (flux/release-namespace release)
-            manifest (shell/stdout-of "helm" (str "--kube-context=" context)
-                                      "-n" storage "get" "manifest" helm-name)]
-        (stdout/print-section-marker)
-        (if-let [message (drift-message release)]
-          (stdout/ok (format "%s reports drift:%n%s" target message))
-          (stdout/ok (format "%s reports no drift - diffing anyway" target)))
-        (stdout/print-section-marker)
-        (if (str/blank? manifest)
-          (do (stdout/error (format "helm has no manifest for release %s in %s"
-                                    helm-name storage))
-              false)
-          (report-diff context objects manifest))))))
+      (compare-release context target))))
 
 (runbook/execute!
  {:description "Diffs what a HelmRelease applied against what is live, field by field"

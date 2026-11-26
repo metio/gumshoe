@@ -2,7 +2,12 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns runbooks.kubernetes.namespaces.remove-finalizers
-  "Removes the kubernetes finalizer from a namespace stuck in Terminating."
+  "Removes the kubernetes finalizer from a namespace stuck in Terminating.
+
+   The finalize subresource removes the Namespace without deleting what is
+   left in it, so the book shows the namespace's deletion conditions and the
+   objects it still holds, and refuses while objects may remain unless the
+   operator passes --orphan-remaining."
   (:require [cheshire.core :as json]
             [gumshoe.cleanup :as cleanup]
             [gumshoe.effect :as effect]
@@ -33,16 +38,23 @@
 
 (mutation/book
  {:description "Removes the kubernetes finalizer from a namespace stuck in Terminating"
-  :options (select/options selection {:namespace {:desc "The stuck namespace - interactive selection when omitted"}})
+  :options (select/options selection {:namespace {:desc "The stuck namespace - interactive selection when omitted"}
+                                      :orphan-remaining {:desc "Finalize even though objects may remain in the namespace, leaving them in etcd without cleanup"
+                                                         :coerce :boolean}})
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities []
                   :kubectl-can-get ["namespaces"]}
   :select selection
   :empty-message "no namespace is stuck in Terminating"
-  :confirm {:action "force namespace termination - every resource left in it is deleted"
+  :confirm {:action (str "force-remove the namespace - objects still in it are NOT deleted: they stay in etcd "
+                         "without cleanup, and a namespace created later under this name exposes them again")
             :destructive? true}
   :subject {:type "namespaces"}
-  :refusal (fn [{:keys [target object]}] (cleanup/namespace-refusal target object))
+  :reads {:contents (fn [{:keys [context target]}] (kubectl/namespace-objects context target))}
+  :items (fn [{:keys [target object contents]}] (cleanup/namespace-items target object contents))
+  :refusal (fn [{:keys [target object contents opts]}]
+             (or (cleanup/namespace-refusal target object)
+                 (cleanup/orphan-refusal target object contents (:orphan-remaining opts))))
   :announce (fn [{:keys [target]}] (format "Remove finalizers from namespace %s" target))
   :effect (fn [{:keys [context target object]}] (finalize-effect context target object))
   :verify (fn [{:keys [context target]}]

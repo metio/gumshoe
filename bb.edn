@@ -78,6 +78,8 @@
                    [gumshoe.mutation-pin-test]
                    [gumshoe.mutation-compare-test]
                    [gumshoe.mutation-books-test]
+                   [gumshoe.namespace-finalize-test]
+                   [gumshoe.flux-reset-drift-test]
                    [gumshoe.change-books-test]
                    [gumshoe.resize-books-test]
                    [gumshoe.pick-books-test]
@@ -313,6 +315,8 @@
                                                          'gumshoe.mutation-pin-test
                                                          'gumshoe.mutation-compare-test
                                                          'gumshoe.mutation-books-test
+                                                         'gumshoe.namespace-finalize-test
+                                                         'gumshoe.flux-reset-drift-test
                                                          'gumshoe.change-books-test
                                                          'gumshoe.resize-books-test
                                                          'gumshoe.pick-books-test

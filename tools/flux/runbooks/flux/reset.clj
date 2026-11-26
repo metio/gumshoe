@@ -14,22 +14,36 @@
    Verify the cause is actually gone first -- the message is a snapshot of the
    last attempt, not a statement about now. `flux/drift` diffs the stored
    manifest against live when the cause is not obvious."
-  (:require [gumshoe.conditions :as conditions]
-            [gumshoe.kubectl :as kubectl]
+  (:require [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
             [gumshoe.select :as select]
+            [gumshoe.steps.flux :as flux-steps]
             [gumshoe.tools.flux :as flux]))
 
 (defn- helmreleases
   [context]
   (flux/parked-first (kubectl/items-of (kubectl/get-all context flux/helmrelease-type))))
 
-(defn ready-check
-  [context namespace name target]
-  (conditions/ready-check
-   {:description (format "HelmRelease %s is Ready" target)
-    :timeout 300 :interval 15
-    :fetch #(kubectl/get-namespaced-resource context namespace flux/helmrelease-type name)}))
+(defn reset-handled?
+  "Whether helm-controller handled the reset stamped at `token` and the
+   release is Ready. A release that was Ready before the request stays Ready
+   whether or not the request was handled, so Ready alone proves nothing.
+   lastHandledReconcileAt carries the requestedAt the controller acted on; a
+   controller that also writes lastHandledResetAt writes it in the same
+   reconcile, so a value there other than the token means the counters were
+   not cleared."
+  [release token]
+  (let [reset-at (-> release :status :lastHandledResetAt)]
+    (and (flux-steps/handled? release token)
+         (or (nil? reset-at) (= token reset-at))
+         (flux-steps/ready? release))))
+
+(defn handled-check
+  [context namespace name target token]
+  {:description (format "HelmRelease %s handled the reset and is Ready" target)
+   :timeout 300 :interval 15
+   :check #(reset-handled? (kubectl/get-namespaced-resource context namespace flux/helmrelease-type name)
+                           token)})
 
 (def selection
   {:mode :namespaced :label "HelmRelease" :namespace-flag :namespace :name-flag :name
@@ -53,6 +67,6 @@
   :effect (fn [{:keys [context target timestamp]}]
             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               (flux/reset-effect context namespace name timestamp)))
-  :verify (fn [{:keys [context target]}]
+  :verify (fn [{:keys [context target timestamp]}]
             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
-              [(ready-check context namespace name target)]))})
+              [(handled-check context namespace name target timestamp)]))})
