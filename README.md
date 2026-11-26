@@ -215,9 +215,9 @@ Every book behaves the same way:
 - Changes are announced in the matching Matrix changelog room. A failed
   announcement never blocks a runbook - during an incident the changelog room
   itself might be down.
-- The exit code tells the truth: `0` on success, `1` on failure, abort, or a
-  failed post-check. Detectives exit `1` when they find something critical, so
-  they work in scripts and cron.
+- The exit code tells the truth: `0` on success, `1` on failure, any abort
+  (whether or not anything changed), or a failed post-check. Detectives exit
+  `1` when they find something critical, so they work in scripts and cron.
 - Diagnostics go to stderr, results go to stdout - piping and redirecting always
   stays clean.
 - A check whose evidence all came back empty-handed - a CRD the cluster does
