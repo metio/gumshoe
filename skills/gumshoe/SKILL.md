@@ -1002,3 +1002,51 @@ destructive spec with no `:refusal`, `:precondition`, `:subject`,
 `:subjects` or `:pin` and no `:no-guard "why"` is a `guard` line: a note by
 default, a finding under `:guards :require`, and a failure in gumshoe's own
 gate.
+
+## Output primitives
+
+A book renders everything it prints on the terminal through
+`gumshoe.stdout`, and every mark it draws comes from the active theme
+(`gumshoe.theme`), so env.edn `:theme` (or a plugin's theme) restyles every
+book at once. The theme names eight outcomes, each with a glyph, a colour
+and an optional plain fallback for output without colour:
+
+| Outcome | Meaning | `:default` | `:ascii` |
+|---|---|---|---|
+| `:success` | a check passed | ✅ | `[OK]` |
+| `:failure` | a check failed | ❌ | `[ERROR]` |
+| `:finding` | worth the operator's attention | 🔶 | `[WARN]` |
+| `:info` | what is being read or probed | ▸ | `>` |
+| `:done` | a piece of work is complete | ✅ | `[OK]` |
+| `:not-yet` | a piece of work is still to do | ⬜ | `[TODO]` |
+| `:in-progress` | waiting for something to finish | ⏳ | `[WAIT]` |
+| `:skipped` | deliberately left out | ⏭ | `[SKIP]` |
+
+The surface, all on stderr so a result on stdout stays clean:
+
+- `(stdout/print-section "Title")`, a titled rule;
+- `(stdout/line :done "volume migrated")`, a report line for any outcome,
+  and `(stdout/item :not-yet "secrets copied")`, the same one level in;
+- `(stdout/note "text")` and `(stdout/detail "text")`, plain lines without a
+  mark, at the margin and one level in, for prose, hints and hand-laid rows;
+- `(stdout/banner :failure "text")`, a full-width banner;
+- `(gumshoe.progress/checklist [[label thunk] …])` and
+  `(gumshoe.progress/watch-futures! [[label future] …])`, live task lists;
+- `(stdout/print-table [["POD" :pod]] rows)`, an aligned table;
+- `(stdout/print-command "kubectl" "get" "pods")`, the echo of a command.
+
+`ok`, `error`, `warn`, `check-ok` and `check-error` print exactly what
+`(line :success …)`, `(line :failure …)`, `(line :finding …)`,
+`(item :success …)` and `(item :failure …)` print, and `err-println` is
+`note`. `gumshoe.render` holds the pure renderers behind them, each taking
+a context `(render/context theme color?)` and returning the string, for a
+test or a book that composes a line inside another (`(stdout/detail
+(render/item (stdout/context) :failure "…"))`). `(theme/glyph :finding)`
+gives the bare glyph for a menu label or a heading.
+
+Conformance names an outcome glyph written by hand inside a printed string
+(`println`, `str`, `format`, `err-println` or a `gumshoe.stdout` printer) as
+a `glyph` line, with the line of the call: a note by default, a finding
+under `:glyphs :require`, and a failure in gumshoe's own gate. The theme
+namespace and files below a `tests` directory are exempt; severities (🔥),
+drill-down markers and decoration in headings (📋, 🔍) are not outcomes.
