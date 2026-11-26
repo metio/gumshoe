@@ -11,15 +11,24 @@
   "A critical finding for a host only when both its A and AAAA queries
    answered with no records. An answer is nil when its query got none, and a
    host whose one query did not answer while the other found nothing is
-   unread: the record may sit behind the query that was lost."
+   unread: the record may sit behind the query that was lost. A host marked
+   :invalid was never queried, because it is no DNS name, and is reported as
+   such rather than as a server that did not answer."
   [evidence]
   (let [server (get evidence "server")
         resolved (get evidence "resolved")]
     (apply concat
            (for [[host kinds] (get evidence "sources")]
-             (let [{:keys [a aaaa]} (get resolved host)
+             (let [{:keys [a aaaa invalid]} (get resolved host)
                    source (str/join ", " kinds)]
                (cond
+                 invalid
+                 [{:severity :warning
+                   :component host
+                   :summary (format "declared hostname is not a valid DNS name (declared by %s)" source)
+                   :hint (str "the name was not queried - it holds characters or a form no DNS name has "
+                              "(a space, an option-like token); correct it where it is declared")}]
+
                  (and (nil? a) (nil? aaaa))
                  [{:severity :warning
                    :component host

@@ -81,6 +81,18 @@
   [hostname]
   (str/replace (str hostname) "*" "bookstore-probe"))
 
+(defn resolution
+  "What resolving host found, with query (fn [type name]) asking the DNS
+   server: {:a .. :aaaa ..}, or {:invalid true} for a host whose probe name
+   dig may not be asked about (dns/query-name?), which is never queried. dns/query
+   answers such a name with the same nil as a server that did not answer, so
+   the two are told apart here, before any query."
+  [query host]
+  (let [probe (probe-name host)]
+    (if (dns/query-name? probe)
+      {:a (query "A" probe) :aaaa (query "AAAA" probe)}
+      {:invalid true})))
+
 ;; ---------------------------------------------------------------------------
 ;; evidence collection
 
@@ -113,8 +125,7 @@
         unread (sort (keep (fn [[k type]] (when (nil? (get reads k)) type)) source-types))
         sources (answered-sources reads)
         resolve (fn [host]
-                  [host {:a (dns/query {:server server} "A" (probe-name host))
-                         :aaaa (dns/query {:server server} "AAAA" (probe-name host))}])]
+                  [host (resolution #(dns/query {:server server} %1 %2) host)])]
     (when (seq unread)
       (stdout/err-println (format "  %s could not read %s - nothing is judged" (stdout/red "✗") (str/join ", " unread))))
     (stdout/err-println (format "  %s %d hostnames via %s" (stdout/blue "▸") (count sources) server))

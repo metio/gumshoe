@@ -32,7 +32,8 @@
 
 (defn detect-volume-pressure
   "Instance volumes at or past the headroom thresholds, and instance pods the
-   kubelet reported nothing for."
+   kubelet reported nothing for - named apart when their node's stats read
+   failed, since then nothing was served at all."
   [evidence]
   (let [stats (get evidence volumes/evidence-key)]
     (concat
@@ -46,13 +47,21 @@
                    "a crashloop rather than a slowdown; pg_wal can dominate the volume "
                    "when a replication slot is inactive, and raising the cluster's "
                    "storage.size is the fix that costs no data")})
-     (for [pod (unreported-pods stats)]
+     (for [pod (unreported-pods stats)
+           :let [unread? (contains? (set (:unread-nodes stats)) (:node pod))]]
        {:severity :warning
         :component (component pod)
-        :summary "volume usage unknown - the kubelet reported none"
-        :hint (format (str "node %s served no volume stats for this pod, which happens when its "
-                           "containers are not running - the usage is unmeasured, not low")
-                      (or (:node pod) "unknown"))}))))
+        :summary (if unread?
+                   (format "volume usage unknown - the stats read of node %s failed" (:node pod))
+                   "volume usage unknown - the kubelet reported none")
+        :hint (if unread?
+                (format (str "reading /api/v1/nodes/%s/proxy/stats/summary did not answer: get on "
+                             "nodes/proxy may be denied, or the kubelet unreachable - the usage is "
+                             "unmeasured, not low")
+                        (:node pod))
+                (format (str "node %s served no volume stats for this pod, which happens when its "
+                             "containers are not running - the usage is unmeasured, not low")
+                        (or (:node pod) "unknown")))}))))
 
 (def detectives
   [{:name "cnpg-volumes"

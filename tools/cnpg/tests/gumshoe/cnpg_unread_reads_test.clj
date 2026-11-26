@@ -50,7 +50,7 @@
 
 (deftest an-answered-empty-pod-list-is-read-test
   (let [stats (volumes/collect (constantly {:items []}) (constantly nil))]
-    (is (= {:instance-pods [] :nodes [] :volumes []} stats))
+    (is (= {:instance-pods [] :nodes [] :unread-nodes [] :volumes []} stats))
     (is (not (detective/unread? volume-check {volumes/evidence-key stats})))))
 
 (deftest the-volume-collector-reads-the-pod-list-strictly-test

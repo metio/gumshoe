@@ -17,6 +17,14 @@
 
 (defn cluster-of [pod] (get (labels-of pod) cluster-label))
 
+(defn terminated?
+  "Whether pod is in a terminal phase, Failed or Succeeded: an evicted pod or
+   one a graceful node shutdown stopped. Such a pod runs no container and
+   serves nothing, yet stays in the API until pod garbage collection removes
+   it, which a rollout restart does not do."
+  [pod]
+  (contains? #{"Failed" "Succeeded"} (-> pod :status :phase)))
+
 (defn- owned-by-cluster?
   "Instance pods are created by the operator with an ownerReference to the
    Cluster; pooler pods are owned by a ReplicaSet. Checked alongside the label

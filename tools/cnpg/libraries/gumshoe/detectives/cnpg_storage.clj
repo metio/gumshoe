@@ -40,6 +40,14 @@
                  "procedure: one instance at a time on a cluster of more than one instance, "
                  "delete the instance's claims (data, and -wal when present) and its pod, and "
                  "the operator re-creates it at the new size")}
+     :unknown
+     {:severity :info
+      :summary (if desired
+                 (format "the cluster asks for %s and this volume's request does not parse" (size desired))
+                 "the cluster declares no size this volume can be compared against")
+      :hint (str "the size comes from size of the volume's storage section (storage, walStorage "
+                 "or the tablespace's storage), else from its pvcTemplate.resources.requests.storage, "
+                 "as the operator reads it; with neither readable the volume was not judged")}
      :resizing
      {:severity :warning
       :summary (format "this volume requests %s and has %s"
@@ -53,13 +61,14 @@
 
 (defn detect-pending-storage
   "Volumes requesting less than their cluster asks for, or still being
-   expanded. Nothing is judged when a joined read did not answer."
+   expanded, and volumes whose sizes could not be read, which are not
+   judged. Nothing is judged when a joined read did not answer."
   [evidence]
   (let [pvcs (kubectl/items-of (get evidence "persistentvolumeclaims"))]
     (for [cluster (when (evidence/joined? evidence pending-storage-joins)
                     (kubectl/items-of (get evidence cnpg/cluster-type)))
           row (storage/assess cluster pvcs)
-          :when (storage/pending? row)]
+          :when (or (storage/pending? row) (= :unknown (:state row)))]
       (finding cluster row))))
 
 (def detectives
