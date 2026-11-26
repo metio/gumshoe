@@ -43,7 +43,8 @@
                                                          :coerce :boolean}})
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities []
-                  :kubectl-can-get ["namespaces"]}
+                  :kubectl-can-get ["namespaces"]
+                  :kubectl-can-update ["namespaces/finalize"]}
   :select selection
   :empty-message "no namespace is stuck in Terminating"
   :confirm {:action (str "force-remove the namespace - objects still in it are NOT deleted: they stay in etcd "

@@ -133,6 +133,65 @@
   [volume]
   (or (-> volume :spec :persistentVolumeReclaimPolicy) "Unknown"))
 
+(defn read-claim-volume
+  "The PersistentVolume claim is bound to, read without strict reads:
+   {:volume <the volume>}, {:volume nil} when a read answered that it does
+   not exist, {:unread true} when no read answered, and nil for a claim bound
+   to none. The read is lenient so that an operator without the right to
+   read PersistentVolumes is told the reclaim policy is unknown rather than
+   refused."
+  [context claim]
+  (when-let [volume-name (not-empty (-> claim :spec :volumeName))]
+    (binding [kubectl/*strict-reads* false]
+      (let [{:keys [ok? doc]} (kubectl/get-json-result context "persistentvolumes" volume-name)]
+        (cond
+          ok? {:volume doc}
+          (= :absent (kubectl/presence context {:type "persistentvolumes" :name volume-name})) {:volume nil}
+          :else {:unread true})))))
+
+(defn claim-volume-line
+  "The confirmation line saying what deleting claim does to the volume it is
+   bound to, from volume-read as read-claim-volume returns it. Under the
+   Delete reclaim policy the volume and the data on it are destroyed with
+   the claim, which every book deleting a claim states the same way."
+  [claim {:keys [volume unread] :as volume-read}]
+  (let [volume-name (-> claim :spec :volumeName)
+        policy (reclaim-policy volume)]
+    (cond
+      (str/blank? volume-name)
+      "the claim is bound to no volume, so no data is deleted with it"
+
+      unread
+      (format "the reclaim policy of its volume %s could not be read - under Delete the volume and the data on it are destroyed with the claim"
+              volume-name)
+
+      (and (contains? volume-read :volume) (nil? volume))
+      (format "its volume %s no longer exists" volume-name)
+
+      (= "Delete" policy)
+      (format "its volume %s has reclaim policy Delete - the volume and the data on it are destroyed with the claim" volume-name)
+
+      (= "Retain" policy)
+      (format "its volume %s has reclaim policy Retain - the volume and its data stay, as a Released PersistentVolume" volume-name)
+
+      (= "Recycle" policy)
+      (format "its volume %s has reclaim policy Recycle - the data on the volume is scrubbed" volume-name)
+
+      :else
+      (format "its volume %s has reclaim policy %s - the data on it may be destroyed with the claim" volume-name policy))))
+
+(defn read-claim-volume-line
+  "claim-volume-line for the claim namespace/name, read now without strict
+   reads, or a line saying the reclaim policy is unknown when the claim
+   itself could not be read."
+  [context namespace name]
+  (binding [kubectl/*strict-reads* false]
+    (let [{:keys [ok? doc]} (kubectl/get-json-result context (str "--namespace=" namespace) "persistentvolumeclaims" name)]
+      (if ok?
+        (claim-volume-line doc (read-claim-volume context doc))
+        (format "claim %s/%s could not be read, so the reclaim policy of its volume is unknown - under Delete the volume and the data on it are destroyed with the claim"
+                namespace name)))))
+
 (defn volume-refusal
   "Why the volume of ref must not be deleted, judged on the volume as read
    now: it no longer exists, or it left Released (bound to a claim again,

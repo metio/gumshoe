@@ -39,9 +39,9 @@
 (deftest a-playbook-needs-what-every-step-needs
   (is (= {:installed-tools ["kubectl" "fzf" "git"]
           :cluster-capabilities []
-          :kubectl-can-get ["nodes" "pods"]
+          :kubectl-can-get ["nodes" "pods" "daemonsets"]
           :kubectl-can-patch ["nodes"]
-          :kubectl-can-delete ["pods"]}
+          :kubectl-can-create ["pods/eviction"]}
          (playbook/all-prerequisites {:prerequisites {:installed-tools ["git"]}
                                       :steps [nodes/cordon nodes/drain {:pause "x"} nodes/uncordon]}))))
 
@@ -197,7 +197,7 @@
             ""
             "Needs:"]
            (subvec lines 0 9)))
-    (is (some #{"  kubectl delete: pods"} lines))))
+    (is (some #{"  kubectl create: pods/eviction"} lines))))
 
 (deftest a-pause-right-after-the-leading-checks-waits-for-the-operator
   (doseq [[what steps] {"after the leading checks" [(check "look" (atom []) true) {:pause "act"}]

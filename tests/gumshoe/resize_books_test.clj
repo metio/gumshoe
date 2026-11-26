@@ -136,11 +136,29 @@
         (and name (not-any? #(and (in-scope? flags %) (named? name %)) (get-in state [:objects type])))
         [state {:exit 1 :out "" :err (format "Error from server (NotFound): %s \"%s\" not found" type name)}]
 
+        ;; the garbage collector never removes the orphan finalizer: the
+        ;; StatefulSet stays, marked for deletion
+        (and (:stalled-gc? state) (= "statefulsets" type))
+        [(update-in state [:objects type]
+                    (fn [objects]
+                      (mapv #(if (and (in-scope? flags %) (named? name %))
+                               (assoc-in % [:metadata :deletionTimestamp] "2026-11-26T10:00:00Z")
+                               %)
+                            objects)))
+         {:exit 0 :out (str type " deleted") :err ""}]
+
         :else
         [(update-in state [:objects type]
                     (fn [objects]
                       (vec (remove #(and (in-scope? flags %) (or (nil? name) (named? name %))) objects))))
          {:exit 0 :out (str type " deleted") :err ""}])
+
+      "wait"
+      (let [[raw name] (str/split (str raw-type) #"/" 2)
+            type (get plural raw raw)]
+        (if (some #(and (in-scope? flags %) (named? name %)) (get-in state [:objects type]))
+          [state {:exit 1 :out "" :err (format "error: timed out waiting for the condition on %s/%s" type name)}]
+          [state {:exit 0 :out "" :err ""}]))
 
       "apply"
       (let [manifest (json/parse-string stdin true)
@@ -417,6 +435,7 @@
     :first-claim-fails {:state (assoc shop :fail [["patch" "persistentvolumeclaims" "data-web-0"]]) :argv enlarge-argv}
     :second-claim-fails {:state (assoc shop :fail [["patch" "persistentvolumeclaims" "data-web-1"]]) :argv enlarge-argv}
     :delete-fails {:state (assoc shop :fail [["delete" "statefulsets" nil]]) :argv enlarge-argv}
+    :deletion-stalls {:state (assoc shop :stalled-gc? true) :argv enlarge-argv}
     :recreate-fails {:state (assoc shop :fail [["apply" nil nil]]) :argv enlarge-argv}
     :dry-run {:state shop :argv enlarge-argv :dry-run? true}
     :declined {:state shop :argv enlarge-argv :confirm? false}
@@ -553,7 +572,7 @@
 (deftest kept-claims-that-only-requested-the-new-size-are-not-verified
   (let [config (load-config "runbooks/kubernetes/statefulsets/enlarge_volumes.clj")
         {:keys [result banner out mutations]} (transcript config {:state web-at-zero :argv enlarge-argv})]
-    (is (= 4 (count mutations)) "both kept claims were patched, the StatefulSet deleted and applied")
+    (is (= 5 (count mutations)) "both kept claims were patched, the StatefulSet deleted, waited for and applied")
     (is (not (true? result)) (str/join "\n" out))
     (is (not= "DONE - applied and verified" banner) (str/join "\n" out))
     (is (some #(str/includes? % "NOT verified") out) (str/join "\n" out))))

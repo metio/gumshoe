@@ -139,10 +139,24 @@
           {}
           (remove nil? prerequisites)))
 
+(def kubectl-verbs
+  "The permission prerequisites that ask `kubectl auth can-i` about a verb,
+   with that verb, in the order they are checked. Each lists resources, and a
+   resource may name a subresource, as \"pods/eviction\" or
+   \"deployments/scale\": RBAC authorises a subresource apart from its
+   resource, so a book lists the one its effect writes through.
+   :kubectl-can-exec stands beside them and asks create on pods/exec."
+  [[:kubectl-can-get "get"]
+   [:kubectl-can-create "create"]
+   [:kubectl-can-update "update"]
+   [:kubectl-can-patch "patch"]
+   [:kubectl-can-delete "delete"]])
+
 (def ^:private summary-rows
   [[:installed-tools "tools"]
    [:kubectl-can-get "kubectl get"]
    [:kubectl-can-create "kubectl create"]
+   [:kubectl-can-update "kubectl replace (update)"]
    [:kubectl-can-patch "kubectl patch"]
    [:kubectl-can-delete "kubectl delete"]
    [:kubectl-can-exec "kubectl exec into"]

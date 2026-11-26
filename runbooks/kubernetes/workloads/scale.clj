@@ -23,7 +23,9 @@
   :prerequisites {:installed-tools ["kubectl" "fzf"]
                   :cluster-capabilities []
                   :kubectl-can-get ["deployments" "statefulsets" "horizontalpodautoscalers"]
-                  :kubectl-can-patch ["deployments" "statefulsets"]}
+                  ;; kubectl scale writes through the scale subresource, which
+                  ;; RBAC authorises apart from the workload itself
+                  :kubectl-can-patch ["deployments/scale" "statefulsets/scale"]}
   :select selection
   :empty-message "no Deployment or StatefulSet to scale"
   :confirm {:action "scale a workload" :destructive? false}

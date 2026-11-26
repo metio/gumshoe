@@ -157,12 +157,14 @@
 (defn- resource-label
   "The label for a kubectl resource in a permission prerequisite: the cluster's
    Kind when discovery knows it (\"Pod resources\"), else the verbatim resource
-   name. A fabricated Kind would read as certainty the check does not have, so an
-   unknown or unreachable resource stays as the raw name the check actually uses."
+   name, followed by the subresource it names (\"Pod resources (eviction
+   subresource)\"). A fabricated Kind would read as certainty the check does
+   not have, so an unknown or unreachable resource stays as the raw name the
+   check actually uses."
   [resource]
-  (if-let [kind (kubectl/resource-kind resource)]
-    (str kind " resources")
-    resource))
+  (let [[base sub] (kubectl/resource-and-subresource resource)
+        label (if-let [kind (kubectl/resource-kind base)] (str kind " resources") base)]
+    (if sub (format "%s (%s subresource)" label sub) label)))
 
 (defn- can-i-item
   [verb resource]
@@ -183,13 +185,26 @@
         {:ok? true :label heading}
         {:ok? false :label (format "Kubernetes: cannot EXEC into %s" target)})]))
 
+(defn permission-checks
+  "The `kubectl auth can-i` questions the permission prerequisites ask, as
+   [verb resource] pairs in the order they are checked: one per resource of
+   each key of gumshoe.prerequisites/kubectl-verbs, and create on the exec
+   subresource for each of :kubectl-can-exec."
+  [prerequisites]
+  (concat
+   (for [[key verb] prerequisites/kubectl-verbs
+         resource (get prerequisites key)]
+     [verb resource])
+   (for [resource (:kubectl-can-exec prerequisites)]
+     ["create" (str resource "/exec")])))
+
 (def ^:private built-in-prerequisite-keys
   "The :prerequisites keys the harness handles directly; everything else must be
    a plugin-registered check. A declared key in neither set is a typo or a plugin
    that failed to load."
   #{:can-ping-using-ipv4 :can-ping-using-ipv6 :access-gopass-secrets
     :installed-tools :minimum-tool-versions :existing-paths :cluster-capabilities
-    :kubectl-can-get :kubectl-can-create :kubectl-can-patch
+    :kubectl-can-get :kubectl-can-create :kubectl-can-update :kubectl-can-patch
     :kubectl-can-delete :kubectl-can-exec})
 
 (defn- unknown-prerequisite-items
@@ -240,10 +255,8 @@
      (prerequisites/existing-path-items (:existing-paths prerequisites) opts)
      (when (contains? prerequisites :cluster-capabilities)
        [(cluster-item (:cluster-capabilities prerequisites))])
-     (map (partial can-i-item "get") (:kubectl-can-get prerequisites))
-     (map (partial can-i-item "create") (:kubectl-can-create prerequisites))
-     (map (partial can-i-item "patch") (:kubectl-can-patch prerequisites))
-     (map (partial can-i-item "delete") (:kubectl-can-delete prerequisites))
+     (mapcat (fn [[key verb]] (map (partial can-i-item verb) (get prerequisites key)))
+             prerequisites/kubectl-verbs)
      (map can-exec-item (:kubectl-can-exec prerequisites))
      ;; plugin-registered checks (change windows, tickets, on-call acks) run last
      ;; one registered check at a time, so a builder that throws fails its

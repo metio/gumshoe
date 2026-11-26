@@ -300,17 +300,58 @@
   []
   (cluster-of (current-config)))
 
+(defn resource-and-subresource
+  "A resource as a permission prerequisite names it, split into the resource
+   and its subresource: \"pods/eviction\" -> [\"pods\" \"eviction\"],
+   \"deployments\" -> [\"deployments\" nil]. `kubectl auth can-i` reads
+   \"pods/eviction\" as the pod named eviction, so the subresource must go to
+   it as --subresource."
+  [resource]
+  (let [[base sub] (str/split (str resource) #"/" 2)]
+    [base (when-not (str/blank? sub) sub)]))
+
+(defn can-i-args
+  "The `kubectl auth can-i` arguments that ask whether the current user may
+   perform verb on resource, which may name a subresource as
+   \"deployments/scale\": across every namespace, or in namespace when one is
+   given."
+  ([verb resource] (can-i-args verb resource nil))
+  ([verb resource namespace]
+   (let [[base sub] (resource-and-subresource resource)]
+     (cond-> ["auth" "can-i" verb base]
+       sub (conj (str "--subresource=" sub))
+       namespace (conj (str "--namespace=" namespace))
+       (nil? namespace) (conj "--all-namespaces")
+       true (conj "--quiet")))))
+
 (defn can-i?
-  "Whether the current user may perform verb on a single resource type, cluster
-   wide."
+  "Whether the current user may perform verb on a single resource type,
+   cluster wide. resource may name a subresource, as \"pods/eviction\"."
   [verb resource]
-  (zero? (shell/exit-code-of "kubectl" "auth" "can-i" verb resource "--all-namespaces" "--quiet")))
+  (zero? (apply shell/exit-code-of "kubectl" (can-i-args verb resource))))
+
+(declare ^:private request-timeout)
+
+(defn can-i-in?
+  "Whether the user of context may perform verb on resource in namespace.
+   resource may name a subresource, as \"namespaces/finalize\". A check that
+   did not answer is false, so a refusal built on it fails closed."
+  [context verb resource namespace]
+  (zero? (apply shell/exit-code-of "kubectl" (str "--context=" context) request-timeout
+                (can-i-args verb resource namespace))))
+
+(defn missing-rights
+  "The [verb resource] pairs of checks the user of context may not perform in
+   namespace, in order, asked concurrently. A check that did not answer counts
+   as missing."
+  [context namespace checks]
+  (let [granted (concurrent/map-all (fn [[verb resource]] (can-i-in? context verb resource namespace)) checks)]
+    (vec (keep (fn [[check ok?]] (when-not (true? ok?) check)) (map vector checks granted)))))
 
 (defn can-exec?
   "Whether the current user may exec into a single resource type."
   [resource]
-  (zero? (shell/exit-code-of "kubectl" "auth" "can-i" "create" resource
-                             "--subresource=exec" "--all-namespaces" "--quiet")))
+  (can-i? "create" (str resource "/exec")))
 
 (defn- answered-empty?
   "A failed kubectl get that still answered: the object or the resource type

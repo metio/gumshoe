@@ -199,11 +199,39 @@
                         rests on (unschedulable, taints, podCIDR,
                         providerID). A drift refusal names the spec keys
                         that moved.
-   An object that carries a generation is compared by it whatever :compare
-   says, since the API server raises it on every spec change. Metadata
-   (labels, annotations) is outside :spec; a change resting on it names it
-   with :facts, or judges it in its :refusal over the object read again."
+   An object that carries a generation is compared by it unless :compare
+   says :spec or its type is one of types-without-status-subresource (see
+   comparison). Metadata (labels, annotations) is outside :spec; a change
+   resting on it names it with :facts, or judges it in its :refusal over the
+   object read again."
   #{:resource-version :spec})
+
+(def types-without-status-subresource
+  "Custom resource types whose CRD declares no status subresource. For such
+   a type the API server raises metadata.generation on every write outside
+   metadata, a controller's status update included, so the generation says
+   nothing about whether the spec changed. An Argo CD Application is one:
+   its CRD declares `subresources: {}`, and the application controller
+   writes its status on every reconciliation."
+  #{"applications.argoproj.io"})
+
+(defn comparison
+  "What a pin compares on object, of resource type `type`, under compare:
+     :spec              its uid and spec, when compare says :spec or type is
+                        one of types-without-status-subresource
+     :generation        its uid and metadata.generation, when it carries one:
+                        the API server raises it on every change of the spec
+                        and leaves it alone on status writes, for a built-in
+                        type and a CRD with the status subresource
+     :resource-version  its uid and resourceVersion otherwise
+   A type whose CRD lacks the status subresource raises its generation on
+   status writes too, so pinning it by generation would refuse a change for
+   every status update a controller made during the confirmation."
+  [object type compare]
+  (cond
+    (or (= :spec compare) (contains? types-without-status-subresource type)) :spec
+    (-> object :metadata :generation) :generation
+    :else :resource-version))
 
 (defn compare-problem
   "Why compare is not a :compare a pin understands, or nil for one of

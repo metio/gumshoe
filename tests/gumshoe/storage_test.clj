@@ -161,14 +161,19 @@
   (storage/statefulset-resize-steps "ctx" statefulset "data" "80Gi" two-claims))
 
 (deftest the-statefulset-is-resized-claims-first-then-deleted-orphaned-then-applied
-  (is (= [:claims :claims :delete :recreate] (mapv :stage steps)))
-  (is (= [:kubectl "ctx" "--namespace=databases" "delete" "statefulset" "postgres" "--cascade=orphan"]
-         (:effect (nth steps 2))))
-  (let [[op context manifest & args] (:effect (nth steps 3))]
+  (is (= [:claims :claims :delete :gone :recreate] (mapv :stage steps)))
+  (is (= [:kubectl "ctx" "--namespace=databases" "delete" "statefulset" "postgres" "--cascade=orphan"
+          "--wait=false" "--request-timeout=30s"]
+         (:effect (nth steps 2)))
+      "the delete returns once the API server accepted it")
+  (is (= [:kubectl "ctx" "--namespace=databases" "wait" "--for=delete" "statefulset/postgres" "--timeout=120s"]
+         (:effect (nth steps 3)))
+      "the wait for the orphan finalizer is bounded by kubectl's own timeout")
+  (let [[op context manifest & args] (:effect (nth steps 4))]
     (is (= [:kubectl-stdin "ctx" ["apply" "--filename" "-"]] [op context (vec args)]))
     (is (= (storage/recreate-manifest statefulset "data" "80Gi") (json/parse-string manifest true))
         "the manifest applied is the recreate manifest of the StatefulSet the steps were built from")
-    (is (= manifest (:manifest (nth steps 3))) "the step names its manifest for the recovery"))
+    (is (= manifest (:manifest (nth steps 4))) "the step names its manifest for the recovery"))
   (is (every? effect/effect? (storage/plan-of steps)) "every step carries exactly one effect"))
 
 (deftest progress-names-what-ran-and-where-it-stopped
@@ -188,13 +193,14 @@
       (is (= [] unresized))
       (is (= :delete (:stage stopped)))))
   (testing "every step ran"
-    (let [{:keys [stopped stages]} (storage/progress steps 4)]
+    (let [{:keys [stopped stages]} (storage/progress steps 5)]
       (is (nil? stopped))
-      (is (= #{:claims :delete :recreate} stages)))))
+      (is (= #{:claims :delete :gone :recreate} stages)))))
 
 (defn- recovery
-  [applied]
-  (storage/statefulset-recovery {:context "ctx" :target "databases/postgres"} steps applied))
+  ([applied] (recovery applied :present))
+  ([applied state]
+   (storage/statefulset-recovery {:context "ctx" :target "databases/postgres" :state state} steps applied)))
 
 (deftest no-recovery-when-nothing-was-applied
   (is (nil? (recovery 0)))
@@ -214,15 +220,38 @@
     (is (str/includes? text "cannot be undone:\n  data-postgres-0\n  data-postgres-1"))
     (is (not (str/includes? text "Not enlarged")))))
 
+(deftest a-delete-the-api-server-accepted-is-reported-as-being-deleted
+  (doseq [applied [2 3]]
+    (testing (str "stopped at " (:stage (:stopped (storage/progress steps applied))))
+      (let [text (recovery applied :deleting)]
+        (is (str/starts-with? text "StatefulSet databases/postgres IS BEING DELETED"))
+        (is (not (str/includes? text "could not be deleted")))
+        (is (str/includes? text "will not find it once it is gone"))
+        (is (str/includes? text (str "  " (:manifest (last steps)) "
+  EOF")) "the re-apply manifest is handed over")))))
+
+(deftest a-statefulset-gone-after-the-delete-is-reported-deleted-with-the-manifest
+  (let [text (recovery 3 :gone)]
+    (is (str/starts-with? text "THE STATEFULSET databases/postgres IS DELETED and was not recreated"))
+    (is (str/includes? text "kubectl --context=ctx apply --filename - <<'EOF'"))))
+
+(deftest a-statefulset-whose-state-is-unread-gets-both-ways-out
+  (doseq [state [:unread nil]]
+    (let [text (recovery 2 state)]
+      (is (str/starts-with? text "Whether StatefulSet databases/postgres still exists is unknown"))
+      (is (str/includes? text "kubectl --context=ctx --namespace=databases get statefulset postgres"))
+      (is (str/includes? text "run this book again"))
+      (is (str/includes? text "<<'EOF'")))))
+
 (deftest a-stop-at-the-recreate-hands-over-the-manifest
-  (let [text (recovery 3)
+  (let [text (recovery 4)
         manifest (:manifest (last steps))]
     (is (str/starts-with? text "THE STATEFULSET databases/postgres IS DELETED"))
     (is (str/includes? text "kubectl --context=ctx apply --filename - <<'EOF'"))
     (is (str/includes? text (str "  " manifest "\n  EOF")) "the manifest is printed whole, ready to paste")))
 
 (deftest a-run-that-applied-everything-says-nothing-was-rolled-back
-  (let [text (recovery 4)]
+  (let [text (recovery 5)]
     (is (str/starts-with? text "Every effect ran: StatefulSet databases/postgres was recreated"))
     (is (str/includes? text "Nothing was rolled back"))))
 

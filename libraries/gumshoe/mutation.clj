@@ -281,13 +281,16 @@
    object was replaced (another uid) or its spec changed (another generation),
    the change is refused, because the operator confirmed an object that no
    longer exists in that form. Status and metadata updates leave the
-   generation alone, so a controller reporting progress does not trip it. An
-   object without a generation is compared by resourceVersion, unless its
-   subject or ref names :compare :spec, for a type the API server never
-   gives a generation although it splits spec from status (a Node): then
-   its uid and spec are compared, and a refusal names the spec keys that
-   moved, as \"its spec changed after the confirmation: taints\". See
-   gumshoe.change/comparisons. A change that
+   generation alone, so a controller reporting progress does not trip it,
+   for a built-in type and a CRD with the status subresource. An object
+   without a generation is compared by resourceVersion, unless its subject
+   or ref names :compare :spec, for a type the API server never gives a
+   generation although it splits spec from status (a Node): then its uid
+   and spec are compared, and a refusal names the spec keys that moved, as
+   \"its spec changed after the confirmation: taints\". A type whose CRD
+   declares no status subresource (an Argo CD Application) raises its
+   generation on status writes too, so it is compared by spec whatever it
+   declares. See gumshoe.change/comparison. A change that
    rests on something outside the spec - an annotation, a status field - names
    it with :facts (fn [object] -> value), which must be equal too. An object
    that cannot be read before the confirmation is refused before it is
@@ -321,26 +324,28 @@
   compare)
 
 (defn fingerprint
-  "What identifies the object the operator confirmed: its uid, its generation
-   or, for an object without one, what compare names (see
-   gumshoe.change/comparisons; resourceVersion when nil), and the value of facts when given."
-  ([object] (fingerprint object nil nil))
-  ([object facts] (fingerprint object facts nil))
-  ([object facts compare]
+  "What identifies the object of resource type `type` the operator
+   confirmed: its uid and what gumshoe.change/comparison picks for it under
+   compare (its generation, its spec or its resourceVersion), and the value
+   of facts when given."
+  ([object] (fingerprint object nil nil nil))
+  ([object facts] (fingerprint object facts nil nil))
+  ([object facts compare] (fingerprint object facts compare nil))
+  ([object facts compare type]
    (check-compare! compare)
    (when object
      (let [{:keys [uid generation resourceVersion]} (:metadata object)]
-       (cond-> (cond
-                 generation {:uid uid :generation generation}
-                 (= :spec compare) {:uid uid :spec (or (:spec object) {})}
-                 :else {:uid uid :resource-version resourceVersion})
+       (cond-> (case (change/comparison object type compare)
+                 :spec {:uid uid :spec (or (:spec object) {})}
+                 :generation {:uid uid :generation generation}
+                 :resource-version {:uid uid :resource-version resourceVersion})
          facts (assoc :facts (facts object)))))))
 
 (defn ref-fingerprint
   "The fingerprint of object as the ref that names it declares it: with its
-   :facts and its :compare."
+   :facts and its :compare, compared as its :type needs."
   [ref object]
-  (fingerprint object (:facts ref) (:compare ref)))
+  (fingerprint object (:facts ref) (:compare ref) (:type ref)))
 
 (defn- moved-keys
   "The keys of two maps whose values differ, sorted, as text."

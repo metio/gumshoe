@@ -39,6 +39,9 @@
   :recheck (fn [{:keys [context ref]}]
              {:holders (claims/read-holders context (:namespace ref))})
   :refusal (fn [{:keys [ref object holders]}] (cleanup/claim-refusal ref object holders))
+  :derive (fn [{:keys [context object]}]
+            {:volume-line (when object (cleanup/claim-volume-line object (cleanup/read-claim-volume context object)))})
+  :items (fn [{:keys [target volume-line]}] (cond-> [(str "delete " target)] volume-line (conj volume-line)))
   :announce (fn [{:keys [target]}] (format "Delete unused PersistentVolumeClaim %s" target))
   ;; --wait=false: the pvc-protection finalizer holds the claim for as long as
   ;; a pod uses it, and the gone check is the bounded wait

@@ -24,3 +24,4 @@ recordings/
 ceph-backups/
 *.dump
 env.edn
+env.edn.*.bak
