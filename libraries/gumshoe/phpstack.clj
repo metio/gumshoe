@@ -132,10 +132,12 @@
 
    php-source names where the PHP values come from: :fpm for 'php-fpm -i'
    with fpm-pools, the pools of 'php-fpm -tt', applied over it; :fpm-ini
-   when php-fpm answered -i but its pools could not be read (fpm-pools nil),
-   so a pool override may be missing; :cli for 'php -i', the CLI's ini, which
-   php-fpm may not share. :php-source is nil when PHP did not answer."
-  [{:keys [component nginx-config php-info php-source fpm-pools]}]
+   when php-fpm answered -i but its pools could not be read (fpm-pools nil
+   or naming no pool, which a running php-fpm always has), so a pool
+   override may be missing; :cli for 'php -i', the CLI's ini, which
+   php-fpm may not share. :php-source is nil when PHP did not answer, and
+   :php-container names the pod/container the PHP values were read in."
+  [{:keys [component nginx-config php-info php-source php-container fpm-pools]}]
   (let [nginx? (not (str/blank? (str nginx-config)))
         php? (not (str/blank? (str php-info)))
         sizes (nginx-body-sizes nginx-config)
@@ -143,7 +145,7 @@
         source (when php?
                  (cond
                    (not= :fpm php-source) :cli
-                   (nil? fpm-pools) :fpm-ini
+                   (empty? fpm-pools) :fpm-ini
                    :else :fpm))
         limits (if (#{:fpm :fpm-ini} source)
                  (fpm-limits php-info fpm-pools)
@@ -153,6 +155,7 @@
      :found-nginx? nginx?
      :found-php? php?
      :php-source source
+     :php-container (when php? php-container)
      :php-pools-differ? (boolean (some :pools-differ? (vals limits)))
      :nginx-explicit? (when nginx? explicit?)
      :nginx-body-size (cond
@@ -182,6 +185,10 @@
   [mode]
   ["sh" "-c" fpm-binary-script "sh" mode])
 
+(defn- report!
+  [label pod-name container]
+  (stdout/err-println (format "  %s %s config from %s/%s" (stdout/blue "▸") label pod-name container)))
+
 (defn- first-answer
   "The first answer of command among the pod's containers that answered? accepts,
    logged as read from that container."
@@ -189,41 +196,53 @@
   (some (fn [c]
           (let [out (kubectl/exec-answer context namespace pod-name c command)]
             (when (answered? out)
-              (stdout/err-println (format "  %s %s config from %s/%s" (stdout/blue "▸") label pod-name c))
+              (report! label pod-name c)
               out)))
         containers))
 
-(defn- php-answer
-  "The PHP side of one container, or nil when it answers neither as php-fpm
-   nor as the PHP CLI: {:php-source :fpm :php-info <php-fpm -i> :fpm-pools
-   <pools of php-fpm -tt, nil when -tt did not answer>}, else {:php-source
-   :cli :php-info <php -i>}. php-fpm is asked first, so the CLI is read
-   only from a container without it."
+(defn fpm-answer
+  "The php-fpm side of one container, or nil when it does not answer
+   'php-fpm -i' as the FPM SAPI: {:php-source :fpm :php-info <php-fpm -i>
+   :php-container \"<pod>/<container>\" :fpm-pools <pools of php-fpm -tt>}.
+   :fpm-pools is nil when -tt did not answer or named no pool: php-fpm
+   refuses to start without one, so a dump without a pool was not captured
+   and a pool's override may be missing from it."
   [context namespace pod-name container]
-  (let [answered (fn [command] (kubectl/exec-answer context namespace pod-name container command))
-        report (fn [label] (stdout/err-println (format "  %s %s config from %s/%s" (stdout/blue "▸") label pod-name container)))]
-    (if-let [info (let [out (answered (fpm-command "-i"))] (when (fpm-info? out) out))]
-      (let [dump (answered (fpm-command "-tt"))]
-        (report (if dump "php-fpm" "php-fpm (its pools did not answer 'php-fpm -tt')"))
-        {:php-source :fpm :php-info info :fpm-pools (some-> dump fpm-pool-values)})
-      (when-let [info (let [out (answered ["php" "-i"])] (when (looks-like-php? out) out))]
-        (report "php CLI")
-        {:php-source :cli :php-info info}))))
+  (let [answered (fn [command] (kubectl/exec-answer context namespace pod-name container command))]
+    (when-let [info (let [out (answered (fpm-command "-i"))] (when (fpm-info? out) out))]
+      (let [pools (some-> (answered (fpm-command "-tt")) fpm-pool-values not-empty)]
+        (report! (if pools "php-fpm" "php-fpm (its pools did not answer 'php-fpm -tt')") pod-name container)
+        {:php-source :fpm :php-info info :php-container (str pod-name "/" container) :fpm-pools pools}))))
+
+(defn cli-answer
+  "The PHP CLI side of one container, or nil when 'php -i' does not answer
+   with phpinfo: {:php-source :cli :php-info <php -i> :php-container
+   \"<pod>/<container>\"}."
+  [context namespace pod-name container]
+  (when-let [info (let [out (kubectl/exec-answer context namespace pod-name container ["php" "-i"])]
+                    (when (looks-like-php? out) out))]
+    (report! "php CLI" pod-name container)
+    {:php-source :cli :php-info info :php-container (str pod-name "/" container)}))
+
+(defn- first-of
+  "The first non-nil (answer context namespace pod container) over targets,
+   asked in order and no further than the first that answers."
+  [answer context namespace targets]
+  (some (fn [[pod-name container]] (answer context namespace pod-name container)) targets))
 
 (defn collect-evidence!
   "Finds the first container that answers 'nginx -T' with a config dump and the
-   first that answers as php-fpm, or failing that as the PHP CLI, across the
-   namespace, and returns parsed evidence."
+   first that answers as php-fpm across the namespace, and returns parsed
+   evidence. Every container of every pod is asked for php-fpm before any is
+   asked for the PHP CLI, so a CLI-only container - a queue worker, a cron
+   pod, a sidecar - listed before the php-fpm one never stands in for it."
   [context namespace]
   (stdout/print-section "🔍 Evidence (kubectl exec)")
-  (let [pods (kubectl/items-of (kubectl/get-namespaced context namespace "pods"))]
-    (loop [pods pods, nginx-config nil, php nil]
-      (if (or (and nginx-config php) (empty? pods))
-        (parse-evidence (merge {:component namespace :nginx-config nginx-config} php))
-        (let [pod (first pods)
-              pod-name (kubectl/name-of pod)
-              containers (kubectl/container-names pod)
-              nginx-config (or nginx-config
-                               (first-answer context namespace pod-name containers ["nginx" "-T"] nginx-dump? "nginx"))
-              php (or php (some #(php-answer context namespace pod-name %) containers))]
-          (recur (rest pods) nginx-config php))))))
+  (let [pods (kubectl/items-of (kubectl/get-namespaced context namespace "pods"))
+        nginx-config (some #(first-answer context namespace (kubectl/name-of %) (kubectl/container-names %)
+                                          ["nginx" "-T"] nginx-dump? "nginx")
+                           pods)
+        targets (for [pod pods, c (kubectl/container-names pod)] [(kubectl/name-of pod) c])
+        php (or (first-of fpm-answer context namespace targets)
+                (first-of cli-answer context namespace targets))]
+    (parse-evidence (merge {:component namespace :nginx-config nginx-config} php))))

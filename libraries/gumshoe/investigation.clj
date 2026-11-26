@@ -316,9 +316,11 @@
   (str/join "," (map (fn [[k v]] (str (name k) "=" v)) labels)))
 
 (defn- selected-pods
+  "The pods of namespace whose labels match, read in that namespace only: a
+   workload's and a Service's selector never reach another namespace."
   [context namespace labels]
   (when (seq labels)
-    (->> (kubectl/items-of (kubectl/get-selected context "pods" (label-selector labels)))
+    (->> (kubectl/items-of (kubectl/get-namespaced-selected context namespace "pods" (label-selector labels)))
          (filter #(= namespace (kubectl/namespace-of %)))
          (unhealthy-first))))
 
@@ -329,20 +331,29 @@
   (for [pod (take related-cap pods)]
     {:relation relation :subject (pod-subject pod) :situation (subject/situation "Pod" pod)}))
 
-(defn- exposed-by!
-  "The routes and ingresses that front a service - the traffic coming in - found
-   by filtering all of them through the pure exposes-service? test."
+(defn- exposed-by
+  [kind object]
+  {:relation "exposed by"
+   :subject (subject/subject kind (kubectl/namespace-of object) (kubectl/name-of object))})
+
+(defn- routed-by!
+  "The HTTPRoutes that send traffic to a service, read in every namespace: a
+   route may reference a Service of another namespace that a ReferenceGrant
+   allows."
   [context namespace name]
   (let [service (subject/subject "Service" namespace name)]
-    (concat
-     (for [route (kubectl/items-of (kubectl/get-all context (subject/kind->type "HTTPRoute")))
-           :when (subject/exposes-service? "HTTPRoute" route service)]
-       {:relation "exposed by"
-        :subject (subject/subject "HTTPRoute" (kubectl/namespace-of route) (kubectl/name-of route))})
-     (for [ingress (kubectl/items-of (kubectl/get-all context "ingresses"))
-           :when (subject/exposes-service? "Ingress" ingress service)]
-       {:relation "exposed by"
-        :subject (subject/subject "Ingress" (kubectl/namespace-of ingress) (kubectl/name-of ingress))}))))
+    (for [route (kubectl/items-of (kubectl/get-all context (subject/kind->type "HTTPRoute")))
+          :when (subject/exposes-service? "HTTPRoute" route service)]
+      (exposed-by "HTTPRoute" route))))
+
+(defn- ingressed-by!
+  "The Ingresses that send traffic to a service, read in its namespace only:
+   an Ingress backend names a Service of the Ingress's own namespace."
+  [context namespace name]
+  (let [service (subject/subject "Service" namespace name)]
+    (for [ingress (kubectl/items-of (kubectl/get-namespaced context namespace "ingresses"))
+          :when (subject/exposes-service? "Ingress" ingress service)]
+      (exposed-by "Ingress" ingress))))
 
 (defonce ^:private extra-fetched-edges (atom {}))
 
@@ -424,8 +435,10 @@
     [(edge-lookup "the pods of this workload"
                   #(pod-edges-from "pod" (selected-pods context namespace (-> object :spec :selector :matchLabels))))]
     "Service"
-    [(edge-lookup "the routes and ingresses that expose this Service"
-                  #(exposed-by! context namespace name))
+    [(edge-lookup "the HTTPRoutes that expose this Service"
+                  #(routed-by! context namespace name))
+     (edge-lookup "the Ingresses that expose this Service"
+                  #(ingressed-by! context namespace name))
      (edge-lookup "the backend pods of this Service"
                   #(pod-edges-from "backend pod" (selected-pods context namespace (-> object :spec :selector))))]
     []))
