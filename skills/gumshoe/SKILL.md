@@ -295,7 +295,10 @@ The generic runbooks under `runbooks/` act on nodes (cordon, drain, taints,
 apiserver restart) and workloads (scale, restart, pause, resume, rollback).
 Others roll back Helm releases, stamp or strip Helm's ownership on objects a
 chart must adopt in place (`runbooks/kubernetes/helm/stamp_ownership.clj` and
-`unstamp_ownership.clj`, see below), drive CronJobs, remove finalizers, delete
+`unstamp_ownership.clj`, see below), rename a ListenerSet's listeners to
+the section names its routes attach to
+(`tools/gateway/runbooks/rename_listeners.clj --pick "ListenerSet <ns>/<name>"`,
+see below), drive CronJobs, remove finalizers, delete
 objects and volumes, renew certificates, recreate ACME orders, query etcd,
 silence alerts, export Grafana dashboards, and open netshoot debug sessions. `./run --list` is the complete
 and current list.
@@ -1009,6 +1012,22 @@ mostly data:
   `helm/unstamp_ownership.clj` take `--namespace`, `--release` and repeated
   `--object <type>/<name>` (or `<type>/<namespace>/<name>`) and
   `--cluster-object <type>/<name>`;
+- a route that reports `Accepted=False`/`NoMatchingParent` on a ListenerSet
+  names a section no listener carries, often because an adopted ListenerSet
+  kept numbered listeners (`https-0`) while the chart's routes ask for
+  `https`; Helm never corrects it, since it patches from the difference
+  between revisions. `gumshoe.listener-renames/plan` renames a listener only
+  when exactly one listener's name minus a trailing `-<digits>` is the
+  missing section and no route attaches to it under its own name; several
+  such listeners (`https-0`, `https-1`, one per hostname) or one in use
+  refuse the whole plan, and a section with no such listener is left
+  missing. The patch is one RFC 6902 JSON patch that tests each old name at
+  its index before replacing it, so hostnames, TLS and annotations are never
+  re-asserted. Every route type (HTTP, GRPC, TLS, TCP, UDP) is read across all
+  namespaces, an unserved type as none and an unanswered one as a refusal.
+  `gumshoe.steps.listener-renames/rename` takes `(fn [ctx] -> {:ref <ListenerSet
+  ref>})` for a casebook to compose; the post-check waits until every route
+  on a renamed section reports it Accepted;
 - a test proves a refusal with `gumshoe.testing.refusal`, which runs the
   spec through the engine twice against a stubbed cluster: once with one
   read unanswered, where the change must refuse with the reason the test

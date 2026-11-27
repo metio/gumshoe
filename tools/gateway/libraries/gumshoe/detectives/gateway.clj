@@ -132,6 +132,26 @@
                          parent-namespace parent-name)
         :hint "the parentRef is dangling - the ListenerSet attaches to nothing and its routes serve no traffic"}))))
 
+(def ^:private listenerset-kinds #{"ListenerSet" "XListenerSet"})
+
+(def rename-listeners-book
+  "The book that renames a ListenerSet's listeners to the sections its routes
+   attach to."
+  "tools/gateway/runbooks/rename_listeners.clj")
+
+(defn- route-hint
+  "The condition's message, and for a ListenerSet parent without the section
+   the route names, the book that renames its listeners."
+  [parent condition]
+  (let [parent-ref (:parentRef parent)]
+    (if (and (= "NoMatchingParent" (:reason condition))
+             (contains? listenerset-kinds (:kind parent-ref))
+             (:sectionName parent-ref))
+      (str (when-let [m (:message condition)] (str m " - "))
+           (format "no listener of %s %s is named %s; %s renames a numbered listener to it"
+                   (:kind parent-ref) (:name parent-ref) (:sectionName parent-ref) rename-listeners-book))
+      (:message condition))))
+
 (defn detect-httproute-problems
   [evidence]
   (let [routes (kubectl/items-of (get evidence httproute-type))]
@@ -146,7 +166,7 @@
                          (:type condition)
                          (-> parent :parentRef :name)
                          (or (:reason condition) "unknown"))
-        :hint (:message condition)})
+        :hint (route-hint parent condition)})
      (for [route routes
            :when (empty? (-> route :status :parents))]
        {:severity :warning
