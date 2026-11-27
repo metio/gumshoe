@@ -41,10 +41,18 @@
      :values         {name expression}: computed once per run, after the reads
      :state          the state the change brings about, see below
      :refuse         [{:when predicate :says \"template\"} or {:reason call}]
+     :problems       [{:when predicate :says \"template\"} or {:reasons call}],
+                     judged as :refuse is, and every message any entry
+                     gives is printed as its own refusing line
+     :pin            [{:type \"type\" :namespace expr :name expr :compare :spec}
+                      ..]: objects other than the subject the change rests
+                     on, see below
      :confirm        {:action \"...\" :destructive? bool :separately? bool}
      :items          [:call <:items function> ..] or [\"template\" ..]
      :announce       \"template\", or false for a change nobody needs to hear of
-     :effect         [[:kubectl <verb> {..}] ..], see below; required
+     :effect         [[:kubectl <verb> {..}] ..] on the picked object, and
+                     [:each <read> {..} [:kubectl <verb> {..}] ..] on every
+                     object a read returned, see below; required
      :recovery       \"template\" printed when the change fails partway
      :opt-out        {safeguard \"why\"}, see below
    Any other key of the change, its target, state, confirmation, refusals,
@@ -80,11 +88,20 @@
      [:opt :name & path]       a flag     [:value :name & path]  a value
      [:read :name & path]      a read     [:context]  the kube context, in
                                           :reads, :values and :candidates
+     [:each & path]            inside an :each, the object it acts on
      [:call :ns/name arg ..]   a registered function
      strings, numbers, booleans, nil, keywords, and maps of expressions
    Reads, in :reads and :values:
      [:list \"type\" {:namespace expr}]  {:ok? :items} of a namespaced list
      [:get \"type\" name {:namespace expr}]  one object, nil when NotFound
+     [:present [{:type \"type\" :name expr :namespace expr} ..] {:namespace expr}]
+                               the named objects that exist, each as {:ref
+                               :object}, read through gumshoe.reads: an
+                               object the cluster answered is absent (or whose
+                               type it confirmably does not serve) is left
+                               out, and a read that did not answer stops the
+                               change; an object's :namespace falls back to
+                               the shared one
      [:call <:read function> arg ..]
    Predicates, in :state, :refuse and inside each other:
      [:field path op value]    the picked object's field; op is := :not= :<
@@ -96,9 +113,9 @@
      [:state]                  the target state holds, in :refuse
      [:absent]                 the picked object does not exist, in :refuse
    Templates are strings whose {target}, {ref.namespace}, {opt.replicas},
-   {value.dry-run.message}, {read.hpas.ok?} and {object.spec.schedule}
-   placeholders are filled from the run; a placeholder naming anything else
-   is refused.
+   {value.dry-run.message}, {read.hpas.ok?}, {object.spec.schedule} and,
+   inside an :each, {each.metadata.name} placeholders are filled from the
+   run; a placeholder naming anything else is refused.
 
    :state {:holds predicate | :absent :says \"template\" :timeout 60 :interval 5}
    declares once what the change brings about, and compile derives from it:
@@ -118,6 +135,46 @@
                                   a nil value removes the annotation
      [:kubectl :delete]           destructive; does not wait, the post-check does
 
+   [:each <read> {:state {..} :max n} <effect> ..] applies the effects to
+   every object a :reads entry returned, in the order read; <read> is
+   :name, or [:name ..] for several reads taken together, each object once.
+   The read is a [:list ..], [:get ..] (no object, nothing to act on),
+   [:present ..], or [:call <:read function> ..] returning gumshoe.reads
+   results (an object, a list, or a sequence of them). Inside it the
+   effects act on the object, [:each & path] reads it, and [:field ..]
+   judges it. :state {:holds predicate | :absent :says \"template\" :timeout
+   :interval} says what holds for each object once the change took effect;
+   it is required unless every effect deletes, where it is :absent. :max
+   bounds how many objects the read may return (default-each-max). Per
+   object, compile derives:
+     the confirmation  lists every object the change acts on
+     the skip          an object whose state holds already is not acted
+                       on; a change acting only through :each is done
+                       when no object is left, so an empty read is done
+     the pin           every object the confirmation showed is fingerprinted
+                       (uid and generation, or resourceVersion) and compared
+                       with the read made again after the confirmation; the
+                       change is refused when one changed or was replaced,
+                       or an object appeared that the confirmation did not
+                       show; an
+                       object that vanished is refused too unless every
+                       effect deletes it, since its delete already happened
+     the bound         more than :max objects refuses the change before the
+                       confirmation
+     the post-check    each object read again, judged by its state, fail-
+                       closed as :state's is
+   A list that did not answer refuses the change: a strict read throws, an
+   :unread result throws, and a [:list ..] that answered its type does not
+   exist proves no absence, so it refuses as well - read objects of an
+   optional type with [:present ..].
+
+   :pin names objects other than the subject the change rests on, such as
+   the custom resource whose secret must not be renamed while the operator
+   confirms. Each is read strictly before the confirmation and again after
+   it, and the change is refused when one does not exist, was replaced, or
+   changed (gumshoe.mutation's :subjects). Its expressions see the pick:
+   [:target], [:ref ..], [:object ..], [:opt ..] and :value functions.
+
    Safeguards, each on by default:
      subject pin      the picked object is read strictly before the
                       confirmation, read again after it, and the change is
@@ -125,11 +182,16 @@
                       is gone; a change without a :type or :parse is refused
      strict reads     every read answers or the change stops; there is no
                       opt-out
-     post-check       from :state, fail-closed; opt out with :verify
-     skip when done   from :state; opt out with :done
-     destructive confirmation  a :delete effect makes the confirmation ask
-                      for \"yes\" and marks the compiled :effect
-                      destructive (gumshoe.change/destructive);
+     post-check       from :state, fail-closed; opt out with :verify. A
+                      change whose every effect is an :each needs no :state:
+                      each object's state is its post-check, and the
+                      safeguards report the subject's as :subject-not-acted-on
+     skip when done   from :state and each :each's states; opt out with :done
+     each object      an :each's pin, bound and post-check, with no opt-out
+     destructive confirmation  a :delete effect, also inside an :each,
+                      makes the confirmation ask for \"yes\" and marks
+                      the compiled :effect destructive
+                      (gumshoe.change/destructive);
                       :destructive? false beside one is refused in the
                       words normalize uses
                       (gumshoe.change/destructive-contradiction) unless
@@ -149,12 +211,15 @@
   (:require [cheshire.core :as json]
             [clojure.string :as str]
             [gumshoe.change :as change]
+            [gumshoe.concurrent :as concurrent]
             [gumshoe.dsl.library]
             [gumshoe.dsl.registry :as registry]
             [gumshoe.deletes :as deletes]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
+            [gumshoe.reads :as reads]
+            [gumshoe.reads.result :as result]
             [gumshoe.select :as select]
             [gumshoe.verify :as verify]))
 
@@ -216,7 +281,8 @@
 ;; registered function it may call.
 
 (def ^:private pure-roots #{:target :ref :object :opt :value :read :call})
-(def ^:private read-forms #{:list :get})
+(def ^:private read-forms #{:list :get :present})
+(def ^:private expression-words (into pure-roots (conj read-forms :context :each)))
 
 (defn- place
   [scope what roots calls]
@@ -280,13 +346,27 @@
       :object (fn [env] (get-in (:object env) steps))
       :opt (do (need-name options) (fn [env] (get-in (get-in env [:ctx :opts]) steps)))
       :value (do (need-name values) (fn [env] (get-in (:ctx env) steps)))
-      :read (do (need-name reads) (fn [env] (get-in (:ctx env) steps))))))
+      :read (do (need-name reads) (fn [env] (get-in (:ctx env) steps)))
+      :each (fn [env] (get-in (:each env) steps)))))
 
 (defn- namespace-arg
   [path opts place]
   (when (some? opts)
     (check-keys! path opts #{:namespace} "a read's options")
     (expr (conj path :namespace) (:namespace opts) place)))
+
+(defn- present-members
+  "The objects refs name that exist, each as {:ref <its ref> :object <it>}, in
+   the order of refs, read through gumshoe.reads at once. An object the
+   cluster answered does not exist (or whose type it confirmably does not
+   serve) is left out; a read that did not answer throws the unread
+   exception, so an unanswered read is never an absent object."
+  [context refs]
+  (let [results (concurrent/all (map (fn [ref] #(reads/object context ref)) refs))]
+    (vec (for [[ref r] (map vector refs results)
+               :let [object (result/object! r)]
+               :when object]
+           {:ref ref :object object}))))
 
 (defn- read-of
   [path [op & args :as form] place]
@@ -307,6 +387,31 @@
                  (if ns
                    (kubectl/get-namespaced-resource context (ns env) type (name env))
                    (kubectl/get-cluster-resource context type (name env)))))))
+    :present (let [[refs opts] args]
+               (when-not (<= 1 (count args) 2)
+                 (invalid! path "[:present [{:type \"type\" :name expr} ..] {:namespace expr}] takes the objects and its options"))
+               (when-not (and (vector? refs) (seq refs))
+                 (invalid! (conj path 1) "[:present ..] names one or more objects, as [{:type \"type\" :name expr :namespace expr} ..]"))
+               (let [ns (namespace-arg (conj path 2) opts place)
+                     wanted (vec (map-indexed
+                                  (fn [i r]
+                                    (let [p (conj path 1 i)]
+                                      (check-keys! p r #{:type :name :namespace} "an object of [:present ..]")
+                                      (non-blank! (conj p :type) (:type r) "an object's :type")
+                                      (when-not (contains? r :name)
+                                        (invalid! (conj p :name) "an object of [:present ..] names itself as :name expr"))
+                                      {:type (:type r)
+                                       :name (expr (conj p :name) (:name r) place)
+                                       :namespace (when (contains? r :namespace) (expr (conj p :namespace) (:namespace r) place))}))
+                                  refs))]
+                 (fn [env]
+                   (present-members (get-in env [:ctx :context])
+                                    (let [shared (when ns (ns env))]
+                                      (mapv (fn [{:keys [type] object-name :name object-namespace :namespace}]
+                                              (cond-> {:type type :name (object-name env)}
+                                                (or object-namespace shared)
+                                                (assoc :namespace (if object-namespace (object-namespace env) shared))))
+                                            wanted))))))
     (invalid! path (format "%s is no read" (pr-str form)))))
 
 (defn- expr
@@ -325,9 +430,9 @@
         (not (keyword? op))
         (invalid! path (format "%s is a form, whose first element names what it is - a list of values is written as data only inside a map"
                                (pr-str x)))
-        (not (contains? (into pure-roots (conj read-forms :context)) op))
+        (not (contains? expression-words op))
         (invalid! (conj path 0) (format "%s is no expression - the expressions are %s" op
-                                        (known-words (into pure-roots (conj read-forms :context)))))
+                                        (known-words expression-words)))
         (not (contains? roots op))
         (invalid! (conj path 0) (format "%s is not available in %s" (pr-str x) what))
         (= :call op) (call-of path x place calls)
@@ -352,8 +457,8 @@
                         root (keyword root)]
                     (when (str/blank? (second m))
                       (invalid! path (format "%s holds an empty placeholder {}" (pr-str s))))
-                    (when-not (#{:target :ref :object :opt :value :read} root)
-                      (invalid! path (format "{%s} names nothing a template reads - write {target}, {ref.x}, {object.x}, {opt.x}, {value.x} or {read.x}"
+                    (when-not (#{:target :ref :object :opt :value :read :each} root)
+                      (invalid! path (format "{%s} names nothing a template reads - write {target}, {ref.x}, {object.x}, {opt.x}, {value.x}, {read.x}, or {each.x} inside an :each"
                                              (second m))))
                     (recur (subs s (+ i (count (first m))))
                            (conj acc (subs s 0 i)
@@ -398,7 +503,9 @@
                 (invalid! (conj path 1) (format "a field is a path vector such as [:spec :replicas], not %s" (pr-str steps))))
             _ (when-not (comparisons cmp)
                 (invalid! (conj path 2) (format "%s is no comparison - write one of %s" (pr-str cmp) (known-words (keys comparisons)))))
-            get (expr (conj path 1) (into [:object] steps) (update place :roots conj :object))
+            ;; inside an :each the field is the field of the object acted on
+            root (:field-root place :object)
+            get (expr (conj path 1) (into [root] steps) (update place :roots conj root))
             v (expr (conj path 3) v place)
             cmp (comparisons cmp)]
         (fn [env] (boolean (cmp (get env) (v env)))))
@@ -564,10 +671,12 @@
   (if (keyword? k) (subs (str k) 1) k))
 
 (defn- effect-of
-  "An effect form at path as (fn [env] -> effect)."
-  [path form place]
+  "A kubectl effect form at path as (fn [env] -> effect), acting on the
+   object (ref env) names: the subject's ref, or inside an :each the ref of
+   the object acted on."
+  [path form place ref]
   (when-not (and (vector? form) (= :kubectl (first form)))
-    (invalid! path (format "%s is no effect - an effect is [:kubectl <verb> {..}] with a verb of %s"
+    (invalid! path (format "%s is no effect - an effect is [:kubectl <verb> {..}] with a verb of %s, or [:each <read> {..} [:kubectl <verb> {..}] ..]"
                            (pr-str form) (known-words (keys verbs)))))
   (let [[_ verb opts & more] form
         opts (or opts {})]
@@ -575,8 +684,7 @@
     (when-not (contains? verbs verb)
       (invalid! (conj path 1) (format "%s is no kubectl verb - the verbs are %s" (pr-str verb) (known-words (keys verbs)))))
     (check-keys! (conj path 2) opts (verbs verb) (str "the options of " verb))
-    (let [context #(get-in % [:ctx :context])
-          ref #(get-in % [:ctx :ref])]
+    (let [context #(get-in % [:ctx :context])]
       (case verb
         :patch (let [_ (when-not (map? (:merge opts))
                          (invalid! (conj path 2 :merge) "a :patch names its merge patch as :merge {..}"))
@@ -627,8 +735,8 @@
 (def ^:private state-keys #{:holds :says :timeout :interval})
 
 (defn- check-state!
-  [state]
-  (let [path [:state]]
+  [path state]
+  (do
     (check-keys! path state state-keys "the :state")
     (when-not (contains? state :holds)
       (invalid! (conj path :holds) "the :state says what holds once the change took effect, as :holds predicate or :holds :absent"))
@@ -671,6 +779,320 @@
                                       (or (nil? object) (some? (-> object :metadata :deletionTimestamp)))))
     :else (fn [env] (verify/object-holds? (:object env) #(state-pred (assoc env :object %))))))
 
+;; --- effects on each object of a read ------------------------------------------------
+;;
+;; [:each <read> {:state .. :max n} <kubectl effect> ..] acts on every object a
+;; declared :reads entry returned. The objects are the members of the read,
+;; each {:ref {:type :namespace :name} :object o}. The confirmed members are
+;; kept as a :values entry, computed once before the confirmation, so the
+;; refusal after the confirmation compares them with the read made again.
+
+(def default-each-max
+  "How many objects an :each may read before the change is refused, unless
+   the :each names its own :max. A selector or a list that matches far more
+   than its author meant must not act on all of them behind one
+   confirmation."
+  25)
+
+(defn each-form?
+  "Whether an effect form is an :each."
+  [form]
+  (and (vector? form) (= :each (first form))))
+
+(defn- each-effect-forms
+  "The kubectl effect forms inside an :each form."
+  [form]
+  (let [more (drop 2 form)]
+    (if (map? (first more)) (rest more) more)))
+
+(defn- listed-members
+  [type read-name {:keys [ok? items]}]
+  (when-not ok?
+    ;; under strict reads a list that is not ok? answered that the type does
+    ;; not exist, which kubectl also prints when discovery of its group
+    ;; failed, so it proves no absence
+    (throw (result/unread-exception
+            (format "the list of %s in :reads %s answered that the type does not exist, which does not prove the objects are absent - read objects of an optional type with [:present ..]"
+                    type read-name))))
+  (mapv (fn [o] {:ref (cond-> {:type type :name (kubectl/name-of o)}
+                        (kubectl/namespace-of o) (assoc :namespace (kubectl/namespace-of o)))
+                 :object o})
+        items))
+
+(defn- result-members
+  "The members of what a registered :read returned: a gumshoe.reads result
+   (an object or a list), or a sequence of them. An :unread result throws the
+   unread exception; anything that is not a result throws."
+  [read-name value]
+  (let [results (if (sequential? value) value [value])]
+    (vec (mapcat (fn [r]
+                   (when-not (result/result? r)
+                     (throw (ex-info (format ":reads %s feeds an :each and returned %s - a :read function an :each acts on returns gumshoe.reads results"
+                                             read-name (pr-str r))
+                                     {:read read-name})))
+                   (if (contains? r :items)
+                     (let [type (get-in r [:ref :type])]
+                       (map (fn [o] {:ref (cond-> {:type type :name (kubectl/name-of o)}
+                                            (kubectl/namespace-of o) (assoc :namespace (kubectl/namespace-of o)))
+                                     :object o})
+                            (result/items! r)))
+                     (when-let [o (result/object! r)]
+                       [{:ref (select-keys (:ref r) [:type :namespace :name]) :object o}])))
+                 results))))
+
+(defn- members-reader
+  "(fn [value] -> members) for the :reads entry read-name, written as form."
+  [read-name form]
+  (case (first form)
+    :list (let [type (second form)] (fn [value] (listed-members type read-name value)))
+    :get (let [type (second form)]
+           (fn [value]
+             (if value
+               [{:ref (cond-> {:type type :name (kubectl/name-of value)}
+                        (kubectl/namespace-of value) (assoc :namespace (kubectl/namespace-of value)))
+                 :object value}]
+               [])))
+    :present (fn [value] (vec value))
+    :call (fn [value] (result-members read-name value))))
+
+(defn- each-env
+  [ctx {:keys [ref object]}]
+  {:ctx ctx :object (:object ctx) :each object :each-ref ref})
+
+(defn- member-key
+  [member]
+  (mutation/object-key (:ref member)))
+
+(defn- distinct-members
+  [members]
+  (second (reduce (fn [[seen out] m]
+                    (let [k (member-key m)]
+                      (if (seen k) [seen out] [(conj seen k) (conj out m)])))
+                  [#{} []]
+                  members)))
+
+(defn- each-of
+  "An :each form at path, compiled: {:names :members :snapshot :max :verbs
+   :deletes-only? :absent? :holds :says :timeout :interval :effects}."
+  [path form i read-forms value-names scope]
+  (let [[_ source & more] form
+        names (cond (keyword? source) [source]
+                    (and (vector? source) (seq source) (every? keyword? source)) source
+                    :else (invalid! (conj path 1) (format "an :each names the :reads entry whose objects it acts on, as :name or [:name ..], not %s"
+                                                          (pr-str source))))
+        _ (when-not (apply distinct? names)
+            (invalid! (conj path 1) "an :each names each :reads entry once"))
+        _ (doseq [n names]
+            (cond
+              (contains? read-forms n) nil
+              (contains? value-names n)
+              (invalid! (conj path 1) (format "%s is a :values entry, computed once and never read again - an :each acts on a :reads entry, which is read again after the confirmation"
+                                              n))
+              :else
+              (invalid! (conj path 1) (format "%s names no declared :reads entry - the declared names are %s"
+                                              n (if (seq read-forms) (known-words (keys read-forms)) "none")))))
+        opts? (map? (first more))
+        opts (if opts? (first more) {})
+        forms (each-effect-forms form)
+        offset (if opts? 3 2)
+        _ (check-keys! (conj path 2) opts #{:state :max} "the options of an :each")
+        _ (when (empty? forms)
+            (invalid! path "an :each names one or more effects after its read, as [:each :name {..} [:kubectl <verb> {..}] ..]"))
+        _ (doseq [[j f] (map-indexed vector forms) :when (each-form? f)]
+            (invalid! (conj path (+ offset j)) "an :each acts on objects with kubectl effects, not with another :each"))
+        max (if (contains? opts :max)
+              (let [m (:max opts)]
+                (when-not (pos-int? m)
+                  (invalid! (conj path 2 :max) (format ":max is a whole number of objects above zero, not %s" (pr-str m))))
+                m)
+              default-each-max)
+        verbs (mapv #(when (vector? %) (second %)) forms)
+        deletes? (some destructive-verbs verbs)
+        state (:state opts)
+        each-place (assoc (place scope "an :each" (conj pure-roots :each) #{:value}) :field-root :each)
+        effects (vec (map-indexed (fn [j f] (effect-of (conj path (+ offset j)) f each-place :each-ref)) forms))
+        state (cond
+                (some? state) (do (check-state! (conj path 2 :state) state)
+                                  (when (and deletes? (not (absent-state? state)))
+                                    (invalid! (conj path 2 :state :holds) "an :each that deletes brings about an absence - write :holds :absent, or leave :state out"))
+                                  state)
+                deletes? nil
+                :else (invalid! (conj path 2 :state)
+                                (str "an :each that does not delete says what holds for each object once it took effect, as {:state {:holds predicate :says \"template\"}}"
+                                     " - it is each object's post-check and what skips an object already done")))
+        absent? (or (nil? state) (absent-state? state))
+        holds (if absent?
+                (fn [env] (some? (get-in env [:each :metadata :deletionTimestamp])))
+                (let [p (predicate (conj path 2 :state :holds) (:holds state) each-place)]
+                  (fn [env] (verify/object-holds? (:each env) #(p (assoc env :each %))))))
+        says (if (:says state)
+               (template (conj path 2 :state :says) (:says state) each-place)
+               (fn [env] (str (mutation/describe-ref (:each-ref env)) " is gone")))
+        member-readers (into {} (map (fn [n] [n (members-reader n (get read-forms n))])) names)]
+    {:names names
+     :members (fn [ctx] (distinct-members (mapcat (fn [n] ((member-readers n) (get ctx n))) names)))
+     :snapshot (keyword "gumshoe.dsl" (str "each-" i))
+     :max max
+     :verbs verbs
+     :deletes-only? (every? destructive-verbs verbs)
+     :absent? absent?
+     :holds holds
+     :says says
+     :timeout (get state :timeout 60)
+     :interval (get state :interval 5)
+     :effects effects}))
+
+(defn- confirmed-members
+  "The members of each the confirmation showed."
+  [each ctx]
+  (get ctx (:snapshot each)))
+
+(defn- acted-on
+  "The confirmed members of each whose state does not hold yet: the objects
+   the change acts on."
+  [each ctx]
+  (vec (remove #((:holds each) (each-env ctx %)) (confirmed-members each ctx))))
+
+(defn- each-refusal
+  "Why the objects each reads now rule the change out, or nil. Before the
+   confirmation the read and the confirmed members are one reading, so only
+   the bound can refuse; after it the read is the one made again."
+  [each ctx]
+  (let [confirmed (confirmed-members each ctx)
+        fresh ((:members each) ctx)
+        before (into {} (map (juxt member-key identity)) confirmed)
+        after (into {} (map (juxt member-key identity)) fresh)
+        names (str/join ", " (map pr-str (:names each)))]
+    (or (when (< (:max each) (count fresh))
+          (format "the :each over %s read %d objects, more than the %d one confirmation may act on - narrow the read, or raise the :each's :max"
+                  names (count fresh) (:max each)))
+        (some (fn [m]
+                (when-not (contains? before (member-key m))
+                  (str (mutation/describe-ref (:ref m)) ": it appeared after the confirmation, which did not show it - run the change again to see it")))
+              fresh)
+        (some (fn [{:keys [ref object] :as m}]
+                (if-let [now (get after (member-key m))]
+                  (when-let [why (mutation/drift (mutation/ref-fingerprint ref object) (mutation/ref-fingerprint ref (:object now)))]
+                    (str (mutation/describe-ref ref) ": " why))
+                  ;; a delete of an object that is gone already did what it
+                  ;; asked for (gumshoe.deletes passes --ignore-not-found);
+                  ;; any other verb planned for it would fail halfway
+                  (when-not (:deletes-only? each)
+                    (format "%s: it was deleted after the confirmation, and the %s planned for it would fail - run the change again"
+                            (mutation/describe-ref ref) (str/join ", " (map name (:verbs each)))))))
+              confirmed))))
+
+(defn- each-items
+  [each ctx]
+  (for [{:keys [ref]} (acted-on each ctx)]
+    (str (str/join ", " (map name (:verbs each))) " " (mutation/describe-ref ref))))
+
+(defn- each-effects
+  [each ctx]
+  (for [m (acted-on each ctx)
+        :let [env (each-env ctx m)]
+        f (:effects each)]
+    (f env)))
+
+(defn- each-checks
+  "One post-check for each object each acts on, judging its state on the
+   object read again; a predicate never holds for an object no read found,
+   and an absence holds only when a read answered NotFound or the object is
+   terminating."
+  [each {:keys [context] :as ctx}]
+  (for [{:keys [ref] :as m} (acted-on each ctx)
+        :let [env (each-env ctx m)]]
+    (cond-> {:description ((:says each) env) :timeout (:timeout each) :interval (:interval each)}
+      (:absent? each)
+      (assoc :verifies-absence? true
+             :check (fn [] (or (some-> (mutation/fetch-pinned context ref) :metadata :deletionTimestamp some?)
+                               (kubectl/confirmed-gone? context (:namespace ref) (:type ref) (:name ref)))))
+      (not (:absent? each))
+      (assoc :check (fn [] (verify/object-holds? (mutation/fetch-pinned context ref)
+                                                 #((:holds each) (assoc env :each %))))))))
+
+;; --- pins on objects other than the subject ---------------------------------------
+
+(defn- pins-of
+  "The :pin entries as a :target subjects entry: each object is read strictly
+   before the confirmation and again after it, and the change is refused
+   when one does not exist, was replaced or changed."
+  [pins scope]
+  (let [path [:pin]
+        _ (when-not (and (vector? pins) (seq pins))
+            (invalid! path "the :pin names one or more objects other than the subject, as [{:type \"type\" :namespace expr :name expr} ..]"))
+        pin-place (place scope "a :pin entry" #{:target :ref :object :opt :call} #{:value})
+        refs (vec (map-indexed
+                   (fn [i r]
+                     (let [p (conj path i)]
+                       (check-keys! p r #{:type :namespace :name :compare} "a :pin entry")
+                       (non-blank! (conj p :type) (:type r) "a pinned object's :type")
+                       (when-not (contains? r :name)
+                         (invalid! (conj p :name) "a pinned object names itself as :name expr"))
+                       (when (contains? r :compare)
+                         (when-let [why (or (when (nil? (:compare r)) "a pin compares nil - drop :compare, or write :compare :spec")
+                                            (change/compare-problem (:compare r)))]
+                           (invalid! (conj p :compare) why)))
+                       {:type (:type r)
+                        :name (expr (conj p :name) (:name r) pin-place)
+                        :namespace (when (contains? r :namespace) (expr (conj p :namespace) (:namespace r) pin-place))
+                        :compare (:compare r)}))
+                   pins))]
+    {:from :target
+     :refs (fn [ctx]
+             (let [env {:ctx ctx :object (:object ctx)}]
+               (mapv (fn [{:keys [type compare] pin-name :name pin-namespace :namespace}]
+                       (let [n (pin-name env)
+                             ns (when pin-namespace (pin-namespace env))]
+                         (when-not (and (string? n) (not (str/blank? n)))
+                           (throw (ex-info (format "a pinned %s names no object (its :name is %s)" type (pr-str n)) {:type type})))
+                         (cond-> {:type type :name n}
+                           ns (assoc :namespace ns)
+                           compare (assoc :compare compare))))
+                     refs)))}))
+
+;; --- problems ------------------------------------------------------------------------
+
+(defn- problems-of
+  "The :problems entries as a :problems function: every message each entry
+   gives, in order."
+  [problems scope state-pred]
+  (let [path [:problems]
+        _ (when-not (and (vector? problems) (seq problems))
+            (invalid! path "the :problems are a vector of one or more {:when predicate :says \"template\"} or {:reasons call}"))
+        problem-place (assoc (place scope "a :problems entry" pure-roots #{:value}) :state state-pred)
+        entries (vec (map-indexed
+                      (fn [i entry]
+                        (let [p (conj path i)]
+                          (check-keys! p entry #{:when :says :reasons} "a :problems entry")
+                          (cond
+                            (contains? entry :reasons)
+                            (let [_ (when (or (contains? entry :when) (contains? entry :says))
+                                      (invalid! p "a :problems entry is {:when predicate :says \"template\"} or {:reasons call}, not both"))
+                                  _ (when-not (and (vector? (:reasons entry)) (= :call (first (:reasons entry))))
+                                      (invalid! (conj p :reasons) "a :reasons is [:call <:problems function> arg ..]"))
+                                  fname (second (:reasons entry))
+                                  f (call-of (conj p :reasons) (:reasons entry) problem-place #{:problems})]
+                              (fn [env]
+                                (let [v (f env)]
+                                  ;; a function that returns no list is a broken
+                                  ;; gate; throwing makes change/judge-problems
+                                  ;; refuse the change naming it
+                                  (when-not (sequential? v)
+                                    (throw (ex-info (format "%s returned %s, not a list of messages" fname (pr-str v)) {:name fname})))
+                                  v)))
+
+                            (and (contains? entry :when) (contains? entry :says))
+                            (let [pred (predicate (conj p :when) (:when entry) problem-place)
+                                  says (template (conj p :says) (:says entry) problem-place)]
+                              (fn [env] (when (pred env) [(says env)])))
+
+                            :else (invalid! p "a :problems entry is {:when predicate :says \"template\"} or {:reasons call}"))))
+                      problems))]
+    (fn [ctx]
+      (let [env {:ctx ctx :object (:object ctx)}]
+        (vec (mapcat #(% env) entries))))))
+
 ;; --- opt-outs ------------------------------------------------------------------------
 
 (def safeguards
@@ -688,7 +1110,7 @@
 
 (def ^:private top-keys
   #{:gumshoe/dsl :description :title :options :prerequisites :target :reads :values :state :refuse
-    :confirm :items :announce :effect :recovery :opt-out})
+    :confirm :items :announce :effect :recovery :opt-out :pin :problems})
 
 (defn- refusal-of
   "The :refuse entries and the target's gone refusal as one :refusal."
@@ -727,6 +1149,8 @@
   (let [path [:items]
         place (place scope ":items" pure-roots #{:value :items})]
     (cond
+      (nil? items) nil
+
       (and (vector? items) (= :call (first items)))
       (let [f (call-of path items place #{:items})]
         (fn [ctx] (vec (f {:ctx ctx :object (:object ctx)}))))
@@ -743,7 +1167,8 @@
     (fn [ctx] (t {:ctx ctx :object (:object ctx)}))))
 
 (defn- compiled
-  [{:keys [description title options prerequisites target reads values state refuse confirm items announce effect recovery opt-out]
+  [{:keys [description title options prerequisites target reads values state refuse confirm items announce effect recovery opt-out
+           pin problems]
     :as dsl}]
   (when-not (map? dsl)
     (invalid! [] (format "a change is a map, not %s" (pr-str dsl))))
@@ -778,7 +1203,7 @@
   (check-names! [:values] values #{})
   (check-names! [:reads] reads (set (keys values)))
   (when-not (and (vector? effect) (seq effect))
-    (invalid! [:effect] "the change names one or more effects, as [[:kubectl <verb> {..}] ..]"))
+    (invalid! [:effect] "the change names one or more effects, as [[:kubectl <verb> {..}] ..] or [[:each <read> {..} [:kubectl <verb> {..}] ..] ..]"))
   (let [select (select-of target)
         options (try (select/options select (or options {}))
                      (catch clojure.lang.ExceptionInfo e (invalid! [:options] (ex-message e))))
@@ -788,9 +1213,9 @@
                            "the target's :candidates {:unless :state}, which judges each listed object alone"
                            #{:object :call} #{:value})
         state-pred (when (and state (not (absent-state? state)))
-                     (check-state! state)
+                     (check-state! [:state] state)
                      (predicate [:state :holds] (:holds state) pure))
-        _ (when (absent-state? state) (check-state! state))
+        _ (when (absent-state? state) (check-state! [:state] state))
         object-state (when state
                        (fn []
                          (if (absent-state? state)
@@ -812,18 +1237,31 @@
                                    (let [f (expr [:values k] form value-place)]
                                      [k (fn [ctx] (f {:ctx ctx :object (:object ctx)}))])))
         destroying (first (keep-indexed (fn [i form]
-                                          (when (and (vector? form) (destructive-verbs (second form)))
+                                          (cond
+                                            (each-form? form)
+                                            (when (some #(and (vector? %) (destructive-verbs (second %))) (each-effect-forms form))
+                                              (format "%s at %s" (pr-str form) (pr-str [:effect i])))
+                                            (and (vector? form) (destructive-verbs (second form)))
                                             (format "%s at %s" (pr-str form) (pr-str [:effect i]))))
                                         effect))
         destructive-effect? (some? destroying)
-        effects (vec (map-indexed (fn [i form] (effect-of [:effect i] form pure)) effect))
+        parts (vec (map-indexed (fn [i form]
+                                  (if (each-form? form)
+                                    {:each (each-of [:effect i] form i (or reads {}) (set (keys values)) scope)}
+                                    {:subject (effect-of [:effect i] form pure #(get-in % [:ctx :ref]))}))
+                                effect))
+        eaches (vec (keep :each parts))
+        subject-effects? (boolean (some :subject parts))
+        ;; a change acting only through :each judges itself done by its
+        ;; objects; one with an effect on the subject needs the :state of it
+        done-able? (or (some? state) (and (seq eaches) (not subject-effects?)))
         destructive? (if (contains? confirm :destructive?) (:destructive? confirm) destructive-effect?)
         used (cond-> #{}
-               (nil? state) (conj :verify)
-               (some? state) (conj :done)
+               (and (nil? state) subject-effects?) (conj :verify)
+               done-able? (conj :done)
                (and destructive? (nil? recovery)) (conj :recovery)
                (and destructive-effect? (false? destructive?)) (conj :destructive))]
-    (when (and (nil? state) (not (contains? opt-out :verify)))
+    (when (and (nil? state) subject-effects? (not (contains? opt-out :verify)))
       (invalid! [:state] (str "the change declares no target :state, so it can neither verify itself nor skip a run that is already done"
                               " - declare :state, or :opt-out {:verify \"why\"}")))
     (when-not (contains? opt-out :destructive)
@@ -835,7 +1273,9 @@
     (doseq [k (keys opt-out) :when (not (used k))]
       (invalid! [:opt-out k] (format "the change opts out of %s, which it does not get%s - drop it"
                                      k (case k
-                                         :verify " (it declares a :state, which is its post-check)"
+                                         :verify (if state
+                                                   " (it declares a :state, which is its post-check)"
+                                                   " (it acts only through :each, whose :state is each object's post-check)")
                                          :done " (it declares no :state to skip by)"
                                          :recovery (if destructive? " (it declares a :recovery)" " (it is not destructive)")
                                          :destructive " (it is destructive, or deletes nothing)"))))
@@ -845,37 +1285,63 @@
                     (:invalid target) (assoc :invalid (:invalid target))
                     (:compare target) (assoc :compare (:compare target)))
           says (when state (template [:state :says] (:says state) pure))
+          subject-refusal (refusal-of refuse target scope (state-judged state state-pred))
+          subject-verify (when state (post-checks-of state (or state-pred (constantly true)) says))
+          own-items (items-of items scope)
+          all-values (into compiled-values
+                           (map (fn [each] [(:snapshot each) (fn [ctx] ((:members each) ctx))]))
+                           eaches)
           spec (cond-> {:description description
                         :options options
                         :prerequisites prerequisites
                         :select (assoc select :candidates candidates)
-                        :subjects [subject]
-                        :refusal (refusal-of refuse target scope (state-judged state state-pred))
+                        :subjects (cond-> [subject] pin (conj (pins-of pin scope)))
+                        :refusal (if (seq eaches)
+                                   (fn [ctx] (or (subject-refusal ctx) (some #(each-refusal % ctx) eaches)))
+                                   subject-refusal)
                         :confirm (cond-> {:action (:action confirm) :destructive? destructive?}
                                    (contains? confirm :separately?) (assoc :separately? (:separately? confirm)))
                         :effect (cond->> (fn [ctx] (let [env {:ctx ctx :object (:object ctx)}]
-                                                     (apply effect/plan (map #(% env) effects))))
+                                                     (apply effect/plan (mapcat (fn [{:keys [subject each]}]
+                                                                                  (if each (each-effects each ctx) [(subject env)]))
+                                                                                parts))))
                                   ;; the mark keeps the change destructive however it is
                                   ;; composed later; an opted-out delete carries none,
                                   ;; so normalize accepts its :destructive? false
                                   (and destructive-effect? destructive?) (change/destructive destroying))}
                  title (assoc :title title)
                  (seq compiled-reads) (assoc :reads compiled-reads)
-                 (seq compiled-values) (assoc :values compiled-values)
-                 (some? items) (assoc :items (items-of items scope))
+                 (seq all-values) (assoc :values all-values)
+                 (and own-items (empty? eaches)) (assoc :items own-items)
+                 ;; the confirmation lists every object an :each acts on
+                 (seq eaches) (assoc :items (fn [ctx]
+                                              (vec (concat (if own-items
+                                                             (own-items ctx)
+                                                             (select/items (:mode select) (:target ctx)))
+                                                           (mapcat #(each-items % ctx) eaches)))))
                  (string? announce) (assoc :announce (ctx-template [:announce] announce pure))
                  (false? announce) (assoc :announce false)
-                 state (assoc :verify (post-checks-of state (or state-pred (constantly true)) says))
-                 (and state (not (contains? opt-out :done))) (assoc :done true)
-                 (nil? state) (assoc :no-verify (:verify opt-out))
+                 (and subject-verify (empty? eaches)) (assoc :verify subject-verify)
+                 (seq eaches) (assoc :verify (fn [ctx]
+                                               (vec (concat (when subject-verify (subject-verify ctx))
+                                                            (mapcat #(each-checks % ctx) eaches)))))
+                 (and done-able? (not (contains? opt-out :done)) (empty? eaches)) (assoc :done true)
+                 ;; done when no object of any :each is left to act on; the
+                 ;; engine joins this with every post-check, the subject's too
+                 (and done-able? (not (contains? opt-out :done)) (seq eaches))
+                 (assoc :done (fn [ctx] (every? #(empty? (acted-on % ctx)) eaches)))
+                 (and (nil? state) (empty? eaches)) (assoc :no-verify (:verify opt-out))
+                 (some? problems) (assoc :problems (problems-of problems scope (state-judged state state-pred)))
                  (some? recovery) (assoc :recovery (ctx-template [:recovery] recovery pure)))]
       (when-not (or (nil? announce) (false? announce) (string? announce))
         (invalid! [:announce] (format ":announce is a template or false, not %s" (pr-str announce))))
       {:spec spec
-       :safeguards {:subject-pin :on
+       :safeguards (cond-> {:subject-pin :on
                     :strict-reads :on
-                    :post-check (if state :on {:off (:verify opt-out)})
-                    :done (cond (nil? state) {:off (:verify opt-out)}
+                    :post-check (cond state :on
+                                      subject-effects? {:off (:verify opt-out)}
+                                      :else :subject-not-acted-on)
+                    :done (cond (not done-able?) {:off (:verify opt-out)}
                                 (contains? opt-out :done) {:off (:done opt-out)}
                                 :else :on)
                     :destructive-confirmation (cond destructive? :on
@@ -883,7 +1349,11 @@
                                                     :else :not-destructive)
                     :recovery (cond (not destructive?) :not-destructive
                                     recovery :on
-                                    :else {:off (:recovery opt-out)})}})))
+                                    :else {:off (:recovery opt-out)})}
+                   pin (assoc :pins :on)
+                   (seq eaches) (assoc :each (mapv (fn [{:keys [names max]}]
+                                                     {:over names :max max :pin :on :post-check :on :grown :refused})
+                                                   eaches)))})))
 
 (defn compile
   "The canonical change map of a DSL change (see the namespace doc), as

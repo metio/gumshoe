@@ -935,21 +935,76 @@ The vocabulary:
   where reads stand;
 - reads, under `:reads` (read again after the confirmation) and `:values`
   (computed once): `[:list "type" {:namespace expr}]`, `[:get "type" name
-  {:namespace expr}]`;
+  {:namespace expr}]`, and `[:present [{:type "type" :name expr} …]
+  {:namespace expr}]`, the named objects that exist, read through
+  `gumshoe.reads` so an absent object is left out and a read that did not
+  answer stops the change;
 - predicates: `[:field [:spec :replicas] := 0]` and `:not=`, `:<`, `:<=`,
   `:>`, `:>=`; the same comparisons over two expressions; `[:some? e]`,
   `[:nil? e]`, `[:not p]`, `[:and …]`, `[:or …]`; and in `:refuse`,
   `[:state]` and `[:absent]`;
 - effects on the picked object: `[:kubectl :patch {:merge {…}}]`,
   `[:kubectl :scale {:replicas e}]`, `[:kubectl :annotate {:annotations
-  {"k" e}}]`, `[:kubectl :delete]`;
+  {"k" e}}]`, `[:kubectl :delete]`; and `[:each <read> {…} <effect> …]` on
+  every object a read returned (below);
+- `:pin [{:type "type" :namespace e :name e}]`, objects other than the
+  subject that are read before and after the confirmation and refuse the
+  change when one moved or is absent;
+- `:problems [{:when p :says "…"} {:reasons [:call …]}]`, which refuses
+  with every message its entries give, one line each;
 - templates: `"Scale {target} to {value.replicas} replica(s)"`;
 - registered functions: `[:call :gumshoe.workloads/scale-items [:ref :kind]
   [:object] [:value :replicas]]`. `gumshoe.dsl.library` lists gumshoe's;
   a casebook registers its own with `gumshoe.dsl.registry/register!`,
-  naming the kind (`:predicate`, `:reason`, `:items`, `:value`, `:read`,
-  `:candidates` or `:parse`), so a function that reads the cluster can only
-  stand where reads stand.
+  naming the kind (`:predicate`, `:reason`, `:problems`, `:items`,
+  `:value`, `:read`, `:candidates` or `:parse`), so a function that reads
+  the cluster can only stand where reads stand.
+
+### Acting on each object a read returned
+
+`[:each <read> {:state … :max n} <effect> …]` applies its effects to every
+object a `:reads` entry returned, so a purge of the leftovers that are
+actually there is data:
+
+```clojure
+{:gumshoe/dsl :v0-experimental
+ :description "Deletes the leftovers the chart supersedes"
+ :target {:pick :one :label "namespace" :type "namespaces" :flag :namespace
+          :candidates [:call :my.casebook/namespaces [:context]]}
+ :prerequisites {}
+ :reads {:leftovers [:present [{:type "services" :name "moodle-tideways"}
+                               {:type "configmaps" :name "mdl-settings"}]
+                     {:namespace [:target]}]}
+ :confirm {:action "delete the leftovers"}
+ :recovery "a deleted leftover is gone; its role recreates it"
+ :effect [[:each :leftovers [:kubectl :delete]]]}
+```
+
+A stamp patches each object and says what holds once it did, as
+`{:state {:holds [:field [:metadata :labels :app.kubernetes.io/managed-by]
+:= "Helm"] :says "{each.metadata.name} carries Helm's ownership"}}`; inside
+an `:each`, `[:field …]` and `[:each & path]` read the object acted on.
+`:state` is required unless every effect deletes, where it is `:absent`.
+For each object, `compile` derives:
+
+- **The confirmation** lists every object the change acts on.
+- **The skip.** An object whose state holds already is not acted on, and a
+  change acting only through `:each` is done when none is left, so an empty
+  read asks nothing.
+- **The pin.** Every object the confirmation showed is compared with the
+  read made again after it, and the change is refused when one changed or
+  was replaced, or when an object appeared that the confirmation did not
+  show. An object that vanished is refused too, unless every effect deletes
+  it.
+- **The bound.** A read returning more than `:max` objects (25 by default)
+  refuses the change before the confirmation.
+- **The post-check.** Each object is read again and judged by its state,
+  failing closed.
+
+A read that did not answer refuses the change. `<read>` may name several
+reads, `[:a :b]`, taken together; a `[:list …]` whose type the cluster says
+it does not serve refuses as well, because kubectl prints that also when
+discovery failed, so an optional type is read with `[:present …]`.
 
 ### Running an EDN book
 

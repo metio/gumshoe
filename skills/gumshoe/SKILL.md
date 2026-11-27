@@ -833,6 +833,14 @@ mostly data:
   so keep data files outside book roots. The file is read as plain EDN
   only (no tagged literals, at most 64 KiB and 32 levels deep), and
   functions a casebook registers load from a plugin named in `env.edn`.
+  `[:each <read> {:state … :max n} [:kubectl <verb> …] …]` acts on every
+  object a `:reads` entry returned (`[:present [{:type … :name …}]]` reads
+  the named objects that exist): the confirmation lists each, an object in
+  its state is skipped, each is pinned and post-checked, an object that
+  appeared after the confirmation refuses the change, a read past `:max`
+  (25) refuses it before asking, and an empty read is done. `:pin [{:type
+  … :name …}]` pins objects other than the subject, and `:problems` refuses
+  with every message its entries give.
   Prefer a Clojure book for anything an operator relies on until the
   vocabulary is reviewed. Declare the target with its `:type` (or a registered `:parse`;
   add `:compare :spec` for a target such as `"nodes"` that has no generation), the
