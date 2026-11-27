@@ -92,6 +92,37 @@
                                 (pr-str (:severity finding)))
                         (when-let [hint (:hint finding)] (str " - " hint)))))))
 
+(def finding-text-budgets
+  "The column budget of a string a finding carries, by the key it sits under:
+   a summary is one line of a report, a hint and a quoted message may run
+   longer. Every other string gets finding-text-default. Each is at least what
+   a detective that cuts its own text cuts it to, so the report never cuts
+   such a text a second time."
+  {:summary 500 :hint 4000 :message 2000})
+
+(def finding-text-default
+  "The column budget of a string in a finding under a key finding-text-budgets
+   does not name."
+  2000)
+
+(def ^:private finding-depth
+  "How deep the report walks a finding's nested data. Deeper data is printed
+   as one bounded string."
+  8)
+
+(defn printable-finding
+  "finding with every string in it, at any depth, made printable and cut
+   (gumshoe.render/printable-data): escape sequences removed, control, format
+   (bidirectional, zero-width) and line separator characters turned into
+   spaces, and each string bounded by finding-text-budgets. Detectives quote
+   names, messages and annotations a cluster wrote, so the report applies this
+   to every finding it renders, in every format, whether or not the detective
+   cleaned its own text. Keys, keywords, numbers and instants are kept, so the
+   finding still ranks, rolls up and pins its object as before."
+  [finding]
+  (render/printable-data #(get finding-text-budgets % finding-text-default)
+                         finding-depth finding))
+
 (declare unread?)
 
 (defn run-detectives
@@ -562,12 +593,16 @@
    it could not judge with outcome/incomplete!, so the verdict banners a run
    that only reported critical findings as FINDINGS and any other as FAILED.
 
+   Every finding passes printable-finding first, so no format, the summary
+   a run captures for sharing, nor a plugin's renderer receives cluster text
+   carrying escapes or unbounded length.
+
    `extra` is a map a book adds to the machine-readable formats, such as the
    rows it collected; the report's own keys win over it, and the text report
-   leaves it out."
+   leaves it out. It is evidence and reaches json and edn as the book gave it."
   ([detectives findings output] (report! detectives findings output nil))
   ([detectives findings output extra]
-   (let [findings (mapv normalize-finding findings)
+   (let [findings (mapv (comp printable-finding normalize-finding) findings)
          blind (nothing-checked? detectives findings)
          crashed (crashed-detectives findings)
          data (cond-> (merge extra {:findings findings
@@ -680,11 +715,13 @@
 
    context may be a delay, forced only when the operator drills into a
    finding, so a scan that never touched a cluster does not read the
-   kubeconfig. `extra` is handed to report!."
+   kubeconfig. `extra` is handed to report!. The drill-down offers the
+   findings as printable-finding leaves them, as the report shows them."
   ([context detectives findings output]
    (report-and-offer! context detectives findings output nil))
   ([context detectives findings output extra]
-   (let [healthy (report! detectives findings output extra)]
+   (let [findings (mapv printable-finding findings)
+         healthy (report! detectives findings output extra)]
      (when (= "text" output)
        (offer-drill-down! context findings))
      healthy)))
