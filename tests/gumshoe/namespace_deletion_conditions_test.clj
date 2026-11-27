@@ -6,7 +6,9 @@
    the namespace controller writes: the three that never resolve are critical
    at once, the two transient ones warn only past terminating-grace, a
    condition whose status is not True never fires, and every finding quotes
-   the condition's message stripped of control characters and bounded."
+   the condition's message stripped of control characters and bounded. A
+   namespace on which none of the five holds warns past the grace, naming the
+   namespace controller, or the metadata finalizers once the controller is done."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.cleanup :as cleanup]
@@ -70,7 +72,9 @@
   (doseq [type (concat failures transient-pair)
           status ["False" "Unknown" nil]]
     (testing (str type " " status)
-      (is (empty? (stuck now (terminating old (condition type status))))))))
+      (is (empty? (stuck now (terminating fresh (condition type status)))))
+      (is (= [nil] (map :condition (stuck now (terminating old (condition type status)))))
+          "past the grace it explains nothing, so the namespace reads as silent"))))
 
 (deftest a-recovered-failure-left-false-beside-a-transient-one-is-quiet
   (testing "conditions persist with status False after recovery"
@@ -143,10 +147,98 @@
                                    [:status :phase] "Active")))))
 
 (deftest unknown-condition-types-are-ignored
-  (is (empty? (stuck now (terminating old (condition "SomethingElse"))))))
+  (is (empty? (stuck now (terminating fresh (condition "SomethingElse")))))
+  (is (= [nil] (map :condition (stuck now (terminating old (condition "SomethingElse")))))))
 
 (deftest the-scan-keeps-the-findings
   (testing "through run-detectives, as a scan reports them"
     (let [findings (detective/run-detectives namespaces/detectives
                                              {:now now "namespaces" {:items [(terminating fresh (condition "NamespaceDeletionContentFailure"))]}})]
       (is (= ["NamespaceDeletionContentFailure"] (map :condition findings))))))
+
+;; --- no deletion condition holds ------------------------------------------------------
+
+(defn- with-finalizers [namespace spec-finalizers meta-finalizers]
+  (cond-> namespace
+    spec-finalizers (assoc-in [:spec :finalizers] spec-finalizers)
+    meta-finalizers (assoc-in [:metadata :finalizers] meta-finalizers)))
+
+(def ^:private all-false
+  (map #(condition % "False") (concat failures transient-pair)))
+
+(def ^:private silent-summary
+  "namespace cannot finish terminating: the namespace controller has recorded no progress")
+
+(deftest no-conditions-within-the-grace-is-quiet
+  (is (empty? (stuck now (with-finalizers (terminating fresh) ["kubernetes"] nil)))))
+
+(deftest no-conditions-past-the-grace-names-the-namespace-controller
+  (let [[finding & more] (stuck now (with-finalizers (terminating old) ["kubernetes"] nil))]
+    (is (nil? more))
+    (is (= :warning (:severity finding)))
+    (is (= silent-summary (:summary finding)))
+    (is (contains? finding :condition))
+    (is (nil? (:condition finding)))
+    (is (= "gone" (:component finding)))
+    (is (= old (:since finding)))
+    (is (str/starts-with? (:hint finding) "no deletion condition written -- deleting since "))
+    (doseq [part ["kube-controller-manager" "control-plane check" "--controllers" "logs"
+                  "do not remove the namespace's finalizer"]]
+      (is (str/includes? (str/lower-case (:hint finding)) (str/lower-case part)) part))))
+
+(deftest every-condition-false-past-the-grace-is-silent-too
+  (let [[finding & more] (stuck now (with-finalizers (apply terminating old all-false) ["kubernetes"] nil))]
+    (is (nil? more))
+    (is (= silent-summary (:summary finding)))
+    (is (str/starts-with? (:hint finding) "no deletion condition reads True"))))
+
+(deftest every-condition-false-within-the-grace-is-quiet
+  (is (empty? (stuck now (apply terminating fresh all-false)))))
+
+(deftest conditions-reading-unknown-or-of-another-type-explain-nothing
+  (is (= [silent-summary]
+         (map :summary (stuck now (terminating old
+                                               (condition "NamespaceContentRemaining" "Unknown")
+                                               (condition "SomethingElse")))))))
+
+(deftest no-conditions-without-an-age-is-reported
+  (testing "as FinalizersRemaining is without an age"
+    (is (= [:warning] (map :severity (stuck nil (terminating nil)))))
+    (is (= [:warning] (map :severity (stuck now (terminating nil)))))))
+
+(deftest one-true-condition-suppresses-the-silent-finding
+  (doseq [type (concat failures transient-pair)]
+    (testing type
+      (let [findings (stuck now (apply terminating old (condition type) (remove #(= type (:type %)) all-false)))]
+        (is (= [type] (map :condition findings)))
+        (is (not-any? #(= silent-summary (:summary %)) findings))))))
+
+(deftest a-transient-condition-within-the-grace-is-not-reported-as-silent
+  (is (empty? (stuck now (terminating fresh (condition "NamespaceFinalizersRemaining"))))))
+
+(deftest metadata-finalizers-after-the-controller-finished-name-the-finalizers
+  (let [[finding & more] (stuck now (with-finalizers (apply terminating old all-false)
+                                                     [] ["example.com/cleanup\u001b[31m"]))]
+    (is (nil? more))
+    (is (= :warning (:severity finding)))
+    (is (nil? (:condition finding)))
+    (is (= "namespace cannot finish terminating: a finalizer on the namespace itself has not returned"
+           (:summary finding)))
+    (is (str/includes? (:hint finding) "metadata.finalizers remain: example.com/cleanup"))
+    (is (not (re-find #"\p{Cc}" (:hint finding))))
+    (is (not (str/includes? (:hint finding) "kube-controller-manager")))))
+
+(deftest a-spec-finalizer-beside-metadata-finalizers-is-still-the-controller
+  (is (= [silent-summary]
+         (map :summary (stuck now (with-finalizers (terminating old) ["kubernetes"] ["example.com/cleanup"]))))))
+
+(deftest a-namespace-that-is-not-terminating-never-reads-as-silent
+  (doseq [phase ["Active" nil]]
+    (testing (str phase)
+      (is (empty? (stuck now (assoc-in (terminating old) [:status :phase] phase)))))))
+
+(deftest the-scan-keeps-the-silent-finding
+  (let [findings (detective/run-detectives namespaces/detectives
+                                           {:now now "namespaces" {:items [(terminating old)
+                                                                           (assoc-in (terminating old) [:status :phase] "Active")]}})]
+    (is (= [silent-summary] (map :summary findings)))))
