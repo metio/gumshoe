@@ -17,6 +17,7 @@
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.quantity :as quantity]
+            [gumshoe.reads.result :as result]
             [gumshoe.stdout :as stdout]
             [gumshoe.verify :as verify]
             [gumshoe.watch :as watch]
@@ -413,7 +414,7 @@
   [read]
   (try (read)
        (catch clojure.lang.ExceptionInfo e
-         (if (::kubectl/unread (ex-data e)) :unread (throw e)))))
+         (if (result/unread-exception? e) :unread (throw e)))))
 
 (defn retained-claims-check
   "The post-check that every claim of claim-names, the kept claims of a

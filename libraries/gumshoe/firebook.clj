@@ -75,6 +75,7 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
             [gumshoe.prerequisites :as prerequisites]
+            [gumshoe.reads.result :as result]
             [gumshoe.runbook :as runbook]
             [gumshoe.shell :as shell]
             [gumshoe.ssh :as ssh]
@@ -213,7 +214,7 @@
    message, so silence from a host or a cluster that did not answer is never
    taken for a fire that is out."
   [message]
-  (ex-info message {::kubectl/unread true}))
+  (result/unread-exception message))
 
 (defn fire-findings
   "The findings of the expected detectives over `evidence` that are the drill's

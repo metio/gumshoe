@@ -13,6 +13,7 @@
   (:require [clojure.string :as str]
             [gumshoe.conditions :as conditions]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.reads.result :as result]
             [gumshoe.runbook :as runbook]
             [gumshoe.select :as select]
             [gumshoe.shell :as shell]
@@ -88,7 +89,7 @@
       {:release release}
       {:unread (format "HelmRelease %s no longer exists" target)})
     (catch clojure.lang.ExceptionInfo e
-      (if (::kubectl/unread (ex-data e))
+      (if (result/unread-exception? e)
         {:unread (format "could not read HelmRelease %s - %s" target (ex-message e))}
         (throw e)))))
 

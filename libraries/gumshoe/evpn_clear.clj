@@ -36,6 +36,7 @@
             [gumshoe.detectives.evpn :as evpn-detectives]
             [gumshoe.effect :as effect]
             [gumshoe.evpn :as evpn]
+            [gumshoe.reads.result :as result]
             [gumshoe.shell :as shell]
             [gumshoe.ssh :as ssh]
             [gumshoe.stdout :as stdout]
@@ -286,9 +287,9 @@
                                        :when (= :unjudged status)]
                                    (str host ": " reason))))]
     (if (and (empty? found) (seq unread))
-      (throw (ex-info (str "no VTEP could be judged orphaned while some of the fabric could not be read - "
-                           (str/join "; " unread))
-                      {:gumshoe.kubectl/unread true}))
+      (throw (result/unread-exception
+              (str "no VTEP could be judged orphaned while some of the fabric could not be read - "
+                   (str/join "; " unread))))
       found)))
 
 (defn cleared?

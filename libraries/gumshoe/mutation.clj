@@ -362,6 +362,7 @@
             [gumshoe.effect :as effect]
             [gumshoe.flow :as flow]
             [gumshoe.prerequisites :as prerequisites]
+            [gumshoe.reads.result :as result]
             [gumshoe.select :as select]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.kube-context :as kube-context]
@@ -522,7 +523,7 @@
                            #(binding [kubectl/*strict-reads* true]
                               (walk/postwalk identity (derive base))))))}
      (catch clojure.lang.ExceptionInfo e
-       (if (::kubectl/unread (ex-data e)) {:unread (ex-message e)} (throw e))))))
+       (if (result/unread-exception? e) {:unread (ex-message e)} (throw e))))))
 
 (defn strict-precondition
   "precondition as a thunk whose reads are strict: a read in it that did not
@@ -535,7 +536,7 @@
         (binding [kubectl/*strict-reads* true]
           (boolean (precondition)))
         (catch clojure.lang.ExceptionInfo e
-          (if (::kubectl/unread (ex-data e))
+          (if (result/unread-exception? e)
             (refuse! (str "could not read what the precondition rests on - " (ex-message e)))
             (throw e)))))))
 
@@ -773,7 +774,7 @@
         (binding [kubectl/*strict-reads* true]
           (read-subjects context refs))
         (catch clojure.lang.ExceptionInfo e
-          (when-not (::kubectl/unread (ex-data e)) (throw e))))
+          (when-not (result/unread-exception? e) (throw e))))
       (thunk))
     thunk))
 
@@ -844,7 +845,7 @@
                               why (change/refusal-reason (refusal judged))]
                           (if (= change/unmet why) unmet-before-confirmation why)))))
           (catch clojure.lang.ExceptionInfo e
-            (if (::kubectl/unread (ex-data e))
+            (if (result/unread-exception? e)
               (str "could not read what the precondition rests on - " (ex-message e))
               (throw e)))))
       (gone-before-confirmation pinned (:refs ctx) (:objects ctx))))
@@ -854,7 +855,7 @@
 (defn- unread-message
   "The message of e when it is a strict read that did not answer, else nil."
   [e]
-  (when (::kubectl/unread (ex-data e)) (ex-message e)))
+  (when (result/unread-exception? e) (ex-message e)))
 
 (defn judge-done
   "Whether a change is already done, decided from the judgements it is

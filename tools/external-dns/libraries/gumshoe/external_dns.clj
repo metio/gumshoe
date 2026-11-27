@@ -10,6 +10,7 @@
             [gumshoe.concurrent :as concurrent]
             [gumshoe.dns :as dns]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.reads.result :as result]
             [gumshoe.stdout :as stdout]))
 
 (def dnsendpoint-type "dnsendpoints.externaldns.k8s.io")
@@ -107,7 +108,7 @@
       (let [{:keys [ok? doc]} (kubectl/get-json-result context type "--all-namespaces")]
         (if ok? doc {:items []})))
     (catch clojure.lang.ExceptionInfo e
-      (if (::kubectl/unread (ex-data e)) nil (throw e)))))
+      (if (result/unread-exception? e) nil (throw e)))))
 
 (def ^:private source-types
   "Each source kind's key in hostname-sources' argument and the type read for

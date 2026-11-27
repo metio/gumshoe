@@ -32,6 +32,7 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.outcome :as outcome]
             [gumshoe.progress :as progress]
+            [gumshoe.reads.result :as result]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
@@ -49,7 +50,7 @@
   [check]
   (try (binding [kubectl/*strict-reads* true] (boolean (check)))
        (catch clojure.lang.ExceptionInfo e
-         (if (::kubectl/unread (ex-data e)) (ex-message e) false))
+         (if (result/unread-exception? e) (ex-message e) false))
        (catch Exception _ false)))
 
 (defn bounded-attempt

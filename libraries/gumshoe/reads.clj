@@ -2,7 +2,15 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.reads
-  "Cluster reads that keep an absence apart from a read that did not answer.
+  "Cluster reads that keep an absence apart from a read that did not answer:
+   the kubectl classifier of the three-state results of gumshoe.reads.result.
+
+   The states, their predicates, on-state, the extractors, derived and the
+   refusal builders live in gumshoe.reads.result, which knows nothing about
+   kubectl, and are forwarded here under their usual names. What stays here
+   is what only a kubectl read needs: the ref checks, the pinned kube
+   context, the identity check of a named get, the unserved-type
+   confirmation through discovery and the read cache.
 
    The plain getters of gumshoe.kubectl (get-namespaced-resource,
    get-cluster-resource, get-all, get-namespaced) return nil both for an
@@ -51,8 +59,8 @@
    makes it name all three branches.
 
    Unread is never a value. The result is a map, and the extractors object!,
-   items! and value! throw an ex-info carrying :gumshoe.kubectl/unread for
-   an :unread result, so an unanswered read cannot reach a string, a
+   items! and value! throw an ex-info carrying :gumshoe.reads/unread and
+   :gumshoe.kubectl/unread for an :unread result, so an unanswered read cannot reach a string, a
    manifest or a comparison as if it were data. The strict-read machinery
    treats that exception as a read that did not answer: verify/eventually
    counts the check as not yet verified, and a mutation's :derive or
@@ -70,196 +78,32 @@
    cluster."
   (:require [clojure.string :as str]
             [gumshoe.kube-context :as kube-context]
-            [gumshoe.kubectl :as kubectl]))
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.reads.result :as result]))
 
 ;; ---------------------------------------------------------------------------
-;; states and predicates
+;; the source-neutral half, forwarded from gumshoe.reads.result so every
+;; caller of gumshoe.reads keeps its names
 
-(def states
-  "The three states a result can be in."
-  #{:present :absent :unread})
+(defmacro ^:private forward
+  [name source]
+  (let [{:keys [doc arglists]} (meta (resolve source))]
+    `(def ~(vary-meta name assoc :doc doc :arglists (list 'quote arglists)) ~source)))
 
-(defn- state-of
-  "The state of a result; anything that is not a result map in one of the
-   three states counts as :unread, so a nil or malformed value never passes
-   as an answer."
-  [r]
-  (let [s (when (map? r) (:state r))]
-    (if (contains? states s) s :unread)))
-
-(defn present?
-  "True only when the read answered and the object exists (a list: one or
-   more objects matched). The test for a caller that asserts a presence: a
-   precondition requiring X, a post-check that X was created. False for
-   :absent and for :unread - so (not (present? r)) does NOT mean the object
-   is absent, and a caller that skips or deletes on it acts on a read that
-   did not answer."
-  [r]
-  (= :present (state-of r)))
-
-(defn absent?
-  "True only when the read answered that no such object exists (a list: it
-   answered with no items), or the cluster confirmably does not serve the
-   type. The test for a caller that confirms a deletion or gates on an
-   absence: a post-check that X is gone, a refusal unless nothing is left.
-   False for :present and for :unread - so (not (absent? r)) does NOT mean
-   the object exists."
-  [r]
-  (= :absent (state-of r)))
-
-(defn unread?
-  "True when the read did not answer, and for anything that is not a result
-   map in one of the three states. The branch a caller must refuse or report
-   on: never read it as absent (a gate would open on a throttled API) nor as
-   present (a post-check would pass on silence)."
-  [r]
-  (= :unread (state-of r)))
-
-(defn answered?
-  "True for :present and :absent: the cluster answered and the result says
-   what it holds."
-  [r]
-  (not (unread? r)))
-
-(defn on-state
-  "Calls the branch for the result's state with the result and returns what
-   it returns. branches must hold :present, :absent and :unread, each a
-   function of one argument; a missing branch throws, so a caller cannot
-   forget the read that did not answer. A malformed result takes the
-   :unread branch.
-
-     (reads/on-state r {:present #(delete! (reads/object! %))
-                        :absent  (constantly :nothing-to-do)
-                        :unread  #(refuse! (reads/unread-refusal %))})
-
-   This is the shape for a caller that skips an object: it acts on
-   :present, skips on :absent, and refuses on :unread."
-  [r branches]
-  (let [missing (remove #(fn? (get branches %)) [:present :absent :unread])]
-    (when (seq missing)
-      (throw (IllegalArgumentException.
-              (str "reads/on-state needs a function for every state; missing "
-                   (str/join ", " missing)))))
-    ((get branches (state-of r)) r)))
-
-;; ---------------------------------------------------------------------------
-;; extractors
-
-(defn describe
-  "The read a ref names, in words an operator knows: \"deployments web/api\",
-   \"nodes worker-1\", \"pods in web\", \"pods in every namespace\", \"nodes\"."
-  [{:keys [type namespace name selector]}]
-  (str type
-       (cond
-         (and name namespace) (str " " namespace "/" name)
-         name (str " " name)
-         (= :all namespace) " in every namespace"
-         namespace (str " in " namespace)
-         :else "")
-       (when selector (str " matching " selector))))
-
-(defn- did-not-answer
-  [r]
-  (let [reason (if (map? r) (:reason r) (str "not a read result: " (pr-str r)))]
-    (ex-info (format "could not read %s: %s"
-                     (if (map? r) (describe (:ref r)) "an object")
-                     (or reason "the read did not answer"))
-             {::kubectl/unread true ::result r})))
-
-(defn object!
-  "The object of a :present result, nil for an :absent one. Throws an
-   ex-info carrying :gumshoe.kubectl/unread for an :unread result, so the
-   object of a read that did not answer is never nil by accident. The nil of
-   :absent is a confirmed answer; a caller that must treat absence and
-   failure apart tests present?/absent? or uses on-state first."
-  [r]
-  (case (state-of r)
-    :present (:object r)
-    :absent nil
-    :unread (throw (did-not-answer r))))
-
-(defn items!
-  "The items of an answered list result: a vector, empty for :absent.
-   Throws an ex-info carrying :gumshoe.kubectl/unread for an :unread
-   result, so a list that did not answer never reads as an empty one."
-  [r]
-  (case (state-of r)
-    (:present :absent) (vec (:items r))
-    :unread (throw (did-not-answer r))))
-
-(defn derived
-  "The result with :value set to what f makes of its answer, state kept.
-   For an object result f receives the object, and only a :present result
-   gets a :value. For a list result f receives the items, and every answered
-   result gets one (f [] for :absent). An :unread result is returned
-   unchanged: f never sees a read that did not answer. Read the value with
-   value!."
-  [r f]
-  (let [s (state-of r)]
-    (cond
-      (= :unread s) r
-      (contains? r :items) (assoc r :value (f (vec (:items r))))
-      (= :present s) (assoc r :value (f (:object r)))
-      :else r)))
-
-(defn value!
-  "The :value of a derived result: nil for an :absent object result, and
-   throws an ex-info carrying :gumshoe.kubectl/unread for an :unread one.
-   This is where an unanswered read would otherwise slip into a manifest or
-   a host name as data; the exception stops it."
-  [r]
-  (if (unread? r)
-    (throw (did-not-answer r))
-    (:value r)))
-
-;; ---------------------------------------------------------------------------
-;; refusals, one per polarity: each returns a line for a :refusal or a
-;; precondition, or nil when the caller may proceed
-
-(defn- unread-line
-  [r what because]
-  (format "could not read %s%s - %s, so this refuses rather than act on a read that did not answer"
-          what
-          (if-let [reason (and (map? r) (:reason r))] (str " (" reason ")") "")
-          (or because "acting on a wrong answer could do harm")))
-
-(defn- what-of
-  [r what]
-  (or what (when (map? r) (describe (:ref r))) "the object"))
-
-(defn unread-refusal
-  "A refusal line when the read did not answer, nil when it answered either
-   way. For a caller that handles :present and :absent itself and must not
-   proceed on silence (one that skips an absent object). opts: :what names
-   the object as the operator knows it (default: the ref described),
-   :because what acting on a wrong answer would do."
-  ([r] (unread-refusal r nil))
-  ([r {:keys [what because]}]
-   (when (unread? r)
-     (unread-line r (what-of r what) because))))
-
-(defn refusal-unless-present
-  "nil only when the object exists; a refusal line when the read answered
-   that it does not, and when it did not answer. For a caller that asserts a
-   presence before acting on the object. opts as unread-refusal."
-  ([r] (refusal-unless-present r nil))
-  ([r {:keys [what because] :as opts}]
-   (case (state-of r)
-     :present nil
-     :absent (format "%s does not exist" (what-of r what))
-     :unread (unread-refusal r opts))))
-
-(defn refusal-unless-absent
-  "nil only when the read answered that the object does not exist (or the
-   type is confirmably not served); a refusal line when it exists, and when
-   the read did not answer. For a caller that confirms a deletion or gates
-   on an absence. opts as unread-refusal."
-  ([r] (refusal-unless-absent r nil))
-  ([r {:keys [what] :as opts}]
-   (case (state-of r)
-     :absent nil
-     :present (format "%s still exists" (what-of r what))
-     :unread (unread-refusal r opts))))
+(forward states result/states)
+(forward present? result/present?)
+(forward absent? result/absent?)
+(forward unread? result/unread?)
+(forward answered? result/answered?)
+(forward on-state result/on-state)
+(forward describe result/describe)
+(forward object! result/object!)
+(forward items! result/items!)
+(forward derived result/derived)
+(forward value! result/value!)
+(forward unread-refusal result/unread-refusal)
+(forward refusal-unless-present result/refusal-unless-present)
+(forward refusal-unless-absent result/refusal-unless-absent)
 
 ;; ---------------------------------------------------------------------------
 ;; classification: pure over kubectl's raw result {:exit :out :err}
@@ -270,9 +114,7 @@
   [{:keys [exit err]}]
   (or (not-empty (str/trim (str err))) (str "exit " exit)))
 
-(defn- unread
-  [ref reason]
-  {:state :unread :ref ref :reason reason})
+(def ^:private unread result/unread)
 
 (defn- grouped?
   [type]

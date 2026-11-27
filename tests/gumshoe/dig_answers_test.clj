@@ -2,10 +2,12 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.dig-answers-test
-  "What a dig run answers: records on NOERROR, [] on NXDOMAIN, and nil for a
-   server that did not reply or failed the query. The DNS and mail checks
-   judge a missing record only on [], and report nil as unanswered. Names
-   from cluster objects never reach dig as options."
+  "What a dig run answers through the older entry points: records on
+   NOERROR, [] on NXDOMAIN, and nil for a server that did not reply or failed
+   the query. The mail checks judge a missing record only on [], and report
+   nil as unanswered; the DNS checks read three-state results and judge a
+   missing record only on :absent. Names from cluster objects never reach dig
+   as options."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.detective :as detective]
@@ -13,7 +15,17 @@
             [gumshoe.detectives.mail :as mail-detectives]
             [gumshoe.dns :as dns]
             [gumshoe.mail :as mail]
+            [gumshoe.reads.result :as result]
             [gumshoe.shell :as shell]))
+
+(defn- answered
+  "A DNS read that answered with these records; none is :absent."
+  [& records]
+  (if (seq records)
+    (result/present {:source :dns} {:items (vec records) :status "NOERROR"})
+    (result/absent {:source :dns} {:items [] :status "NOERROR"})))
+
+(def ^:private unanswered (result/unread {:source :dns} "SERVFAIL" {:status "SERVFAIL"}))
 
 (defn- response
   "dig's +noall +comments +answer output for a response with this status and
@@ -106,50 +118,55 @@
   (with-redefs [shell/execute (answering {:exit 9 :out ""})]
     (let [evidence (binding [*err* (java.io.StringWriter.)]
                      (dns/collect-evidence! {:server "192.0.2.53" :zone "example.org" :probes ["www.example.org"]}))]
-      (is (nil? (get evidence "nameservers")))
+      (is (result/unread? (get evidence "nameservers")))
+      (is (= "dig exited 9" (:reason (get evidence "nameservers"))))
       (is (nil? (get evidence "addresses")))
       (is (nil? (get evidence "serials")))
       (is (nil? (get evidence "probes")))
-      (testing "and the checks that ask the nameservers are unread and silent"
+      (testing "and the checks that ask the nameservers are unread; only the NS read is reported, as unread"
         (let [checks (detective/mark-unread dns-detectives/detectives evidence)]
           (is (= #{"dns-nameservers" "dns-replication" "dns-probes"}
                  (set (map :name (filter :unread checks)))))
-          (is (empty? (filter #(#{"dns-nameservers" "dns-replication" "dns-probes"} (:detective %))
-                              (detective/run-detectives checks evidence)))))))))
+          (is (= [["dns-zone" "could not read NS example.org at 192.0.2.53 (dig exited 9)"]]
+                 (map (juxt :detective :summary)
+                      (filter #(#{"dns-zone" "dns-nameservers" "dns-replication" "dns-probes"} (:detective %))
+                              (detective/run-detectives checks evidence))))))))))
 
 (deftest a-servfail-on-the-ns-query-is-no-zone-without-nameservers
   (with-redefs [shell/execute (answering {:exit 0 :out (response "SERVFAIL")})]
     (let [evidence (binding [*err* (java.io.StringWriter.)]
                      (dns/collect-evidence! {:server "192.0.2.53" :zone "example.org" :probes []}))]
-      (is (nil? (get evidence "nameservers")))
-      (is (empty? (dns-detectives/detect-nameserver-problems evidence))))))
+      (is (result/unread? (get evidence "nameservers")))
+      (is (empty? (dns-detectives/detect-nameserver-problems evidence)))
+      (is (= [[:warning "could not read NS example.org at 192.0.2.53 (SERVFAIL)"]]
+             (map (juxt :severity :summary) (dns-detectives/detect-zone-problems evidence)))))))
 
 ;; --- the nameserver check -------------------------------------------------------
 
 (defn- nameserver-findings [addresses]
   (set (map (juxt :severity :component :summary)
             (dns-detectives/detect-nameserver-problems
-             {"zone" "example.org" "nameservers" (vec (keys addresses)) "addresses" addresses}))))
+             {"zone" "example.org" "nameservers" (apply answered (keys addresses)) "addresses" addresses}))))
 
 (deftest an-unanswered-address-query-is-no-missing-record
   (is (= #{[:warning "ns1.example.org" "could not resolve the nameserver's A record and AAAA record"]}
-         (nameserver-findings {"ns1.example.org" {:a nil :aaaa nil}
-                               "ns2.example.org" {:a ["203.0.113.2"] :aaaa ["2001:db8::2"]}})))
+         (nameserver-findings {"ns1.example.org" {:a unanswered :aaaa nil}
+                               "ns2.example.org" {:a (answered "203.0.113.2") :aaaa (answered "2001:db8::2")}})))
   (is (= #{[:warning "ns1.example.org" "could not resolve the nameserver's AAAA record"]}
-         (nameserver-findings {"ns1.example.org" {:a ["203.0.113.1"] :aaaa nil}
-                               "ns2.example.org" {:a ["203.0.113.2"] :aaaa ["2001:db8::2"]}})))
+         (nameserver-findings {"ns1.example.org" {:a (answered "203.0.113.1") :aaaa unanswered}
+                               "ns2.example.org" {:a (answered "203.0.113.2") :aaaa (answered "2001:db8::2")}})))
   (testing "a nameserver absent from the address map was never asked either"
     (is (= #{[:warning "ns1.example.org" "could not resolve the nameserver's A record and AAAA record"]}
            (set (map (juxt :severity :component :summary)
                      (dns-detectives/detect-nameserver-problems
-                      {"zone" "example.org" "nameservers" ["ns1.example.org" "ns2.example.org"]
-                       "addresses" {"ns2.example.org" {:a ["203.0.113.2"] :aaaa ["2001:db8::2"]}}})))))))
+                      {"zone" "example.org" "nameservers" (answered "ns1.example.org" "ns2.example.org")
+                       "addresses" {"ns2.example.org" {:a (answered "203.0.113.2") :aaaa (answered "2001:db8::2")}}})))))))
 
 (deftest an-answered-empty-address-query-is-a-missing-record
   (is (= #{[:critical "ns1.example.org" "nameserver has no A record"]
            [:warning "ns2.example.org" "nameserver has no AAAA record"]}
-         (nameserver-findings {"ns1.example.org" {:a [] :aaaa ["2001:db8::1"]}
-                               "ns2.example.org" {:a ["203.0.113.2"] :aaaa []}}))))
+         (nameserver-findings {"ns1.example.org" {:a (answered) :aaaa (answered "2001:db8::1")}
+                               "ns2.example.org" {:a (answered "203.0.113.2") :aaaa (answered)}}))))
 
 ;; --- the mail checks ------------------------------------------------------------
 
