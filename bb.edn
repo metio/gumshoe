@@ -115,6 +115,7 @@
                    [gumshoe.change-destructive-test]
                    [gumshoe.dsl-test]
                    [gumshoe.dsl-books-test]
+                   [gumshoe.dsl-each-test]
                    [gumshoe.edn-book-test]
                    [gumshoe.mutation-pick-test]
                    [gumshoe.mutation-subjects-test]
@@ -437,6 +438,7 @@
                                                          'gumshoe.change-destructive-test
                                                          'gumshoe.dsl-test
                                                          'gumshoe.dsl-books-test
+                                                         'gumshoe.dsl-each-test
                                                          'gumshoe.edn-book-test
                                                          'gumshoe.mutation-pick-test
                                                          'gumshoe.mutation-subjects-test

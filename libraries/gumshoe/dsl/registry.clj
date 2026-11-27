@@ -24,6 +24,7 @@
      :predicate   (args..) -> boolean               any predicate
      :reason      (args..) -> reason or nil         a :refuse entry's :reason
      :items       (args..) -> confirmation lines    :items
+     :problems    (args..) -> [message ..]          a :problems entry's :reasons
    A function that reads the cluster is a :read or :candidates function, so
    compile can keep reads out of refusals, post-checks and plans, which
    judge only what a declared read returned.
@@ -34,7 +35,7 @@
 
 (def kinds
   "Every kind of registered function."
-  #{:parse :candidates :read :value :predicate :reason :items})
+  #{:parse :candidates :read :value :predicate :reason :items :problems})
 
 (defonce ^:private registry (atom {}))
 
