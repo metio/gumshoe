@@ -687,6 +687,26 @@ mostly data:
   `:connect` takes none of them and re-checks its object in `:precondition`. A change nobody else
   needs to hear of, such as a netshoot debug session, sets `:announce?
   false` and runs as a read-only book does (`runbooks/kubernetes/netshoot/node.clj`);
+- a change on a kube context other than the current one names it with
+  `:kube-context (fn [opts] …)`, which returns a context name from the
+  parsed flags (or nil for the current one), so a book can offer
+  `--context`. A mutation spec, a playbook and a dispatcher each take it.
+  The run resolves it once from the kubeconfig, without contacting any API
+  server, before the prerequisites, and pins it
+  (`gumshoe.kube-context/*pinned*`): the cluster and permission
+  prerequisites, the candidate query, the `:subject`, `:subjects` and
+  `:pin` reads, `:reads`, `:values`, `:derive`, the effect and the
+  post-checks all receive that `:context`, and the confirmation, the
+  changelog and the announcement environment name its cluster from the
+  kubeconfig. A name the kubeconfig does not hold stops the run before any
+  read. Without `:kube-context` the current context is resolved once and
+  pinned the same way, so switching contexts in another terminal mid-run
+  moves nothing. A step inside a pinned playbook that names a different
+  context is refused, so a step shared with a standalone book takes the
+  same `:kube-context` as the playbook. `:connect` and `:kube-context`
+  exclude each other, and a `:derive` may not return another `:context` or
+  `:cluster`. A callback that calls `kubectl/current-context` itself
+  instead of using its `:context` bypasses the pin;
 - every spec shape above is an alias of one canonical change map, and
   `gumshoe.change/normalize` maps a spec onto it before the engine reads it
   (its docstring lists the map and the aliases): `:subject`, a `:subjects`

@@ -11,6 +11,7 @@
    Canonical change map:
      {:title .. :description .. :options {..} :prerequisites {..}
       :connect  (fn [opts] -> {:context :cluster :announce-as} or nil)
+      :kube-context (fn [opts] -> a kube context name, or nil for the current one)
       :select   {:mode .. :label .. :candidates .. :empty-message \"...\" ..}
       :subjects [{:from :pick   :type .. :parse .. :invalid .. :facts .. :compare ..}
                  {:from :target :refs (fn [ctx] -> refs)}
@@ -43,6 +44,16 @@
               speaks of \"it\".
    Each :from appears at most once. :connect takes no :subjects, because
    every entry is read with kubectl.
+
+   :kube-context names the kube context the change reads and acts on, from
+   the parsed flags, so a book can offer --context; nil means the current
+   one. It is resolved once per run from the kubeconfig and reaches the
+   candidate query, the subjects, :reads, :values, :derive, the cluster the
+   confirmation names and every callback's :context, which the effect and
+   the post-checks build their kubectl calls from (see gumshoe.kube-context).
+   :connect names something that is not a kube cluster, so a spec takes at
+   most one of the two: with both, a :connect could hand a kubectl read an
+   SSH host's context, or the kube context could hide what :connect names.
 
    :reads are the live state a change rests on, each named and read
    strictly. They are read before the confirmation, after the subjects,
@@ -119,7 +130,8 @@
    canonical :subjects beside :subject or :pin, an unknown or repeated
    :from, a :compare no pin understands, two different empty messages, a changelog message beside
    :announce? false, a :recheck with nothing to judge it, a :subject on a
-   :many select, :connect with any subject, :derive beside :values or
+   :many select, :connect with any subject, :connect beside :kube-context,
+   a :kube-context that is not a function, :derive beside :values or
    :recheck beside :reads, either alias beside a named entry, a :reads or
    :values that is not a map of keyword to function, a name the engine
    binds itself or both maps bind, a reserved name in the wrong map, and an
@@ -490,11 +502,23 @@
     (invalid! "a destructive change is skipped as done only on evidence its post-check accepts, so its :done needs a :verify"
               {:done done})))
 
+(defn- kube-context-of
+  "The canonical :kube-context of spec: a function, or nil when absent."
+  [spec]
+  (let [f (:kube-context spec)]
+    (when-not (or (nil? f) (fn? f))
+      (invalid! (format ":kube-context is (fn [opts] -> a kube context name or nil), not %s" (pr-str f))
+                {:kube-context f}))
+    f))
+
 (defn- check-runnable!
-  [{:keys [select subjects refusal reads connect]}]
+  [{:keys [select subjects refusal reads connect kube-context]}]
   (when (and (contains? reads recheck-entry) (nil? refusal))
     (invalid! "a :recheck is judged by :refusal or :precondition, and the spec has neither"
               {:recheck (get reads recheck-entry)}))
+  (when (and connect kube-context)
+    (invalid! "a spec takes :connect, for what is not a kube cluster, or :kube-context, for the kube context its kubectl calls use - not both"
+              {:connect connect :kube-context kube-context}))
   (when (and connect (seq subjects))
     (invalid! "a :subject, :subjects or :pin reads its objects with kubectl, so a spec with :connect takes neither"
               {:subjects subjects}))
@@ -516,10 +540,13 @@
         reads (named-of spec :reads :recheck recheck-entry)
         values (named-of spec :values :derive derive-entry)
         done (done-of spec)
+        kube-context (kube-context-of spec)
         _ (check-destructive! spec)
         canonical (cond-> (dissoc spec :subject :subjects :pin :precondition :refusal
                                   :empty-message :announce? :announce :select
-                                  :derive :recheck :reads :values :done :satisfied?)
+                                  :derive :recheck :reads :values :done :satisfied?
+                                  :kube-context)
+                    (some? kube-context) (assoc :kube-context kube-context)
                     (seq subjects) (assoc :subjects subjects)
                     (seq reads) (assoc :reads reads)
                     (seq values) (assoc :values values)

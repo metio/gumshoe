@@ -17,6 +17,7 @@
             [gumshoe.config :as config]
             [gumshoe.flags :as flags]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.kube-context :as kube-context]
             [gumshoe.flow :as flow]
             [gumshoe.hooks :as hooks]
             [gumshoe.outcome :as outcome]
@@ -137,29 +138,31 @@
    capabilities the book needs. Capabilities are opt-in labels in env.edn: a
    cluster that declares none is not capability-gated (any book runs on it, once
    it is a known cluster), so onboarding stays smooth while labelled clusters get
-   the safety of a real match."
-  [required-capabilities]
-  ["connected to a suitable Kubernetes cluster"
-   #(let [current (kubectl/current-cluster)
-          known (config/known-clusters)
-          declared (config/env-value {:kubernetes-cluster current} [:capabilities])
-          missing (when declared (remove (set declared) required-capabilities))]
-      (cond
-        (str/blank? (str current))
-        {:ok? false :label "not connected to any Kubernetes cluster"}
+   the safety of a real match. With a connection, the cluster is the one the
+   run pinned (see gumshoe.kube-context), not the kubeconfig's current one."
+  ([required-capabilities] (cluster-item required-capabilities nil))
+  ([required-capabilities connection]
+   ["connected to a suitable Kubernetes cluster"
+    #(let [current (if connection (:cluster connection) (kubectl/current-cluster))
+           known (config/known-clusters)
+           declared (config/env-value {:kubernetes-cluster current} [:capabilities])
+           missing (when declared (remove (set declared) required-capabilities))]
+       (cond
+         (str/blank? (str current))
+         {:ok? false :label "not connected to any Kubernetes cluster"}
 
-        (and (seq known) (not (some #{current} known)))
-        {:ok? false :label (format "current Kubernetes cluster %s is none you configured: %s"
-                                   current (str/join ", " known))}
+         (and (seq known) (not (some #{current} known)))
+         {:ok? false :label (format "current Kubernetes cluster %s is none you configured: %s"
+                                    current (str/join ", " known))}
 
-        (seq missing)
-        {:ok? false :label (format "Kubernetes cluster %s does not advertise: %s"
-                                   current (str/join ", " (map name missing)))}
+         (seq missing)
+         {:ok? false :label (format "Kubernetes cluster %s does not advertise: %s"
+                                    current (str/join ", " (map name missing)))}
 
-        :else
-        {:ok? true :label (if (seq required-capabilities)
-                            (format "Kubernetes cluster: %s (has %s)" current (str/join ", " (map name required-capabilities)))
-                            (format "Kubernetes cluster: %s" current))}))])
+         :else
+         {:ok? true :label (if (seq required-capabilities)
+                             (format "Kubernetes cluster: %s (has %s)" current (str/join ", " (map name required-capabilities)))
+                             (format "Kubernetes cluster: %s" current))}))]))
 
 (defn- resource-label
   "The label for a kubectl resource in a permission prerequisite: the cluster's
@@ -167,30 +170,34 @@
    name, followed by the subresource it names (\"Pod resources (eviction
    subresource)\"). A fabricated Kind would read as certainty the check does
    not have, so an unknown or unreachable resource stays as the raw name the
-   check actually uses."
-  [resource]
+   check actually uses. context is the kube context to discover on, nil for
+   the current one."
+  [context resource]
   (let [[base sub] (kubectl/resource-and-subresource resource)
-        label (if-let [kind (kubectl/resource-kind base)] (str kind " resources") base)]
+        kind (if context (kubectl/resource-kind context base) (kubectl/resource-kind base))
+        label (if kind (str kind " resources") base)]
     (if sub (format "%s (%s subresource)" label sub) label)))
 
 (defn- can-i-item
-  [verb resource]
-  (let [verb-label (str/upper-case verb)
-        target (resource-label resource)
-        heading (format "Kubernetes: can %s %s" verb-label target)]
-    [heading
-     #(if (kubectl/can-i? verb resource)
-        {:ok? true :label heading}
-        {:ok? false :label (format "Kubernetes: cannot %s %s" verb-label target)})]))
+  ([verb resource] (can-i-item nil verb resource))
+  ([context verb resource]
+   (let [verb-label (str/upper-case verb)
+         target (resource-label context resource)
+         heading (format "Kubernetes: can %s %s" verb-label target)]
+     [heading
+      #(if (if context (kubectl/can-i? context verb resource) (kubectl/can-i? verb resource))
+         {:ok? true :label heading}
+         {:ok? false :label (format "Kubernetes: cannot %s %s" verb-label target)})])))
 
 (defn- can-exec-item
-  [resource]
-  (let [target (resource-label resource)
-        heading (format "Kubernetes: can EXEC into %s" target)]
-    [heading
-     #(if (kubectl/can-exec? resource)
-        {:ok? true :label heading}
-        {:ok? false :label (format "Kubernetes: cannot EXEC into %s" target)})]))
+  ([resource] (can-exec-item nil resource))
+  ([context resource]
+   (let [target (resource-label context resource)
+         heading (format "Kubernetes: can EXEC into %s" target)]
+     [heading
+      #(if (if context (kubectl/can-exec? context resource) (kubectl/can-exec? resource))
+         {:ok? true :label heading}
+         {:ok? false :label (format "Kubernetes: cannot EXEC into %s" target)})])))
 
 (defn permission-checks
   "The `kubectl auth can-i` questions the permission prerequisites ask, as
@@ -238,8 +245,13 @@
            [[label (fn [] {:ok? false :label (format "%s could not be checked: %s" label message)})]]))))
 
 (defn- prerequisite-items
+  "The checklist items of prerequisites for opts. The cluster and permission
+   checks ask about the kube context the run pinned (see
+   gumshoe.kube-context/*pinned*), and about the current one when none is."
   [prerequisites opts]
-  (let [blank? #(str/blank? (str %))
+  (let [connection kube-context/*pinned*
+        context (:context connection)
+        blank? #(str/blank? (str %))
         ipv4-hosts (remove blank? (map opts (:can-ping-using-ipv4 prerequisites)))
         ipv6-hosts (remove blank? (map opts (:can-ping-using-ipv6 prerequisites)))
         secrets (remove blank? (map opts (:access-gopass-secrets prerequisites)))
@@ -261,10 +273,10 @@
      (map secret-item secrets)
      (prerequisites/existing-path-items (:existing-paths prerequisites) opts)
      (when (contains? prerequisites :cluster-capabilities)
-       [(cluster-item (:cluster-capabilities prerequisites))])
-     (mapcat (fn [[key verb]] (map (partial can-i-item verb) (get prerequisites key)))
+       [(cluster-item (:cluster-capabilities prerequisites) connection)])
+     (mapcat (fn [[key verb]] (map (partial can-i-item context verb) (get prerequisites key)))
              prerequisites/kubectl-verbs)
-     (map can-exec-item (:kubectl-can-exec prerequisites))
+     (map (partial can-exec-item context) (:kubectl-can-exec prerequisites))
      ;; plugin-registered checks (change windows, tickets, on-call acks) run last
      ;; one registered check at a time, so a builder that throws fails its
      ;; own item and the others still run
@@ -299,7 +311,8 @@
    environment it happened in (so the right announcers are selected), who did it,
    and the git provenance. Where to post and how is each announcer's own config
    in env.edn :announce - the announcers resolve their homeserver, room, webhook
-   URL, and tokens themselves."
+   URL, and tokens themselves. The cluster is the one of the kube context
+   the run pinned, the current one's when none is."
   []
   (let [username (shell/stdout-of "whoami")
         host (hostname)]
@@ -307,7 +320,9 @@
      :git-commit (git-commit)
      :username username
      :hostname host
-     :cluster (try (kubectl/current-cluster) (catch Exception _ nil))
+     :cluster (if-let [connection kube-context/*pinned*]
+                (:cluster connection)
+                (try (kubectl/current-cluster) (catch Exception _ nil)))
      :actor (format "%s@%s" username host)}))
 
 (defn- book-heading
@@ -413,6 +428,19 @@
     {:banner (outcome/banner run record)
      :exit (outcome/detailed-exit-code (some-> (:exit-codes opts) keyword) run record)}))
 
+(defn- pinned-connection
+  "The connection the run pins for the :kube-context of config, nil when it
+   declares none. A kube context the kubeconfig does not hold ends the run,
+   before any prerequisite is checked or anything is read."
+  [{:keys [kube-context]} opts]
+  (when kube-context
+    (let [{:keys [connection refusal]} (kube-context/resolve (kube-context/named kube-context opts))]
+      (when refusal
+        (stdout/error refusal)
+        (stdout/print-banner stdout/red (str (theme/token :error) " UNKNOWN KUBE CONTEXT - nothing was attempted"))
+        (System/exit 1))
+      connection)))
+
 (defn execute!
   "Runs a runbook described by a config map:
 
@@ -429,6 +457,14 @@
    :action        (fn [opts ctx]) -> truthy on success
    :details       optional lines --help shows under the description; an
                   unindented line is a heading
+   :kube-context  optional (fn [opts] -> a kube context name, or nil for the
+                  current one): the kube context the run acts on, resolved
+                  from the kubeconfig once, before the prerequisites, and
+                  pinned for the whole run (gumshoe.kube-context/*pinned*).
+                  The cluster and permission prerequisites, the pre-hooks'
+                  :connection, the announcement data's :cluster and every
+                  change the action runs use it. A name the kubeconfig does
+                  not hold stops the run before anything is checked or read
 
    ctx contains :announcement-data when :announce? is true. Under *loading*
    it returns the config untouched."
@@ -462,67 +498,69 @@
           (theme/apply!)
           (ui/activate!)
           (doseq [note (cond-> (vec notes) (:note exit-contract) (conj (:note exit-contract)))] (stdout/warn note))
-          (when-not (prerequisites? prerequisites opts)
-            (stdout/print-banner stdout/red (str (theme/token :error) " PREREQUISITES NOT MET - nothing was attempted"))
-            (stdout/err-println "Next: install the missing tools, connect to the right cluster/VPN, or fix the")
-            (stdout/err-println (str "      access shown with a " (theme/token :check-error) " above, then run this book again."))
-            (System/exit 1))
-          ;; global pre-execution gates (change freeze, required ack) may veto the
-          ;; run before it touches anything - they apply to every book, unlike a
-          ;; book's own declared prerequisites
-          (let [gate (hooks/run-pre-hooks! {:description description
-                                            :book (System/getProperty "babashka.file")
-                                            :opts opts
-                                            :change? change?})]
-            (when-not (:allowed? gate)
-              (stdout/print-banner stdout/red (str (theme/token :error) " BLOCKED - " (:reason gate)))
-              (System/exit 1)))
-          (let [ctx (when announce? {:announcement-data (announcement-data)})]
-            (stdout/print-section (book-heading (System/getProperty "babashka.file") description))
-            ;; an unexpected exception must still land on the red banner with a
-            ;; clean message, never a raw stack trace - the exit code stays 1 so
-            ;; scripts and ./detect see the failure
-            (let [record (outcome/fresh)
-                  outcome (try
-                            (binding [flow/*dry-run* (boolean (:dry-run opts))
-                                      outcome/*record* record]
-                              ;; a rehearsal that passed a step it could not
-                              ;; show did not succeed, whatever the action returned
-                              (if (and (action opts ctx) (empty? (:unrehearsed @record))) :ok :failed))
-                            ;; Throwable, not Exception: an Error from the action
-                            ;; must still land on the red banner and the recording,
-                            ;; not skip them with a raw stack trace.
-                            (catch Throwable e
-                              (stdout/error "unexpected error:" (or (ex-message e) (str e)))
-                              :error))
-                  ;; every run leaves an audit trail: input vars, selections, commands
-                  recording-path (recording/save! {:book-file (System/getProperty "babashka.file")
-                                                   :description description
-                                                   :opts opts
-                                                   :outcome outcome
-                                                   :skipped (:skipped @record)
-                                                   :meta (:announcement-data ctx)})
-                  final (verdict config (assoc opts :exit-codes (:mode exit-contract)) outcome @record (summary/captured?))]
-              ;; the final banner leaves no doubt about the outcome, even at 3am
-              (print-outcome! (:banner final) @record)
-              ;; run summary: where the record is, how to reproduce, how to dig in together
-              (when recording-path
-                (stdout/err-println (format "📼 Recording: %s" (stdout/shorten-path recording-path))))
-              (when (read-only-run? change? @record)
-                ;; the exact CLI calls behind a read-only run's output are safe to replay
-                (reproducer/offer! description)
-                ;; the findings themselves, as Markdown, for a shared pad or a ticket
-                (when (offers-share? {:output (:output opts) :console? (some? (System/console))})
-                  (summary/offer! description))
-                ;; something turned up - offer a shared terminal to investigate together
-                (when (= :failed outcome)
-                  (upterm/offer!)))
-              ;; post-execution hooks observe the finished run (metrics, audit
-              ;; forwarding, status pages) - bounded so none can block the exit
-              (hooks/run-post-hooks! {:description description
-                                      :book (System/getProperty "babashka.file")
-                                      :opts opts
-                                      :outcome outcome
-                                      :recording-path recording-path
-                                      :meta (:announcement-data ctx)})
-              (System/exit (:exit final)))))))))
+          (binding [kube-context/*pinned* (pinned-connection config opts)]
+            (when-not (prerequisites? prerequisites opts)
+              (stdout/print-banner stdout/red (str (theme/token :error) " PREREQUISITES NOT MET - nothing was attempted"))
+              (stdout/err-println "Next: install the missing tools, connect to the right cluster/VPN, or fix the")
+              (stdout/err-println (str "      access shown with a " (theme/token :check-error) " above, then run this book again."))
+              (System/exit 1))
+            ;; global pre-execution gates (change freeze, required ack) may veto the
+            ;; run before it touches anything - they apply to every book, unlike a
+            ;; book's own declared prerequisites
+            (let [gate (hooks/run-pre-hooks! {:description description
+                                              :book (System/getProperty "babashka.file")
+                                              :opts opts
+                                              :change? change?
+                                              :connection kube-context/*pinned*})]
+              (when-not (:allowed? gate)
+                (stdout/print-banner stdout/red (str (theme/token :error) " BLOCKED - " (:reason gate)))
+                (System/exit 1)))
+            (let [ctx (when announce? {:announcement-data (announcement-data)})]
+              (stdout/print-section (book-heading (System/getProperty "babashka.file") description))
+              ;; an unexpected exception must still land on the red banner with a
+              ;; clean message, never a raw stack trace - the exit code stays 1 so
+              ;; scripts and ./detect see the failure
+              (let [record (outcome/fresh)
+                    outcome (try
+                              (binding [flow/*dry-run* (boolean (:dry-run opts))
+                                        outcome/*record* record]
+                                ;; a rehearsal that passed a step it could not
+                                ;; show did not succeed, whatever the action returned
+                                (if (and (action opts ctx) (empty? (:unrehearsed @record))) :ok :failed))
+                              ;; Throwable, not Exception: an Error from the action
+                              ;; must still land on the red banner and the recording,
+                              ;; not skip them with a raw stack trace.
+                              (catch Throwable e
+                                (stdout/error "unexpected error:" (or (ex-message e) (str e)))
+                                :error))
+                    ;; every run leaves an audit trail: input vars, selections, commands
+                    recording-path (recording/save! {:book-file (System/getProperty "babashka.file")
+                                                     :description description
+                                                     :opts opts
+                                                     :outcome outcome
+                                                     :skipped (:skipped @record)
+                                                     :meta (:announcement-data ctx)})
+                    final (verdict config (assoc opts :exit-codes (:mode exit-contract)) outcome @record (summary/captured?))]
+                ;; the final banner leaves no doubt about the outcome, even at 3am
+                (print-outcome! (:banner final) @record)
+                ;; run summary: where the record is, how to reproduce, how to dig in together
+                (when recording-path
+                  (stdout/err-println (format "📼 Recording: %s" (stdout/shorten-path recording-path))))
+                (when (read-only-run? change? @record)
+                  ;; the exact CLI calls behind a read-only run's output are safe to replay
+                  (reproducer/offer! description)
+                  ;; the findings themselves, as Markdown, for a shared pad or a ticket
+                  (when (offers-share? {:output (:output opts) :console? (some? (System/console))})
+                    (summary/offer! description))
+                  ;; something turned up - offer a shared terminal to investigate together
+                  (when (= :failed outcome)
+                    (upterm/offer!)))
+                ;; post-execution hooks observe the finished run (metrics, audit
+                ;; forwarding, status pages) - bounded so none can block the exit
+                (hooks/run-post-hooks! {:description description
+                                        :book (System/getProperty "babashka.file")
+                                        :opts opts
+                                        :outcome outcome
+                                        :recording-path recording-path
+                                        :meta (:announcement-data ctx)})
+                (System/exit (:exit final))))))))))

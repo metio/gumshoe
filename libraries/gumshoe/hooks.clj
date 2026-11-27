@@ -70,7 +70,10 @@
      {:description  the book's one-line description
       :book         the book file about to run
       :opts         the parsed flags
-      :change?      true for a book that makes a change, false for a read-only one}
+      :change?      true for a book that makes a change, false for a read-only one
+      :connection   the kube context the run pinned, {:context :cluster
+                    :announce-as}, or nil for a book that pins none (see
+                    gumshoe.kube-context)}
    Return anything truthy to allow the run, or false / {:allow? false :reason
    \"...\"} to VETO it - the book stops before touching anything."
   [f]
