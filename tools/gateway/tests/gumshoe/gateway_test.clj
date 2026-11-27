@@ -46,6 +46,22 @@
              "HTTPRoute is not accepted by any Gateway or ListenerSet"}
            (summaries findings)))))
 
+(deftest a-route-missing-its-listener-set-section-names-the-rename-book
+  (let [finding (fn [parent-ref reason]
+                  (first (gateway/detect-httproute-problems
+                          {gateway/httproute-type
+                           {:items [{:metadata {:namespace "shop" :name "web"}
+                                     :status {:parents [{:parentRef parent-ref
+                                                         :conditions [{:type "Accepted" :status "False"
+                                                                       :reason reason :message "no matching parent"}]}]}}]}})))]
+    (is (= "no matching parent - no listener of ListenerSet web is named https; tools/gateway/runbooks/rename_listeners.clj renames a numbered listener to it"
+           (:hint (finding {:kind "ListenerSet" :name "web" :sectionName "https"} "NoMatchingParent"))))
+    (is (re-find #"rename_listeners" (:hint (finding {:kind "XListenerSet" :name "web" :sectionName "https"} "NoMatchingParent"))))
+    (testing "a Gateway parent, a route without a section and another reason keep the controller's message"
+      (is (= "no matching parent" (:hint (finding {:name "main" :sectionName "https"} "NoMatchingParent"))))
+      (is (= "no matching parent" (:hint (finding {:kind "ListenerSet" :name "web"} "NoMatchingParent"))))
+      (is (= "no matching parent" (:hint (finding {:kind "ListenerSet" :name "web" :sectionName "https"} "NotAllowedByListeners")))))))
+
 (deftest dummy-listener-skipped-test
   (testing "the mandatory dummy listener (zero routes by design) is not reported, others still are"
     (let [evidence {gateway/gateway-type

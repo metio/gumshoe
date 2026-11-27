@@ -176,6 +176,7 @@
                    [gumshoe.certificates-test]
                    [gumshoe.certificate-renewal-test]
                    [gumshoe.gateway-test]
+                   [gumshoe.listener-renames-test]
                    [gumshoe.cnpg-test]
                    [gumshoe.cnpg-health-test]
                    [gumshoe.cnpg.operations-test]
@@ -491,6 +492,7 @@
                                                          'gumshoe.certificates-test
                                                          'gumshoe.certificate-renewal-test
                                                          'gumshoe.gateway-test
+                                                         'gumshoe.listener-renames-test
                                                          'gumshoe.cnpg-test
                                                          'gumshoe.cnpg-health-test
                                                          'gumshoe.cnpg.operations-test
