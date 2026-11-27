@@ -3519,6 +3519,64 @@
    "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
    "                    findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help        Show this help message"]},
+ "tools/flux/runbooks/flux/retire.clj"
+ {:options
+  {:name
+   {:desc
+    "The name of the HelmRelease - interactive selection when omitted",
+    :coerce :string,
+    :alias :N},
+   :namespace
+   {:desc
+    "The namespace of the HelmRelease - interactive selection when omitted",
+    :coerce :string,
+    :alias :n},
+   :writer
+   {:desc
+    "A field manager that has taken over the release's objects, repeatable; when given, only these count as another writer",
+    :coerce [:string]}},
+  :help
+  ["Retires a HelmRelease without a helm uninstall, keeping the objects another writer took over"
+   ""
+   "What it does:"
+   "  picks one HelmRelease by namespace and name (--namespace and --name, or interactively)"
+   "  skips it, asking nothing, when it is already done and its post-checks already hold"
+   "  asks to confirm: retire the HelmRelease without a helm uninstall: suspend it, strip its Flux finalizer and delete it, keeping every object its release deployed and its Helm storage (destructive - type yes)"
+   "  checks again right before acting that what was confirmed still holds"
+   "  announces the change to the changelog"
+   "  verifies the result before it reports success"
+   ""
+   "Needs:"
+   "  tools: kubectl, fzf"
+   "  kubectl get: helmreleases.helm.toolkit.fluxcd.io, kustomizations.kustomize.toolkit.fluxcd.io"
+   "  kubectl patch: helmreleases.helm.toolkit.fluxcd.io"
+   "  kubectl delete: helmreleases.helm.toolkit.fluxcd.io"
+   "  cluster capabilities: flux"
+   ""
+   "Usage:"
+   "  bb <runbook> [options]"
+   ""
+   "Options:"
+   "  -n, --namespace   The namespace of the HelmRelease - interactive selection"
+   "                    when omitted"
+   "  -N, --name        The name of the HelmRelease - interactive selection when"
+   "                    omitted (deprecated alias: -r, -s)"
+   "      --writer      A field manager that has taken over the release's objects,"
+   "                    repeatable; when given, only these count as another writer"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"],
+  :parsed
+  {"--name web" {:opts {:name "web"}, :notes []},
+   "-N web" {:opts {:name "web"}, :notes []},
+   "-r web"
+   {:opts {:name "web"},
+    :notes ["-r is a deprecated alias of --name; use -N"]},
+   "-s web"
+   {:opts {:name "web"},
+    :notes ["-s is a deprecated alias of --name; use -N"]}}},
  "tools/flux/runbooks/flux/suspend.clj"
  {:options
   {:pick

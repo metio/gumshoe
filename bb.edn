@@ -222,6 +222,7 @@
                    [gumshoe.cnpg.console-promote-test]
                    [gumshoe.cnpg.reload-unobservable-test]
                    [gumshoe.tools.flux-storage-owner-rights-test]
+                   [gumshoe.tools.flux-retire-test]
                    [gumshoe.cnpg.promote-status-rights-test]
                    [gumshoe.monitoring-test]
                    [gumshoe.calico-test]
@@ -542,6 +543,7 @@
                                                          'gumshoe.cnpg.console-promote-test
                                                          'gumshoe.cnpg.reload-unobservable-test
                                                          'gumshoe.tools.flux-storage-owner-rights-test
+                                                         'gumshoe.tools.flux-retire-test
                                                          'gumshoe.cnpg.promote-status-rights-test
                                                          'gumshoe.monitoring-test
                                                          'gumshoe.calico-test
