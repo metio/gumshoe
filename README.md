@@ -311,6 +311,7 @@ bb run runbooks/detectives/events.clj         # Warning events, last hour
 bb run runbooks/detectives/rbac.clj           # admins, wildcards, secret readers
 bb run runbooks/detectives/security.clj       # RBAC + pod security + NetPol
 bb run runbooks/detectives/posture.clj        # probes, image tags, replicas, PDBs, deprecated APIs, template drift
+bb run runbooks/detectives/unmanaged.clj -n shop  # objects in one namespace nobody manages
 bb run runbooks/detectives/dns.clj            # nameservers, SOA replication
 bb run runbooks/detectives/mail.clj           # MX/SPF/DKIM/DMARC/rDNS + TLS
 bb run runbooks/detectives/fabric.clj         # EVPN-VXLAN MAC ownership, over ssh
