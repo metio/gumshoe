@@ -18,7 +18,8 @@
                  {:from :reads  :ref  (fn [ctx] -> ref or nil)}]
       :reads    {name (fn [ctx] -> value)}
       :values   {name (fn [ctx] -> value)}
-      :refusal  (fn [ctx] -> nil, a reason, or gumshoe.change/unmet)
+      :refusal  (fn [ctx] -> nil, a reason, a vector of reasons, or
+                 gumshoe.change/unmet)
       :confirm  {:action .. :destructive? .. :separately? ..}
       :items    (fn [ctx] -> seq)
       :announce (fn [ctx] -> message), or false for a change that posts nothing
@@ -77,10 +78,12 @@
    derived context with what :recheck returns merged over it, and again
    after the confirmation, against the context the subjects and :recheck
    read again (see gumshoe.mutation). It returns nil to let the change run,
-   a reason to refuse it with \"refusing: <reason>\", or `unmet` to refuse
+   a reason to refuse it with \"refusing: <reason>\", a non-empty vector of
+   reasons to refuse it with one such line per reason, or `unmet` to refuse
    it in the engine's generic words (\"its precondition does not hold\"
    before the confirmation, gumshoe.flow's \"its precondition no longer
-   holds\" after it), which add nothing of their own.
+   holds\" after it), which add nothing of their own. refusal-messages
+   reads any of them as the list of lines the operator is shown.
 
    :done says the change is already satisfied, so a run skips it instead
    of confirming and applying it again. `true` means \"when every post-check
@@ -102,6 +105,13 @@
      :precondition (fn)    judged after :refusal, before and after the
                            confirmation, as a refusal returning `unmet`
                            when it returns false
+     :problems (fn)        (fn [ctx] -> a sequence of messages, empty to
+                           proceed): judged after :refusal, before and after
+                           the confirmation, as a refusal returning the
+                           vector of its messages, so the lines the operator
+                           reads are the list the gate decided on (see
+                           problems-refusal for what it may return and
+                           what it may not do)
      :empty-message \"..\"  [:select :empty-message]
      :announce? false      :announce false; :announce? true is the default
                            and is dropped
@@ -131,7 +141,9 @@
    :from, a :compare no pin understands, two different empty messages, a changelog message beside
    :announce? false, a :recheck with nothing to judge it, a :subject on a
    :many select, :connect with any subject, :connect beside :kube-context,
-   a :kube-context that is not a function, :derive beside :values or
+   a :kube-context that is not a function, :problems beside :precondition
+   (one gate saying why it refuses beside one that cannot, the split
+   :problems exists to end) or a :problems that is not a function, :derive beside :values or
    :recheck beside :reads, either alias beside a named entry, a :reads or
    :values that is not a map of keyword to function, a name the engine
    binds itself or both maps bind, a reserved name in the wrong map, and an
@@ -186,6 +198,7 @@
    normalize makes them when the composed spec runs or its book loads."
   (:require [clojure.string :as str]
             [gumshoe.flags :as flags]
+            [gumshoe.offline :as offline]
             [gumshoe.prerequisites :as prerequisites]))
 
 (def unmet
@@ -391,16 +404,110 @@
    name it."
   [precondition]
   (with-meta (fn [ctx] (when-not (precondition ctx) unmet))
-    {::precondition precondition}))
+    {::guard [:precondition precondition]}))
+
+(def problems-forbidden
+  "Why a :problems function may not reach outside the process: it judges
+   the context the reads already made, so what it decides on is what the
+   reads read and nothing a second, unpinned read saw."
+  "a :problems function judges the context the change's reads made - declare what it needs in :reads")
+
+(def ^:private shown-at-most 200)
+
+(defn- shown
+  [x]
+  (let [s (pr-str x)]
+    (if (< shown-at-most (count s)) (str (subs s 0 shown-at-most) "...") s)))
+
+(defn- problems-verdict
+  "What a :problems function's result x means for the gate: nil to proceed,
+   the vector of its messages to refuse with them, or {::malformed <why>}."
+  [x]
+  (cond
+    (nil? x)
+    {::malformed "its :problems returned nil, not a sequence of messages - return [] when nothing stands in the way, so an answer nobody gave never reads as no problems"}
+
+    (not (sequential? x))
+    {::malformed (format "its :problems returned %s, not a sequence of messages (a vector or a list, empty to proceed)" (shown x))}
+
+    :else
+    (let [messages (vec x)]
+      (if-let [[bad] (some #(when-not (and (string? %) (not (str/blank? %))) [%]) messages)]
+        {::malformed (format "its :problems returned %s among its messages, and every message is a non-blank string" (shown bad))}
+        (not-empty messages)))))
+
+(defn judge-problems
+  "What problems, a :problems function, says about ctx as the reason of a
+   refusal: nil when it returned an empty sequence, the vector of its
+   messages, in order, when it returned any, and one reason naming the
+   defect - so the change is refused, never run - when it returned nil,
+   something that is not a sequential collection, a message that is not a
+   non-blank string, threw, or reached outside the process. It runs inside
+   gumshoe.offline/forbidding, its result realized there. A strict read
+   that did not answer (an ex-info carrying :gumshoe.kubectl/unread) is
+   rethrown, so the engine refuses it in the words it uses for every guard."
+  [problems ctx]
+  (let [verdict (try
+                  (problems-verdict (offline/forbidding problems-forbidden #(problems ctx)))
+                  (catch clojure.lang.ExceptionInfo e
+                    (cond
+                      (:gumshoe.kubectl/unread (ex-data e)) (throw e)
+                      (offline/forbidden? e) {::malformed (str "its :problems reached outside the process: " (ex-message e))}
+                      :else {::malformed (str "its :problems threw: " (ex-message e))}))
+                  (catch Exception e
+                    {::malformed (str "its :problems threw: " (or (ex-message e) (.getName (class e))))}))]
+    (if (map? verdict) (::malformed verdict) verdict)))
+
+(defn problems-refusal
+  "A :problems function as a refusal: judge-problems over the context the
+   refusal judges. It carries the function, so compose judges one :problems
+   once however many parts name it."
+  [problems]
+  (with-meta (fn [ctx] (judge-problems problems ctx))
+    {::guard [:problems problems]}))
+
+(defn refusal-reason
+  "What a :refusal's result why means: nil to let the change run, else the
+   reason to refuse with - why itself, except an empty sequential
+   collection, which would refuse with nothing to show and is refused with
+   a reason naming that instead."
+  [why]
+  (if (and (sequential? why) (empty? why))
+    "its :refusal returned an empty list of reasons - return nil to let the change run"
+    why))
+
+(defn refusal-messages
+  "The lines a refusal's reason is shown as, each printed after
+   \"refusing: \": a vector of one for a string, the messages of a vector,
+   and nil for nil and for `unmet`, whose words belong to the engine."
+  [why]
+  (cond
+    (or (nil? why) (= unmet why)) nil
+    (sequential? why) (vec why)
+    :else [(str why)]))
 
 (declare combined first-reason)
 
 (defn- refusal-of
-  "The one guard: :refusal, then :precondition as a refusal returning unmet."
-  [{:keys [refusal precondition]}]
-  (if (nil? precondition)
-    refusal
-    (combined :refusal first-reason [refusal (precondition-refusal precondition)])))
+  "The one guard: :refusal, then :problems as a refusal returning its
+   messages, then :precondition as a refusal returning unmet. normalize
+   refuses :problems beside :precondition, so at most one of the two is
+   there."
+  [{:keys [refusal precondition problems] :as spec}]
+  (when (and (some? problems) (not (fn? problems)))
+    (invalid! (format ":problems is (fn [ctx] -> a sequence of messages, empty to proceed), not %s" (shown problems))
+              {:problems problems}))
+  (when (and (some? problems) (some? precondition))
+    (invalid! (str "the spec has :problems and :precondition - a precondition refuses without saying why, so a"
+                   " spec with both prints one gate's reasons and enforces another's; fold the precondition into"
+                   " :problems as a message")
+              {:problems problems :precondition precondition}))
+  (let [guards (remove nil? [refusal
+                             (some-> problems problems-refusal)
+                             (some-> precondition precondition-refusal)])]
+    (if (next guards)
+      (combined :refusal first-reason guards)
+      (first guards))))
 
 (defn- select-of
   [{:keys [select empty-message]}]
@@ -514,7 +621,7 @@
 (defn- check-runnable!
   [{:keys [select subjects refusal reads connect kube-context]}]
   (when (and (contains? reads recheck-entry) (nil? refusal))
-    (invalid! "a :recheck is judged by :refusal or :precondition, and the spec has neither"
+    (invalid! "a :recheck is judged by :refusal, :problems or :precondition, and the spec has none of them"
               {:recheck (get reads recheck-entry)}))
   (when (and connect kube-context)
     (invalid! "a spec takes :connect, for what is not a kube cluster, or :kube-context, for the kube context its kubectl calls use - not both"
@@ -542,7 +649,7 @@
         done (done-of spec)
         kube-context (kube-context-of spec)
         _ (check-destructive! spec)
-        canonical (cond-> (dissoc spec :subject :subjects :pin :precondition :refusal
+        canonical (cond-> (dissoc spec :subject :subjects :pin :precondition :problems :refusal
                                   :empty-message :announce? :announce :select
                                   :derive :recheck :reads :values :done :satisfied?
                                   :kube-context)
@@ -620,13 +727,13 @@
 
 (defn- combined
   "One function for key standing for the distinct functions of given (by
-   identity, a precondition's refusal by its precondition, in order, each
+   identity, a :precondition's or :problems' refusal by that function, in order, each
    combined one flattened into what it combines), built by (join fs). A given function that already stands for exactly
    those is returned as it is, so combining a function with one it already
    combines yields the same function; nil when there are none."
   [key join given]
   (let [given (remove nil? given)
-        identity-of #(or (::precondition (meta %)) %)
+        identity-of #(or (::guard (meta %)) %)
         fs (->> (mapcat #(parts-of key %) given)
                 (reduce (fn [[seen acc :as kept] f]
                           (if (contains? seen (identity-of f))

@@ -42,6 +42,15 @@
   [reason]
   (record! assoc :aborted reason))
 
+(defn refused!
+  "A change was refused: `step` names it (nil when the refusal came from
+   outside a change) and `messages` are the lines its refusal printed. The
+   first refusal of a run is kept, because it is the one that stopped the
+   run; a rehearsal that goes on past a refusal records the later ones
+   nowhere."
+  [step messages]
+  (record! update :refused #(or % {:step step :messages (vec messages)})))
+
 (defn unmet!
   "A rehearsed step whose precondition does not hold against the current
    state; `step` names it."
@@ -292,6 +301,22 @@
       (pos? applied) (str (effects applied) " had been applied")
       thunk (str unknown-step " had run"))))
 
+(defn- refused-phrase
+  "Which step a run's refusal stopped, as a phrase for a banner, or nil
+   when no refusal named a step: \"refused at \\\"<step>\\\"\", with the
+   number of messages when there were several."
+  [{:keys [step messages]}]
+  (when step
+    (str "refused at \"" step "\""
+         (when (< 1 (count messages)) (str " (" (count messages) " problems)")))))
+
+(defn- with-refusal
+  "text followed by the refused-phrase of the record, after a separator."
+  [text refused]
+  (if-let [phrase (refused-phrase refused)]
+    (str text "; " phrase)
+    text))
+
 (defn- skipped-suffix
   [skipped]
   (when (seq skipped)
@@ -318,13 +343,17 @@
    that recorded an `incomplete!` reason is bannered FAILED naming it, even
    when it also reported findings.
 
+   A failed or aborted run that a refusal stopped names the step it
+   refused at (see refused!), and how many problems it named when there
+   were several, so a playbook's banner says which step blocked it.
+
    Only a run whose post-checks all ran and held may claim verification; a
    :soft? check that ran out its time is named as not confirmed.
 
    The tone agrees with `exit-code`: :ok only when it is 0, :error only
    when it is 1."
   [{:keys [dry-run? changes? outcome findings?]} record]
-  (let [{:keys [aborted applied paused stopped thunk verified unmet unrehearsed skipped unconfirmed]} record
+  (let [{:keys [aborted applied paused stopped thunk verified unmet unrehearsed skipped unconfirmed refused]} record
         applied (or applied 0)
         failed (failed? outcome record)]
     (cond
@@ -366,11 +395,11 @@
       (cond
         (pos? applied)
         {:tone :error
-         :text (str "ABORTED after " (effects applied) " - " aborted " - the effects before it stay applied")}
+         :text (str "ABORTED after " (effects applied) " - " (with-refusal aborted refused) " - the effects before it stay applied")}
         (changed? record)
-        {:tone :error :text (str "ABORTED - " aborted " - after a change had already run")}
+        {:tone :error :text (str "ABORTED - " (with-refusal aborted refused) " - after a change had already run")}
         :else
-        {:tone :neutral :text (str "ABORTED - " aborted " - nothing was changed")})
+        {:tone :neutral :text (str "ABORTED - " (with-refusal aborted refused) " - nothing was changed")})
 
       paused
       {:tone :neutral
@@ -417,7 +446,9 @@
 
       failed
       {:tone :error
-       :text (str "FAILED - read the messages above"
+       :text (str "FAILED - "
+                  (some-> (refused-phrase refused) (str " - "))
+                  "read the messages above"
                   (if-let [m (made record)] (str "; " m) "; nothing was changed"))}
 
       (and (true? verified) (changed? record) (seq unconfirmed))

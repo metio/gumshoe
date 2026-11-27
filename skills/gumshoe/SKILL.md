@@ -501,7 +501,21 @@ mostly data:
   pure judgement of `ctx` (it may read, never write); what it prints shows
   only when it refuses before the confirmation, and after the confirmation
   as before. A refusal that must tell the two apart reads
-  `mutation/*phase*` (`:derive` before, `:judge` after). A rehearsal and a
+  `mutation/*phase*` (`:derive` before, `:judge` after). A spec that
+  refuses for several reasons declares `:problems (fn [ctx] -> [message
+  …])` instead of printing reasons and gating on a `:precondition`: the
+  engine prints each message as its own `refusing: <message>` line and
+  refuses on the same sequence, so the list the operator reads is the list
+  the gate decided on; an empty sequence lets the change run, and under
+  `--dry-run` the messages say why a real run would not run the step. It is
+  judged after `:refusal`, before and after the confirmation, and reads
+  nothing: it runs inside `gumshoe.offline/forbidding`, so whatever it
+  judges is declared in `:reads` and arrives in `ctx`. It fails closed: nil,
+  a value that is not a vector or list, a message that is not a non-blank
+  string, a throw, or a read each refuse the change with a reason naming
+  that. `normalize` refuses `:problems` beside `:precondition`. A playbook
+  run that a refusal stopped ends with a banner naming the step, as
+  `FAILED - refused at "<step>" (2 problems) - …`. A rehearsal and a
   change a playbook's confirmation covered judge once. Its effect plan (`[[:kubectl "cordon" node]]`) runs,
   dry-runs, or is collected in a test. An `:effect` returning one effect,
   such as a bare `(effect/note …)`, runs as a plan of one; anything else
@@ -1031,7 +1045,11 @@ mostly data:
   test naming it. `:answer` takes an object (sent as JSON), a string, a
   process result, `refusal/absent` (an `--ignore-not-found` miss) or
   `(refusal/not-found type name)`. `refusal/polarity` returns the verdicts
-  as data, and `:phases [:before]` judges one side only;
+  as data, and `:phases [:before]` judges one side only. A `:problems`
+  gate is proven with `:refusal` as the vector of every message it must
+  print, in order, and `:refusing-answer` as the answer it refuses (a
+  rollout not finished) in place of the unanswered read, so the two runs
+  differ only in what the read returned;
 - a cluster read no `gumshoe.kubectl` function wraps goes through
   `(kubectl/get-json context "namespaces" "--selector=…")`, nil when the read
   fails, or `get-json-result`, whose `:ok?` tells a failed read from an empty

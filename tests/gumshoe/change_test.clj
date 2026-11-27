@@ -230,7 +230,7 @@
             #":announce false and :announce\? true"]
            ["a :recheck with nothing to judge it"
             {:recheck recheck}
-            #"a :recheck is judged by :refusal or :precondition, and the spec has neither"]
+            #"a :recheck is judged by :refusal, :problems or :precondition, and the spec has none of them"]
            ["a :subject on a :many select"
             {:select many :subject subject}
             #"a :subject needs a select that picks one object, not a :many select"]
@@ -308,7 +308,7 @@
             #":gumshoe.change/elsewhere is reserved"]
            ["a canonical :recheck entry with nothing to judge it"
             {:reads {change/recheck-entry recheck}}
-            #"a :recheck is judged by :refusal or :precondition, and the spec has neither"]]]
+            #"a :recheck is judged by :refusal, :problems or :precondition, and the spec has none of them"]]]
     (testing label
       (let [refused (refused-message spec)]
         (is (some? refused) "it is refused")
@@ -371,7 +371,7 @@
     (is (every? string? refusals))
     (is (= #{"a :subject needs a select that picks one object, not a :many select"
              "a :subject, :subjects or :pin reads its objects with kubectl, so a spec with :connect takes neither"
-             "a :recheck is judged by :refusal or :precondition, and the spec has neither"
+             "a :recheck is judged by :refusal, :problems or :precondition, and the spec has none of them"
              "the spec has an :announce message and :announce? false, so it is unclear whether it posts to the changelog - drop one"
              "the spec has two empty messages, \"top\" at the top and \"inside\" in :select - keep the one in :select"
              "the spec names its subjects in :subjects and again as :subject - write one or the other"

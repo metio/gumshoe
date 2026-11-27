@@ -9,7 +9,7 @@
    "refusing: BGP advertises 10.21.2.70 in VNI 4208 on upward-cobra.srv.g60.bastelgenosse.de, so the VTEP is live and the rows naming it are correct - nothing was deleted"
    "❌ the change was confirmed but its precondition no longer holds - aborting before any action"],
   :banner
-  "ABORTED - the precondition no longer held after the confirmation - nothing was changed",
+  "ABORTED - the precondition no longer held after the confirmation; refused at \"delete the fdb rows naming a VTEP no BGP path advertises - frames for those MACs stop going to the dead VTEP\" - nothing was changed",
   :asked
   {:action
    "delete the fdb rows naming a VTEP no BGP path advertises - frames for those MACs stop going to the dead VTEP",
@@ -289,7 +289,8 @@
   ["── 🔌 Fabric ────────────────────────────────────────────────────────────────────"
    "▸ VTEP: 10.21.2.71"
    "refusing: BGP advertises 10.21.2.71 in VNI 4208 on upward-cobra.srv.g60.bastelgenosse.de, so the VTEP is live and the rows naming it are correct - nothing was deleted"],
-  :banner "FAILED - read the messages above; nothing was changed",
+  :banner
+  "FAILED - refused at \"delete the fdb rows naming a VTEP no BGP path advertises - frames for those MACs stop going to the dead VTEP\" - read the messages above; nothing was changed",
   :asked nil,
   :announced nil,
   :deleted []},
@@ -310,7 +311,7 @@
    "refusing: the rows naming 10.21.2.70 on upward-cobra.srv.g60.bastelgenosse.de are no longer the ones confirmed, or can no longer be judged - nothing was deleted; run the book again to see them as they are now"
    "❌ the change was confirmed but its precondition no longer holds - aborting before any action"],
   :banner
-  "ABORTED - the precondition no longer held after the confirmation - nothing was changed",
+  "ABORTED - the precondition no longer held after the confirmation; refused at \"delete the fdb rows naming a VTEP no BGP path advertises - frames for those MACs stop going to the dead VTEP\" - nothing was changed",
   :asked
   {:action
    "delete the fdb rows naming a VTEP no BGP path advertises - frames for those MACs stop going to the dead VTEP",

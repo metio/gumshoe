@@ -388,7 +388,7 @@
     steps
     (let [refused! (fn [step verdict]
                      (stdout/print-section (::title step))
-                     (mutation/prejudge-printed verdict)
+                     (mutation/prejudge-printed (update verdict :step #(or % (mutation/step-name step))))
                      nil)
           pick-refusal (fn [steps from to]
                          (some (fn [i]

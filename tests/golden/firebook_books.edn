@@ -432,7 +432,12 @@
    :calls
    ["kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"],
    :checks [],
-   :record {:applied 0},
+   :record
+   {:applied 0,
+    :refused
+    {:step "put out the fire: delete the fire-drill namespace",
+     :messages
+     ["namespace fire-drill exists and no drill created it (it lacks the label app.kubernetes.io/managed-by=gumshoe), so the drill neither burns in it nor deletes it"]}},
    :out
    ["refusing: namespace fire-drill exists and no drill created it (it lacks the label app.kubernetes.io/managed-by=gumshoe), so the drill neither burns in it nor deletes it"]},
   :extinguish-still-burning
@@ -574,7 +579,12 @@
    :calls
    ["kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"],
    :checks [],
-   :record {:applied 0},
+   :record
+   {:applied 0,
+    :refused
+    {:step "start a fire drill: a crash-looping deployment",
+     :messages
+     ["namespace fire-drill exists and no drill created it (it lacks the label app.kubernetes.io/managed-by=gumshoe), so the drill neither burns in it nor deletes it"]}},
    :out
    ["refusing: namespace fire-drill exists and no drill created it (it lacks the label app.kubernetes.io/managed-by=gumshoe), so the drill neither burns in it nor deletes it"]},
   :ignite-unanswered
@@ -707,7 +717,12 @@
    :calls
    ["kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"],
    :checks [],
-   :record {:applied 0},
+   :record
+   {:applied 0,
+    :refused
+    {:step "put out the fire: delete the fire-drill namespace",
+     :messages
+     ["namespace fire-drill exists and no drill created it (it lacks the label app.kubernetes.io/managed-by=gumshoe), so the drill neither burns in it nor deletes it"]}},
    :out
    ["refusing: namespace fire-drill exists and no drill created it (it lacks the label app.kubernetes.io/managed-by=gumshoe), so the drill neither burns in it nor deletes it"]},
   :extinguish-still-burning
@@ -852,7 +867,12 @@
    :calls
    ["kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"],
    :checks [],
-   :record {:applied 0},
+   :record
+   {:applied 0,
+    :refused
+    {:step "start a fire drill: a deployment with an unpullable image",
+     :messages
+     ["namespace fire-drill exists and no drill created it (it lacks the label app.kubernetes.io/managed-by=gumshoe), so the drill neither burns in it nor deletes it"]}},
    :out
    ["refusing: namespace fire-drill exists and no drill created it (it lacks the label app.kubernetes.io/managed-by=gumshoe), so the drill neither burns in it nor deletes it"]},
   :ignite-unanswered
@@ -989,7 +1009,12 @@
    :calls
    ["kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"],
    :checks [],
-   :record {:applied 0},
+   :record
+   {:applied 0,
+    :refused
+    {:step "put out the fire: delete the fire-drill namespace",
+     :messages
+     ["namespace fire-drill exists and no drill created it (it lacks the label app.kubernetes.io/managed-by=gumshoe), so the drill neither burns in it nor deletes it"]}},
    :out
    ["refusing: namespace fire-drill exists and no drill created it (it lacks the label app.kubernetes.io/managed-by=gumshoe), so the drill neither burns in it nor deletes it"]},
   :extinguish-still-burning
@@ -1140,7 +1165,13 @@
    :calls
    ["kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"],
    :checks [],
-   :record {:applied 0},
+   :record
+   {:applied 0,
+    :refused
+    {:step
+     "start a fire drill: a PersistentVolumeClaim that can never bind",
+     :messages
+     ["namespace fire-drill exists and no drill created it (it lacks the label app.kubernetes.io/managed-by=gumshoe), so the drill neither burns in it nor deletes it"]}},
    :out
    ["refusing: namespace fire-drill exists and no drill created it (it lacks the label app.kubernetes.io/managed-by=gumshoe), so the drill neither burns in it nor deletes it"]},
   :ignite-unanswered

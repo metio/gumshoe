@@ -49,6 +49,12 @@
       :precondition (fn [ctx] -> bool)            ; optional, judged after :refusal, before
                                                   ; and after the confirmation;
                                                   ; reads only, a dry run calls it too
+      :problems (fn [ctx] -> [message ..])        ; optional, instead of :precondition:
+                                                  ; judged after :refusal, before and
+                                                  ; after the confirmation; every
+                                                  ; message is printed as \"refusing:
+                                                  ; <message>\" and an empty sequence
+                                                  ; proceeds; reads nothing, see below
       :announce (fn [ctx] -> changelog message)   ; optional
       :effect   (fn [ctx] -> effect plan)         ; one effect runs as a plan of one;
                                                   ; anything else is refused naming
@@ -229,7 +235,25 @@
 
    :refusal returns why the change must not run, or nil. The engine prints
    the reason as \"refusing: <reason>\" and stops, and only a change no
-   refusal stopped reaches :precondition.
+   refusal stopped reaches :problems or :precondition.
+
+   :problems returns every reason the change must not run, as a sequence
+   of messages, and an empty one to let it run. The engine prints each
+   message as its own \"refusing: <message>\" line and decides on the same
+   sequence, so the reasons an operator reads are the ones the gate
+   enforced; under --dry-run the same lines say why a real run would not
+   run the step. It is judged where :refusal is, before the confirmation
+   and again after it, over the context the reads made, and it reads
+   nothing itself: it runs inside gumshoe.offline/forbidding, so what it
+   needs belongs in :reads, which are read again after the confirmation
+   for it. A :problems that returns nil, something that is not a vector or
+   a list, or a message that is not a non-blank string, that throws, or
+   that reaches outside the process refuses the change with a reason
+   naming that, so a broken gate never lets a change run (see
+   gumshoe.change/judge-problems). A spec declares :problems or
+   :precondition, not both (gumshoe.change/normalize). A refusal is
+   recorded against the step it stopped (gumshoe.outcome/refused!), so the
+   banner of a playbook names the step that blocked it.
 
    A change is judged twice: before the confirmation is shown, so the
    operator is never asked to approve a change that will be refused, and
@@ -416,11 +440,30 @@
     (format "what the change rests on moved after the confirmation (%s, now %s)" (pr-str (:facts before)) (pr-str (:facts after)))
     :else nil))
 
+(declare step-name)
+
+(def ^:dynamic *step*
+  "The name of the change a run is judging (step-name), or nil outside one,
+   so a refusal is recorded against the step it stopped."
+  nil)
+
+(defn- as-step
+  "(f) with *step* naming spec's change."
+  [spec f]
+  (binding [*step* (step-name spec)]
+    (f)))
+
 (defn- refuse!
   "Prints why the change is refused on stderr, beside the banner that ends
-   the run, and returns false, the verdict of a precondition that refused."
+   the run, one \"refusing: <message>\" line per message
+   change/refusal-messages reads from why, records the refusal against
+   *step* (gumshoe.outcome/refused!), and returns false, the verdict of a
+   precondition that refused."
   [why]
-  (stdout/err-println (str "refusing: " why))
+  (let [messages (change/refusal-messages why)]
+    (doseq [message messages]
+      (stdout/err-println (str "refusing: " message)))
+    (outcome/refused! *step* messages))
   false)
 
 (defn fetch-pinned
@@ -690,7 +733,7 @@
   [{:keys [refusal] :as spec} ctx]
   (when refusal
     (fn []
-      (let [why (refusal (rechecked spec ctx))]
+      (let [why (change/refusal-reason (refusal (rechecked spec ctx)))]
         (cond
           (= change/unmet why) false
           why (refuse! why)
@@ -798,7 +841,7 @@
                               judged (if recheck
                                        (merge ctx (realized recheck ctx))
                                        ctx)
-                              why (refusal judged)]
+                              why (change/refusal-reason (refusal judged))]
                           (if (= change/unmet why) unmet-before-confirmation why)))))
           (catch clojure.lang.ExceptionInfo e
             (if (::kubectl/unread (ex-data e))
@@ -1200,7 +1243,7 @@
         {:keys [ref refusal]} (parse-pick spec target)]
     (if refusal
       {:refusal refusal}
-      (when-let [connection (connect spec opts)]
+      (when-let [connection (as-step spec #(connect spec opts))]
         (pinned-to
          spec connection
          #(let [announcement-data (connected-data spec connection announcement-data)
@@ -1222,10 +1265,12 @@
 (defn prejudge-printed
   "Prints what prejudge returned the way a standalone run prints it - what
    the refusing judgement printed, then the reason - and returns whether
-   the change may be offered for confirmation."
-  [{:keys [refusal printed unread cache]}]
+   the change may be offered for confirmation. A refusal is recorded
+   against :step, the step-name of the change it judged, when the caller
+   adds it to the verdict, else against *step*."
+  [{:keys [refusal printed unread cache step]}]
   (cond
-    refusal (do (replay-held! printed) (refuse! refusal))
+    refusal (do (replay-held! printed) (binding [*step* (or step *step*)] (refuse! refusal)))
     unread (unread! unread)
     :else (some? cache)))
 
@@ -1264,16 +1309,18 @@
   ([spec target opts announcement-data]
    (run-on! spec target opts announcement-data nil))
   ([spec target opts announcement-data {:keys [derive-cache derived on-skip]}]
-   (let [spec (change/normalize spec)
-         {:keys [ref refusal]} (parse-pick spec target)]
-     (if refusal
-       (refuse! refusal)
-       (if-let [connection (connect spec opts)]
-         (pinned-to spec connection
-                    #(run-connected! spec connection target ref opts
-                                     (connected-data spec connection announcement-data)
-                                     derive-cache derived on-skip))
-         false)))))
+   (let [spec (change/normalize spec)]
+     (as-step
+      spec
+      #(let [{:keys [ref refusal]} (parse-pick spec target)]
+         (if refusal
+           (refuse! refusal)
+           (if-let [connection (connect spec opts)]
+             (pinned-to spec connection
+                        (fn [] (run-connected! spec connection target ref opts
+                                               (connected-data spec connection announcement-data)
+                                               derive-cache derived on-skip)))
+             false)))))))
 
 (defn named-but-not-offered
   "Pure: the error for `named`, the target the flags name, when the select
@@ -1312,7 +1359,7 @@
     (cond
       (nil? verdict) false
       done (skipped! spec done)
-      (or refusal unread) (prejudge-printed verdict)
+      (or refusal unread) (prejudge-printed (assoc verdict :step (step-name spec)))
       undecided (do (stdout/error (named-but-not-offered (:select spec) named :undecided undecided)) false)
       :else (do (stdout/error (named-but-not-offered (:select spec) named :not-eligible)) false))))
 
@@ -1378,19 +1425,22 @@
    run-on! to compose several steps against one already-picked subject."
   [spec opts announcement-data]
   (let [spec (change/normalize spec)]
-    (if-let [connection (connect spec opts)]
-      (pinned-to
-       spec connection
-       #(let [{:keys [target result] :as picked} (pick! spec opts (:context connection))]
-          (if (contains? picked :result)
-            result
-            (let [{:keys [ref refusal]} (parse-pick spec target)]
-              (if refusal
-                (refuse! refusal)
-                (run-connected! spec connection target ref opts
-                                (connected-data spec connection announcement-data)
-                                nil nil nil))))))
-      false)))
+    (as-step
+     spec
+     #(if-let [connection (connect spec opts)]
+        (pinned-to
+         spec connection
+         (fn []
+           (let [{:keys [target result] :as picked} (pick! spec opts (:context connection))]
+             (if (contains? picked :result)
+               result
+               (let [{:keys [ref refusal]} (parse-pick spec target)]
+                 (if refusal
+                   (refuse! refusal)
+                   (run-connected! spec connection target ref opts
+                                   (connected-data spec connection announcement-data)
+                                   nil nil nil)))))))
+        false))))
 
 (defn picks
   "How a select spec chooses its subject, in the words --help shows."
