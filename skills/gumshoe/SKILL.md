@@ -210,6 +210,13 @@ deletes with `(gumshoe.deletes/effect context target options)`.
 
 - `severity` is `critical`, `warning` or `info`. Start with critical.
 - `hint` is the book's suggestion for what to do next.
+- Every string in a finding is cleaned before any format prints it: escape
+  sequences are removed, control, bidi and zero-width characters become
+  spaces (a multi-line message reads as one line), and length is bounded
+  (summary 500 columns, hint 4000, any other field 2000). A text ending in
+  `…` was cut, so read the object itself for the full message. A book's
+  extra keys beside `findings` (such as `hosts` or `rows`) are evidence and
+  are not cleaned.
 - `parent` marks a finding that follows from another at least as severe,
   and names that finding's object as `Kind namespace/name`: a pod finding
   under its workload or node, a finding under a cause on its own object (a
