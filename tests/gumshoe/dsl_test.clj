@@ -152,7 +152,7 @@
         ((:effect %) ctx))]
    ["a delete does not wait"
     deleting
-    #(= [[:kubectl "ctx" "--namespace=batch" "delete" "cronjobs" "nightly" "--wait=false"]] ((:effect %) ctx))]
+    #(= [[:kubectl "ctx" "--namespace=batch" "delete" "cronjobs" "nightly" "--ignore-not-found" "--interactive=false" "--wait=false"]] ((:effect %) ctx))]
    ["several effects run in order as one plan"
     (assoc base :effect [[:kubectl :annotate {:annotations {"a" "1"}}] [:kubectl :scale {:replicas 0}]])
     #(= 2 (count ((:effect %) ctx)))]

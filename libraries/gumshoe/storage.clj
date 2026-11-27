@@ -13,6 +13,7 @@
   (:require [cheshire.core :as json]
             [clojure.string :as str]
             [gumshoe.claims :as claims]
+            [gumshoe.deletes :as deletes]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.quantity :as quantity]
@@ -473,9 +474,8 @@
         manifest (json/encode (recreate-manifest statefulset template-name capacity))]
     (conj (resize-claim-steps context namespace plan capacity)
           {:stage :delete
-           :effect (effect/kubectl context (str "--namespace=" namespace)
-                                   "delete" "statefulset" name "--cascade=orphan"
-                                   "--wait=false" "--request-timeout=30s")}
+           :effect (deletes/effect context {:type "statefulset" :namespace namespace :name name}
+                                   {:cascade :orphan :wait false :extra ["--request-timeout=30s"]})}
           {:stage :gone
            :effect (effect/kubectl context (str "--namespace=" namespace)
                                    "wait" "--for=delete" (str "statefulset/" name)

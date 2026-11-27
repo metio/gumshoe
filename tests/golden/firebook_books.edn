@@ -368,7 +368,7 @@
    :calls
    ["kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"
     "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"
-    "kubectl --context=ctx delete namespace fire-drill --ignore-not-found --wait=false"
+    "kubectl --context=ctx delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"
     "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"
     "kubectl --context=ctx --request-timeout=30s get pods --all-namespaces --output=json"],
    :checks
@@ -382,7 +382,7 @@
    :record {:applied 1, :verified true},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --wait=false"
+    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ✅ verified: the fire-drill namespace is gone"
     "  ✅ verified: the fire is out: the pods, stuck-pods detectives no longer report it"]},
@@ -397,18 +397,18 @@
    :calls
    ["kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"
     "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"
-    "kubectl --context=ctx delete namespace fire-drill --ignore-not-found --wait=false"],
+    "kubectl --context=ctx delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"],
    :checks [],
    :record
    {:applied 0,
     :stopped
-    "kubectl delete namespace fire-drill --ignore-not-found --wait=false",
+    "kubectl delete namespace fire-drill --ignore-not-found --interactive=false --wait=false",
     :recovery
     {:text
      "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --wait=false"]},
+    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"]},
   :extinguish-dry-run
   {:result true,
    :confirmations [],
@@ -424,7 +424,7 @@
     "────────────────────────────────────────────────────────────────────────────────"
     "This will put out the fire: delete the fire-drill namespace on 'cluster':"
     "  - namespace fire-drill and everything in it"
-    "  would run: kubectl delete namespace fire-drill --ignore-not-found --wait=false"]},
+    "  would run: kubectl delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"]},
   :extinguish-foreign-namespace
   {:result false,
    :confirmations [],
@@ -451,7 +451,7 @@
    :calls
    ["kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"
     "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"
-    "kubectl --context=ctx delete namespace fire-drill --ignore-not-found --wait=false"
+    "kubectl --context=ctx delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"
     "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"
     "kubectl --context=ctx --request-timeout=30s get pods --all-namespaces --output=json"],
    :checks
@@ -470,7 +470,7 @@
      "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --wait=false"
+    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ the fire-drill namespace is gone"
     "    NOT verified within 0s: the fire-drill namespace is gone"
@@ -653,7 +653,7 @@
    :calls
    ["kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"
     "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"
-    "kubectl --context=ctx delete namespace fire-drill --ignore-not-found --wait=false"
+    "kubectl --context=ctx delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"
     "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"
     "kubectl --context=ctx --request-timeout=30s get pods --all-namespaces --output=json"],
    :checks
@@ -667,7 +667,7 @@
    :record {:applied 1, :verified true},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --wait=false"
+    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ✅ verified: the fire-drill namespace is gone"
     "  ✅ verified: the fire is out: the pods, stuck-pods detectives no longer report it"]},
@@ -682,18 +682,18 @@
    :calls
    ["kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"
     "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"
-    "kubectl --context=ctx delete namespace fire-drill --ignore-not-found --wait=false"],
+    "kubectl --context=ctx delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"],
    :checks [],
    :record
    {:applied 0,
     :stopped
-    "kubectl delete namespace fire-drill --ignore-not-found --wait=false",
+    "kubectl delete namespace fire-drill --ignore-not-found --interactive=false --wait=false",
     :recovery
     {:text
      "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --wait=false"]},
+    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"]},
   :extinguish-dry-run
   {:result true,
    :confirmations [],
@@ -709,7 +709,7 @@
     "────────────────────────────────────────────────────────────────────────────────"
     "This will put out the fire: delete the fire-drill namespace on 'cluster':"
     "  - namespace fire-drill and everything in it"
-    "  would run: kubectl delete namespace fire-drill --ignore-not-found --wait=false"]},
+    "  would run: kubectl delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"]},
   :extinguish-foreign-namespace
   {:result false,
    :confirmations [],
@@ -736,7 +736,7 @@
    :calls
    ["kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"
     "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"
-    "kubectl --context=ctx delete namespace fire-drill --ignore-not-found --wait=false"
+    "kubectl --context=ctx delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"
     "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"
     "kubectl --context=ctx --request-timeout=30s get pods --all-namespaces --output=json"],
    :checks
@@ -755,7 +755,7 @@
      "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --wait=false"
+    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ the fire-drill namespace is gone"
     "    NOT verified within 0s: the fire-drill namespace is gone"
@@ -942,7 +942,7 @@
    :calls
    ["kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"
     "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"
-    "kubectl --context=ctx delete namespace fire-drill --ignore-not-found --wait=false"
+    "kubectl --context=ctx delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"
     "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"
     "kubectl --context=ctx --request-timeout=30s get events --all-namespaces --output=json"
     "kubectl --context=ctx --request-timeout=30s get persistentvolumeclaims --all-namespaces --output=json"
@@ -959,7 +959,7 @@
    :record {:applied 1, :verified true},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --wait=false"
+    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ✅ verified: the fire-drill namespace is gone"
     "  ✅ verified: the fire is out: the storage detective no longer reports it"]},
@@ -974,18 +974,18 @@
    :calls
    ["kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"
     "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"
-    "kubectl --context=ctx delete namespace fire-drill --ignore-not-found --wait=false"],
+    "kubectl --context=ctx delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"],
    :checks [],
    :record
    {:applied 0,
     :stopped
-    "kubectl delete namespace fire-drill --ignore-not-found --wait=false",
+    "kubectl delete namespace fire-drill --ignore-not-found --interactive=false --wait=false",
     :recovery
     {:text
      "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --wait=false"]},
+    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"]},
   :extinguish-dry-run
   {:result true,
    :confirmations [],
@@ -1001,7 +1001,7 @@
     "────────────────────────────────────────────────────────────────────────────────"
     "This will put out the fire: delete the fire-drill namespace on 'cluster':"
     "  - namespace fire-drill and everything in it"
-    "  would run: kubectl delete namespace fire-drill --ignore-not-found --wait=false"]},
+    "  would run: kubectl delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"]},
   :extinguish-foreign-namespace
   {:result false,
    :confirmations [],
@@ -1028,7 +1028,7 @@
    :calls
    ["kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"
     "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --output=json"
-    "kubectl --context=ctx delete namespace fire-drill --ignore-not-found --wait=false"
+    "kubectl --context=ctx delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"
     "kubectl --context=ctx --request-timeout=30s get namespaces fire-drill --ignore-not-found --output=name"
     "kubectl --context=ctx --request-timeout=30s get events --all-namespaces --output=json"
     "kubectl --context=ctx --request-timeout=30s get persistentvolumeclaims --all-namespaces --output=json"
@@ -1050,7 +1050,7 @@
      "the fire-drill namespace may still exist, and the fire in it may still burn.\nCheck:   kubectl --context=ctx get namespace fire-drill\nA namespace stuck in Terminating waits on a finalizer of an object in it:\n         kubectl --context=ctx get all --namespace fire-drill\nRun this firebook again with --extinguish once that is resolved."}},
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --wait=false"
+    "  ▸ kubectl delete namespace fire-drill --ignore-not-found --interactive=false --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ the fire-drill namespace is gone"
     "    NOT verified within 0s: the fire-drill namespace is gone"

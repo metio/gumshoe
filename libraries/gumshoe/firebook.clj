@@ -67,6 +67,7 @@
             [clojure.string :as str]
             [gumshoe.catalog :as catalog]
             [gumshoe.detective :as detective]
+            [gumshoe.deletes :as deletes]
             [gumshoe.effect :as effect]
             [gumshoe.evpn :as evpn]
             [gumshoe.flags :as flags]
@@ -183,8 +184,8 @@
    For a firebook written as runbook/execute!; one written with `book`
    deletes it as an effect plan, behind a confirmation."
   [context]
-  (let [result (shell/execute "kubectl" (str "--context=" context)
-                              "delete" "namespace" drill-namespace "--ignore-not-found")]
+  (let [result (apply shell/execute "kubectl" (str "--context=" context)
+                     (deletes/args {:type "namespace" :name drill-namespace}))]
     (if-not (zero? (:exit result))
       (do (stdout/error (format "could not extinguish the fire:\n%s" (:err result))) false)
       (do (stdout/ok "fire extinguished, drill namespace deleted")
@@ -361,8 +362,8 @@
                   ;; forever; namespace-gone-check is the bounded wait, and
                   ;; its failure prints kubernetes-recovery
                   :effect (fn [{:keys [context]}]
-                            (effect/kubectl context "delete" "namespace" drill-namespace
-                                            "--ignore-not-found" "--wait=false"))
+                            (deletes/effect context {:type "namespace" :name drill-namespace}
+                                            {:wait false}))
                   :checks (fn [ctx] [(namespace-gone-check ctx)])
                   :recovery kubernetes-recovery}
      :expect (assoc expect

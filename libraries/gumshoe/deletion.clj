@@ -9,6 +9,7 @@
    at the end, so the book and its gumshoe.dsl form read the same way."
   (:require [clojure.string :as str]
             [gumshoe.cleanup :as cleanup]
+            [gumshoe.deletes :as deletes]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.pick :as pick]
             [gumshoe.shell :as shell]))
@@ -100,12 +101,16 @@
 ;; --- the dry run ----------------------------------------------------------------
 
 (defn dry-run-args
-  [{:keys [type namespace name]}]
-  [(str "--namespace=" namespace) "delete" type name "--dry-run=server"])
+  "The arguments of the server-side dry run of deleting ref (see
+   gumshoe.deletes/dry-run-args: a missing object is refused there)."
+  [ref]
+  (deletes/dry-run-args (select-keys ref [:type :namespace :name])))
 
 (defn delete-args
-  [{:keys [type namespace name]}]
-  [(str "--namespace=" namespace) "delete" type name "--wait=false"])
+  "The arguments of deleting ref without waiting for its finalizers; the
+   book's post-check is the bounded wait (see gumshoe.deletes/args)."
+  [ref]
+  (deletes/args (select-keys ref [:type :namespace :name]) {:wait false}))
 
 (defn dry-run-result
   "The outcome of a server-side dry run from its process map."

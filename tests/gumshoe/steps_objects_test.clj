@@ -19,8 +19,8 @@
   (objects/delete {:objects :targets :none "nothing of the release" :timeout :wait}))
 
 (deftest the-delete-step-deletes-each-object-without-waiting
-  (is (= [[:kubectl "ctx" "-n" "apps" "delete" "deployments" "web" "--ignore-not-found" "--wait=false"]
-          [:kubectl "ctx" "-n" "apps" "delete" "persistentvolumeclaims" "data" "--ignore-not-found" "--wait=false"]]
+  (is (= [[:kubectl "ctx" "--namespace=apps" "delete" "deployments" "web" "--ignore-not-found" "--interactive=false" "--wait=false"]
+          [:kubectl "ctx" "--namespace=apps" "delete" "persistentvolumeclaims" "data" "--ignore-not-found" "--interactive=false" "--wait=false"]]
          (effect/collect ((:effect step) {:context "ctx" :targets targets}))))
   (is (= ["delete deployments apps/web" "delete persistentvolumeclaims apps/data"]
          ((:items step) {:targets targets}))))

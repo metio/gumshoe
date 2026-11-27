@@ -56,10 +56,10 @@
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
-    "  ▸ kubectl --namespace=shop delete statefulset web --cascade=orphan --wait=false --request-timeout=30s"
+    "  ▸ kubectl --namespace=shop delete statefulset web --ignore-not-found --interactive=false --cascade=orphan --wait=false --request-timeout=30s"
     "Error from server (Forbidden): deleting statefulsets is denied"],
    :banner
-   "FAILED after 2 effects - stopped at: kubectl --namespace=shop delete statefulset web --cascade=orphan --wait=false --request-timeout=30s - the effects before it stay applied",
+   "FAILED after 2 effects - stopped at: kubectl --namespace=shop delete statefulset web --ignore-not-found --interactive=false --cascade=orphan --wait=false --request-timeout=30s - the effects before it stay applied",
    :recovery
    ["Recovery:"
     "  StatefulSet shop/web could not be deleted: it still exists with its old volume claim template,"
@@ -104,6 +104,8 @@
       "delete"
       "statefulset"
       "web"
+      "--ignore-not-found"
+      "--interactive=false"
       "--cascade=orphan"
       "--wait=false"
       "--request-timeout=30s"],
@@ -141,7 +143,7 @@
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
-    "  ▸ kubectl --namespace=shop delete statefulset web --cascade=orphan --wait=false --request-timeout=30s"
+    "  ▸ kubectl --namespace=shop delete statefulset web --ignore-not-found --interactive=false --cascade=orphan --wait=false --request-timeout=30s"
     "  ▸ kubectl --namespace=shop wait --for=delete statefulset/web --timeout=120s"
     "error: timed out waiting for the condition on statefulsets/web"],
    :banner
@@ -194,6 +196,8 @@
       "delete"
       "statefulset"
       "web"
+      "--ignore-not-found"
+      "--interactive=false"
       "--cascade=orphan"
       "--wait=false"
       "--request-timeout=30s"],
@@ -227,7 +231,7 @@
     "  - data-web-1"
     "  would run: kubectl --namespace=shop patch persistentvolumeclaims data-web-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "  would run: kubectl --namespace=shop patch persistentvolumeclaims data-web-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
-    "  would run: kubectl --namespace=shop delete statefulset web --cascade=orphan --wait=false --request-timeout=30s"
+    "  would run: kubectl --namespace=shop delete statefulset web --ignore-not-found --interactive=false --cascade=orphan --wait=false --request-timeout=30s"
     "  would run: kubectl --namespace=shop wait --for=delete statefulset/web --timeout=120s"
     "  would run: kubectl apply --filename - (with stdin)"],
    :banner "DRY RUN - nothing was changed, this was a rehearsal",
@@ -261,6 +265,8 @@
       "delete"
       "statefulset"
       "web"
+      "--ignore-not-found"
+      "--interactive=false"
       "--cascade=orphan"
       "--wait=false"
       "--request-timeout=30s"],
@@ -329,7 +335,7 @@
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
-    "  ▸ kubectl --namespace=shop delete statefulset web --cascade=orphan --wait=false --request-timeout=30s"
+    "  ▸ kubectl --namespace=shop delete statefulset web --ignore-not-found --interactive=false --cascade=orphan --wait=false --request-timeout=30s"
     "  ▸ kubectl --namespace=shop wait --for=delete statefulset/web --timeout=120s"
     "  ▸ kubectl apply --filename - (with stdin)"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
@@ -443,6 +449,8 @@
       "delete"
       "statefulset"
       "web"
+      "--ignore-not-found"
+      "--interactive=false"
       "--cascade=orphan"
       "--wait=false"
       "--request-timeout=30s"],
@@ -511,7 +519,7 @@
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
-    "  ▸ kubectl --namespace=shop delete statefulset web --cascade=orphan --wait=false --request-timeout=30s"
+    "  ▸ kubectl --namespace=shop delete statefulset web --ignore-not-found --interactive=false --cascade=orphan --wait=false --request-timeout=30s"
     "  ▸ kubectl --namespace=shop wait --for=delete statefulset/web --timeout=120s"
     "  ▸ kubectl apply --filename - (with stdin)"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
@@ -557,7 +565,7 @@
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
-    "  ▸ kubectl --namespace=shop delete statefulset web --cascade=orphan --wait=false --request-timeout=30s"
+    "  ▸ kubectl --namespace=shop delete statefulset web --ignore-not-found --interactive=false --cascade=orphan --wait=false --request-timeout=30s"
     "  ▸ kubectl --namespace=shop wait --for=delete statefulset/web --timeout=120s"
     "  ▸ kubectl apply --filename - (with stdin)"
     "❌ Error from server (Forbidden): applying statefulsets web is denied"],
@@ -610,6 +618,8 @@
       "delete"
       "statefulset"
       "web"
+      "--ignore-not-found"
+      "--interactive=false"
       "--cascade=orphan"
       "--wait=false"
       "--request-timeout=30s"],
@@ -680,6 +690,8 @@
       "delete"
       "statefulset"
       "web"
+      "--ignore-not-found"
+      "--interactive=false"
       "--cascade=orphan"
       "--wait=false"
       "--request-timeout=30s"],
@@ -748,7 +760,7 @@
     "── ⚡ Action ────────────────────────────────────────────────────────────────────"
     "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "  ▸ kubectl --namespace=shop patch persistentvolumeclaims data-web-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
-    "  ▸ kubectl --namespace=shop delete statefulset web --cascade=orphan --wait=false --request-timeout=30s"
+    "  ▸ kubectl --namespace=shop delete statefulset web --ignore-not-found --interactive=false --cascade=orphan --wait=false --request-timeout=30s"
     "  ▸ kubectl --namespace=shop wait --for=delete statefulset/web --timeout=120s"
     "  ▸ kubectl apply --filename - (with stdin)"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
@@ -954,10 +966,10 @@
     "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"
     "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
-    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
+    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --ignore-not-found --interactive=false --cascade=orphan"
     "Error from server (Forbidden): deleting statefulsets is denied"],
    :banner
-   "FAILED after 3 effects - stopped at: kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan - the effects before it stay applied",
+   "FAILED after 3 effects - stopped at: kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --ignore-not-found --interactive=false --cascade=orphan - the effects before it stay applied",
    :recovery
    ["Recovery:"
     "  Prometheus monitoring/k8s is PAUSED, and its volumeClaimTemplate already requests the new capacity:"
@@ -1014,6 +1026,8 @@
       "delete"
       "statefulset"
       "--selector=operator.prometheus.io/name=k8s"
+      "--ignore-not-found"
+      "--interactive=false"
       "--cascade=orphan"],
      :exit 1}],
    :stdout
@@ -1036,7 +1050,7 @@
     "  would run: kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"
     "  would run: kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "  would run: kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
-    "  would run: kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
+    "  would run: kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --ignore-not-found --interactive=false --cascade=orphan"
     "  would run: kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}}"],
    :banner "DRY RUN - nothing was changed, this was a rehearsal",
    :recovery []},
@@ -1103,6 +1117,8 @@
       "delete"
       "statefulset"
       "--selector=operator.prometheus.io/name=k8s"
+      "--ignore-not-found"
+      "--interactive=false"
       "--cascade=orphan"],
      :exit 0}
     {:argv
@@ -1150,7 +1166,7 @@
     "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"
     "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
-    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
+    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --ignore-not-found --interactive=false --cascade=orphan"
     "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ✅ verified: all 2 PVCs report capacity 20Gi"
@@ -1247,6 +1263,8 @@
       "delete"
       "statefulset"
       "--selector=operator.prometheus.io/name=k8s"
+      "--ignore-not-found"
+      "--interactive=false"
       "--cascade=orphan"],
      :exit 0}
     {:argv
@@ -1294,7 +1312,7 @@
     "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"
     "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
-    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
+    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --ignore-not-found --interactive=false --cascade=orphan"
     "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ✅ verified: all 2 PVCs report capacity 20Gi"
@@ -1366,6 +1384,8 @@
       "delete"
       "statefulset"
       "--selector=operator.prometheus.io/name=k8s"
+      "--ignore-not-found"
+      "--interactive=false"
       "--cascade=orphan"],
      :exit 0}
     {:argv
@@ -1413,7 +1433,7 @@
     "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"
     "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
-    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
+    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --ignore-not-found --interactive=false --cascade=orphan"
     "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ✅ verified: all 2 PVCs report capacity 20Gi"
@@ -1475,6 +1495,8 @@
       "delete"
       "statefulset"
       "--selector=operator.prometheus.io/name=k8s"
+      "--ignore-not-found"
+      "--interactive=false"
       "--cascade=orphan"],
      :exit 0}
     {:argv
@@ -1522,7 +1544,7 @@
     "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"
     "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
-    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
+    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --ignore-not-found --interactive=false --cascade=orphan"
     "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  🔶 all 2 PVCs report capacity 20Gi"
@@ -1579,6 +1601,8 @@
       "delete"
       "statefulset"
       "--selector=operator.prometheus.io/name=k8s"
+      "--ignore-not-found"
+      "--interactive=false"
       "--cascade=orphan"],
      :exit 0}
     {:argv
@@ -1626,7 +1650,7 @@
     "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"
     "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
-    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
+    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --ignore-not-found --interactive=false --cascade=orphan"
     "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}}"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ✅ verified: all 2 PVCs report capacity 20Gi"
@@ -1771,7 +1795,7 @@
     "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":true,\"storage\":{\"volumeClaimTemplate\":{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}}}}"
     "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-0 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
     "  ▸ kubectl --namespace=monitoring patch persistentvolumeclaims prometheus-k8s-db-prometheus-k8s-1 --type=merge --patch={\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}"
-    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --cascade=orphan"
+    "  ▸ kubectl --namespace=monitoring delete statefulset --selector=operator.prometheus.io/name=k8s --ignore-not-found --interactive=false --cascade=orphan"
     "  ▸ kubectl --namespace=monitoring patch prometheuses.monitoring.coreos.com k8s --type=merge --patch={\"spec\":{\"paused\":false}}"
     "Error from server (Forbidden): patching prometheuses.monitoring.coreos.com k8s is denied"],
    :banner
@@ -1833,6 +1857,8 @@
       "delete"
       "statefulset"
       "--selector=operator.prometheus.io/name=k8s"
+      "--ignore-not-found"
+      "--interactive=false"
       "--cascade=orphan"],
      :exit 0}
     {:argv

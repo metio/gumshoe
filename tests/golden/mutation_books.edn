@@ -2058,6 +2058,8 @@
      "delete"
      "deployments"
      "web"
+     "--ignore-not-found"
+     "--interactive=false"
      "--wait=false"]],
    :precondition {:result true, :out ""},
    :announce "Delete deployments shop/web",
@@ -2083,6 +2085,8 @@
      "delete"
      "deployments"
      "web"
+     "--ignore-not-found"
+     "--interactive=false"
      "--wait=false"]],
    :precondition
    {:result false,
@@ -2160,6 +2164,8 @@
      "delete"
      "deployments"
      "web"
+     "--ignore-not-found"
+     "--interactive=false"
      "--wait=false"]],
    :precondition
    {:result false,
@@ -2181,7 +2187,7 @@
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "  ▸ kubectl --namespace=shop delete orders.acme.cert-manager.io web-1 --wait=false"
+    "  ▸ kubectl --namespace=shop delete orders.acme.cert-manager.io web-1 --ignore-not-found --interactive=false --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ invalid order shop/web-1 is cleared"
     "    NOT verified within 0s: invalid order shop/web-1 is cleared"],
@@ -2191,7 +2197,7 @@
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
-    "      kubectl --namespace=shop delete orders.acme.cert-manager.io web-1 --wait=false"
+    "      kubectl --namespace=shop delete orders.acme.cert-manager.io web-1 --ignore-not-found --interactive=false --wait=false"
     "    its post-check did not hold"
     "  Look at:"
     "    the post-check messages above"
@@ -2209,6 +2215,8 @@
      "delete"
      "orders.acme.cert-manager.io"
      "web-1"
+     "--ignore-not-found"
+     "--interactive=false"
      "--wait=false"]],
    :precondition {:result true, :out ""},
    :announce "Recreate invalid orders [shop/web-1]",
@@ -2229,6 +2237,8 @@
      "delete"
      "orders.acme.cert-manager.io"
      "web-1"
+     "--ignore-not-found"
+     "--interactive=false"
      "--wait=false"]]},
   :refused
   {:stopped
@@ -2245,6 +2255,8 @@
      "delete"
      "orders.acme.cert-manager.io"
      "web-1"
+     "--ignore-not-found"
+     "--interactive=false"
      "--wait=false"]],
    :precondition
    {:result false,
@@ -2300,6 +2312,8 @@
      "delete"
      "orders.acme.cert-manager.io"
      "web-1"
+     "--ignore-not-found"
+     "--interactive=false"
      "--wait=false"]],
    :precondition
    {:result false,
@@ -2330,7 +2344,7 @@
     "────────────────────────────────────────────────────────────────────────────────"
     "This will delete Released PersistentVolumes - a 'Delete' reclaim policy also removes the backing storage on 'cluster':"
     "  - pv-1 (Delete reclaim policy)"
-    "  would run: kubectl delete persistentvolume pv-1 --wait=false"],
+    "  would run: kubectl delete persistentvolume pv-1 --ignore-not-found --interactive=false --wait=false"],
    :banner "DONE - nothing was changed",
    :recovery []},
   :empty
@@ -2341,7 +2355,7 @@
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "  ▸ kubectl delete persistentvolume pv-1 --wait=false"
+    "  ▸ kubectl delete persistentvolume pv-1 --ignore-not-found --interactive=false --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ PersistentVolume pv-1 is gone"
     "    NOT verified within 0s: PersistentVolume pv-1 is gone"],
@@ -2351,7 +2365,7 @@
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
-    "      kubectl delete persistentvolume pv-1 --wait=false"
+    "      kubectl delete persistentvolume pv-1 --ignore-not-found --interactive=false --wait=false"
     "    its post-check did not hold"
     "  Look at:"
     "    the post-check messages above"
@@ -2370,6 +2384,8 @@
      "delete"
      "persistentvolume"
      "pv-1"
+     "--ignore-not-found"
+     "--interactive=false"
      "--wait=false"]],
    :precondition {:result true, :out ""},
    :announce "Delete released PersistentVolumes [pv-1]",
@@ -2390,6 +2406,8 @@
      "delete"
      "persistentvolume"
      "pv-1"
+     "--ignore-not-found"
+     "--interactive=false"
      "--wait=false"]]},
   :refused
   {:stopped "refusing: PersistentVolume pv-1 is Bound, not Released"},
@@ -2406,6 +2424,8 @@
      "delete"
      "persistentvolume"
      "pv-1"
+     "--ignore-not-found"
+     "--interactive=false"
      "--wait=false"]],
    :precondition
    {:result false,
@@ -2462,6 +2482,8 @@
      "delete"
      "persistentvolume"
      "pv-1"
+     "--ignore-not-found"
+     "--interactive=false"
      "--wait=false"]],
    :precondition
    {:result false,
@@ -2492,7 +2514,7 @@
   {:result false,
    :out
    ["── ⚡ Action ────────────────────────────────────────────────────────────────────"
-    "  ▸ kubectl --namespace=shop delete persistentvolumeclaim data --wait=false"
+    "  ▸ kubectl --namespace=shop delete persistentvolumeclaim data --ignore-not-found --interactive=false --wait=false"
     "── 🔎 Post-check ────────────────────────────────────────────────────────────────"
     "  ❌ PersistentVolumeClaim shop/data is gone"
     "    NOT verified within 0s: PersistentVolumeClaim shop/data is gone"],
@@ -2502,7 +2524,7 @@
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
-    "      kubectl --namespace=shop delete persistentvolumeclaim data --wait=false"
+    "      kubectl --namespace=shop delete persistentvolumeclaim data --ignore-not-found --interactive=false --wait=false"
     "    its post-check did not hold"
     "  Look at:"
     "    the post-check messages above"
@@ -2527,6 +2549,8 @@
      "delete"
      "persistentvolumeclaim"
      "data"
+     "--ignore-not-found"
+     "--interactive=false"
      "--wait=false"]],
    :precondition {:result true, :out ""},
    :announce "Delete unused PersistentVolumeClaim shop/data",
@@ -2550,6 +2574,8 @@
      "delete"
      "persistentvolumeclaim"
      "data"
+     "--ignore-not-found"
+     "--interactive=false"
      "--wait=false"]]},
   :refused
   {:stopped
@@ -2570,6 +2596,8 @@
      "delete"
      "persistentvolumeclaim"
      "data"
+     "--ignore-not-found"
+     "--interactive=false"
      "--wait=false"]],
    :precondition
    {:result false,
@@ -2648,6 +2676,8 @@
      "delete"
      "persistentvolumeclaim"
      "data"
+     "--ignore-not-found"
+     "--interactive=false"
      "--wait=false"]],
    :precondition
    {:result false,

@@ -26,12 +26,12 @@
 (deftest recreating-orders-does-not-wait-on-their-finalizer
   (load-book! "runbooks/kubernetes/orders/recreate.clj")
   (let [recreate-effect (requiring-resolve 'runbooks.kubernetes.orders.recreate/recreate-effect)]
-    (is (= [[:kubectl "ctx" "--namespace=shop" "delete" "orders.acme.cert-manager.io" "o-1" "--wait=false"]]
+    (is (= [[:kubectl "ctx" "--namespace=shop" "delete" "orders.acme.cert-manager.io" "o-1" "--ignore-not-found" "--interactive=false" "--wait=false"]]
            (effect/collect (effect/as-plan (recreate-effect "ctx" ["shop/o-1"])))))))
 
 (deftest deleting-an-unused-claim-does-not-wait-on-pvc-protection
   (let [{:keys [effect]} (load-spec "runbooks/kubernetes/volumes/delete_unused.clj")]
-    (is (= [[:kubectl "ctx" "--namespace=shop" "delete" "persistentvolumeclaim" "data" "--wait=false"]]
+    (is (= [[:kubectl "ctx" "--namespace=shop" "delete" "persistentvolumeclaim" "data" "--ignore-not-found" "--interactive=false" "--wait=false"]]
            (plan-of effect {:context "ctx" :target "shop/data"})))))
 
 (defn- quietly [f]
