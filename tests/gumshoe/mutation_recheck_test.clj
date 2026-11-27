@@ -129,7 +129,7 @@
     (is (= "refusing: the database ConfigMap is gone\n" out))))
 
 (deftest recheck-without-a-judgement-is-a-spec-error
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":recheck is judged by :refusal or :precondition"
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":recheck is judged by :refusal, :problems or :precondition"
                         (run {:derive derive-secret :recheck derive-secret} moving))))
 
 (deftest help-mentions-the-check-for-recheck

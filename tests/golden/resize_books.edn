@@ -13,7 +13,7 @@
     "refusing: its spec changed after the confirmation (generation 3, now 4)"
     "❌ the change was confirmed but its precondition no longer holds - aborting before any action"],
    :banner
-   "ABORTED - the precondition no longer held after the confirmation - nothing was changed",
+   "ABORTED - the precondition no longer held after the confirmation; refused at \"enlarge volumes\" - nothing was changed",
    :recovery [],
    :confirmations
    [{:action
@@ -122,7 +122,7 @@
     "refusing: it was deleted after the confirmation"
     "❌ the change was confirmed but its precondition no longer holds - aborting before any action"],
    :banner
-   "ABORTED - the precondition no longer held after the confirmation - nothing was changed",
+   "ABORTED - the precondition no longer held after the confirmation; refused at \"enlarge volumes\" - nothing was changed",
    :recovery [],
    :confirmations
    [{:action
@@ -883,7 +883,7 @@
     "refusing: could not read what the precondition rests on - kubectl get did not answer: Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout"
     "❌ the change was confirmed but its precondition no longer holds - aborting before any action"],
    :banner
-   "ABORTED - the precondition no longer held after the confirmation - nothing was changed",
+   "ABORTED - the precondition no longer held after the confirmation; refused at \"enlarge volumes\" - nothing was changed",
    :recovery [],
    :confirmations
    [{:action
@@ -916,7 +916,7 @@
     "refusing: its spec changed after the confirmation (generation 7, now 8)"
     "❌ the change was confirmed but its precondition no longer holds - aborting before any action"],
    :banner
-   "ABORTED - the precondition no longer held after the confirmation - nothing was changed",
+   "ABORTED - the precondition no longer held after the confirmation; refused at \"resize the Prometheus storage\" - nothing was changed",
    :recovery [],
    :confirmations
    [{:action

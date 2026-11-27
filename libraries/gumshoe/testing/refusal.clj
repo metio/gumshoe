@@ -59,9 +59,18 @@
    the reason must return truthy. A reason is what the engine prints after
    \"refusing: \", or, for a read in the :derive phase that did not answer,
    \"could not read what the change rests on - <why>\". A :precondition
-   that returned false refuses with `unmet` in both judgements. There is no
-   way to accept any refusal: a broad expectation is how an unrelated
-   refusal passes the test.
+   that returned false refuses with `unmet` in both judgements. A vector of
+   strings names every message a refusal printing several - a :problems
+   gate - must print, in order and nothing else; a refusal that printed
+   one message is compared as that string, so [\"x\"] and \"x\" expect the
+   same. There is no way to accept any refusal: a broad expectation is how
+   an unrelated refusal passes the test.
+
+   :refusing-answer, when given, is what the read under test answers in
+   the refusing run instead of `unanswered`: a :problems or :refusal that
+   judges what a read returned is proven by one answer it refuses (a
+   rollout not finished) and one it lets through (the rollout done), over
+   the same read.
 
    The answered run also checks that :read was made, so a control whose
    read never happens cannot pass, and that :read matched exactly one
@@ -77,10 +86,12 @@
             [clojure.java.shell :as java-shell]
             [clojure.string :as str]
             [clojure.test :as test]
+            [gumshoe.change :as change]
             [gumshoe.flow :as flow]
             [gumshoe.kube-context :as kube-context]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
+            [gumshoe.offline :as offline]
             [gumshoe.shell :as shell]))
 
 ;; ---------------------------------------------------------------------------
@@ -233,6 +244,7 @@
   [calls read read-answer cluster context f]
   (let [capture (fn [_opts args]
                   (let [argv (argv-of args)]
+                    (offline/check! argv)
                     (swap! calls update :all conj argv)
                     (cond
                       (read argv) (do (swap! calls update :read conj argv) read-answer)
@@ -260,12 +272,25 @@
 
 (def ^:private unread-prefix "could not read what the change rests on - ")
 
+(defn- reason-shape
+  "A reason as a failure compares it: the one message of a reason that
+   names one as that string, several as their vector, anything else as it
+   is."
+  [why]
+  (let [messages (when (or (string? why) (sequential? why)) (change/refusal-messages why))]
+    (cond
+      (nil? messages) why
+      (= 1 (count messages)) (first messages)
+      :else messages)))
+
 (defn- printed-reason
-  "The reason a run printed: the text after the first \"refusing: \", else
-   the line saying a :derive read did not answer, else nil."
+  "The reason a run printed: the text after each \"refusing: \" (one
+   string for one line, their vector for several), else the line saying a
+   :derive read did not answer, else nil."
   [text]
-  (let [text (plain text)]
-    (or (some-> (re-find #"(?m)refusing: (.*)$" text) second str/trim)
+  (let [text (plain text)
+        refusing (mapv (comp str/trim second) (re-seq #"(?m)refusing: (.*)$" text))]
+    (or (when (seq refusing) (reason-shape refusing))
         (some->> (re-find (re-pattern (str "(?m)" (java.util.regex.Pattern/quote unread-prefix) "(.*)$")) text)
                  second str/trim (str unread-prefix)))))
 
@@ -284,7 +309,7 @@
     (cond
       (and (vector? result) (= ::threw (first result)))
       {:verdict :threw :reason (ex-message (second result))}
-      refusal {:verdict :refused :reason refusal}
+      refusal {:verdict :refused :reason (reason-shape refusal)}
       unread {:verdict :refused :reason (str unread-prefix unread)}
       done {:verdict :done}
       cache {:verdict :proceeds}
@@ -338,21 +363,25 @@
   [expected]
   (cond
     (string? expected) (pr-str expected)
+    (vector? expected) (str "exactly the messages " (pr-str expected))
     (instance? java.util.regex.Pattern expected) (str "a reason matching #\"" expected "\"")
     :else "a reason the given predicate accepts"))
 
 (defn- expected?
   [expected reason]
   (boolean
-   (when (string? reason)
-     (cond
-       (string? expected) (= expected reason)
-       (instance? java.util.regex.Pattern expected) (re-find expected reason)
-       :else (expected reason)))))
+   (cond
+     (vector? expected) (= (reason-shape expected) reason)
+     (not (string? reason)) (when (fn? expected) (expected reason))
+     (string? expected) (= expected reason)
+     (instance? java.util.regex.Pattern expected) (re-find expected reason)
+     :else (expected reason))))
 
 (defn- unanswered-failure
-  [read-name expected phase {:keys [verdict reason]}]
-  (let [must (format "while %s does not answer, the gate must refuse with %s" read-name (describe-expected expected))
+  [read-name refusing? expected phase {:keys [verdict reason]}]
+  (let [must (format "while %s %s, the gate must refuse with %s" read-name
+                     (if refusing? "gives the refusing answer" "does not answer")
+                     (describe-expected expected))
         when-said (phase-words phase)]
     (case verdict
       :refused (when-not (expected? expected reason)
@@ -396,7 +425,11 @@
      :answer   what the read under test answers in the answered run (see
                answer); required
      :refusal  the reason the unanswered run must refuse with: a string,
-               a regex or a predicate; required
+               a regex, a predicate, or a vector of every message it must
+               print; required
+     :refusing-answer
+               what the read under test answers in the refusing run, in
+               place of `unanswered` (see answer)
      :cluster  the answers to every other call, the same in both runs: a
                seq of [matcher answer] pairs, the first match winning, or
                a function of argv returning an answer or nil
@@ -414,17 +447,19 @@
     (throw (IllegalArgumentException. "polarity needs :read, a matcher naming the read under test")))
   (when-not (contains? opts :answer)
     (throw (IllegalArgumentException. "polarity needs :answer, what the read under test answers in the answered run")))
-  (when-not (or (string? refusal) (instance? java.util.regex.Pattern refusal) (fn? refusal))
-    (throw (IllegalArgumentException. "polarity needs :refusal, the reason the gate must refuse with - a string, a regex or a predicate")))
+  (when-not (or (string? refusal) (instance? java.util.regex.Pattern refusal) (fn? refusal)
+                (and (vector? refusal) (seq refusal) (every? #(and (string? %) (not (str/blank? %))) refusal)))
+    (throw (IllegalArgumentException. "polarity needs :refusal, the reason the gate must refuse with - a string, a regex, a predicate or a non-empty vector of messages")))
   (let [opts (assoc opts
                     :phases (or phases [:before :after])
                     :context (or context "polarity-control"))
         read-name (describe read)
-        runs {:unanswered (run spec opts unanswered)
+        refusing? (contains? opts :refusing-answer)
+        runs {:unanswered (run spec opts (if refusing? (answer (:refusing-answer opts)) unanswered))
               :answered (run spec opts (answer (:answer opts)))}
         failures (vec (concat
                        (call-failures read-name runs)
-                       (keep #(unanswered-failure read-name refusal % (get-in runs [:unanswered %])) (:phases opts))
+                       (keep #(unanswered-failure read-name refusing? refusal % (get-in runs [:unanswered %])) (:phases opts))
                        (keep #(answered-failure read-name % (get-in runs [:answered %])) (:phases opts))))]
     (assoc runs :holds? (empty? failures) :failures failures)))
 

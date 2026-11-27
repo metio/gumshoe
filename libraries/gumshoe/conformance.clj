@@ -28,7 +28,7 @@
      :no-verify \"the session is the result; nothing is left to check\"
 
    A destructive spec also needs a guard the engine judges again after the
-   confirmation - a :refusal, a :precondition, or a subject it reads again
+   confirmation - a :refusal, a :problems, a :precondition, or a subject it reads again
    and pins - or a stated reason for having none,
 
      :no-guard \"the effect itself refuses a target that moved\"
@@ -586,7 +586,8 @@
   "What a spec, as gumshoe.change/normalize maps it, lacks to act only on
    the target the operator confirmed, as messages. A destructive spec needs
    a guard the engine judges again after the confirmation: a :refusal (or a
-   :precondition, its alias), which judges the state read again then, or a
+   :problems or a :precondition, which normalize folds into it), which
+   judges the state read again then, or a
    subject (:subject, :subjects, :pin), which is read again and refused when
    it was deleted, replaced or changed. A spec with neither states why, as
    :no-guard \"why\". A spec that is not destructive needs no guard."
@@ -595,14 +596,14 @@
         reason? (contains? spec :no-guard)]
     (cond
       (and guarded? reason?)
-      ["declares a guard (:refusal, :precondition, :subject, :subjects or :pin) and a :no-guard reason for having none; drop the reason"]
+      ["declares a guard (:refusal, :problems, :precondition, :subject, :subjects or :pin) and a :no-guard reason for having none; drop the reason"]
 
       (and reason? (not (non-blank? no-guard)))
       [":no-guard must be a string saying why the spec judges nothing again after the confirmation"]
 
       (and (true? (:destructive? confirm)) (not guarded?) (not reason?))
       [(str "is destructive and judges nothing again after the confirmation, so it acts on a target whose state"
-            " moved while the operator read the prompt; declare a :refusal over that state, a :subject or"
+            " moved while the operator read the prompt; declare a :refusal or :problems over that state, a :subject or"
             " :subjects to pin, or :no-guard \"why\"")]
 
       :else [])))

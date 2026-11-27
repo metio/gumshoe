@@ -119,6 +119,7 @@
                    [gumshoe.mutation-recheck-test]
                    [gumshoe.mutation-reads-values-test]
                    [gumshoe.mutation-prejudge-test]
+                   [gumshoe.mutation-problems-test]
                    [gumshoe.mutation-done-test]
                    [gumshoe.playbook-done-test]
                    [gumshoe.playbook-prejudge-test]
@@ -432,6 +433,7 @@
                                                          'gumshoe.mutation-recheck-test
                                                          'gumshoe.mutation-reads-values-test
                                                          'gumshoe.mutation-prejudge-test
+                                                         'gumshoe.mutation-problems-test
                                                          'gumshoe.mutation-done-test
                                                          'gumshoe.playbook-done-test
                                                          'gumshoe.playbook-prejudge-test

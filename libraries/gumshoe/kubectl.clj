@@ -10,6 +10,7 @@
             [cheshire.core :as cheshire]
             [clojure.string :as str]
             [gumshoe.concurrent :as concurrent]
+            [gumshoe.offline :as offline]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
@@ -613,8 +614,12 @@
    it is bound and holds an answer for argv. Within one cache the first
    caller of an argv runs it and every concurrent caller waits for its
    result; a result that did not answer is dropped from the cache once
-   delivered, so the next caller reads again."
+   delivered, so the next caller reads again. Inside
+   gumshoe.offline/forbidding it refuses before the cache is consulted, so
+   code that may not read is refused for a read the cache would have
+   served as well as for one that would start kubectl."
   [argv]
+  (offline/check! argv)
   (if-let [cache *read-cache*]
     (let [pending (delay (apply shell/execute argv))
           entry (get (swap! cache #(if (contains? % argv) % (assoc % argv pending))) argv)
