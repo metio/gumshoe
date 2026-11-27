@@ -50,6 +50,23 @@ about Flux, in one place, registered through a single `plugin/provide!` in
   `(storage/playbook-with {:after-volumes [step]})`; the positions are
   `storage/positions`, and none but `:after-resume` lies after the release
   resumes, which refuses a destructive step.
+- **Retiring a release** - `runbooks/flux/retire.clj` is the opposite of
+  `clear_helm_storage`: it deletes a HelmRelease without a `helm uninstall`,
+  so the objects its release deployed survive because another writer now
+  manages them, and keeps the Helm storage for you to drop afterwards. It
+  suspends the HelmRelease, strips `finalizers.fluxcd.io` (keeping any other
+  finalizer) and deletes it, in that order. It refuses while an object the
+  stored manifest claims exists and nothing but Helm writes it (another
+  writer is a server-side apply by a field manager other than `helm` or
+  `helm-controller`, or, with repeated `--writer <manager>`, only the managers
+  named), while a claimed object or the storage cannot be read, while a Helm
+  action is running, and while a Kustomization or ResourceSet that is not
+  suspended still renders the HelmRelease. Its post-checks confirm the
+  HelmRelease is gone, every claimed object is still the same object (same
+  uid), and the storage still holds the revisions it read.
+  `gumshoe.tools.flux-retire/retire` takes a function of the context
+  returning the writer predicate, for a casebook that knows which controller
+  took over.
 
 ## Use
 

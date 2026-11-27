@@ -306,7 +306,9 @@ The generic runbooks under `runbooks/` act on nodes (cordon, drain, taints,
 apiserver restart) and workloads (scale, restart, pause, resume, rollback).
 Others roll back Helm releases, stamp or strip Helm's ownership on objects a
 chart must adopt in place (`runbooks/kubernetes/helm/stamp_ownership.clj` and
-`unstamp_ownership.clj`, see below), rename a ListenerSet's listeners to
+`unstamp_ownership.clj`, see below), retire a HelmRelease without an
+uninstall so the objects another writer took over survive
+(`tools/flux/runbooks/flux/retire.clj`, see below), rename a ListenerSet's listeners to
 the section names its routes attach to
 (`tools/gateway/runbooks/rename_listeners.clj --pick "ListenerSet <ns>/<name>"`,
 see below), drive CronJobs, remove finalizers, delete
@@ -1037,6 +1039,25 @@ mostly data:
   `helm/unstamp_ownership.clj` take `--namespace`, `--release` and repeated
   `--object <type>/<name>` (or `<type>/<namespace>/<name>`) and
   `--cluster-object <type>/<name>`;
+- the other half of a handover takes a release's objects out from under
+  Helm: deleting a HelmRelease that carries `finalizers.fluxcd.io` and is
+  not suspended runs `helm uninstall`, which deletes every object the stored
+  manifest claims, also those another controller now applies.
+  `tools/flux/runbooks/flux/retire.clj --namespace <ns> --name <name>`
+  suspends the HelmRelease, strips that finalizer and deletes it, in that
+  order, and leaves the Helm storage for you to drop once its post-checks
+  (HelmRelease gone, every claimed object still there with the same uid,
+  storage still holding the revisions read) pass. It refuses while a
+  claimed object exists that nothing but Helm writes - another writer is a
+  server-side apply by a manager other than `helm`/`helm-controller`, or
+  only the managers repeated `--writer` names - while a claimed object or the
+  storage did not answer, while a Helm action runs, and while an owner that
+  is not suspended still renders the HelmRelease. helm-controller skips the
+  uninstall of a suspended HelmRelease and adds a stripped finalizer back on
+  its next reconcile, so the suspend is what holds on a running controller
+  and the strip what holds when none acts on the delete.
+  `gumshoe.tools.flux-retire` keeps the plan, its four ordering predicates
+  and the payload decoding pure;
 - a route that reports `Accepted=False`/`NoMatchingParent` on a ListenerSet
   names a section no listener carries, often because an adopted ListenerSet
   kept numbered listeners (`https-0`) while the chart's routes ask for
