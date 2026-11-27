@@ -407,7 +407,8 @@
  {:absent
   {:action "start a Job from a CronJob outside its schedule",
    :destructive? false,
-   :items ["batch/nightly"],
+   :items
+   ["create Job batch/nightly-abcde from CronJob batch/nightly"],
    :step "start a Job from a CronJob outside its schedule",
    :plan
    [[:kubectl
@@ -432,7 +433,7 @@
     "  🔍 DRY RUN - nothing will be changed"
     "────────────────────────────────────────────────────────────────────────────────"
     "This will start a Job from a CronJob outside its schedule on 'cluster':"
-    "  - batch/nightly"
+    "  - create Job batch/nightly-abcde from CronJob batch/nightly"
     "  would run: kubectl --namespace=batch create job nightly-abcde --from cronjob/nightly"],
    :banner "DONE - nothing was changed",
    :recovery []},
@@ -453,7 +454,8 @@
   :permitted
   {:action "start a Job from a CronJob outside its schedule",
    :destructive? false,
-   :items ["batch/nightly"],
+   :items
+   ["create Job batch/nightly-abcde from CronJob batch/nightly"],
    :step "start a Job from a CronJob outside its schedule",
    :plan
    [[:kubectl
@@ -475,7 +477,8 @@
   {:result true,
    :out "▸ CronJob: batch/nightly",
    :action "start a Job from a CronJob outside its schedule",
-   :items ["batch/nightly"],
+   :items
+   ["create Job batch/nightly-abcde from CronJob batch/nightly"],
    :plan
    [[:kubectl
      "ctx"
@@ -488,7 +491,8 @@
   :refused
   {:action "start a Job from a CronJob outside its schedule",
    :destructive? false,
-   :items ["batch/nightly"],
+   :items
+   ["create Job batch/nightly-abcde from CronJob batch/nightly"],
    :step "start a Job from a CronJob outside its schedule",
    :plan
    [[:kubectl
@@ -509,7 +513,8 @@
   :spec-changed
   {:action "start a Job from a CronJob outside its schedule",
    :destructive? false,
-   :items ["batch/nightly"],
+   :items
+   ["create Job batch/nightly-abcde from CronJob batch/nightly"],
    :step "start a Job from a CronJob outside its schedule",
    :plan
    [[:kubectl
@@ -571,7 +576,8 @@
   :unanswered
   {:action "start a Job from a CronJob outside its schedule",
    :destructive? false,
-   :items ["batch/nightly"],
+   :items
+   ["create Job batch/nightly-abcde from CronJob batch/nightly"],
    :step "start a Job from a CronJob outside its schedule",
    :plan
    [[:kubectl

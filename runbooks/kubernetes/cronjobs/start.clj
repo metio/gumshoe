@@ -43,6 +43,9 @@
   :derive (fn [{:keys [target]}]
             (let [{:keys [name]} (kubectl/namespace-name-map target)]
               {:cronjob name :job-name (str name "-" (random-suffix))}))
+  :items (fn [{:keys [target job-name]}]
+           (let [{:keys [namespace]} (kubectl/namespace-name-map target)]
+             [(format "create Job %s/%s from CronJob %s" namespace job-name target)]))
   :announce (fn [{:keys [target]}] (format "Start CronJob %s" target))
   :effect (fn [{:keys [context target cronjob job-name]}]
             (let [{:keys [namespace]} (kubectl/namespace-name-map target)]

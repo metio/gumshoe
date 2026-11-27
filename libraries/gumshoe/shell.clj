@@ -4,7 +4,9 @@
 (ns gumshoe.shell
   "Thin wrappers around babashka.process for the common execution styles.
 
-   These never throw, except on a cancelled thread (see capture). babashka.process throws when the binary does not exist
+   These never throw, except on a cancelled thread (see capture) and inside
+   gumshoe.offline/forbidding, where every launch below refuses before it
+   starts anything. babashka.process throws when the binary does not exist
    or can not be launched (a missing tool, a permission error) - even with
    :continue true, which only suppresses non-zero exits. A book must be able
    to survive that: a failed launch becomes a result map with a non-zero exit
@@ -33,7 +35,8 @@
   (:require [babashka.process :as process]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [gumshoe.child-output :as child-output]))
+            [gumshoe.child-output :as child-output]
+            [gumshoe.offline :as offline]))
 
 (def child-env
   "Environment every child process gets on top of ours, winning over the
@@ -202,6 +205,7 @@
    thread, or one that could not be launched, contributed nothing to what the
    operator saw, and the reproducer would replay it as if it had."
   [opts args]
+  (offline/check! args)
   (refuse-when-interrupted! args)
   (let [proc (try (apply process/process (child-opts opts) args)
                   (catch Exception e e))]
@@ -234,6 +238,7 @@
    command; throws as babashka.process does when the program can not be
    launched, and records nothing."
   [opts & args]
+  (offline/check! args)
   (apply process/process (child-opts opts) args))
 
 (defn execute
@@ -263,6 +268,7 @@
   "Runs a streaming command without capturing its output. Never bounded: this
    is for the interactive, deliberately long-running foreground operations."
   [opts args]
+  (offline/check! args)
   (record! args)
   (try
     (apply process/shell (child-opts opts) args)
@@ -361,6 +367,7 @@
    A child that needs stderr to be a terminal - an interactive shell, a
    prompt drawn on stderr - must run through run-with-output instead."
   [& args]
+  (offline/check! args)
   (refuse-when-interrupted! args)
   (let [collected *warnings*
         out *err*
@@ -392,6 +399,7 @@
    back while the widget and the keyboard stay on the terminal. Never bounded: a
    person is answering. Returns the trimmed value, or nil on any trouble."
   [& args]
+  (offline/check! args)
   (record! args)
   (try
     (not-empty (str/trim (str (:out (apply process/shell
@@ -414,6 +422,7 @@
    null device belongs to neither. Returns the exit code (non-zero on any
    trouble); this is best-effort plumbing and never throws."
   [input & args]
+  (offline/check! args)
   (try
     (let [proc (apply process/process
                       (child-opts {:in input :out :write :out-file discard

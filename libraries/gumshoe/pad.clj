@@ -7,7 +7,8 @@
    gumshoe.summary) - the clipboard provider pastes the Markdown, the HedgeDoc
    provider posts it as a note."
   (:require [babashka.http-client :as http]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [gumshoe.offline :as offline]))
 
 (def ^:private severity-order {:critical 0 :warning 1 :info 2})
 (def ^:private severity-icon {:critical "🔥" :warning "🔶" :info "💡"})
@@ -44,6 +45,7 @@
    POST /new answers 302 to the new note, so the redirect is read rather than
    followed. Never throws."
   [hedgedoc-url markdown]
+  (offline/check! ["POST" (str hedgedoc-url "/new")])
   (try
     (let [response (http/post (str hedgedoc-url "/new")
                               {:headers {"Content-Type" "text/markdown"}
