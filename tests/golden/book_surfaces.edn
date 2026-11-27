@@ -682,6 +682,32 @@
    "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
    "                    findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help        Show this help message"]},
+ "runbooks/detectives/unmanaged.clj"
+ {:options
+  {:namespace
+   {:desc "The namespace to audit", :alias :n, :coerce :string},
+   :output
+   {:desc
+    "Report format: text, json, edn, or a plugin-registered format",
+    :alias :o,
+    :default "text",
+    :validate {:pred :fn, :ex-msg :fn},
+    :coerce :string}},
+  :help
+  ["Audits one namespace for objects no controller, Helm, Flux, Argo CD or StageSet manages"
+   ""
+   "Usage:"
+   "  bb <runbook> [options]"
+   ""
+   "Options:"
+   "  -n, --namespace   The namespace to audit"
+   "  -o, --output      Report format: text, json, edn, or a plugin-registered"
+   "                    format (default: text)"
+   "      --dry-run     Show what would change without changing anything"
+   "      --no-color    Disable colored output (also honors the NO_COLOR env var)"
+   "      --exit-codes  Exit codes: default (0/1), or detailed (2 = only critical"
+   "                    findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help        Show this help message"]},
  "runbooks/detectives/upgrade.clj"
  {:options
   {:output

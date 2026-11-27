@@ -41,3 +41,12 @@ path = "tests/fixtures/postgres/*.csv"
 precedence = "override"
 SPDX-FileCopyrightText = "The gumshoe Authors"
 SPDX-License-Identifier = "0BSD"
+
+# Command output in kubectl's format (api-resources rows and stderr, a
+# namespace's lists as JSON) can not carry a comment header, for the
+# unmanaged-objects detective's tests.
+[[annotations]]
+path = "tests/fixtures/unmanaged/*"
+precedence = "override"
+SPDX-FileCopyrightText = "The gumshoe Authors"
+SPDX-License-Identifier = "0BSD"
