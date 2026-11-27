@@ -23,6 +23,7 @@
                    [gumshoe.catalog-test]
                    [gumshoe.main-test]
                    [gumshoe.ceph-test]
+                   [gumshoe.ceph-mgr-hosts-test]
                    [gumshoe.ceph-upgrade-backups-test]
                    [gumshoe.ceph-upgrade-rehearsal-test]
                    [gumshoe.subresource-prerequisites-test]
@@ -326,6 +327,7 @@
                                                          'gumshoe.catalog-test
                                                          'gumshoe.main-test
                                                          'gumshoe.ceph-test
+                                                         'gumshoe.ceph-mgr-hosts-test
                                                          'gumshoe.ceph-upgrade-backups-test
                                                          'gumshoe.ceph-upgrade-rehearsal-test
                                                          'gumshoe.subresource-prerequisites-test

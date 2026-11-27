@@ -42,6 +42,35 @@
         doc (gumshoe-json/parse-or-nil out)]
     {:ok? (and (zero? exit) (some? doc)) :doc doc :exit exit :err err}))
 
+(defn ceph-answer
+  "{:ok? <the command answered> :out .. :exit .. :err ..} of a ceph command
+   whose output is text. :ok? is true only when ssh and ceph exited cleanly, so
+   an unreachable host (ssh exits 255 with no output) is told apart from a
+   command that answered with nothing to say."
+  [connection & args]
+  (let [{:keys [exit out err]} (apply shell/execute (ssh/ssh-args connection (ceph-args connection (cons "ceph" args))))]
+    {:ok? (= 0 exit) :out (str out) :exit exit :err err}))
+
+(defn first-answering
+  "The first of `hosts`, in order, whose (read host) answers, and every
+   attempt made on the way: {:host <the answering host, nil when none did>
+   :answer <its answer> :tried [{:host .. :answer ..} ..]}. An answer
+   counts when its :ok? is true; a read that throws counts as unanswered, its
+   message kept as :error. Hosts after the first that answers are never read,
+   so a healthy first host costs one read. read is injected, so the selection
+   is tested without a network."
+  [hosts read]
+  (loop [remaining (seq hosts)
+         tried []]
+    (if-let [host (first remaining)]
+      (let [answer (try (read host)
+                        (catch Exception e {:ok? false :error (or (ex-message e) (str e))}))
+            tried (conj tried {:host host :answer answer})]
+        (if (true? (:ok? answer))
+          {:host host :answer answer :tried tried}
+          (recur (next remaining) tried)))
+      {:host nil :answer nil :tried tried})))
+
 (defn ceph-json-result
   "{:ok? <the command answered> :doc <its parsed JSON>} of a ceph command.
    :ok? is true only when it exited cleanly and its output parsed, so a check
