@@ -66,8 +66,11 @@
 
 (def ^:private allowed
   "Spawn sites outside gumshoe.shell, each with the only command it starts.
-   stdout asks `stty size` for the terminal's width on an inherited stdin."
-  {"libraries/gumshoe/stdout.clj" #"ProcessBuilder\. \[\"stty\" \"size\"\]"})
+   stdout asks `stty size` for the terminal's width on an inherited stdin.
+   The refusal test helper names the spawning functions only to replace
+   them with one that refuses, and starts nothing."
+  {"libraries/gumshoe/stdout.clj" #"ProcessBuilder\. \[\"stty\" \"size\"\]"
+   "libraries/gumshoe/testing/refusal.clj" #"#'process/process refuse\s+#'process/shell refuse\s+#'process/sh refuse\s+#'java-shell/sh refuse"})
 
 (deftest nothing-starts-a-process-outside-the-shell-namespace
   (let [roots (concat ["libraries" "runbooks" "playbooks" "firebooks" "examples" "casebook-example"]
