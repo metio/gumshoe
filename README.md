@@ -102,8 +102,12 @@ on your VPN being up), so a resizer error surfaces live; on a machine with no
 file means no config, never an error. The first file found is used even when
 it is broken: a file that does not read as an EDN map is named on stderr with
 the parse error, nothing of it applies, the next file in the order is not
-read in its place, and the "suitable Kubernetes cluster" prerequisite refuses
-every cluster until it is fixed.
+read in its place, the "suitable Kubernetes cluster" prerequisite refuses
+every cluster until it is fixed, and every book that reaches a cluster is
+blocked, since the pre-hooks the file may require are unknown. A top-level
+`:require-known-cluster true` checks every book that reaches a cluster against
+the known clusters, whether or not it declares `:cluster-capabilities`, and
+fails that check when env.edn names no cluster.
 
 If you operate more than one environment, declare each as a named bundle under
 `:environments` and tie it to a cluster with `:select`. The active one is
@@ -648,8 +652,25 @@ unifying convenience.
   returning `{:allow? false :reason …}`. A pre-hook's `:change?` is true for
   every book that changes something, including mutation books that post nothing
   to the changelog; a bespoke book that posts nothing declares `:change? true`,
-  or `:change? (fn [opts] …)` when only a flag makes it change something. Both are bounded; pre-hooks fail *open*
-  so a broken gate never blocks emergency response. A post-hook runs after a
+  or `:change? (fn [opts] …)` when only a flag makes it change something. A
+  pre-hook also sees `:connection`, the kube context and cluster the run
+  pinned (`{:context :cluster :announce-as}`), and `:cluster-access`:
+  `:pinned` (the book acts on `:connection` only), `:unresolved` (it pins its
+  context but the kubeconfig names no current one), `:unpinned` (its
+  prerequisites show it reaches a cluster through the current context as each
+  call finds it, and `:connection` is nil) or `:none`. Both kinds of hook are
+  bounded; pre-hooks fail *open* by default, so a broken gate never blocks
+  emergency response. A hook registered as `{:hook f :name :estate/lock
+  :fail-closed? true}` fails *closed* instead: only `true` or `{:allow? true}`
+  lets the book run, and anything else, a throw or a timeout (`:timeout-ms`,
+  default 30000) blocks it with a message naming the hook; it is never asked
+  about an `:unresolved` run, which it blocks. An estate requires its lock in
+  env.edn with `:pre-hooks {:fail-closed [:estate/lock]}`: the named hooks run
+  fail-closed whatever they declare, every book is blocked while one of them is
+  not registered (its plugin did not load) or the `:pre-hooks` value is
+  malformed, and a later registration under the same name cannot make a
+  fail-closed hook fail-open. An env.edn that cannot be read blocks every book
+  that reaches a cluster, since the hooks it requires are unknown. A post-hook runs after a
   scan printed its report on stdout, so hooks, like announcers, print to
   stderr. Distinct from announcers (fire on confirmation) and prerequisites (a
   single book declares its own).

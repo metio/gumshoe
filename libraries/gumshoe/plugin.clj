@@ -53,7 +53,7 @@
                                :prerequisites (fn [opts] …)}}
      :summary-providers [provider …]                                    ; where findings go
      :themes        [theme …]                                           ; how output looks
-     :pre-hooks     [(fn [ctx] …) …]                                    ; gate a run (may veto)
+     :pre-hooks     [(fn [ctx] …) {:hook f :name :x/lock :fail-closed? true} …] ; gate a run (may veto)
      :post-hooks    [(fn [ctx] …) …]                                    ; observe a finished run
      :secrets       [provider …]                                        ; a password-manager backend
      :prerequisites {:change-window (fn [value opts] items)}            ; a custom gate type

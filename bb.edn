@@ -258,6 +258,7 @@
                    [gumshoe.robustness-test]
                    [gumshoe.engine-resilience-test]
                    [gumshoe.hooks-test]
+                   [gumshoe.pre-hook-lock-test]
                    [gumshoe.grafana-test]
                    [gumshoe.interact-test]
                    [gumshoe.fuzzy-finder-test]
@@ -569,6 +570,7 @@
                                                          'gumshoe.robustness-test
                                                          'gumshoe.engine-resilience-test
                                                          'gumshoe.hooks-test
+                                                         'gumshoe.pre-hook-lock-test
                                                          'gumshoe.grafana-test
                                                          'gumshoe.interact-test
                                                          'gumshoe.fuzzy-finder-test
