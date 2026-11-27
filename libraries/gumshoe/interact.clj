@@ -13,6 +13,7 @@
             [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.shell :as shell]
             [gumshoe.outcome :as outcome]
+            [gumshoe.render :as render]
             [gumshoe.stdout :as stdout]
             [gumshoe.theme :as theme]
             [gumshoe.ui :as ui]))
@@ -168,17 +169,10 @@
 
 (defn printable
   "Pure: s with every terminal escape sequence removed and every other control,
-   format (bidirectional overrides, zero-width characters) and line or paragraph
-   separator character turned into a space, runs of whitespace collapsed and the
-   ends trimmed. A label drawn from a book's text can then neither move the
-   cursor, recolour nor reorder what the operator reads next to it."
+   format and separator character turned into a space (see
+   gumshoe.render/printable)."
   [s]
-  (-> (str s)
-      (str/replace #"\u001b\[[0-?]*[ -/]*[@-~]" "")
-      (str/replace #"\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?" "")
-      (str/replace #"[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]" " ")
-      (str/replace #"\s+" " ")
-      str/trim))
+  (render/printable s))
 
 (defn consequence-label
   "Pure: the affirmative option of a destructive picker, naming what approving

@@ -99,6 +99,7 @@
                    [gumshoe.mutation-compare-test]
                    [gumshoe.mutation-books-test]
                    [gumshoe.namespace-finalize-test]
+                   [gumshoe.namespace-deletion-conditions-test]
                    [gumshoe.flux-reset-drift-test]
                    [gumshoe.change-books-test]
                    [gumshoe.resize-books-test]
@@ -412,6 +413,7 @@
                                                          'gumshoe.mutation-compare-test
                                                          'gumshoe.mutation-books-test
                                                          'gumshoe.namespace-finalize-test
+                                                         'gumshoe.namespace-deletion-conditions-test
                                                          'gumshoe.flux-reset-drift-test
                                                          'gumshoe.change-books-test
                                                          'gumshoe.resize-books-test
