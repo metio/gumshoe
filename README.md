@@ -344,6 +344,7 @@ bb run tools/velero/runbooks/scan.clj         # Velero storage, schedules, backu
 bb run tools/calico/runbooks/scan.clj         # tigera-operator components
 bb run tools/cnpg/runbooks/scan.clj           # CloudNativePG clusters, WAL archiving, connection ceiling (exec)
 bb run tools/prometheus/runbooks/scan.clj     # Prometheus, Alertmanager, ThanosRuler
+bb run tools/prometheus/runbooks/scrape_targets.clj  # why scrape targets are down, every shard read (needs get pods/proxy)
 bb run tools/thanos/runbooks/scan.clj         # Thanos Query: stores, rules
 bb run tools/loki/runbooks/scan.clj           # Loki readiness + ring health
 bb run tools/matrix/runbooks/scan.clj         # client/federation APIs, keys

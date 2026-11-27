@@ -288,6 +288,7 @@
                    [gumshoe.progress-live-line-test]
                    [gumshoe.prometheus-test]
                    [gumshoe.prometheus-recreate-test]
+                   [gumshoe.scrape-targets-test]
                    [gumshoe.statefulset-guard-test]
                    [gumshoe.cnpg-pvc-template-size-test]
                    [gumshoe.cnpg-terminated-pooler-test]
@@ -605,6 +606,7 @@
                                                          'gumshoe.progress-live-line-test
                                                          'gumshoe.prometheus-test
                                                          'gumshoe.prometheus-recreate-test
+                                                         'gumshoe.scrape-targets-test
                                                          'gumshoe.statefulset-guard-test
                                                          'gumshoe.cnpg-pvc-template-size-test
                                                          'gumshoe.cnpg-terminated-pooler-test
