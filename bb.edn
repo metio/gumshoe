@@ -50,6 +50,9 @@
                    [gumshoe.optional-type-discovery-test]
                    [gumshoe.reads-test]
                    [gumshoe.refusal-polarity-test]
+                   [gumshoe.offline-test]
+                   [gumshoe.plan-check-test]
+                   [gumshoe.plan-check-books-test]
                    [gumshoe.abort-exit-contract-test]
                    [gumshoe.strict-json-test]
                    [gumshoe.ceph-strict-json-test]
@@ -357,6 +360,9 @@
                                                          'gumshoe.optional-type-discovery-test
                                                          'gumshoe.reads-test
                                                          'gumshoe.refusal-polarity-test
+                                                         'gumshoe.offline-test
+                                                         'gumshoe.plan-check-test
+                                                         'gumshoe.plan-check-books-test
                                                          'gumshoe.abort-exit-contract-test
                                                          'gumshoe.strict-json-test
                                                          'gumshoe.ceph-strict-json-test

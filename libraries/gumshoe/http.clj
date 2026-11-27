@@ -9,7 +9,9 @@
    one complete JSON value."
   (:require [babashka.http-client :as http]
             [clojure.java.io :as io]
-            [gumshoe.json :as gumshoe-json])
+            [clojure.string :as str]
+            [gumshoe.json :as gumshoe-json]
+            [gumshoe.offline :as offline])
   (:import [java.io ByteArrayOutputStream InputStream]
            [java.nio.charset StandardCharsets]))
 
@@ -73,8 +75,10 @@
    the headers but not a whole body within the deadline (:status is then kept
    for the record). method is :get, :post, ...; opts takes :headers (merged
    over Accept: application/json), :query-params, and overrides of
-   default-timeouts. It never throws."
+   default-timeouts. It never throws, except inside
+   gumshoe.offline/forbidding, where it refuses before it connects."
   [method url opts]
+  (offline/check! [(str/upper-case (name method)) url])
   (let [{:keys [headers query-params timeout-ms deadline-ms max-bytes]} (merge default-timeouts opts)
         started (System/nanoTime)]
     (try
@@ -124,10 +128,12 @@
    would never satisfy a buffered read. Returns {:reachable, :status, :lines}
    with whatever arrived before the deadline, {:reachable, :status, :body} for a
    non-2xx (nil :body when the error page did not end within the deadline or
-   64 KiB), or {:reachable false, :error}; it never throws."
+   64 KiB), or {:reachable false, :error}; it never throws, except inside
+   gumshoe.offline/forbidding, where it refuses before it connects."
   ([url] (fetch-lines! url {}))
   ([url {:keys [headers deadline-ms max-lines]
          :or {deadline-ms 15000 max-lines 20000}}]
+   (offline/check! ["GET" url])
    (let [started (System/nanoTime)]
      (try
        (let [{:keys [status body]} (http/get url {:throw false

@@ -26,6 +26,7 @@
             [cheshire.core :as json]
             [clojure.string :as str]
             [gumshoe.config :as config]
+            [gumshoe.offline :as offline]
             [gumshoe.secrets :as secrets]
             [gumshoe.stdout :as stdout]))
 
@@ -67,7 +68,9 @@
       (str/blank? (str token)) (stdout/warn "matrix: no changelog token - skipping")
       (str/blank? (str room)) (stdout/warn "matrix: no :room configured - skipping")
       :else
-      (try
+      (do
+       (offline/check! ["POST" (format "%s/_matrix/client/r0/rooms/%s/send/m.room.message" homeserver room)])
+       (try
         (let [response (http/post (format "%s/_matrix/client/r0/rooms/%s/send/m.room.message" homeserver room)
                                   {:oauth-token token :throw false :timeout 10000
                                    :body (json/encode {:msgtype "m.text" :body plain
@@ -75,7 +78,7 @@
           (when-not (= 200 (:status response))
             (stdout/warn "matrix: could not post, status" (:status response))))
         (catch Exception e
-          (stdout/warn "matrix: could not reach the changelog room:" (ex-message e)))))))
+          (stdout/warn "matrix: could not reach the changelog room:" (ex-message e))))))))
 
 ;; --- built-in: webhook (Slack / Discord / Mattermost incoming webhooks) -----
 
@@ -91,7 +94,9 @@
 (defmethod announce-via :webhook
   [announcer system {:keys [actor]} message]
   (if-let [url (:url announcer)]
-    (try
+    (do
+     (offline/check! ["POST" url])
+     (try
       (let [response (http/post url {:headers {"Content-Type" "application/json"}
                                      :throw false :timeout 10000
                                      :body (json/encode (webhook-payload (:format announcer) system message actor))})]
@@ -99,7 +104,7 @@
         (when-not (<= 200 (or (:status response) 0) 299)
           (stdout/warn "webhook: could not post, status" (:status response))))
       (catch Exception e
-        (stdout/warn "webhook: could not post:" (ex-message e))))
+        (stdout/warn "webhook: could not post:" (ex-message e)))))
     (stdout/warn "webhook: no :url configured - skipping")))
 
 ;; --- fan-out ---------------------------------------------------------------
@@ -148,4 +153,5 @@
         (try
           (announce-via announcer system data message)
           (catch Exception e
+            (when (offline/forbidden? e) (throw e))
             (stdout/warn "announcer failed:" (ex-message e))))))))

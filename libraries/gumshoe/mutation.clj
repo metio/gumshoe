@@ -67,7 +67,8 @@
       :recheck  (fn [ctx] -> map)   ; optional, alias: read again after the confirmation
                                     ; and merged over ctx for :refusal and :precondition
                                     ; only, see below
-      :items    (fn [ctx] -> seq)   ; optional, overrides the confirmation items
+      :items    (fn [ctx] -> seq)   ; optional, overrides the confirmation items;
+                                    ; reads nothing, see below
       :pin      (fn [ctx] -> {:type :name :namespace? :facts? :compare?})  ; optional, see below
       :recovery \"...\" or (fn [ctx] -> string)   ; optional, printed under the
                                     ; FAILED banner when this change fails,
@@ -213,6 +214,19 @@
    with gumshoe.concurrent/values, whose futures
    carry *phase*, the cache and kubectl/*strict-reads* along.
 
+   :items and :effect compute the plan the operator approves - what the
+   confirmation lists and what the effect applies - from the one context
+   the :derive phase made, never from a reading of their own (planned).
+   Both run inside gumshoe.offline/forbidding, so a command either starts -
+   a kubectl get, an ssh, any local tool - or an HTTP request either sends
+   refuses the change before the confirmation, as \"refusing: its :items
+   reached outside the process: not running '<argv>': ...\", and nothing of
+   it ran. A plan computed from a second reading would show the operator one
+   state and apply another, most often exactly when the cluster is flaky.
+   What either needs to know is read by :reads, :values, :derive or a
+   :subject, and arrives in the context. gumshoe.plan-check tests that what
+   :items lists covers every object the effect touches.
+
    :refusal returns why the change must not run, or nil. The engine prints
    the reason as \"refusing: <reason>\" and stops, and only a change no
    refusal stopped reaches :precondition.
@@ -327,6 +341,7 @@
             [gumshoe.select :as select]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.kube-context :as kube-context]
+            [gumshoe.offline :as offline]
             [gumshoe.announce :as announce]
             [gumshoe.outcome :as outcome]
             [gumshoe.pick :as pick]
@@ -1073,11 +1088,40 @@
   (stdout/error (format "could not read what the change rests on - %s" why))
   false)
 
+(defn- offline-reason
+  [callback]
+  (format "%s computes the plan the operator approves, so it reads only the context the :derive phase made - move the read into :reads, :values or :derive" callback))
+
+(defn planned
+  "The plan of spec over ctx, the context its :derive phase made, as the
+   confirmation shows it and the effect applies it: {:items <the
+   confirmation items> :effect <what :effect returned>}, or {:refusal
+   <why>} when :items or :effect reached outside the process while it was
+   computed. Both run inside gumshoe.offline/forbidding and are realized
+   there, so a callback that runs a command - kubectl, ssh, a local tool -
+   or sends an HTTP request is refused before that command starts, and
+   neither can show or apply a reading other than the one :derive made.
+   :items defaults to the picks (gumshoe.select/items). Pure apart from
+   what the callbacks do."
+  [{:keys [select effect] items-fn :items} ctx target]
+  (letfn [(computed [callback f]
+            (try {:value (offline/forbidding (offline-reason callback) f)}
+                 (catch clojure.lang.ExceptionInfo e
+                   (if (offline/forbidden? e)
+                     {:refusal (format "its %s reached outside the process: %s" callback (ex-message e))}
+                     (throw e)))))]
+    (let [items (if items-fn
+                  (computed ":items" #(items-fn ctx))
+                  {:value (select/items (:mode select) target)})
+          plan (when-not (:refusal items) (computed ":effect" #(effect ctx)))]
+      (or (some #(when (:refusal %) {:refusal (:refusal %)}) [items plan])
+          {:items (:value items) :effect (:value plan)}))))
+
 (defn- run-prepared!
   "Runs spec over ctx, the context its :derive phase made with
    derive-cache: the judgement before the confirmation, then the change
    through gumshoe.flow."
-  [{:keys [select confirm announce effect verify] :as spec}
+  [{:keys [confirm announce verify] :as spec}
    {:keys [context cluster announce-as]} target announcement-data derive-cache ctx]
   (let [applied-before (outcome/applied-count)
         plan (volatile! nil)
@@ -1091,13 +1135,13 @@
                        refused (when (prejudges? spec) (prejudged-reason spec ctx pinned derive-cache))
                        refs (:refs ctx)
                        subjects-before (subjects-fingerprints refs (:objects ctx))
-                       items-fn (:items spec)]
-                   (if refused
-                     (do (refuse! refused) ::refused)
+                       {:keys [items] planned-refusal :refusal :as the-plan} (when-not refused (planned spec ctx target))]
+                   (if-let [why (or refused planned-refusal)]
+                     (do (refuse! why) ::refused)
                      (flow/change!
                       {:confirmation {:action (:action confirm)
                                       :target cluster
-                                      :items (if items-fn (items-fn ctx) (select/items (:mode select) target))
+                                      :items items
                                       :destructive? (:destructive? confirm)}
                        :precondition (let [guard (strict-precondition
                                                   (subjects-precondition
@@ -1108,7 +1152,7 @@
                        :confirmed? (:confirmed? spec)
                        :announce! (when announce
                                     #(announce/announce! announce-as announcement-data (announce ctx)))
-                       :effect (vreset! plan (effect ctx))
+                       :effect (vreset! plan (:effect the-plan))
                        :step (step-name spec)
                        :post-checks (when verify (verify ctx))})))
                  (catch Throwable e (failed!) (throw e)))]
@@ -1184,6 +1228,23 @@
     refusal (do (replay-held! printed) (refuse! refusal))
     unread (unread! unread)
     :else (some? cache)))
+
+(defn derived-context
+  "The context the :derive phase of spec makes for target on connection
+   ({:context .. :cluster ..}), as a run makes it - the subject and
+   subjects reads, :reads, :values and :derive, strict and with one fresh
+   read cache: {:ctx <the context>}, {:refusal <why>} when parse-pick
+   refuses target or the :derive would move the change off connection
+   (moved-connection), or {:unread <why>} when a read did not answer. It
+   asks nothing and judges nothing, so a test runs the real reads of a spec
+   once and hands the context to planned (see gumshoe.plan-check)."
+  [spec connection target opts]
+  (let [spec (change/normalize spec)
+        {:keys [ref refusal]} (parse-pick spec target)]
+    (if refusal
+      {:refusal refusal}
+      (pinned-to spec connection
+                 #(prepared spec connection target ref opts nil (kubectl/read-cache))))))
 
 (defn run-on!
   "Runs a mutation spec against an ALREADY-CHOSEN `target`, skipping the spec's own

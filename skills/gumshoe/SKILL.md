@@ -530,6 +530,22 @@ mostly data:
   the same shape, `{:doc ..}` or `{:unread "why"}`, and fails the run with
   "could not read the <type> of the cluster - <why>" instead of printing an
   all-clear;
+- a change's `:items` (what the confirmation and `--dry-run` list) and its
+  `:effect` (what runs) compute the plan from the one context the `:derive`
+  phase read, and read nothing themselves. The engine runs both inside
+  `gumshoe.offline/forbidding`: a kubectl, ssh or other command, or an HTTP
+  request, started from either refuses the change before the confirmation
+  with `refusing: its :items reached outside the process: not running
+  '<argv>': …`, and nothing of it ran. Move such a read into `:reads`,
+  `:values`, `:derive` or a `:subject`, and take the value from the
+  context. Test that the items list every object the effect touches with
+  `(gumshoe.plan-check/covers! spec {:target … :opts …})` inside a
+  `deftest`, with `shell/execute` stubbed as the cluster answers: it runs
+  `:derive` once, then `:items` and `:effect` over that context, and fails
+  naming each object missing from the items (`secrets shop/b`), each
+  effect whose objects it cannot tell (pass `:touches (fn [effect] ->
+  refs)` for those), or a read either callback made. Objects are compared
+  by namespace and name, not by type;
 - a post-check fails closed. A check about the state of an object (resumed,
   schedulable, unfenced, Ready) judges it through
   `(verify/object-holds? object pred)`, which is false for nil, because a
