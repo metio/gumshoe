@@ -33,6 +33,7 @@
             [gumshoe.flags :as flags]
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.reads.result :as result]
             [gumshoe.stdout :as stdout]))
 
 (defn nothing-selected?
@@ -57,7 +58,7 @@
   (try
     {:names (binding [kubectl/*strict-reads* true] (into [] (candidates context)))}
     (catch clojure.lang.ExceptionInfo e
-      (if (::kubectl/unread (ex-data e)) {:unread (ex-message e)} (throw e)))))
+      (if (result/unread-exception? e) {:unread (ex-message e)} (throw e)))))
 
 (defn unread!
   "Reports candidates that could not be listed; false, for a run's result."

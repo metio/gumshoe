@@ -179,6 +179,9 @@
     :checked
     [{:name "dns-transports",
       :description "The entry server answers over both IPv4 and IPv6"}
+     {:name "dns-zone",
+      :description
+      "The entry server answers the zone's NS query with nameservers"}
      {:name "dns-nameservers",
       :description
       "The zone has redundant, dual-stack reachable nameservers"}
@@ -198,6 +201,7 @@
       :probes ["www.example.org"]}]
     [:detectives
      ["dns-transports"
+      "dns-zone"
       "dns-nameservers"
       "dns-replication"
       "dns-probes"]
@@ -211,9 +215,9 @@
   "clean text"
   {:result true,
    :stdout
-   "  ✅ The entry server answers over both IPv4 and IPv6\n  ✅ The zone has redundant, dual-stack reachable nameservers\n  ✅ Every nameserver answers and serves the same SOA serial\n  ✅ Probe names resolve identically on every nameserver\n",
+   "  ✅ The entry server answers over both IPv4 and IPv6\n  ✅ The entry server answers the zone's NS query with nameservers\n  ✅ The zone has redundant, dual-stack reachable nameservers\n  ✅ Every nameserver answers and serves the same SOA serial\n  ✅ Probe names resolve identically on every nameserver\n",
    :stderr
-   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when names aren't resolving, mail is bouncing, or right after a nameserver change - transports, nameserver redundancy, SOA replication, and answer consistency across servers.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 4 checks passed\n",
+   "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when names aren't resolving, mail is bouncing, or right after a nameserver change - transports, nameserver redundancy, SOA replication, and answer consistency across servers.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n✅ no issues found - 5 checks passed\n",
    :calls
    [[:collect
      {:server "192.0.2.53",
@@ -221,6 +225,7 @@
       :probes ["www.example.org"]}]
     [:detectives
      ["dns-transports"
+      "dns-zone"
       "dns-nameservers"
       "dns-replication"
       "dns-probes"]
@@ -242,6 +247,9 @@
     :checked
     [{:name "dns-transports",
       :description "The entry server answers over both IPv4 and IPv6"}
+     {:name "dns-zone",
+      :description
+      "The entry server answers the zone's NS query with nameservers"}
      {:name "dns-nameservers",
       :description
       "The zone has redundant, dual-stack reachable nameservers"}
@@ -261,6 +269,7 @@
       :probes ["www.example.org"]}]
     [:detectives
      ["dns-transports"
+      "dns-zone"
       "dns-nameservers"
       "dns-replication"
       "dns-probes"]
@@ -274,7 +283,7 @@
   "finding text"
   {:result true,
    :stdout
-   "  dns-transports (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✅ 3 other checks came back clean: dns-nameservers, dns-replication, dns-probes\n",
+   "  dns-transports (1 finding)\n    🔶 WARNING  something to look at\n        ns/subject\n0 critical, 1 warning, 0 info\n✅ 4 other checks came back clean: dns-zone, dns-nameservers, dns-replication, dns-probes\n",
    :stderr
    "── 🔎 When this helps ───────────────────────────────────────────────────────────\n  Reach for this when names aren't resolving, mail is bouncing, or right after a nameserver change - transports, nameserver redundancy, SOA replication, and answer consistency across servers.\n── 🔬 Findings ──────────────────────────────────────────────────────────────────\n────────────────────────────────────────────────────────────────────────────────\n",
    :calls
@@ -284,6 +293,7 @@
       :probes ["www.example.org"]}]
     [:detectives
      ["dns-transports"
+      "dns-zone"
       "dns-nameservers"
       "dns-replication"
       "dns-probes"]

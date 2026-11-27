@@ -27,6 +27,7 @@
             [gumshoe.config :as config]
             [gumshoe.correlation :as correlation]
             [gumshoe.detectives.registry :as registry]
+            [gumshoe.evidence :as evidence]
             [gumshoe.flags :as flags]
             [gumshoe.fuzzy-finder :as fuzzy]
             [gumshoe.investigation :as investigation]
@@ -36,6 +37,7 @@
             [gumshoe.report :as report]
             [gumshoe.summary :as summary]
             [gumshoe.progress :as progress]
+            [gumshoe.reads.result :as result]
             [gumshoe.runbook :as runbook]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]
@@ -146,9 +148,11 @@
 
 (defn empty-subjects?
   "Whether one evidence value holds nothing to judge: nil, an empty list,
-   or a kubectl list document whose :items are empty."
+   a kubectl list document whose :items are empty, or a three-state result
+   of gumshoe.reads.result that is :absent or :unread."
   [v]
-  (or (nil? v)
+  (or (evidence/missing? v)
+      (and (result/result? v) (result/absent? v))
       (and (map? v) (contains? v :items) (empty? (:items v)))
       (and (coll? v) (not (map? v)) (empty? v))))
 
@@ -176,10 +180,11 @@
    and its silence is no more a pass than a refused read. An empty list
    answers, so a consulted read that came back empty still counts."
   [{:keys [requires judges joins consults]} evidence]
-  (boolean (or (and (seq requires) (every? #(nil? (get evidence %)) requires))
-               (and (seq joins) (some #(nil? (get evidence %)) joins))
-               (and (seq consults) (every? #(nil? (get evidence %)) consults))
-               (and (seq judges) (every? #(empty-subjects? (get evidence %)) judges)))))
+  (let [missing? #(evidence/missing? (get evidence %))]
+    (boolean (or (and (seq requires) (every? missing? requires))
+                 (and (seq joins) (some missing? joins))
+                 (and (seq consults) (every? missing? consults))
+                 (and (seq judges) (every? #(empty-subjects? (get evidence %)) judges))))))
 
 (defn mark-unread
   "The detectives, each that read nothing carrying :unread true, so a report

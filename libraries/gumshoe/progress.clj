@@ -28,6 +28,7 @@
    and gumshoe.render/live-line."
   (:refer-clojure :exclude [run!])
   (:require [clojure.string :as str]
+            [gumshoe.reads.result :as result]
             [gumshoe.render :as render]
             [gumshoe.stdout :as stdout]))
 
@@ -74,9 +75,6 @@
 
 (def ^:private settled #{:done :failed :unread :warned :skipped})
 
-(def ^:private unread-key
-  "The ex-data key gumshoe.kubectl marks a read that did not answer with."
-  :gumshoe.kubectl/unread)
 
 (defn- thrown-reason
   [^Throwable e]
@@ -100,7 +98,7 @@
   [returned thrown]
   (cond
     thrown
-    (if (unread-key (ex-data thrown))
+    (if (result/unread-exception? thrown)
       {:status :unread :ok? false :reason (str "could not read: " (thrown-reason thrown))}
       {:status :failed :ok? false :reason (str "threw: " (thrown-reason thrown))})
 

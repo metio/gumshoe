@@ -199,7 +199,8 @@
   (:require [clojure.string :as str]
             [gumshoe.flags :as flags]
             [gumshoe.offline :as offline]
-            [gumshoe.prerequisites :as prerequisites]))
+            [gumshoe.prerequisites :as prerequisites]
+            [gumshoe.reads.result :as result]))
 
 (def unmet
   "What a :refusal returns to refuse in the generic words of gumshoe.flow:
@@ -444,14 +445,14 @@
    something that is not a sequential collection, a message that is not a
    non-blank string, threw, or reached outside the process. It runs inside
    gumshoe.offline/forbidding, its result realized there. A strict read
-   that did not answer (an ex-info carrying :gumshoe.kubectl/unread) is
+   that did not answer (an ex-info result/unread-exception? recognises) is
    rethrown, so the engine refuses it in the words it uses for every guard."
   [problems ctx]
   (let [verdict (try
                   (problems-verdict (offline/forbidding problems-forbidden #(problems ctx)))
                   (catch clojure.lang.ExceptionInfo e
                     (cond
-                      (:gumshoe.kubectl/unread (ex-data e)) (throw e)
+                      (result/unread-exception? e) (throw e)
                       (offline/forbidden? e) {::malformed (str "its :problems reached outside the process: " (ex-message e))}
                       :else {::malformed (str "its :problems threw: " (ex-message e))}))
                   (catch Exception e

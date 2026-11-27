@@ -55,6 +55,7 @@
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.playbook :as playbook]
+            [gumshoe.reads.result :as result]
             [gumshoe.select :as select]
             [gumshoe.shell :as shell]
             [gumshoe.steps.flux :as flux-steps]
@@ -231,7 +232,7 @@
                :statefulsets statefulsets
                :volumes (release-volumes release-name release-namespace pvcs statefulsets)})))))
      (catch clojure.lang.ExceptionInfo e
-       (if (::kubectl/unread (ex-data e))
+       (if (result/unread-exception? e)
          {:unread (ex-message e)}
          (throw e))))))
 

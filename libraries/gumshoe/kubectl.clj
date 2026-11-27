@@ -11,6 +11,7 @@
             [clojure.string :as str]
             [gumshoe.concurrent :as concurrent]
             [gumshoe.offline :as offline]
+            [gumshoe.reads.result :as result]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
@@ -590,7 +591,7 @@
   [exit err]
   (ex-info (format "kubectl get did not answer: %s"
                    (or (not-empty (str/trim (str err))) (str "exit " exit)))
-           {::unread true}))
+           {::unread true :gumshoe.reads/unread true}))
 
 (defn answered?
   "Whether the result of a kubectl get answered: it exited cleanly and its
@@ -770,7 +771,7 @@
         (type-unserved? context type) {:items []}
         :else nil))
     (catch clojure.lang.ExceptionInfo e
-      (when-not (::unread (ex-data e))
+      (when-not (result/unread-exception? e)
         (throw e)))))
 
 (defn read-all
@@ -786,7 +787,7 @@
         {:doc doc}
         {:unread (format "the server has no %s resource" type)}))
     (catch clojure.lang.ExceptionInfo e
-      (if (::unread (ex-data e))
+      (if (result/unread-exception? e)
         {:unread (ex-message e)}
         (throw e)))))
 

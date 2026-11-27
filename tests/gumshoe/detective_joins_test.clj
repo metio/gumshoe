@@ -27,6 +27,7 @@
             [gumshoe.detectives.traefik :as traefik]
             [gumshoe.evidence :as evidence]
             [gumshoe.joins-support :as joins]
+            [gumshoe.reads.result :as result]
             [gumshoe.tools.jaas :as jaas]))
 
 ;; --- fixtures ---------------------------------------------------------------------
@@ -101,13 +102,20 @@
                                                :spec {:libraries [{:name "lib"} {:name "gone"}]}})
               jaas/jsonnetlibrary-type (items {:metadata (meta-of "app" "lib")})}})
 
+(defn- dns-answer
+  "A DNS read that answered with these records; none is :absent."
+  [& records]
+  (if (seq records)
+    (result/present {:source :dns} {:items (vec records) :status "NOERROR"})
+    (result/absent {:source :dns} {:items [] :status "NOERROR"})))
+
 (def ^:private dns-nameservers
   {:check (check-named dns/detectives "dns-nameservers")
    :joins ["nameservers" "addresses"]
    :answered {"zone" "example.org"
-              "nameservers" ["ns1.example.org" "ns2.example.org"]
-              "addresses" {"ns1.example.org" {:a ["192.0.2.1"] :aaaa ["2001:db8::1"]}
-                           "ns2.example.org" {:a ["192.0.2.2"] :aaaa []}}}})
+              "nameservers" (dns-answer "ns1.example.org" "ns2.example.org")
+              "addresses" {"ns1.example.org" {:a (dns-answer "192.0.2.1") :aaaa (dns-answer "2001:db8::1")}
+                           "ns2.example.org" {:a (dns-answer "192.0.2.2") :aaaa (dns-answer)}}}})
 
 (def ^:private services-check
   {:check (check-named services/detectives "services")
