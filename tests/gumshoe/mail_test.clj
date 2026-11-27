@@ -205,7 +205,8 @@
         (is (= [2500] @seen)))
       (testing "collect-evidence! passes :probe-timeout-ms to every probe"
         (reset! seen [])
-        (with-redefs [gumshoe.dns/query (fn [& _] [])]
+        (with-redefs [gumshoe.dns/lookup (fn [connection type name]
+                                           (gumshoe.reads.result/absent (gumshoe.dns/ref-of connection type name) {:items []}))]
           (mail/collect-evidence! {:domain "example.org" :host "mail.example.org"
                                    :dkim-selectors [] :probe-timeout-ms 1234}))
         (is (= (repeat (count mail/services) 1234) @seen))))))
@@ -236,6 +237,14 @@
       (is (not (connected? {:exit 1 :out "" :err "4007:error:8000006F:system library:BIO_connect:Connection refused\nconnect:errno=111\n"}))))))
 
 (deftest a-cname-in-the-address-answer-is-not-looked-up-as-an-address
-  (with-redefs [gumshoe.dns/query (fn [_ type _] (if (= "A" type) ["mx.provider.net." "203.0.113.5"] []))
-                gumshoe.dns/ptr-records (fn [_ ip] (when (= "203.0.113.5" ip) ["mail.example.org."]))]
-    (is (= [["203.0.113.5" "mail.example.org."]] (mail/ptr-evidence nil "mail.example.org")))))
+  (let [looked-up (atom [])]
+    (with-redefs [gumshoe.dns/lookup (fn [connection type name]
+                                       (swap! looked-up conj [type name])
+                                       (let [ref (gumshoe.dns/ref-of connection type name)]
+                                         (case type
+                                           "A" (gumshoe.reads.result/present ref {:items ["mx.provider.net." "203.0.113.5"]})
+                                           "PTR" (gumshoe.reads.result/present ref {:items ["mail.example.org."]}))))]
+      (let [r (mail/ptr-evidence nil "mail.example.org")]
+        (is (= ["203.0.113.5"] (keys (:addresses r))))
+        (is (= ["mail.example.org."] (:items (get (:addresses r) "203.0.113.5"))))
+        (is (= [["A" "mail.example.org"] ["PTR" "203.0.113.5"]] @looked-up))))))

@@ -30,6 +30,7 @@
             [gumshoe.opennebula :as opennebula]
             [gumshoe.phpstack :as phpstack]
             [gumshoe.promql :as promql]
+            [gumshoe.reads.result :as result]
             [gumshoe.restic :as restic]
             [gumshoe.runbook :as runbook]
             [gumshoe.fuzzy-finder :as fuzzy]
@@ -121,7 +122,20 @@
    "mail" {:path "runbooks/detectives/mail.clj"
            :opts {:domain "example.org" :host "mx.example.org" :server "192.0.2.53" :dkim-selectors ["default"]}
            :stubs (fn [evidence] {#'mail/collect-evidence! (recording :collect evidence)})
-           :evidence {"domain" "example.org" "host" "mx.example.org" "mx" [] "spf" [] "dmarc" [] "dkim" {} "ptr" [] "probes" []}
+           :evidence (let [dns (fn [type name & items]
+                                 (if (seq items)
+                                   (result/present (dns/ref-of {:server "192.0.2.53"} type name) {:items (vec items) :status "NOERROR"})
+                                   (result/absent (dns/ref-of {:server "192.0.2.53"} type name) {:items [] :status "NOERROR"})))]
+                       {"domain" "example.org" "host" "mx.example.org"
+                        "mx" (dns "MX" "example.org" "10 mx.example.org.")
+                        "spf" (dns "TXT" "example.org" "\"v=spf1 mx -all\"")
+                        "dmarc" (dns "TXT" "_dmarc.example.org" "\"v=DMARC1; p=reject\"")
+                        "dkim" (result/present {:source :mail :read :dkim :domain "example.org" :server "192.0.2.53" :selectors ["default"]}
+                                               {:selectors {"default" (dns "TXT" "default._domainkey.example.org" "\"v=DKIM1; k=rsa; p=AAAA\"")}})
+                        "ptr" (result/present {:source :mail :read :ptr :host "mx.example.org" :server "192.0.2.53"}
+                                              {:items ["192.0.2.25"]
+                                               :addresses {"192.0.2.25" (dns "PTR" "192.0.2.25" "mx.example.org.")}})
+                        "probes" (result/present {:source :mail :read :probes :host "mx.example.org"} {:items []})})
            :detective "mail-mx"}
    "fabric" {:path "runbooks/detectives/fabric.clj"
              :opts {:hosts "h1,h2" :vni "100"}

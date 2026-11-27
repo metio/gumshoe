@@ -5,10 +5,23 @@
   "Evidence collection for mail infrastructure. Two independent angles:
    deliverability records pulled from DNS (dig), and live protocol probes
    against the running services (openssl s_client / bash TCP). Pure parsing
-   and planning stay here; the detectives judge the evidence."
+   and planning stay here; the detectives judge the evidence.
+
+   Every value collect-evidence! reads is a three-state result of
+   gumshoe.reads.result. The MX, SPF and DMARC values are the results of
+   gumshoe.dns/lookup. The reverse DNS value (ptr-evidence) is the result
+   of the address query, carrying one PTR result per address under
+   :addresses; the DKIM value (dkim-evidence) carries one TXT result per
+   selector under :selectors; the service probes are a :present result
+   with the probe maps as :items. A read that depends on an input the
+   operator did not give - a domain, a host, a DKIM selector - is never
+   made, and its value is result/not-asked: :unread like a read that did
+   not answer, so no check passes on it, and marked so the report can say
+   which input was missing."
   (:require [clojure.string :as str]
             [gumshoe.concurrent :as concurrent]
             [gumshoe.dns :as dns]
+            [gumshoe.reads.result :as result]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
@@ -149,69 +162,123 @@
 ;; ---------------------------------------------------------------------------
 ;; evidence collection
 
+(def ^:private read-words
+  {:mx "the MX records"
+   :spf "the SPF record"
+   :dmarc "the DMARC record"
+   :dkim "the DKIM keys"
+   :ptr "the reverse DNS"
+   :probes "the service ports"})
+
+(defmethod result/describe :mail
+  [{:keys [read domain host selectors server]}]
+  (str (get read-words read (str "the " (name (or read :mail)) " read"))
+       (cond
+         domain (str " of " domain)
+         host (str " of " host)
+         (#{:mx :spf :dmarc :dkim} read) " of the mail domain"
+         (#{:ptr :probes} read) " of the mail host"
+         :else "")
+       (when (seq selectors) (str " (selector" (when (next selectors) "s") " " (str/join ", " selectors) ")"))
+       (when server (str " at " server))))
+
 (defn- address?
   [s]
   (boolean (re-matches #"\d{1,3}(\.\d{1,3}){3}|[0-9A-Fa-f:]*:[0-9A-Fa-f:.]*" s)))
 
+(defn- reasons-of
+  [results]
+  (str/join ", " (distinct (keep :reason results))))
+
 (defn ptr-evidence
-  "Each address the host resolves to, paired with its first PTR name: \"\"
-   when the server answered with no PTR record, nil when it did not answer.
-   nil as a whole when the address query did not answer, so the reverse-DNS
-   check is unread instead of passing on no addresses. dig lists a CNAME's
-   target before the addresses it leads to; that name is no address and has
-   no reverse record of its own, so it is skipped."
+  "The reverse DNS of host as a result. The address query decides the
+   state: :unread when it did not answer, :absent when it answered with no
+   address. When it answered with addresses, :addresses holds one PTR
+   result per address (sorted by address), each :present with the PTR
+   names as :items, :absent when that server answered with no PTR record,
+   or :unread when that query did not answer; the whole is :present, and
+   :unread only when no PTR query answered, so the check is unread instead
+   of reporting each address as unanswered. dig lists a CNAME's target
+   before the addresses it leads to; that name is no address and has no
+   reverse record of its own, so it is skipped."
   [server host]
-  (when-let [answers (dns/query {:server server} "A" host)]
-    (mapv (fn [address]
-            [address (when-let [names (dns/ptr-records {:server server} address)]
-                       (or (first names) ""))])
-          (filter address? answers))))
+  (let [connection {:server server}
+        a (dns/lookup connection "A" host)
+        addresses (when (result/present? a) (filterv address? (:items a)))]
+    (cond
+      (result/unread? a) a
+      (empty? addresses) (result/absent (:ref a) {:items [] :status (:status a)})
+      :else
+      (let [ptrs (into (sorted-map)
+                       (map (fn [address]
+                              [address (dns/lookup (assoc connection :reverse? true) "PTR" address)]))
+                       addresses)
+            ref (cond-> {:source :mail :read :ptr :host host} server (assoc :server server))]
+        (if (every? result/unread? (vals ptrs))
+          (result/unread ref (str "no PTR query answered: " (reasons-of (vals ptrs)))
+                         {:items addresses :addresses ptrs})
+          (result/present ref {:items addresses :addresses ptrs}))))))
 
 (defn- given?
   [s]
   (and (string? s) (not (str/blank? s))))
 
 (defn dkim-evidence
-  "Each selector's TXT answer keyed by selector, or nil when no selector
-   answered: nothing was read, so the DKIM check is unread instead of passing
-   on no keys. A map where some selectors answered keeps the others as nil,
-   which the check reports as unanswered."
-  [answers]
-  (when (some some? (vals answers))
-    answers))
+  "The DKIM keys as one result over answers, a map of selector to the TXT
+   result of its query, kept under :selectors. :present when at least one
+   selector answered, the others named there as :unread; :unread when none
+   answered, so the DKIM check is unread instead of passing on no keys; and
+   not-asked when there was no selector to ask about. ref names the read
+   (default {:source :mail :read :dkim} with the selectors)."
+  ([answers] (dkim-evidence {:source :mail :read :dkim} answers))
+  ([ref answers]
+   (let [selectors (into (sorted-map) answers)
+         ref (assoc ref :selectors (vec (keys selectors)))]
+     (cond
+       (empty? selectors) (result/not-asked (dissoc ref :selectors) "no DKIM selector was given")
+       (every? result/unread? (vals selectors))
+       (result/unread ref (str "no selector answered: " (reasons-of (vals selectors)))
+                      {:selectors selectors})
+       :else (result/present ref {:selectors selectors})))))
+
+(defn- not-asked
+  [read reason]
+  (fn [] (result/not-asked {:source :mail :read read} reason)))
 
 (defn collect-evidence!
   "Collects deliverability records and live protocol probes in parallel. Each
    probe is bounded by :probe-timeout-ms (default-probe-timeout-ms).
 
-   What is not probed is nil in the evidence: without a domain the MX, SPF,
-   DMARC and DKIM records, and without a host the reverse DNS and the service
-   probes. The checks reading them are then unread, never clean."
+   Every value is a result (see the namespace docstring). What is not
+   probed is result/not-asked, naming the input that was not given: without
+   a domain the MX, SPF, DMARC and DKIM records, without a host the reverse
+   DNS and the service probes. The checks reading them are then unread,
+   never clean, and the report says which input was missing."
   [{:keys [domain host server dkim-selectors probe-timeout-ms]
     :or {probe-timeout-ms default-probe-timeout-ms}}]
   (stdout/print-section "🔍 Evidence (dig + openssl)")
   (stdout/item :info (format "domain %s, host %s" (or domain "-") (or host "-")))
-  (let [q (fn [type name] (dns/query {:server server} type name))
+  (let [connection {:server server}
+        q (fn [type name] (dns/lookup connection type name))
         domain? (given? domain)
         host? (given? host)
-        unprobed (constantly nil)
-        _ (if host?
-            (stdout/item :info (format "probing %d service ports on %s" (count services) host))
-            (stdout/item :finding "no host given, so no service port and no reverse DNS is probed"))
-        _ (when-not domain?
-            (stdout/item :finding "no domain given, so no MX, SPF, DMARC or DKIM record is queried"))
+        no-domain "no domain was given"
+        no-host "no host was given"
+        _ (when host?
+            (stdout/item :info (format "probing %d service ports on %s" (count services) host)))
         [mx spf dmarc ptr dkim & probes]
         (concurrent/all
-         (into [(if domain? #(q "MX" domain) unprobed)
-                (if domain? #(q "TXT" domain) unprobed)
-                (if domain? #(q "TXT" (str "_dmarc." domain)) unprobed)
-                (if host? #(ptr-evidence server host) unprobed)
+         (into [(if domain? #(q "MX" domain) (not-asked :mx no-domain))
+                (if domain? #(q "TXT" domain) (not-asked :spf no-domain))
+                (if domain? #(q "TXT" (str "_dmarc." domain)) (not-asked :dmarc no-domain))
+                (if host? #(ptr-evidence server host) (not-asked :ptr no-host))
                 (if domain?
                   #(dkim-evidence
+                    (cond-> {:source :mail :read :dkim :domain domain} server (assoc :server server))
                     (into {} (map (fn [selector]
                                     [selector (q "TXT" (format "%s._domainkey.%s" selector domain))])
                                   dkim-selectors)))
-                  unprobed)]
+                  (not-asked :dkim no-domain))]
                (when host?
                  (map (fn [service] #(probe-service host service probe-timeout-ms)) services))))]
     {:now (java.time.Instant/now)
@@ -222,4 +289,6 @@
      "dmarc" dmarc
      "ptr" ptr
      "dkim" dkim
-     "probes" (when host? (vec probes))}))
+     "probes" (if host?
+                (result/present {:source :mail :read :probes :host host} {:items (vec probes)})
+                ((not-asked :probes no-host)))}))

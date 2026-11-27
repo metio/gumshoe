@@ -42,6 +42,7 @@
                    [gumshoe.config-docs-test]
                    [gumshoe.front-door-options-test]
                    [gumshoe.mail-unread-test]
+                   [gumshoe.read-not-asked-test]
                    [gumshoe.evpn-unread-test]
                    [gumshoe.dry-run-books-test]
                    [gumshoe.node-condition-polarity-test]
@@ -363,6 +364,7 @@
                                                          'gumshoe.config-docs-test
                                                          'gumshoe.front-door-options-test
                                                          'gumshoe.mail-unread-test
+                                                         'gumshoe.read-not-asked-test
                                                          'gumshoe.evpn-unread-test
                                                          'gumshoe.dry-run-books-test
                                                          'gumshoe.node-condition-polarity-test

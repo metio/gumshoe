@@ -4,8 +4,9 @@
 (ns gumshoe.dig-answers-test
   "What a dig run answers through the older entry points: records on
    NOERROR, [] on NXDOMAIN, and nil for a server that did not reply or failed
-   the query. The mail checks judge a missing record only on [], and report
-   nil as unanswered; the DNS checks read three-state results and judge a
+   the query. The mail checks read three-state results, and read the older
+   shapes as results too: a missing record only on [], nil as unanswered;
+   the DNS checks read three-state results and judge a
    missing record only on :absent. Names from cluster objects never reach dig
    as options."
   (:require [clojure.string :as str]
@@ -204,17 +205,23 @@
 
 (deftest ptr-evidence-keeps-an-unanswered-query-apart
   (testing "a failed address query leaves the whole read unanswered, so the check is unread"
-    (with-redefs [dns/query (fn [_ _ _] nil)]
-      (is (nil? (mail/ptr-evidence "ns" "mail.example.org")))
+    (with-redefs [dns/lookup (fn [_ _ _] unanswered)]
+      (is (result/unread? (mail/ptr-evidence "ns" "mail.example.org")))
       (is (:unread? (judged "mail-rdns" {"host" "mail.example.org" "ptr" (mail/ptr-evidence "ns" "mail.example.org")})))))
-  (testing "a PTR query that failed is nil, one answered without records is \"\""
-    (with-redefs [dns/query (fn [_ _ _] ["203.0.113.5" "203.0.113.6" "203.0.113.7"])
-                  dns/ptr-records (fn [_ address] (case address
-                                                    "203.0.113.5" nil
-                                                    "203.0.113.6" []
-                                                    "203.0.113.7" ["mail.example.org."]))]
-      (is (= [["203.0.113.5" nil] ["203.0.113.6" ""] ["203.0.113.7" "mail.example.org."]]
-             (mail/ptr-evidence "ns" "mail.example.org"))))))
+  (testing "each address keeps its PTR result: unread, absent or present"
+    (with-redefs [dns/lookup (fn [connection type name]
+                               (if (= "A" type)
+                                 (answered "203.0.113.5" "203.0.113.6" "203.0.113.7")
+                                 (do (assert (:reverse? connection))
+                                     (case name
+                                       "203.0.113.5" unanswered
+                                       "203.0.113.6" (answered)
+                                       "203.0.113.7" (answered "mail.example.org.")))))]
+      (let [r (mail/ptr-evidence "ns" "mail.example.org")]
+        (is (result/present? r))
+        (is (= {"203.0.113.5" :unread "203.0.113.6" :absent "203.0.113.7" :present}
+               (update-vals (:addresses r) result/state-of)))
+        (is (= [["203.0.113.5" unanswered]] (result/unread-in (:addresses r))))))))
 
 (deftest a-resource-list-under-a-mail-key-is-no-domain
   ;; a cluster serving a CRD that resolves as "domain" hands the mail checks
