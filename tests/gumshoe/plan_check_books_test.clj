@@ -3,7 +3,7 @@
 
 (ns gumshoe.plan-check-books-test
   "Every book of the mutation-books harness holds its dry-run plan to its
-   effect: over its permitted scenario's recorded cluster, gumshoe.plan-check
+   effect: over its permitted scenario's recorded cluster, gumshoe.testing.plan
    runs the book's :derive phase once and finds every object the effect
    plan touches named by the confirmation items, with :items and :effect
    reading nothing themselves."
@@ -11,7 +11,7 @@
             [clojure.test :refer [deftest is testing]]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation-books-test :as books]
-            [gumshoe.plan-check :as plan-check]
+            [gumshoe.testing.plan :as plan]
             [gumshoe.shell :as shell]
             [gumshoe.ssh :as ssh]))
 
@@ -28,7 +28,7 @@
 (def ^:private answer @#'books/answer)
 
 (defn- checked
-  "plan-check/check of the book at path over its permitted scenario, with
+  "plan/check of the book at path over its permitted scenario, with
    its spec passed through f and touches as the scenario's :touches."
   ([path] (checked path identity (get touches path)))
   ([path f touches]
@@ -40,7 +40,7 @@
          #(with-redefs [shell/execute (fn [& argv] (answer {:objects objects :answering? true :ssh ssh :dry-run dry-run} (vec argv)))
                         kubectl/current-context (constantly "ctx")
                         kubectl/current-cluster (constantly "cluster")]
-            (plan-check/check spec {:target target :opts opts :touches touches})))))))
+            (plan/check spec {:target target :opts opts :touches touches})))))))
 
 (deftest every-book-lists-what-its-effect-touches
   (is (<= 45 (count books/books)) "the harness still holds the books")

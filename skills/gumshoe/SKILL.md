@@ -539,7 +539,7 @@ mostly data:
   '<argv>': …`, and nothing of it ran. Move such a read into `:reads`,
   `:values`, `:derive` or a `:subject`, and take the value from the
   context. Test that the items list every object the effect touches with
-  `(gumshoe.plan-check/covers! spec {:target … :opts …})` inside a
+  `(gumshoe.plan/covers! spec {:target … :opts …})` inside a
   `deftest`, with `shell/execute` stubbed as the cluster answers: it runs
   `:derive` once, then `:items` and `:effect` over that context, and fails
   naming each object missing from the items (`secrets shop/b`), each
