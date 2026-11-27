@@ -292,7 +292,9 @@ its plugin namespace is listed under `:plugins` in `env.edn`. The focused
 
 The generic runbooks under `runbooks/` act on nodes (cordon, drain, taints,
 apiserver restart) and workloads (scale, restart, pause, resume, rollback).
-Others roll back Helm releases, drive CronJobs, remove finalizers, delete
+Others roll back Helm releases, stamp or strip Helm's ownership on objects a
+chart must adopt in place (`runbooks/kubernetes/helm/stamp_ownership.clj` and
+`unstamp_ownership.clj`, see below), drive CronJobs, remove finalizers, delete
 objects and volumes, renew certificates, recreate ACME orders, query etcd,
 silence alerts, export Grafana dashboards, and open netshoot debug sessions. `./run --list` is the complete
 and current list.
@@ -988,6 +990,24 @@ mostly data:
   manifest as data, and `refusal-unless-present`, `refusal-unless-absent` and
   `unread-refusal` give a `:refusal` line per polarity. The reads follow the
   run's pinned kube context and `kubectl/*read-cache*`;
+- an object `helm install` must adopt in place, because something else
+  created it under a name the chart renders, needs Helm's ownership stamp
+  first, or the install aborts on "invalid ownership metadata":
+  `gumshoe.helm-ownership` judges an object's `ownership` for a release
+  (`:stamped`, `:bare`, `:partial`, `:foreign`), builds one JSON merge patch
+  per object (`stamp-plan`, `unstamp-plan`, which throw on an object another
+  release owns) and reads the result back with two post-checks of opposite
+  polarity: `stamped?` holds only when every listed object was read, exists
+  and carries the stamp, `no-stamp-confirmed?` only when every read answered
+  and none carries it. `(not (stamped? ..))` is not a strip's post-check,
+  because it is true on silence. `gumshoe.steps.helm-ownership/stamp` and
+  `unstamp` take `(fn [ctx] -> {:release :release-namespace :objects
+  [refs]})` and return the acting parts of a step, each object an optional
+  pinned subject, so a casebook composes them with its own list through
+  `change/compose`; the books `helm/stamp_ownership.clj` and
+  `helm/unstamp_ownership.clj` take `--namespace`, `--release` and repeated
+  `--object <type>/<name>` (or `<type>/<namespace>/<name>`) and
+  `--cluster-object <type>/<name>`;
 - a test proves a refusal with `gumshoe.testing.refusal`, which runs the
   spec through the engine twice against a stubbed cluster: once with one
   read unanswered, where the change must refuse with the reason the test

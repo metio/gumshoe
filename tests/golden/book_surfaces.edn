@@ -1232,6 +1232,106 @@
    "      --exit-codes   Exit codes: default (0/1), or detailed (2 = only critical"
    "                     findings); env GUMSHOE_EXIT_CODES"
    "  -h, --help         Show this help message"]},
+ "runbooks/kubernetes/helm/stamp_ownership.clj"
+ {:options
+  {:cluster-object
+   {:desc
+    "A cluster-scoped object the chart renders, <type>/<name>, repeatable",
+    :coerce [:string]},
+   :namespace
+   {:desc
+    "The namespace the release is installed in, which the stamp records - interactive selection when omitted",
+    :coerce :string,
+    :alias :n},
+   :object
+   {:desc
+    "An object the chart renders, <type>/<name> in the release namespace or <type>/<namespace>/<name>, repeatable",
+    :coerce [:string]},
+   :release
+   {:desc "The Helm release that adopts the objects", :alias :r}},
+  :help
+  ["Stamps Helm ownership of a release onto existing objects, so helm install adopts them in place"
+   ""
+   "What it does:"
+   "  picks one release namespace (--namespace, or interactively)"
+   "  skips it, asking nothing, when it is already done and its post-checks already hold"
+   "  asks to confirm: stamp Helm ownership onto existing objects, so the next helm install of the release adopts them in place"
+   "  checks again right before acting that what was confirmed still holds"
+   "  announces the change to the changelog"
+   "  verifies the result before it reports success"
+   ""
+   "Needs:"
+   "  tools: kubectl, fzf"
+   "  kubectl get: namespaces"
+   ""
+   "Usage:"
+   "  bb <runbook> [options]"
+   ""
+   "Options:"
+   "  -n, --namespace       The namespace the release is installed in, which the"
+   "                        stamp records - interactive selection when omitted"
+   "  -r, --release         The Helm release that adopts the objects"
+   "      --object          An object the chart renders, <type>/<name> in the"
+   "                        release namespace or <type>/<namespace>/<name>,"
+   "                        repeatable"
+   "      --cluster-object  A cluster-scoped object the chart renders,"
+   "                        <type>/<name>, repeatable"
+   "      --dry-run         Show what would change without changing anything"
+   "      --no-color        Disable colored output (also honors the NO_COLOR env"
+   "                        var)"
+   "      --exit-codes      Exit codes: default (0/1), or detailed (2 = only"
+   "                        critical findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help            Show this help message"]},
+ "runbooks/kubernetes/helm/unstamp_ownership.clj"
+ {:options
+  {:cluster-object
+   {:desc
+    "A cluster-scoped object the chart renders, <type>/<name>, repeatable",
+    :coerce [:string]},
+   :namespace
+   {:desc
+    "The namespace the release is installed in, which the stamp records - interactive selection when omitted",
+    :coerce :string,
+    :alias :n},
+   :object
+   {:desc
+    "An object the chart renders, <type>/<name> in the release namespace or <type>/<namespace>/<name>, repeatable",
+    :coerce [:string]},
+   :release
+   {:desc "The Helm release that adopts the objects", :alias :r}},
+  :help
+  ["Strips Helm ownership of a release from objects, so the release no longer claims them"
+   ""
+   "What it does:"
+   "  picks one release namespace (--namespace, or interactively)"
+   "  skips it, asking nothing, when it is already done and its post-checks already hold"
+   "  asks to confirm: strip Helm ownership from objects, so the release no longer adopts or owns them"
+   "  checks again right before acting that what was confirmed still holds"
+   "  announces the change to the changelog"
+   "  verifies the result before it reports success"
+   ""
+   "Needs:"
+   "  tools: kubectl, fzf"
+   "  kubectl get: namespaces"
+   ""
+   "Usage:"
+   "  bb <runbook> [options]"
+   ""
+   "Options:"
+   "  -n, --namespace       The namespace the release is installed in, which the"
+   "                        stamp records - interactive selection when omitted"
+   "  -r, --release         The Helm release that adopts the objects"
+   "      --object          An object the chart renders, <type>/<name> in the"
+   "                        release namespace or <type>/<namespace>/<name>,"
+   "                        repeatable"
+   "      --cluster-object  A cluster-scoped object the chart renders,"
+   "                        <type>/<name>, repeatable"
+   "      --dry-run         Show what would change without changing anything"
+   "      --no-color        Disable colored output (also honors the NO_COLOR env"
+   "                        var)"
+   "      --exit-codes      Exit codes: default (0/1), or detailed (2 = only"
+   "                        critical findings); env GUMSHOE_EXIT_CODES"
+   "  -h, --help            Show this help message"]},
  "runbooks/kubernetes/namespaces/remove_finalizers.clj"
  {:options
   {:namespace
