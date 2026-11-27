@@ -1,7 +1,7 @@
 ;; SPDX-FileCopyrightText: The gumshoe Authors
 ;; SPDX-License-Identifier: 0BSD
 
-(ns gumshoe.plan-check
+(ns gumshoe.testing.plan
   "A test helper holding a mutation spec's dry-run plan to the evidence its
    effect runs on.
 
@@ -17,8 +17,8 @@
    stubs of gumshoe.shell and gumshoe.http so that a stubbed read is
    refused the same way a real one is.
 
-     (plan-check/check spec {:target \"shop/web\" :opts {..}})
-     (plan-check/covers! spec {:target \"shop/web\"})   ; inside a deftest
+     (plan/check spec {:target \"shop/web\" :opts {..}})
+     (plan/covers! spec {:target \"shop/web\"})   ; inside a deftest
 
    Objects are identified as {:type :namespace :name} refs.
 

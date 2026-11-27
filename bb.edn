@@ -50,9 +50,6 @@
                    [gumshoe.optional-type-discovery-test]
                    [gumshoe.reads-test]
                    [gumshoe.refusal-polarity-test]
-                   [gumshoe.offline-test]
-                   [gumshoe.plan-check-test]
-                   [gumshoe.plan-check-books-test]
                    [gumshoe.abort-exit-contract-test]
                    [gumshoe.strict-json-test]
                    [gumshoe.ceph-strict-json-test]
@@ -61,6 +58,9 @@
                    [gumshoe.local-port-permission-test]
                    [gumshoe.dry-run-allow-list-test]
                    [gumshoe.mutation-named-target-test]
+                   [gumshoe.offline-test]
+                   [gumshoe.plan-check-test]
+                   [gumshoe.plan-check-books-test]
                    [gumshoe.local-port-test]
                    [gumshoe.cancellation-test]
                    [gumshoe.summary-test]
@@ -360,9 +360,6 @@
                                                          'gumshoe.optional-type-discovery-test
                                                          'gumshoe.reads-test
                                                          'gumshoe.refusal-polarity-test
-                                                         'gumshoe.offline-test
-                                                         'gumshoe.plan-check-test
-                                                         'gumshoe.plan-check-books-test
                                                          'gumshoe.abort-exit-contract-test
                                                          'gumshoe.strict-json-test
                                                          'gumshoe.ceph-strict-json-test
@@ -371,6 +368,9 @@
                                                          'gumshoe.local-port-permission-test
                                                          'gumshoe.dry-run-allow-list-test
                                                          'gumshoe.mutation-named-target-test
+                                                         'gumshoe.offline-test
+                                                         'gumshoe.plan-check-test
+                                                         'gumshoe.plan-check-books-test
                                                          'gumshoe.local-port-test
                                                          'gumshoe.cancellation-test
                                                          'gumshoe.summary-test

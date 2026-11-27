@@ -2,7 +2,7 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.plan-check-test
-  "gumshoe.plan-check holds a spec's dry-run plan to its effect: it passes a
+  "gumshoe.testing.plan holds a spec's dry-run plan to its effect: it passes a
    spec whose :items list every object its effect touches, computed from
    the context its :derive phase read once, and fails a spec whose :items
    or :effect read the cluster themselves, whose :items leave an object
@@ -18,15 +18,15 @@
             [gumshoe.interact :as interact]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
-            [gumshoe.plan-check :as plan-check]
+            [gumshoe.testing.plan :as plan]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
 ;; --- what an effect touches ----------------------------------------------------------
 
-(defn- refs [effect & [touches]] (:refs (plan-check/touched effect touches)))
+(defn- refs [effect & [touches]] (:refs (plan/touched effect touches)))
 
-(defn- unidentified? [effect] (contains? (plan-check/touched effect) :unidentified))
+(defn- unidentified? [effect] (contains? (plan/touched effect) :unidentified))
 
 (deftest kubectl-effects-touch-the-objects-their-arguments-name
   (is (= [{:type "secrets" :namespace "shop" :name "a"} {:type "secrets" :namespace "shop" :name "b"}]
@@ -55,10 +55,10 @@
          (refs (effect/kubectl "ctx" "-n" "db" "exec" "pg-1" "--" "psql" "-c" "select 1")))))
 
 (deftest a-raw-api-path-touches-the-object-it-names
-  (is (= {:type "namespaces" :namespace nil :name "stuck"} (plan-check/raw-path-ref "/api/v1/namespaces/stuck/finalize")))
-  (is (= {:type "deployments" :namespace "shop" :name "web"} (plan-check/raw-path-ref "/apis/apps/v1/namespaces/shop/deployments/web/scale")))
-  (is (= {:type "nodes" :namespace nil :name "n1"} (plan-check/raw-path-ref "/api/v1/nodes/n1")))
-  (is (nil? (plan-check/raw-path-ref "/healthz")))
+  (is (= {:type "namespaces" :namespace nil :name "stuck"} (plan/raw-path-ref "/api/v1/namespaces/stuck/finalize")))
+  (is (= {:type "deployments" :namespace "shop" :name "web"} (plan/raw-path-ref "/apis/apps/v1/namespaces/shop/deployments/web/scale")))
+  (is (= {:type "nodes" :namespace nil :name "n1"} (plan/raw-path-ref "/api/v1/nodes/n1")))
+  (is (nil? (plan/raw-path-ref "/healthz")))
   (is (= [{:type "namespaces" :namespace nil :name "stuck"}]
          (refs (effect/kubectl-stdin "ctx" "{}" "replace" "--raw" "/api/v1/namespaces/stuck/finalize" "-f" "-")))))
 
@@ -120,24 +120,24 @@
 
 (deftest an-item-names-a-namespaced-object-by-namespace-and-name
   (let [web {:type "deployments" :namespace "shop" :name "web"}]
-    (is (plan-check/names? "Deployment shop/web" web))
-    (is (plan-check/names? "shop/web" web))
-    (is (plan-check/names? "scale web in namespace shop to 3." web))
-    (is (plan-check/names? "deployment/web (shop)" web))
+    (is (plan/names? "Deployment shop/web" web))
+    (is (plan/names? "shop/web" web))
+    (is (plan/names? "scale web in namespace shop to 3." web))
+    (is (plan/names? "deployment/web (shop)" web))
     (testing "negative controls"
-      (is (not (plan-check/names? "shop/webby" web)) "a longer name")
-      (is (not (plan-check/names? "web" web)) "no namespace")
-      (is (not (plan-check/names? "Deployment other/web" web)) "another namespace")
-      (is (not (plan-check/names? "shop/web-1 and shop/web-2" web))))))
+      (is (not (plan/names? "shop/webby" web)) "a longer name")
+      (is (not (plan/names? "web" web)) "no namespace")
+      (is (not (plan/names? "Deployment other/web" web)) "another namespace")
+      (is (not (plan/names? "shop/web-1 and shop/web-2" web))))))
 
 (deftest an-item-names-a-cluster-scoped-object-by-name
-  (is (plan-check/names? "n1" {:type "nodes" :name "n1"}))
-  (is (plan-check/names? "cordon node n1" {:type "nodes" :namespace nil :name "n1"}))
-  (is (not (plan-check/names? "n10" {:type "nodes" :name "n1"}))))
+  (is (plan/names? "n1" {:type "nodes" :name "n1"}))
+  (is (plan/names? "cordon node n1" {:type "nodes" :namespace nil :name "n1"}))
+  (is (not (plan/names? "n10" {:type "nodes" :name "n1"}))))
 
 (deftest namespace-and-name-must-share-one-item
-  (is (not (plan-check/listed? ["namespace shop" "delete web"] {:type "x" :namespace "shop" :name "web"})))
-  (is (plan-check/listed? ["namespace shop" "delete shop/web"] {:type "x" :namespace "shop" :name "web"})))
+  (is (not (plan/listed? ["namespace shop" "delete web"] {:type "x" :namespace "shop" :name "web"})))
+  (is (plan/listed? ["namespace shop" "delete shop/web"] {:type "x" :namespace "shop" :name "web"})))
 
 (deftest coverage-lists-each-touched-object-once-and-the-missing-ones
   (let [plan [(effect/kubectl "ctx" "-n" "shop" "annotate" "secrets" "a" "k=v")
@@ -147,7 +147,7 @@
     (is (= {:touched [{:type "secrets" :namespace "shop" :name "a"} {:type "secrets" :namespace "shop" :name "b"}]
             :missing [{:type "secrets" :namespace "shop" :name "b"}]
             :unidentified []}
-           (plan-check/coverage ["stamp shop/a"] plan nil)))))
+           (plan/coverage ["stamp shop/a"] plan nil)))))
 
 ;; --- a spec over a recorded cluster --------------------------------------------------
 
@@ -186,7 +186,7 @@
   [spec answers & [scenario]]
   (let [reads (atom 0)]
     (with-redefs [shell/execute (recorded answers reads)]
-      (assoc (plan-check/check spec (merge {:target "shop"} scenario)) :reads @reads))))
+      (assoc (plan/check spec (merge {:target "shop"} scenario)) :reads @reads))))
 
 (deftest a-plan-computed-from-the-derived-context-passes
   (let [{:keys [ok? items plan touched missing reads]} (check consistent [["a" "b"]])]
@@ -269,8 +269,8 @@
         spec (assoc consistent :items (constantly ["delete Secret shop/a"]))]
     (binding [test/report (fn [m] (swap! reports conj m))]
       (with-redefs [shell/execute (recorded [["a" "b"]] (atom 0))]
-        (plan-check/covers! spec {:target "shop"})
-        (plan-check/covers! consistent {:target "shop"})))
+        (plan/covers! spec {:target "shop"})
+        (plan/covers! consistent {:target "shop"})))
     (let [[failed passed] @reports]
       (is (= :fail (:type failed)))
       (is (str/includes? (:message failed) "secrets shop/b"))

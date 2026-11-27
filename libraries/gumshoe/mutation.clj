@@ -224,7 +224,7 @@
    it ran. A plan computed from a second reading would show the operator one
    state and apply another, most often exactly when the cluster is flaky.
    What either needs to know is read by :reads, :values, :derive or a
-   :subject, and arrives in the context. gumshoe.plan-check tests that what
+   :subject, and arrives in the context. gumshoe.testing.plan tests that what
    :items lists covers every object the effect touches.
 
    :refusal returns why the change must not run, or nil. The engine prints
@@ -1237,7 +1237,7 @@
    refuses target or the :derive would move the change off connection
    (moved-connection), or {:unread <why>} when a read did not answer. It
    asks nothing and judges nothing, so a test runs the real reads of a spec
-   once and hands the context to planned (see gumshoe.plan-check)."
+   once and hands the context to planned (see gumshoe.testing.plan)."
   [spec connection target opts]
   (let [spec (change/normalize spec)
         {:keys [ref refusal]} (parse-pick spec target)]
