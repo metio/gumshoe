@@ -74,6 +74,7 @@
                    [gumshoe.collect-books-test]
                    [gumshoe.helm-releases-test]
                    [gumshoe.helm-rollback-test]
+                   [gumshoe.helm-ownership-test]
                    [gumshoe.detective-capabilities-test]
                    [gumshoe.autoscaler-status-test]
                    [gumshoe.template-drift-test]
@@ -385,6 +386,7 @@
                                                          'gumshoe.collect-books-test
                                                          'gumshoe.helm-releases-test
                                                          'gumshoe.helm-rollback-test
+                                                         'gumshoe.helm-ownership-test
                                                          'gumshoe.detective-capabilities-test
                                                          'gumshoe.autoscaler-status-test
                                                          'gumshoe.template-drift-test
