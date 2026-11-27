@@ -204,7 +204,8 @@ deletes with `(gumshoe.deletes/effect context target options)`.
 ```json
 {"findings": [{"severity": "critical", "component": "...", "summary": "...",
                "hint": "...", "parent": "...", "since": "..."}],
- "checked": [{"name": "...", "description": "...", "capabilities": [...], "unread": true}],
+ "checked": [{"name": "...", "description": "...", "capabilities": [...], "unread": true,
+              "not-asked": ["no host was given"], "reasons": ["could not read ..."]}],
  "summary": {"critical": 1, "warning": 0, "info": 0}}
 ```
 
@@ -234,7 +235,14 @@ deletes with `(gumshoe.deletes/effect context target options)`.
   refused the read, or because the scope it judges selected no subjects, or
   because one of the reads it joins did not answer, so an empty finding list
   from it proves nothing; its only findings are ones naming a read that did
-  not answer. Say so when you report a clean result.
+  not answer. Say so when you report a clean result. An unread entry with
+  `not-asked` read nothing because an input it needs was not given (a flag
+  the operator did not pass); the list says which, and passing it is the
+  fix. `reasons` names each read that was asked and did not answer, with
+  its reason (`could not read MX example.org at 192.0.2.53 (SERVFAIL)`);
+  that is a failing source, not a missing flag. An entry can carry both.
+  The text report lists the not-asked checks on their own line ("judged
+  nothing because an input was not given").
 - A book that judges against values from its options or env.edn names a
   missing one on stderr. The fabric detective without gateway VTEPs marks
   `evpn-gateway-only-mac` `unread`, adds an `evpn-inputs` warning naming it,
@@ -277,7 +285,7 @@ The detectives compose from one domain to the whole cluster:
 | `runbooks/detectives/observability.clj` | Prometheus, Alertmanager, ThanosRuler |
 | `tools/prometheus/runbooks/scrape_targets.clj` | the opt-in `:proxy` scope: every down scrape target of every Prometheus (`scrape-targets`, warning, component `<namespace>/<name> shard <n> <scrape pool>`), its `class` read from `lastError` - `dropped` (nothing answered the connection: policy or routing), `refused` (nothing listens: the workload), `above-transport` (connected, then TLS, auth, path, status or a scrape limit), `timed-out` (`context deadline exceeded` and kin, which do not say whether the connection was made), `lookup` (the host name did not resolve) or `unknown` (quoted, never guessed) - with a hint per class. It reads each shard's `/api/v1/targets?state=active` from one ready replica through the pod proxy (`kubectl get --raw`, so it needs `get` on `pods/proxy`), falls back to the next ready replica, and reports a shard none answered, or with no ready pod, as critical (`scrape-target-shards`) while judging the others; both checks are unread when the Prometheus objects could not be listed. A casebook puts its own next steps over the defaults with `(gumshoe.detectives.scrape-targets/detectives-with {:hints {:dropped (fn [target] ..)} :extra-rules [..]})` |
 | `runbooks/detectives/dns.clj` | nameservers, SOA replication, answer consistency; an NS query the entry server did not answer is a `dns-zone` warning naming the status (`could not read NS example.org at 192.0.2.53 (REFUSED)`) and leaves the per-nameserver checks unread, NXDOMAIN reads "zone does not exist on the entry server", and NOERROR without NS records "zone has no NS records" |
-| `runbooks/detectives/mail.clj` | MX, SPF, DKIM, DMARC, rDNS, live SMTP/POP3/IMAP with TLS; without `--host` the services and rDNS checks are unread and no port is probed, without `--domain` the record checks are, and `mail-dkim` is unread when no selector answered |
+| `runbooks/detectives/mail.clj` | MX, SPF, DKIM, DMARC, rDNS, live SMTP/POP3/IMAP with TLS; without `--host` the services and rDNS checks are unread with `not-asked` `no host was given` and no port is probed, without `--domain` the record checks are (`no domain was given`); a DNS server that did not answer leaves a check unread with `reasons` instead. `mail-dkim` is unread when no selector answered, and `mail-rdns` when the address query or every PTR query did not answer; an address whose own PTR query did not answer is an info finding, never "has no PTR record", and a host whose address query answered with no address is a warning |
 | `runbooks/detectives/fabric.clj` | EVPN-VXLAN MAC ownership, over SSH; each `evpn-fdb-conflict` finding carries `local-uptime`, `bgp-route` (`present`/`absent`/`unread`) and `classification` (`live-misadvertisement`/`orphan`/`unknown`), and `tap-learning` and `tap-flood` (`on`/`off`/`unread`, read from the tap's own `linkinfo.info_slave_data` in `ip -d -j link show`), and its hint states the black hole as fact only when the tap reads `off`; each `evpn-static-fdb` finding is one entry with `host`, `dev`, `vni`, `mac`, `dst` and `destination` (`static`, `learned`, `local-port`, or `unread` when no row names a VTEP), its `rows` with how often one read printed each, and their `count`; each `evpn-orphan-fdb` finding names one host and one VTEP no BGP path advertises (read with `show bgp vni <vni> vtep <vtep> json`, or the single-table `show bgp l2vpn evpn route vni … vtep …` on FRR before 8.5), its `count` of learned `dst` rows naming that VTEP and the distinct `macs`, with or without a local tap, `local-tap-macs` (the collisions `evpn-fdb-conflict` reports), `owned-elsewhere` (guests another scanned host holds as local, which makes it critical), and each row and `bridge-rows` with its delete command; a VTEP whose path count could not be read gives a warning that its rows are unjudged, never an orphan, and the hint of an orphan finding names the change book `runbooks/fabric/clear_orphan_fdb.clj`, which takes `--vtep` and `--hosts` (else env.edn's `:evpn :hosts`, failing without either), deletes per MAC the `dst` row and its bridge rows on the overlay device, one command each with a row already gone counted as deleted, only on hosts where BGP read 0 paths for the VTEP in every VNI its rows lie in, lists a host whose table or count did not answer as unjudged and deletes nothing there, refuses a VTEP any host reads a path for, keeps tap rows and static or permanent pins, reads every host again after the confirmation and refuses when the VTEP is advertised again or a touched host's rows changed, post-checks each touched host with `evpn-orphan-fdb` and `evpn-fdb-conflict`, and skips a VTEP already cleared as done; the fabric detective takes `--hosts`, `--vni`, `--gateway-vteps` and `--guest-mac-prefixes`, each overriding env.edn's `:evpn` value; it also reads every VNI a host's VXLAN devices carry (`ip -d -j link show type vxlan`) and `evpn-vni-coverage` names those beyond the configured ones as info, while `--configured-vnis-only` reads only the configured VNIs and gives each host carrying another one a warning that its verdict is incomplete; a device list that did not answer, or a device listing no VNI, is a warning too; when no host answered, the checks over the MAC and fdb tables are unread |
 
 Posture findings describe risks that may be deliberate choices, so they run
@@ -493,7 +501,13 @@ mostly data:
   NOERROR without records absent with the `:status` kept, any other status,
   no header, a failed dig or a name dig may not be asked about unread). The
   engine and `evidence/joined?` count an `:unread` result as a read that did
-  not answer, like nil. Judge with `present?`/`absent?`/`unread?` instead of
+  not answer, like nil (`joined?` is `evidence/answered?` over each read).
+  A read the collection never made because an input was not given is
+  `(result/not-asked ref "no domain was given")`: `:unread` with
+  `:not-asked true`, so every gate refuses it as it refuses a failed read,
+  and the report marks the check `not-asked` with the reason instead of
+  calling it unread for a failing source. Collect it in place of nil and
+  print nothing about it during collection. Judge with `present?`/`absent?`/`unread?` instead of
   `(and (some? x) (empty? x))`, and name the read in a finding with
   `result/unread-line-of`. `object!`, `items!` and `value!` throw an
   exception carrying `:gumshoe.reads/unread` and `:gumshoe.kubectl/unread`;

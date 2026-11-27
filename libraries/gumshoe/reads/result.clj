@@ -17,6 +17,12 @@
    :items on :present (one or more) and :absent (none, an empty vector).
    A source may add keys of its own (:status, :unserved).
 
+   A read that was never made, because an input it needs was not given, is
+   :unread with :not-asked true (built by not-asked, told apart by
+   not-asked?). It stays inside the three states on purpose: every gate
+   that refuses an unanswered read refuses it as well, and only a report
+   that wants to say why nothing was read looks at the flag.
+
    The ref names what was read and is the source's own data. describe turns
    it into the words an operator reads; a ref without a :source is described
    as a type, a namespace and a name, and a source with other words for its
@@ -164,6 +170,24 @@
   ([ref reason] (unread ref reason nil))
   ([ref reason extra] (merge {:state :unread :ref ref :reason reason} extra)))
 
+(defn not-asked
+  "An :unread result for a read that was never made, because an input it
+   needs was not given: reason says which (\"no domain was given\"). It
+   carries :not-asked true and is :unread in every other respect, so each
+   gate that refuses a read that did not answer refuses this one too, and
+   no check passes on a question nobody asked. Tell it apart with
+   not-asked? where the report should say why nothing was read."
+  ([ref reason] (not-asked ref reason nil))
+  ([ref reason extra] (unread ref reason (merge extra {:not-asked true}))))
+
+(defn not-asked?
+  "Whether r is an :unread result for a read that was never made (built by
+   not-asked). False for every answered result and for an :unread one whose
+   source was asked and did not answer. A value that is no result map is
+   never one, though it counts as :unread everywhere else."
+  [r]
+  (and (result? r) (= :unread (:state r)) (true? (:not-asked r))))
+
 ;; ---------------------------------------------------------------------------
 ;; describing what was read
 
@@ -289,12 +313,13 @@
 
 (defn unread-line-of
   "\"could not read <what> (<reason>)\" for a result, without a refusal's
-   tail: the summary of a finding that reports a read as unread. nil for an
-   answered result."
+   tail: the summary of a finding that reports a read as unread. A read that
+   was never made (not-asked?) reads \"did not read <what> (<reason>)\".
+   nil for an answered result."
   ([r] (unread-line-of r nil))
   ([r what]
    (when (unread? r)
-     (str "could not read " (what-of r what)
+     (str (if (not-asked? r) "did not read " "could not read ") (what-of r what)
           (when-let [reason (and (map? r) (:reason r))] (str " (" reason ")"))))))
 
 (defn unread-refusal

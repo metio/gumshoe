@@ -965,14 +965,75 @@
       "mail-dkim"
       "mail-rdns"
       "mail-services"]
-     {"dkim" {},
-      "dmarc" [],
+     {"dkim"
+      {:state :present,
+       :ref
+       {:source :mail,
+        :read :dkim,
+        :domain "example.org",
+        :server "192.0.2.53",
+        :selectors ["default"]},
+       :selectors
+       {"default"
+        {:state :present,
+         :ref
+         {:source :dns,
+          :type "TXT",
+          :name "default._domainkey.example.org",
+          :server "192.0.2.53"},
+         :items ["\"v=DKIM1; k=rsa; p=AAAA\""],
+         :status "NOERROR"}}},
+      "dmarc"
+      {:state :present,
+       :ref
+       {:source :dns,
+        :type "TXT",
+        :name "_dmarc.example.org",
+        :server "192.0.2.53"},
+       :items ["\"v=DMARC1; p=reject\""],
+       :status "NOERROR"},
       "domain" "example.org",
       "host" "mx.example.org",
-      "mx" [],
-      "probes" [],
-      "ptr" [],
-      "spf" []}]]},
+      "mx"
+      {:state :present,
+       :ref
+       {:source :dns,
+        :type "MX",
+        :name "example.org",
+        :server "192.0.2.53"},
+       :items ["10 mx.example.org."],
+       :status "NOERROR"},
+      "probes"
+      {:state :present,
+       :ref {:source :mail, :read :probes, :host "mx.example.org"},
+       :items []},
+      "ptr"
+      {:state :present,
+       :ref
+       {:source :mail,
+        :read :ptr,
+        :host "mx.example.org",
+        :server "192.0.2.53"},
+       :items ["192.0.2.25"],
+       :addresses
+       {"192.0.2.25"
+        {:state :present,
+         :ref
+         {:source :dns,
+          :type "PTR",
+          :name "192.0.2.25",
+          :server "192.0.2.53"},
+         :items ["mx.example.org."],
+         :status "NOERROR"}}},
+      "spf"
+      {:state :present,
+       :ref
+       {:source :dns,
+        :type "TXT",
+        :name "example.org",
+        :server "192.0.2.53"},
+       :items ["\"v=spf1 mx -all\""],
+       :status "NOERROR"}}]]},
   "clean text"
   {:result true,
    :stdout
@@ -992,14 +1053,75 @@
       "mail-dkim"
       "mail-rdns"
       "mail-services"]
-     {"dkim" {},
-      "dmarc" [],
+     {"dkim"
+      {:state :present,
+       :ref
+       {:source :mail,
+        :read :dkim,
+        :domain "example.org",
+        :server "192.0.2.53",
+        :selectors ["default"]},
+       :selectors
+       {"default"
+        {:state :present,
+         :ref
+         {:source :dns,
+          :type "TXT",
+          :name "default._domainkey.example.org",
+          :server "192.0.2.53"},
+         :items ["\"v=DKIM1; k=rsa; p=AAAA\""],
+         :status "NOERROR"}}},
+      "dmarc"
+      {:state :present,
+       :ref
+       {:source :dns,
+        :type "TXT",
+        :name "_dmarc.example.org",
+        :server "192.0.2.53"},
+       :items ["\"v=DMARC1; p=reject\""],
+       :status "NOERROR"},
       "domain" "example.org",
       "host" "mx.example.org",
-      "mx" [],
-      "probes" [],
-      "ptr" [],
-      "spf" []}]]},
+      "mx"
+      {:state :present,
+       :ref
+       {:source :dns,
+        :type "MX",
+        :name "example.org",
+        :server "192.0.2.53"},
+       :items ["10 mx.example.org."],
+       :status "NOERROR"},
+      "probes"
+      {:state :present,
+       :ref {:source :mail, :read :probes, :host "mx.example.org"},
+       :items []},
+      "ptr"
+      {:state :present,
+       :ref
+       {:source :mail,
+        :read :ptr,
+        :host "mx.example.org",
+        :server "192.0.2.53"},
+       :items ["192.0.2.25"],
+       :addresses
+       {"192.0.2.25"
+        {:state :present,
+         :ref
+         {:source :dns,
+          :type "PTR",
+          :name "192.0.2.25",
+          :server "192.0.2.53"},
+         :items ["mx.example.org."],
+         :status "NOERROR"}}},
+      "spf"
+      {:state :present,
+       :ref
+       {:source :dns,
+        :type "TXT",
+        :name "example.org",
+        :server "192.0.2.53"},
+       :items ["\"v=spf1 mx -all\""],
+       :status "NOERROR"}}]]},
   "finding edn"
   {:result true,
    :stdout
@@ -1039,14 +1161,75 @@
       "mail-dkim"
       "mail-rdns"
       "mail-services"]
-     {"dkim" {},
-      "dmarc" [],
+     {"dkim"
+      {:state :present,
+       :ref
+       {:source :mail,
+        :read :dkim,
+        :domain "example.org",
+        :server "192.0.2.53",
+        :selectors ["default"]},
+       :selectors
+       {"default"
+        {:state :present,
+         :ref
+         {:source :dns,
+          :type "TXT",
+          :name "default._domainkey.example.org",
+          :server "192.0.2.53"},
+         :items ["\"v=DKIM1; k=rsa; p=AAAA\""],
+         :status "NOERROR"}}},
+      "dmarc"
+      {:state :present,
+       :ref
+       {:source :dns,
+        :type "TXT",
+        :name "_dmarc.example.org",
+        :server "192.0.2.53"},
+       :items ["\"v=DMARC1; p=reject\""],
+       :status "NOERROR"},
       "domain" "example.org",
       "host" "mx.example.org",
-      "mx" [],
-      "probes" [],
-      "ptr" [],
-      "spf" []}]]},
+      "mx"
+      {:state :present,
+       :ref
+       {:source :dns,
+        :type "MX",
+        :name "example.org",
+        :server "192.0.2.53"},
+       :items ["10 mx.example.org."],
+       :status "NOERROR"},
+      "probes"
+      {:state :present,
+       :ref {:source :mail, :read :probes, :host "mx.example.org"},
+       :items []},
+      "ptr"
+      {:state :present,
+       :ref
+       {:source :mail,
+        :read :ptr,
+        :host "mx.example.org",
+        :server "192.0.2.53"},
+       :items ["192.0.2.25"],
+       :addresses
+       {"192.0.2.25"
+        {:state :present,
+         :ref
+         {:source :dns,
+          :type "PTR",
+          :name "192.0.2.25",
+          :server "192.0.2.53"},
+         :items ["mx.example.org."],
+         :status "NOERROR"}}},
+      "spf"
+      {:state :present,
+       :ref
+       {:source :dns,
+        :type "TXT",
+        :name "example.org",
+        :server "192.0.2.53"},
+       :items ["\"v=spf1 mx -all\""],
+       :status "NOERROR"}}]]},
   "finding text"
   {:result true,
    :stdout
@@ -1066,14 +1249,75 @@
       "mail-dkim"
       "mail-rdns"
       "mail-services"]
-     {"dkim" {},
-      "dmarc" [],
+     {"dkim"
+      {:state :present,
+       :ref
+       {:source :mail,
+        :read :dkim,
+        :domain "example.org",
+        :server "192.0.2.53",
+        :selectors ["default"]},
+       :selectors
+       {"default"
+        {:state :present,
+         :ref
+         {:source :dns,
+          :type "TXT",
+          :name "default._domainkey.example.org",
+          :server "192.0.2.53"},
+         :items ["\"v=DKIM1; k=rsa; p=AAAA\""],
+         :status "NOERROR"}}},
+      "dmarc"
+      {:state :present,
+       :ref
+       {:source :dns,
+        :type "TXT",
+        :name "_dmarc.example.org",
+        :server "192.0.2.53"},
+       :items ["\"v=DMARC1; p=reject\""],
+       :status "NOERROR"},
       "domain" "example.org",
       "host" "mx.example.org",
-      "mx" [],
-      "probes" [],
-      "ptr" [],
-      "spf" []}]]}},
+      "mx"
+      {:state :present,
+       :ref
+       {:source :dns,
+        :type "MX",
+        :name "example.org",
+        :server "192.0.2.53"},
+       :items ["10 mx.example.org."],
+       :status "NOERROR"},
+      "probes"
+      {:state :present,
+       :ref {:source :mail, :read :probes, :host "mx.example.org"},
+       :items []},
+      "ptr"
+      {:state :present,
+       :ref
+       {:source :mail,
+        :read :ptr,
+        :host "mx.example.org",
+        :server "192.0.2.53"},
+       :items ["192.0.2.25"],
+       :addresses
+       {"192.0.2.25"
+        {:state :present,
+         :ref
+         {:source :dns,
+          :type "PTR",
+          :name "192.0.2.25",
+          :server "192.0.2.53"},
+         :items ["mx.example.org."],
+         :status "NOERROR"}}},
+      "spf"
+      {:state :present,
+       :ref
+       {:source :dns,
+        :type "TXT",
+        :name "example.org",
+        :server "192.0.2.53"},
+       :items ["\"v=spf1 mx -all\""],
+       :status "NOERROR"}}]]}},
  "matrix"
  {"clean edn"
   {:result true,

@@ -217,17 +217,60 @@
                  (and (seq consults) (every? missing? consults))
                  (and (seq judges) (every? #(empty-subjects? (get evidence %)) judges))))))
 
+(defn- unanswered-reads
+  "The values of the evidence keys a detective reads that did not answer, in
+   the order :requires, :joins, :consults, :judges name them, each key once."
+  [{:keys [requires joins consults judges]} evidence]
+  (->> (concat requires joins consults judges)
+       distinct
+       (map #(get evidence %))
+       (filter evidence/missing?)))
+
+(defn- unread-marks
+  "What a report says about a detective that read nothing: :unread true;
+   :not-asked, the reasons of its reads that were never made because an
+   input they need was not given (evidence/not-asked?), so the operator can
+   tell a flag they did not pass from a source that failed; and :reasons,
+   one line per read that was asked and did not answer, naming it with its
+   reason. Each is left out when empty. Whatever the marks, the detective
+   stays unread."
+  [detective evidence]
+  (let [missing (filter result/result? (unanswered-reads detective evidence))
+        {never true asked false} (group-by evidence/not-asked? missing)
+        not-asked (vec (distinct (keep :reason never)))
+        reasons (vec (distinct (keep result/unread-line-of asked)))]
+    (cond-> {:unread true}
+      (seq never) (assoc :not-asked (if (seq not-asked) not-asked ["an input was not given"]))
+      (seq reasons) (assoc :reasons reasons))))
+
 (defn mark-unread
   "The detectives, each that read nothing carrying :unread true, so a report
-   can tell a check that passed from one that had nothing to look at."
+   can tell a check that passed from one that had nothing to look at. One
+   that read nothing because a read it needs was never made also carries
+   :not-asked, the reasons those reads were not made, and one whose reads
+   did not answer carries :reasons, a line per read."
   [detectives evidence]
-  (mapv #(cond-> % (unread? % evidence) (assoc :unread true)) detectives))
+  (mapv #(cond-> % (unread? % evidence) (merge (unread-marks % evidence))) detectives))
+
+(defn not-asked-line
+  "The line naming the checks that read nothing because an input they need
+   was not given, grouped by what was not given, or nil when there is none."
+  [detectives]
+  (let [not-asked (filter #(and (:unread %) (seq (:not-asked %))) detectives)]
+    (when (seq not-asked)
+      (format "%d check%s judged nothing because an input was not given - %s"
+              (count not-asked) (if (= 1 (count not-asked)) "" "s")
+              (str/join "; "
+                        (for [[reasons ds] (sort-by (comp str first) (group-by :not-asked not-asked))]
+                          (format "%s (%s)" (str/join ", " (map :name ds)) (str/join ", " reasons))))))))
 
 (defn unread-line
   "The line naming the checks that read nothing, grouped by the capability
-   their tool package inspects, or nil when every check read something."
+   their tool package inspects, or nil when every check read something. A
+   check that read nothing because an input was not given is left to
+   not-asked-line."
   [detectives]
-  (let [unread (filter :unread detectives)]
+  (let [unread (filter #(and (:unread %) (empty? (:not-asked %))) detectives)]
     (when (seq unread)
       (format "%d check%s read nothing on this cluster - %s; what they read is not served, not readable, or not gathered by this scan"
               (count unread) (if (= 1 (count unread)) "" "s")
@@ -462,6 +505,8 @@
                             (count clean) (if (= 1 (count clean)) "" "s"))
                     (str/join ", " (map :name clean)))))
     (when-let [line (unread-line quiet)]
+      (println (str (theme/token :bullet) " " line)))
+    (when-let [line (not-asked-line quiet)]
       (println (str (theme/token :bullet) " " line)))))
 
 (defn print-report!
@@ -480,6 +525,8 @@
       (let [passed (count (remove :unread detectives))]
         (stdout/ok (format "no issues found - %d check%s passed" passed (if (= 1 passed) "" "s"))))
       (when-let [line (unread-line detectives)]
+        (println (str (theme/token :bullet) " " line)))
+      (when-let [line (not-asked-line detectives)]
         (println (str (theme/token :bullet) " " line))))
     (do
       (let [children (correlation/children findings)]
@@ -499,10 +546,11 @@
 (defn- checked
   "The compact record of what ran, for machine-readable output: every
    detective's name and what it looks for, so a clean json/edn report still
-   proves its coverage, with the capabilities it inspects and whether it read
-   nothing."
+   proves its coverage, with the capabilities it inspects, whether it read
+   nothing, what was not given when that is why (:not-asked) and the reads
+   that did not answer, each with its reason (:reasons)."
   [detectives]
-  (mapv #(select-keys % [:name :description :capabilities :unread]) detectives))
+  (mapv #(select-keys % [:name :description :capabilities :unread :not-asked :reasons]) detectives))
 
 (defn nothing-checked?
   "Whether a run judged nothing: it produced no findings and no detective read
@@ -516,8 +564,10 @@
   [detectives]
   (if (empty? detectives)
     "no check ran, so nothing was checked"
-    (format "every check read nothing, so nothing was checked - %s"
-            (str/join ", " (map :name detectives)))))
+    (str (format "every check read nothing, so nothing was checked - %s"
+                 (str/join ", " (map :name detectives)))
+         (when-let [line (not-asked-line detectives)]
+           (str "; " line)))))
 
 (defn- json-safe
   "data with every value cheshire has no encoder for replaced by its string

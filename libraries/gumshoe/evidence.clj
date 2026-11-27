@@ -12,21 +12,38 @@
    both. An empty list and an :absent result are answers."
   (:require [gumshoe.reads.result :as result]))
 
+(defn answered?
+  "Whether an evidence value is a read that answered. A three-state result
+   answered when result/answered? holds for it (:present or :absent); any
+   other value answered unless it is nil, an empty list included."
+  [v]
+  (if (result/result? v)
+    (result/answered? v)
+    (some? v)))
+
 (defn missing?
   "Whether an evidence value is a read that did not answer: nil, or a
    three-state result that is :unread. Any other value answered, an empty
    list and an :absent result included."
   [v]
-  (or (nil? v) (and (result/result? v) (result/unread? v))))
+  (not (answered? v)))
+
+(defn not-asked?
+  "Whether an evidence value is a read that was never made because an input
+   it needs was not given (result/not-asked?). Such a value is missing? as
+   well, so every check over it stays unread; only a report asks this, to
+   say why."
+  [v]
+  (result/not-asked? v))
 
 (defn joined?
-  "Whether every read a check joins answered. A read that did not answer is
-   nil in the evidence; an empty list is an answer. A check that correlates
-   one read against another judges nothing unless this holds, because the
-   missing side would read as an object that does not exist. An :unread
-   result counts as a read that did not answer."
+  "Whether every read a check joins answered (answered?). An empty list and
+   an :absent result are answers; nil and an :unread result are not. A
+   check that correlates one read against another judges nothing unless
+   this holds, because the missing side would read as an object that does
+   not exist."
   [evidence reads]
-  (not-any? #(missing? (get evidence %)) reads))
+  (every? #(answered? (get evidence %)) reads))
 
 (defn consulted?
   "Whether any read a check consults answered. A check that judges against
@@ -34,4 +51,4 @@
    answered - has nothing to judge against when none did. An empty list is an
    answer."
   [evidence reads]
-  (boolean (some #(not (missing? (get evidence %))) reads)))
+  (boolean (some #(answered? (get evidence %)) reads)))
