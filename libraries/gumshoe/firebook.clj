@@ -347,8 +347,8 @@
                                 (kubectl/get-cluster-resource context "namespaces" drill-namespace))}
      :refusal (fn [{:keys [drill-namespace]}] (foreign-namespace drill-namespace))
      :derive (fn [_]
-               (let [cluster (kubectl/current-cluster)]
-                 {:context (kubectl/current-context) :cluster cluster
+               (let [{:keys [context cluster]} (kubectl/kube-connection)]
+                 {:context context :cluster cluster
                   :system cluster :target cluster}))
      :ignite {:items (fn [_] [(str drill-namespace "/" drill)])
               :effect (fn [{:keys [context]}]

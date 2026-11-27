@@ -276,9 +276,16 @@
    users. We only need two names, so no credential enters this process."
   ["kubectl" "config" "view" "--minify" "--output" "json"])
 
+(def ^:dynamic *kubeconfig*
+  "nil, or a delay of the kubeconfig current-config reads, so every reader
+   inside one binding answers from one reading (see kube-connection)."
+  nil)
+
 (defn- current-config
   []
-  (parse-json (apply shell/stdout-of current-config-args)))
+  (if-let [config *kubeconfig*]
+    @config
+    (parse-json (apply shell/stdout-of current-config-args))))
 
 (defn current-context
   []
@@ -299,6 +306,46 @@
    environments and capabilities against it."
   []
   (cluster-of (current-config)))
+
+(def kubeconfig-args
+  "Reads every context of the kubeconfig, with its credentials redacted as in
+   current-config-args. A named context is looked up in it by name, so a
+   kubeconfig whose current-context names nothing, which --minify refuses,
+   still resolves a context it holds."
+  ["kubectl" "config" "view" "--output" "json"])
+
+(defn context-of
+  "Pure: {:context :cluster} for the context named `context-name` in a
+   kubeconfig (as `kubectl config view` prints it), or nil when it holds no
+   context of exactly that name."
+  [config context-name]
+  (when-let [entry (first (filter #(= (:name %) context-name) (:contexts config)))]
+    {:context context-name :cluster (get-in entry [:context :cluster])}))
+
+(defn kube-connection
+  "{:context :cluster} the kube context reaches, read from the kubeconfig
+   once and without contacting any API server, or {:refusal <why>}.
+   Without a name it is the current context and its cluster, as
+   current-context and current-cluster answer them from one reading of the
+   kubeconfig, so the two cannot describe two different moments of a
+   kubeconfig the operator switched in between; a
+   kubeconfig with no current context answers nil for both, as those do. A
+   name is looked up among the kubeconfig's contexts, and one it does not
+   hold is refused, as is a name that is not a non-blank string, so a
+   mistyped context fails before anything reads or acts on a cluster."
+  ([] (binding [*kubeconfig* (delay (parse-json (apply shell/stdout-of current-config-args)))]
+        {:context (current-context) :cluster (current-cluster)}))
+  ([context-name]
+   (cond
+     (nil? context-name) (kube-connection)
+     (not (and (string? context-name) (not (str/blank? context-name))))
+     {:refusal (format "the kube context must be a non-blank name, not %s" (pr-str context-name))}
+     :else
+     (let [config (parse-json (apply shell/stdout-of kubeconfig-args))]
+       (or (context-of config context-name)
+           {:refusal (if (nil? config)
+                       (format "could not read the kubeconfig to find the kube context %s" context-name)
+                       (format "the kubeconfig has no kube context named %s" context-name))})))))
 
 (defn resource-and-subresource
   "A resource as a permission prerequisite names it, split into the resource
@@ -326,9 +373,12 @@
 
 (defn can-i?
   "Whether the current user may perform verb on a single resource type,
-   cluster wide. resource may name a subresource, as \"pods/eviction\"."
-  [verb resource]
-  (zero? (apply shell/exit-code-of "kubectl" (can-i-args verb resource))))
+   cluster wide. resource may name a subresource, as \"pods/eviction\".
+   With a context, it asks as the user of that kube context."
+  ([verb resource]
+   (zero? (apply shell/exit-code-of "kubectl" (can-i-args verb resource))))
+  ([context verb resource]
+   (zero? (apply shell/exit-code-of "kubectl" (str "--context=" context) (can-i-args verb resource)))))
 
 (declare ^:private request-timeout)
 
@@ -349,9 +399,10 @@
     (vec (keep (fn [[check ok?]] (when-not (true? ok?) check)) (map vector checks granted)))))
 
 (defn can-exec?
-  "Whether the current user may exec into a single resource type."
-  [resource]
-  (can-i? "create" (str resource "/exec")))
+  "Whether the current user may exec into a single resource type, as the
+   user of context when one is given."
+  ([resource] (can-i? "create" (str resource "/exec")))
+  ([context resource] (can-i? context "create" (str resource "/exec"))))
 
 (defn- answered-empty?
   "A failed kubectl get that still answered: the object or the resource type
@@ -434,13 +485,16 @@
 (defn- now-ms [] (System/currentTimeMillis))
 
 (defn- kinds-discovery
-  "One `kubectl api-resources` call, as {:kinds .. :complete? .. :at ..}.
+  "One `kubectl api-resources` call, as {:kinds .. :complete? .. :at ..},
+   against context, or the current kube context when it is nil.
    kubectl exits non-zero while still printing every group it did read when
    one aggregated API is unavailable, so the output is parsed whatever the
    exit; only an exit 0 with kinds counts as a complete answer."
-  []
-  (let [{:keys [exit out]} (shell/execute "kubectl" "api-resources" "--no-headers"
-                                          "--request-timeout=5s")
+  [context]
+  (let [{:keys [exit out]} (apply shell/execute (concat ["kubectl"]
+                                                        (when context [(str "--context=" context)])
+                                                        ["api-resources" "--no-headers"
+                                                         "--request-timeout=5s"]))
         kinds (parse-api-resources out)]
     {:kinds kinds
      :complete? (and (= 0 exit) (boolean (seq kinds)))
@@ -458,21 +512,22 @@
    what it read for incomplete-discovery-ttl-ms, so the labels of one
    prerequisite list trigger at most one call against an unreachable or
    partly unavailable API, and a later call asks again once that time has
-   passed."
-  []
-  (let [cached @resource-kinds-cache]
-    (:kinds (if (and cached (fresh-discovery? cached))
-              cached
-              (reset! resource-kinds-cache (kinds-discovery))))))
+   passed. Each kube context has its own entry; nil is the current one."
+  ([] (resource-kinds nil))
+  ([context]
+   (let [cached (get @resource-kinds-cache context)]
+     (:kinds (if (and cached (fresh-discovery? cached))
+               cached
+               (get (swap! resource-kinds-cache assoc context (kinds-discovery context)) context))))))
 
 (defn resource-kind
   "The Kind the cluster reports for a resource name - \"pods\" -> \"Pod\",
    \"helmreleases.helm.toolkit.fluxcd.io\" -> \"HelmRelease\" - or nil when the API
    is unreachable or serves no such resource. The cluster's own discovery is the
    single source of truth for a resource's Kind; there is no hardcoded table to
-   drift out of date."
-  [resource]
-  (get (resource-kinds) resource))
+   drift out of date. With a context, the discovery of that kube context."
+  ([resource] (resource-kind nil resource))
+  ([context resource] (get (resource-kinds context) resource)))
 
 ;; A bounded request timeout on every read means a wedged API server slows a
 ;; book down by seconds, never hangs it forever. It applies only to these

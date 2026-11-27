@@ -26,9 +26,20 @@
       :done          (fn [ctx] -> bool)   ; optional, see below
       :confirm       {:action \"...\" :destructive? false}
       :recovery      \"...\" or (fn [ctx] -> string)   ; optional, see below
+      :kube-context  (fn [opts] -> a kube context name or nil)   ; optional, see below
       :steps         [..]}
 
    Each step receives {:context :cluster :target :opts :announcement-data}.
+
+   :kube-context names the kube context the whole playbook reads and acts
+   on, from the parsed flags; nil, or none, means the current one. The run
+   resolves it once and pins it (gumshoe.kube-context): the pick, every
+   step's context, every change step's reads and effects and the
+   announcement data's :cluster use it. A change step that declares its own
+   :kube-context runs only when it names the context the playbook pinned,
+   and is refused otherwise, since the playbook picked its subject there; a
+   step shared with a standalone book therefore takes the same
+   :kube-context as the playbook that runs it.
 
    A target the flags name that the select does not offer is judged as
    gumshoe.mutation/pick! judges it, with pick-spec: :subject, the typed
@@ -102,7 +113,7 @@
             [gumshoe.flags :as flags]
             [gumshoe.flow :as flow]
             [gumshoe.interact :as interact]
-            [gumshoe.kubectl :as kubectl]
+            [gumshoe.kube-context :as kube-context]
             [gumshoe.mutation :as mutation]
             [gumshoe.outcome :as outcome]
             [gumshoe.prerequisites :as prerequisites]
@@ -534,12 +545,25 @@
             (map-indexed vector steps))))
 
 (defn- context-for
-  [target opts announcement-data]
-  {:context (kubectl/current-context)
-   :cluster (kubectl/current-cluster)
+  [{:keys [context cluster]} target opts announcement-data]
+  {:context context
+   :cluster cluster
    :target target
    :opts opts
-   :announcement-data announcement-data})
+   :announcement-data (some-> announcement-data (assoc :cluster cluster))})
+
+(defn- refused
+  [why]
+  (stdout/err-println (str "refusing: " why))
+  false)
+
+(defn pinned
+  "(f connection) with the kube context of the playbook or dispatcher
+   pinned for the run (see gumshoe.kube-context/pinning): the one an
+   enclosing run pinned, or its :kube-context resolved for opts. False,
+   having said why, when that is refused."
+  [{:keys [kube-context]} opts f]
+  (kube-context/pinning kube-context opts refused f))
 
 (defn- confirmed!
   [playbook steps ctx]
@@ -557,19 +581,16 @@
   [playbook n target opts announcement-data]
   (let [segs (segments (:steps playbook))]
     (if-let [steps (get segs (dec n))]
-      (run-steps! steps (context-for target opts announcement-data) false playbook)
+      (pinned playbook opts
+              #(run-steps! steps (context-for % target opts announcement-data) false playbook))
       (do (stdout/error (format "the playbook has %d segments, there is no segment %d" (count segs) n))
           false))))
 
-(defn run-on!
-  "Runs the playbook against an already-chosen target, from --from-segment (1
-   when absent) to its end: the leading checks, the judgement before the
-   confirmation (prejudge!), the one confirmation, then every later step.
-   Returns true when every step succeeded."
-  [playbook target opts announcement-data]
+(defn- run-pinned!
+  [playbook connection target opts announcement-data]
   (let [segs (segments (:steps playbook))
         from (or (:from-segment opts) 1)
-        ctx (context-for target opts announcement-data)]
+        ctx (context-for connection target opts announcement-data)]
     (if-not (<= 1 from (count segs))
       (do (stdout/error (format "the playbook has %d segments, there is no segment %d" (count segs) from))
           false)
@@ -589,6 +610,14 @@
                  (and (confirmed! playbook later ctx)
                       (run-steps! later ctx waits-first? playbook)))
                false))))))
+
+(defn run-on!
+  "Runs the playbook against an already-chosen target, from --from-segment (1
+   when absent) to its end: the leading checks, the judgement before the
+   confirmation (prejudge!), the one confirmation, then every later step.
+   Returns true when every step succeeded."
+  [playbook target opts announcement-data]
+  (pinned playbook opts #(run-pinned! playbook % target opts announcement-data)))
 
 (defn- step-subject
   "The :pick entry of the first change step among steps that picks through
@@ -622,10 +651,12 @@
    false when nothing was picked or the named target is not offered and
    not done (see gumshoe.mutation/pick!)."
   [playbook opts announcement-data]
-  (let [{:keys [target result] :as picked} (mutation/pick! (pick-spec playbook) opts (kubectl/current-context))]
-    (if (contains? picked :result)
-      result
-      (run-on! playbook target opts announcement-data))))
+  (pinned playbook opts
+          (fn [{:keys [context]}]
+            (let [{:keys [target result] :as picked} (mutation/pick! (pick-spec playbook) opts context)]
+              (if (contains? picked :result)
+                result
+                (run-on! playbook target opts announcement-data))))))
 
 (defn- step-line
   [step]
@@ -677,5 +708,6 @@
     :options (cond-> (all-options playbook)
                (some #(= :pause (kind %)) steps) (flags/merge-ordered segment-option))
     :prerequisites (all-prerequisites playbook)
+    :kube-context (or (:kube-context playbook) (constantly nil))
     :details (details playbook)
     :action (fn [opts {:keys [announcement-data]}] (run! playbook opts announcement-data))}))

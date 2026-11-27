@@ -258,6 +258,7 @@
                    [gumshoe.fuzzy-finder-test]
                    [gumshoe.investigation-test]
                    [gumshoe.kubectl-test]
+                   [gumshoe.kube-context-test]
                    [gumshoe.mail-test]
                    [gumshoe.announce-test]
                    [gumshoe.mimirtool-test]
@@ -563,6 +564,7 @@
                                                          'gumshoe.fuzzy-finder-test
                                                          'gumshoe.investigation-test
                                                          'gumshoe.kubectl-test
+                                                         'gumshoe.kube-context-test
                                                          'gumshoe.mail-test
                                                          'gumshoe.announce-test
                                                          'gumshoe.mimirtool-test

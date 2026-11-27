@@ -75,6 +75,9 @@
       :connect  (fn [opts] -> {:context .. :cluster .. :announce-as ..} or nil)
                                     ; optional, what the change acts on when that
                                     ; is not the kube context, see below
+      :kube-context (fn [opts] -> a kube context name or nil)
+                                    ; optional, the kube context the change
+                                    ; reads and acts on, see below
       :announce? false  ; optional, handed to the runbook harness; a book whose
                         ; change nobody else needs to hear of (a debug session)
                         ; posts nothing to the changelog. It is still a change:
@@ -259,9 +262,27 @@
    the system the changelog names, defaulting to :cluster. It returns nil
    when what it names cannot be reached, having said why, and the change
    stops before anything is listed. Without :connect the context is the
-   current kube context and :cluster its cluster. :subject, :subjects and
-   :pin read their objects with kubectl, so a spec with :connect takes none
-   of them.
+   kube context :kube-context names, or the current one, and :cluster its
+   cluster. :subject, :subjects and :pin read their objects with kubectl, so
+   a spec with :connect takes none of them.
+
+   :kube-context receives the parsed flags and returns the name of the kube
+   context the change reads and acts on, or nil for the current one, so a
+   book can offer --context. It is resolved from the kubeconfig without
+   contacting any API server, and a name the kubeconfig does not hold
+   refuses the change before anything is listed. The resolved context is
+   the :context the candidate query, the subject reads, :reads, :values,
+   :derive, :refusal, the effect and the post-checks receive, and its
+   cluster is the :cluster the confirmation names, the system the changelog
+   names and the :cluster of the announcement data, which picks the
+   environment the announcement goes to. A run resolves it once
+   (gumshoe.kube-context/*pinned*): `book` hands the spec's :kube-context,
+   or the current context for a spec without one, to runbook/execute!,
+   which resolves it before the prerequisites, and run!, run-on! and
+   prejudge take the pinned connection when one is bound, refusing a spec
+   that names a different context than the run pinned. A :derive may not return a
+   :context or :cluster other than the connection's, so nothing moves a
+   change to another cluster after the confirmation's cluster was chosen.
 
    A change without :recovery that fails after applying an effect - a later
    effect failed, its post-check did not hold, or an error stopped it - is
@@ -305,6 +326,7 @@
             [gumshoe.prerequisites :as prerequisites]
             [gumshoe.select :as select]
             [gumshoe.kubectl :as kubectl]
+            [gumshoe.kube-context :as kube-context]
             [gumshoe.announce :as announce]
             [gumshoe.outcome :as outcome]
             [gumshoe.pick :as pick]
@@ -932,16 +954,55 @@
 
 (defn- connect
   "{:context :cluster :announce-as} for the spec: what its :connect returns
-   for opts, or nil when that could not be reached; the kube context and its
-   cluster without :connect. change/normalize refuses :connect beside any
-   subject."
-  [{:keys [connect]} opts]
+   for opts, or nil when that could not be reached; without :connect the
+   kube context its :kube-context names (the current one when it names
+   none) and that context's cluster, the pinned connection inside a pinned
+   run, or nil, having said why, when that is refused (see
+   gumshoe.kube-context/connection). change/normalize refuses :connect
+   beside any subject and beside :kube-context."
+  [{:keys [connect kube-context]} opts]
   (if connect
     (when-let [connection (connect opts)]
       (update connection :announce-as #(or % (:cluster connection))))
-    (let [context (kubectl/current-context)
-          cluster (kubectl/current-cluster)]
-      {:context context :cluster cluster :announce-as cluster})))
+    (let [{:keys [connection refusal]} (kube-context/connection kube-context opts)]
+      (if refusal
+        (do (refuse! refusal) nil)
+        connection))))
+
+(defn- kube?
+  "Whether the spec acts on a kube context rather than on what a :connect
+   names."
+  [spec]
+  (nil? (:connect spec)))
+
+(defn- connected-data
+  "announcement-data as a change on connection announces it: for a change
+   on a kube context, with :cluster the connection's cluster, so the
+   environment the announcement picks is the one of the cluster the change
+   acts on; as it is for a change through :connect, and nil when nil."
+  [spec {:keys [cluster]} announcement-data]
+  (if (and announcement-data (kube? spec))
+    (assoc announcement-data :cluster cluster)
+    announcement-data))
+
+(defn- pinned-to
+  "thunk run with connection pinned as the run's kube context when the spec
+   acts on a kube context (see gumshoe.kube-context), so a change nested in
+   its callbacks resolves the same one."
+  [spec connection thunk]
+  (if (kube? spec)
+    (binding [kube-context/*pinned* connection] (thunk))
+    (thunk)))
+
+(defn moved-connection
+  "Pure: why the values a :derive returned would move the change away from
+   connection - a :context or :cluster other than the connection's - or nil."
+  [{:keys [context cluster]} values]
+  (some (fn [[k v]]
+          (when (and (contains? values k) (not= v (get values k)))
+            (format "its :derive returned %s %s, but the change runs on %s %s - a change does not move to another cluster after its connection was chosen"
+                    k (pr-str (get values k)) k (pr-str v))))
+        [[:context context] [:cluster cluster]]))
 
 (defn fallback-guidance
   "The guidance under the FAILED banner of a change that declares no
@@ -993,13 +1054,19 @@
 (defn- prepared
   "The derived context of spec against target, whose ref parse-pick made,
    on the connection, read in the :derive *phase* with cache:
-   {:ctx <the context every callback receives>} or {:unread <reason>}."
-  [spec {:keys [context cluster]} target ref opts announcement-data cache]
+   {:ctx <the context every callback receives>}, {:unread <reason>}, or
+   {:refusal <why>} when its :derive would move it off the connection (see
+   moved-connection)."
+  [spec {:keys [context cluster] :as connection} target ref opts announcement-data cache]
   (let [base (cond-> {:context context :cluster cluster :target target
                       :opts opts :announcement-data announcement-data}
                (change/pick-subject spec) (assoc :ref ref))
-        {:keys [values unread]} (derived (subject-derive spec) base cache)]
-    (if unread {:unread unread} {:ctx (merge base values)})))
+        {:keys [values unread]} (derived (subject-derive spec) base cache)
+        moved (when-not unread (moved-connection connection values))]
+    (cond
+      unread {:unread unread}
+      moved {:refusal moved}
+      :else {:ctx (merge base values)})))
 
 (defn- unread!
   [why]
@@ -1059,11 +1126,12 @@
    done there, so only a change derived here judges its :done."
   [spec connection target ref opts announcement-data cache derived on-skip]
   (let [derive-cache (or cache (kubectl/read-cache))
-        {:keys [ctx unread]} (if derived
-                               {:ctx derived}
-                               (prepared spec connection target ref opts announcement-data derive-cache))
-        done (when-not (or unread derived) (judged-done spec ctx derive-cache))]
+        {:keys [ctx unread refusal]} (if derived
+                                       {:ctx derived}
+                                       (prepared spec connection target ref opts announcement-data derive-cache))
+        done (when-not (or unread refusal derived) (judged-done spec ctx derive-cache))]
     (cond
+      refusal (refuse! refusal)
       unread (unread! unread)
       done (do (when on-skip (on-skip)) (skipped! spec done))
       :else (run-prepared! spec connection target announcement-data derive-cache ctx))))
@@ -1089,19 +1157,23 @@
     (if refusal
       {:refusal refusal}
       (when-let [connection (connect spec opts)]
-        (let [cache (kubectl/read-cache)
-              {:keys [ctx unread]} (prepared spec connection target ref opts announcement-data cache)
-              verdict (when (and (not unread) (change/done spec))
-                        ((in-phase :derive cache #(done-verdict spec ctx))))]
-          (cond
-            unread {:unread unread}
-            (:done? verdict) {:done verdict}
-            :else (let [pinned ((in-phase :derive cache #(pin-of spec ctx)))
-                        [why chunks] (held #(prejudgement spec ctx pinned cache))]
-                    (if why
-                      {:refusal why :printed chunks}
-                      (cond-> {:cache cache :derived ctx}
-                        (:unread verdict) (assoc :undecided (:unread verdict)))))))))))
+        (pinned-to
+         spec connection
+         #(let [announcement-data (connected-data spec connection announcement-data)
+                cache (kubectl/read-cache)
+                {:keys [ctx unread] moved :refusal} (prepared spec connection target ref opts announcement-data cache)
+                verdict (when (and (not unread) (not moved) (change/done spec))
+                          ((in-phase :derive cache (fn [] (done-verdict spec ctx)))))]
+            (cond
+              moved {:refusal moved}
+              unread {:unread unread}
+              (:done? verdict) {:done verdict}
+              :else (let [pinned ((in-phase :derive cache (fn [] (pin-of spec ctx))))
+                          [why chunks] (held (fn [] (prejudgement spec ctx pinned cache)))]
+                      (if why
+                        {:refusal why :printed chunks}
+                        (cond-> {:cache cache :derived ctx}
+                          (:unread verdict) (assoc :undecided (:unread verdict))))))))))))
 
 (defn prejudge-printed
   "Prints what prejudge returned the way a standalone run prints it - what
@@ -1136,7 +1208,10 @@
      (if refusal
        (refuse! refusal)
        (if-let [connection (connect spec opts)]
-         (run-connected! spec connection target ref opts announcement-data derive-cache derived on-skip)
+         (pinned-to spec connection
+                    #(run-connected! spec connection target ref opts
+                                     (connected-data spec connection announcement-data)
+                                     derive-cache derived on-skip))
          false)))))
 
 (defn named-but-not-offered
@@ -1243,13 +1318,17 @@
   [spec opts announcement-data]
   (let [spec (change/normalize spec)]
     (if-let [connection (connect spec opts)]
-      (let [{:keys [target result] :as picked} (pick! spec opts (:context connection))]
-        (if (contains? picked :result)
-          result
-          (let [{:keys [ref refusal]} (parse-pick spec target)]
-            (if refusal
-              (refuse! refusal)
-              (run-connected! spec connection target ref opts announcement-data nil nil nil)))))
+      (pinned-to
+       spec connection
+       #(let [{:keys [target result] :as picked} (pick! spec opts (:context connection))]
+          (if (contains? picked :result)
+            result
+            (let [{:keys [ref refusal]} (parse-pick spec target)]
+              (if refusal
+                (refuse! refusal)
+                (run-connected! spec connection target ref opts
+                                (connected-data spec connection announcement-data)
+                                nil nil nil))))))
       false)))
 
 (defn picks
@@ -1304,4 +1383,5 @@
               :details (details spec)
               :change? true
               :action (fn [opts {:keys [announcement-data]}] (run! spec opts announcement-data))}
-       (false? announce) (assoc :announce? false)))))
+       (false? announce) (assoc :announce? false)
+       (kube? spec) (assoc :kube-context (or (:kube-context spec) (constantly nil)))))))

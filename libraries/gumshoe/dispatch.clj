@@ -16,7 +16,13 @@
       :routes   {key {:playbook {..}          ; a playbook spec, or one mutation spec
                       :note \"...\"}}          ; optional, shown before it runs
       :options       {..}                     ; optional, the dispatcher's own
-      :prerequisites {..}}                    ; optional, joined with every route's
+      :prerequisites {..}                     ; optional, joined with every route's
+      :kube-context  (fn [opts] -> name)}     ; optional, see below
+
+   :kube-context names the kube context the dispatcher picks, classifies
+   and runs its route on, nil for the current one; the run resolves it once
+   and pins it, and a route whose playbook or steps name another context is
+   refused (see gumshoe.playbook and gumshoe.kube-context).
 
    ctx is {:context :cluster :opts}. The dispatcher offers every route's
    options, which must agree on :coerce and :alias, without their defaults:
@@ -35,7 +41,6 @@
   (:require [clojure.string :as str]
             [gumshoe.change :as change]
             [gumshoe.flags :as flags]
-            [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
             [gumshoe.playbook :as playbook]
             [gumshoe.prerequisites :as prerequisites]
@@ -81,11 +86,9 @@
   [routes]
   (str/join ", " (sort (map name (keys routes)))))
 
-(defn run-on!
-  "Classifies an already-picked subject and runs its route. Returns false when
-   the subject names no route."
-  [{:keys [classify routes]} target opts announcement-data]
-  (let [ctx {:context (kubectl/current-context) :cluster (kubectl/current-cluster) :opts opts}
+(defn- run-route!
+  [{:keys [classify routes]} {:keys [context cluster]} target opts announcement-data]
+  (let [ctx {:context context :cluster cluster :opts opts}
         key (classify ctx target)
         route (get routes key)]
     (cond
@@ -102,6 +105,13 @@
           (when-let [note (:note route)] (stdout/err-println (str "   " note)))
           (playbook/run-on! (playbook-of route) target (with-defaults route opts) announcement-data)))))
 
+(defn run-on!
+  "Classifies an already-picked subject and runs its route, on the kube
+   context the dispatcher pins (see gumshoe.playbook/pinned). Returns false
+   when the subject names no route."
+  [dispatcher target opts announcement-data]
+  (playbook/pinned dispatcher opts #(run-route! dispatcher % target opts announcement-data)))
+
 (defn run!
   "Picks the subject, honouring the flags (see gumshoe.mutation/pick!), and
    runs its route. Returns true when there is nothing to pick or the named
@@ -109,10 +119,13 @@
    when nothing was picked or the named target is not offered and not
    done."
   [dispatcher opts announcement-data]
-  (let [{:keys [target result] :as picked} (mutation/pick! (playbook/pick-spec dispatcher) opts (kubectl/current-context))]
-    (if (contains? picked :result)
-      result
-      (run-on! dispatcher target opts announcement-data))))
+  (playbook/pinned
+   dispatcher opts
+   (fn [{:keys [context]}]
+     (let [{:keys [target result] :as picked} (mutation/pick! (playbook/pick-spec dispatcher) opts context)]
+       (if (contains? picked :result)
+         result
+         (run-on! dispatcher target opts announcement-data))))))
 
 (defn details
   "What --help says a dispatcher does, generated from its routes."
@@ -140,6 +153,7 @@
    {:description description
     :options (flags/merge-ordered (all-options dispatcher) segment-option)
     :prerequisites (all-prerequisites dispatcher)
+    :kube-context (or (:kube-context dispatcher) (constantly nil))
     :details (details dispatcher)
     :action (fn [opts {:keys [announcement-data]}]
               (run! dispatcher opts announcement-data))}))
