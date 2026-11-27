@@ -49,6 +49,7 @@
                    [gumshoe.blind-findings-test]
                    [gumshoe.optional-type-discovery-test]
                    [gumshoe.reads-test]
+                   [gumshoe.refusal-polarity-test]
                    [gumshoe.abort-exit-contract-test]
                    [gumshoe.strict-json-test]
                    [gumshoe.ceph-strict-json-test]
@@ -355,6 +356,7 @@
                                                          'gumshoe.blind-findings-test
                                                          'gumshoe.optional-type-discovery-test
                                                          'gumshoe.reads-test
+                                                         'gumshoe.refusal-polarity-test
                                                          'gumshoe.abort-exit-contract-test
                                                          'gumshoe.strict-json-test
                                                          'gumshoe.ceph-strict-json-test

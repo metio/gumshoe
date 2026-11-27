@@ -966,6 +966,30 @@ mostly data:
   manifest as data, and `refusal-unless-present`, `refusal-unless-absent` and
   `unread-refusal` give a `:refusal` line per polarity. The reads follow the
   run's pinned kube context and `kubectl/*read-cache*`;
+- a test proves a refusal with `gumshoe.testing.refusal`, which runs the
+  spec through the engine twice against a stubbed cluster: once with one
+  read unanswered, where the change must refuse with the reason the test
+  names, and once with that read answered, where it must proceed. A test
+  that only watches the refusal fire passes for a gate that fires whatever
+  the cluster answers. `(refusal/is-polar spec {:target "apps/web" :read
+  (refusal/kubectl-get {:type "secrets" :namespace "apps" :name "web-tls"})
+  :answer secret-object :cluster [[other-matcher other-answer] …] :refusal
+  "<exact reason>"})` judges the change before the confirmation
+  (`mutation/prejudge`) and after it (`run-on!` with the confirmation given
+  and `flow/change!` stood in for), and reports each judgement that did not
+  hold as one sentence naming the polarity, e.g. "while kubectl get secrets
+  web-tls --namespace=apps does not answer, the gate must refuse with …, but
+  before the confirmation it proceeded". `:refusal` is a string compared
+  for equality, a regex or a predicate, never "any refusal"; a
+  `:precondition` returning false refuses with `refusal/unmet`, and a
+  `:derive`-phase read that did not answer with "could not read what the
+  change rests on - …". Every other read the gate makes must be answered
+  in `:cluster`: an unanswered command, through `gumshoe.shell`,
+  `babashka.process` or `clojure.java.shell`, never starts and fails the
+  test naming it. `:answer` takes an object (sent as JSON), a string, a
+  process result, `refusal/absent` (an `--ignore-not-found` miss) or
+  `(refusal/not-found type name)`. `refusal/polarity` returns the verdicts
+  as data, and `:phases [:before]` judges one side only;
 - a cluster read no `gumshoe.kubectl` function wraps goes through
   `(kubectl/get-json context "namespaces" "--selector=…")`, nil when the read
   fails, or `get-json-result`, whose `:ok?` tells a failed read from an empty
