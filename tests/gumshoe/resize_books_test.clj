@@ -133,8 +133,12 @@
         (fails? state "delete" type name)
         [state (denied (str "deleting " type))]
 
+        ;; kubectl delete filters NotFound out under --ignore-not-found and
+        ;; prints that it found nothing (kubectl pkg/cmd/delete, DeleteResult)
         (and name (not-any? #(and (in-scope? flags %) (named? name %)) (get-in state [:objects type])))
-        [state {:exit 1 :out "" :err (format "Error from server (NotFound): %s \"%s\" not found" type name)}]
+        (if (contains? flags "ignore-not-found")
+          [state {:exit 0 :out "No resources found" :err ""}]
+          [state {:exit 1 :out "" :err (format "Error from server (NotFound): %s \"%s\" not found" type name)}])
 
         ;; the garbage collector never removes the orphan finalizer: the
         ;; StatefulSet stays, marked for deletion
@@ -153,11 +157,23 @@
                       (vec (remove #(and (in-scope? flags %) (or (nil? name) (named? name %))) objects))))
          {:exit 0 :out (str type " deleted") :err ""}])
 
+      ;; kubectl wait --for=delete, as release-1.29 to release-1.37 of
+      ;; kubectl's pkg/cmd/wait answer it: the read of the object is the
+      ;; first step, so a server that does not answer fails the wait; RunWait
+      ;; ignores NotFound for --for=delete and returns success when it
+      ;; visited nothing, so an object that does not exist passes at once,
+      ;; printing nothing; and one that stays until --timeout fails it
       "wait"
       (let [[raw name] (str/split (str raw-type) #"/" 2)
             type (get plural raw raw)]
-        (if (some #(and (in-scope? flags %) (named? name %)) (get-in state [:objects type]))
+        (cond
+          (or (not (:answering? state)) (contains? (:unanswered-types state) type))
+          [state unanswered]
+
+          (some #(and (in-scope? flags %) (named? name %)) (get-in state [:objects type]))
           [state {:exit 1 :out "" :err (format "error: timed out waiting for the condition on %s/%s" type name)}]
+
+          :else
           [state {:exit 0 :out "" :err ""}]))
 
       "apply"
@@ -641,3 +657,53 @@
         (is (false? result))
         (is (empty? mutations) (str/join "\n" out))
         (is (some #(str/includes? % "the kept claim data-web-1 no longer exists") out) (str/join "\n" out))))))
+
+;; --- a StatefulSet that is gone before its delete --------------------------------------
+
+(defn- original-web?
+  [object]
+  (and (= "web" (get-in object [:metadata :name])) (= "uid-web" (get-in object [:metadata :uid]))))
+
+(defn- web-vanishes
+  "A :settle that deletes shop/web behind the book's back after the first
+   mutation that succeeds, a claim patch: the StatefulSet the operator
+   confirmed is gone by the time the book deletes it. A recreated web
+   carries another uid and stays."
+  [state]
+  (update-in state [:objects "statefulsets"] (fn [sets] (vec (remove original-web? sets)))))
+
+(defn- unanswered-once-web-is-gone
+  "A :settle under which the API server stops answering once the original
+   shop/web is gone, so the wait after the delete cannot read it."
+  [state]
+  (cond-> state
+    (not-any? original-web? (get-in state [:objects "statefulsets"])) (assoc :answering? false)))
+
+(defn- verb-of
+  [{:keys [argv]}]
+  (some #{"patch" "delete" "wait" "apply"} argv))
+
+(deftest the-wait-after-the-orphan-delete-holds-once-the-statefulset-is-gone
+  (let [config (load-config "runbooks/kubernetes/statefulsets/enlarge_volumes.clj")
+        run (fn [state] (transcript config {:state state :argv enlarge-argv}))]
+    (testing "a StatefulSet deleted behind the book's back passes the delete and the wait, and is recreated"
+      (let [{:keys [result banner out mutations]} (run (assoc shop :settle web-vanishes))]
+        (is (= [["patch" 0] ["patch" 0] ["delete" 0] ["wait" 0] ["apply" 0]]
+               (mapv (juxt verb-of :exit) mutations))
+            (str/join "\n" out))
+        (is (some #{"--ignore-not-found"} (:argv (nth mutations 2))) "the delete tolerates the absent StatefulSet")
+        (is (true? result) (str/join "\n" out))
+        (is (= "DONE - applied and verified" banner) (str/join "\n" out))))
+    (testing "a wait whose read does not answer fails, and nothing is recreated"
+      (let [{:keys [result mutations recovery out]} (run (assoc shop :settle unanswered-once-web-is-gone))]
+        (is (= [["patch" 0] ["patch" 0] ["delete" 0] ["wait" 1]] (mapv (juxt verb-of :exit) mutations))
+            (str/join "\n" out))
+        (is (not (true? result)) (str/join "\n" out))
+        (is (some #(str/includes? % "Whether StatefulSet shop/web still exists is unknown") recovery)
+            (str/join "\n" recovery))))
+    (testing "a StatefulSet that stays until the timeout fails the wait, and nothing is recreated"
+      (let [{:keys [result mutations recovery out]} (run (assoc shop :stalled-gc? true))]
+        (is (= [["patch" 0] ["patch" 0] ["delete" 0] ["wait" 1]] (mapv (juxt verb-of :exit) mutations))
+            (str/join "\n" out))
+        (is (not (true? result)) (str/join "\n" out))
+        (is (some #(str/includes? % "IS BEING DELETED") recovery) (str/join "\n" recovery))))))

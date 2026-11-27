@@ -467,6 +467,9 @@
    request timeout), and the wait that follows is bounded by
    statefulset-gone-timeout, so a garbage collector that never removes the
    orphan finalizer stops the run with recovery text instead of hanging it.
+   A StatefulSet already gone when the delete runs passes both: the delete
+   ignores NotFound, and kubectl wait --for=delete succeeds for an object
+   that does not exist, while a read that does not answer fails it.
    Applying the manifest before the old StatefulSet is gone would patch the
    object being deleted."
   [context statefulset template-name capacity plan]
