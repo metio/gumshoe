@@ -244,6 +244,45 @@
                   (recur (next cps) (+ used w) (.appendCodePoint kept (int cp)))
                   (str kept "…")))))))
 
+(defn printable-cut
+  "s made printable (see printable), then cut to at most `budget` columns
+   (see cut). Applying it twice gives the same string as applying it once."
+  [budget s]
+  (cut budget (printable s)))
+
+(defn printable-data
+  "data with every string in it made printable and cut (see printable-cut),
+   map keys included, so a structure built from text a cluster supplied can be
+   printed in any format without carrying escapes, bidirectional or zero-width
+   characters, or unbounded text. `budget-of` maps the key a string sits
+   under - the nearest map key above it, nil at the top - to its column
+   budget. Keywords, numbers, instants and other values pass through.
+
+   A collection nested more than `max-depth` levels deep is replaced by its
+   printed form, printable and cut, with print length and level bounded, so
+   neither deep nor endless data stops the walk."
+  [budget-of max-depth data]
+  (letfn [(walk [k depth v]
+            (cond
+              (string? v) (printable-cut (budget-of k) v)
+              (not (coll? v)) v
+              (> depth max-depth) (printable-cut (budget-of k)
+                                                 (binding [*print-length* 100 *print-level* 4]
+                                                   (pr-str v)))
+              (map? v) (let [entry (fn [[mk mv]]
+                                     [(if (string? mk) (printable-cut (budget-of nil) mk) mk)
+                                      (walk mk (inc depth) mv)])]
+                         (if (record? v)
+                           (reduce (fn [m [ok :as e]]
+                                     (let [[mk mv] (entry e)]
+                                       (assoc (if (= ok mk) m (dissoc m ok)) mk mv)))
+                                   v v)
+                           (into (empty v) (map entry) v)))
+              (vector? v) (mapv #(walk k (inc depth) %) v)
+              (set? v) (into (empty v) (map #(walk k (inc depth) %)) v)
+              :else (doall (map #(walk k (inc depth) %) v))))]
+    (walk nil 0 data)))
+
 (defn- one-line
   "text as one line of plain text: colour removed and every control
    character, a newline or an escape included, turned into a space, so it can
