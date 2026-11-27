@@ -945,6 +945,27 @@ mostly data:
   answers, so a missing store fails the query instead of shrinking a count;
 - a book that collects rows passes them to the machine formats with
   `(detective/report! detectives findings output {:hosts rows})`;
+- a gate, refusal or post-check that must tell an absent object from a read
+  that did not answer reads through `gumshoe.reads`, never the plain getters
+  (`get-namespaced-resource`, `get-cluster-resource`, `get-all`,
+  `get-namespaced`), which return nil for both. `(reads/namespaced-object
+  context ns type name)`, `(reads/cluster-object context type name)`,
+  `(reads/object context ref)` and `(reads/listing context {:type :namespace
+  :selector})` (`:namespace :all` for every namespace) return `{:state
+  :present|:absent|:unread …}` with `:object`, `:items` or `:reason`. Only a
+  clean answer is `:absent`; a timeout, a denial, unparsable output or another
+  object is `:unread`. A type the cluster does not serve is `:absent` with
+  `:unserved true` only when discovery confirms it, and only for a type named
+  as `<plural>.<group>`: kubectl prints "doesn't have a resource type" also
+  when the group's discovery failed. Pick the predicate by what the caller
+  proceeds on: `present?` to assert a presence, `absent?` to confirm a
+  deletion, `(reads/on-state r {:present … :absent … :unread …})`, which
+  needs all three branches, to skip an object; `(not (present? r))` is not an
+  absence. `object!`, `items!` and `value!` (over `(reads/derived r f)`)
+  throw `::kubectl/unread` for an unread result, so it never lands in a
+  manifest as data, and `refusal-unless-present`, `refusal-unless-absent` and
+  `unread-refusal` give a `:refusal` line per polarity. The reads follow the
+  run's pinned kube context and `kubectl/*read-cache*`;
 - a cluster read no `gumshoe.kubectl` function wraps goes through
   `(kubectl/get-json context "namespaces" "--selector=…")`, nil when the read
   fails, or `get-json-result`, whose `:ok?` tells a failed read from an empty

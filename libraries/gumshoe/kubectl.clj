@@ -599,6 +599,15 @@
   (boolean (or (and (= 0 exit) (some? (parse-json out)))
                (answered-empty? err))))
 
+(defn- answered-read?
+  "Whether the result of the kubectl get argv answered (see answered?). A
+   get with --ignore-not-found that exits cleanly with no output has also
+   answered: kubectl prints nothing when the object it names does not
+   exist."
+  [argv {:keys [exit out] :as result}]
+  (boolean (or (answered? result)
+               (and (= 0 exit) (str/blank? out) (some #{"--ignore-not-found"} argv)))))
+
 (defn- execute-read
   "The result of running the kubectl get argv, served from *read-cache* when
    it is bound and holds an answer for argv. Within one cache the first
@@ -610,7 +619,7 @@
     (let [pending (delay (apply shell/execute argv))
           entry (get (swap! cache #(if (contains? % argv) % (assoc % argv pending))) argv)
           result @entry]
-      (when-not (answered? result)
+      (when-not (answered-read? argv result)
         (swap! cache #(if (identical? entry (get % argv)) (dissoc % argv) %)))
       result)
     (apply shell/execute argv)))
@@ -660,6 +669,15 @@
   (apply read-result "kubectl" (str "--context=" context) request-timeout
          "get" (concat args ["--output=json"])))
 
+(defn get-answer
+  "The raw result {:exit :out :err} of `kubectl get` with args against
+   context, bounded by the request timeout and served from *read-cache* when
+   it is bound. Ignores *strict-reads* and interprets nothing: it is the
+   collection half of gumshoe.reads, whose pure classification decides what
+   the result proves."
+  [context & args]
+  (execute-read (into ["kubectl" (str "--context=" context) request-timeout "get"] args)))
+
 (defn get-all
   [context type]
   (get-json context type "--all-namespaces"))
@@ -687,13 +705,19 @@
    every one of them answered: an aggregated API whose server is down still
    has its group listed by the kube-apiserver, while its versions answer 503.
    Anything else - a failed read, a type a version lists after all - is not
-   a confirmed absence."
+   a confirmed absence. A version lists the type when any name kubectl
+   resolves a type by matches it, case aside: its plural, its singular
+   name, a short name or its Kind."
   [plural group-result version-results]
   (cond
     (and group-result (not (zero? (:exit group-result)))) (not-found? (:err group-result))
     :else (boolean
            (when-let [docs (discovery-documents version-results)]
-             (not-any? #(= plural (:name %)) (mapcat :resources docs))))))
+             (let [wanted (str/lower-case (str plural))
+                   names (fn [{:keys [name singularName shortNames kind]}]
+                           (map #(str/lower-case (str %))
+                                (remove nil? (concat [name singularName kind] shortNames))))]
+               (not-any? #(some #{wanted} (names %)) (mapcat :resources docs)))))))
 
 (defn- raw-result
   [context path]
@@ -704,11 +728,20 @@
    plural.group) is not served. A kubectl get reports a type it finds no
    mapping for as \"doesn't have a resource type\" both when the type is
    not served and when discovery of its group failed and kubectl carried on
-   with what it did read, so that message alone never proves an absence."
+   with what it did read, so that message alone never proves an absence.
+   A type written as resource.version.group (\"deployments.v1.apps\") is
+   never confirmed unserved: its group would be read as \"v1.apps\", which
+   no server knows."
   [context type]
   (let [[plural group] (str/split type #"\." 2)]
-    (if (str/blank? group)
+    (cond
+      (and group (re-find #"^v[0-9]+((alpha|beta)[0-9]+)?(\.|$)" group))
+      false
+
+      (str/blank? group)
       (unserved-in-discovery? plural nil [(raw-result context "/api/v1")])
+
+      :else
       (let [group-result (raw-result context (str "/apis/" group))
             versions (when (zero? (:exit group-result))
                        (keep :version (:versions (parse-json (:out group-result)))))]
