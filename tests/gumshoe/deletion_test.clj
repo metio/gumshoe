@@ -77,9 +77,9 @@
   (is (nil? (deletion/dependents {:type "pods" :namespace "shop" :name "x"} {}))))
 
 (deftest the-dry-run-and-the-delete
-  (is (= ["--namespace=shop" "delete" "services" "web" "--dry-run=server"]
+  (is (= ["--namespace=shop" "delete" "services" "web" "--interactive=false" "--dry-run=server"]
          (deletion/dry-run-args {:type "services" :namespace "shop" :name "web"})))
-  (is (= ["--namespace=shop" "delete" "services" "web" "--wait=false"]
+  (is (= ["--namespace=shop" "delete" "services" "web" "--ignore-not-found" "--interactive=false" "--wait=false"]
          (deletion/delete-args {:type "services" :namespace "shop" :name "web"})))
   (testing "the outcome reads stdout on success and stderr on refusal"
     (is (= {:ok? true :message "service \"web\" deleted (server dry run)"}

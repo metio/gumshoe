@@ -127,15 +127,15 @@
     :pin {:type helmrelease :namespace "apps" :name "podinfo"}
     :verify [{:description "the HelmRelease is suspended and no Helm action is running" :timeout 180 :interval 5}]}
    {:items ["delete deployments apps/web" "delete statefulsets apps/db"]
-    :plan [[:kubectl "ctx" "-n" "apps" "delete" "deployments" "web" "--ignore-not-found" "--wait=false"]
-           [:kubectl "ctx" "-n" "apps" "delete" "statefulsets" "db" "--ignore-not-found" "--wait=false"]]
+    :plan [[:kubectl "ctx" "--namespace=apps" "delete" "deployments" "web" "--ignore-not-found" "--interactive=false" "--wait=false"]
+           [:kubectl "ctx" "--namespace=apps" "delete" "statefulsets" "db" "--ignore-not-found" "--interactive=false" "--wait=false"]]
     :verify [{:description "deployments apps/web is gone" :timeout 180 :interval 5}
              {:description "statefulsets apps/db is gone" :timeout 180 :interval 5}]}
    {:items ["delete persistentvolumeclaims apps/data-db-0 and the data on it"]
-    :plan [[:kubectl "ctx" "-n" "apps" "delete" "persistentvolumeclaims" "data-db-0" "--ignore-not-found" "--wait=false"]]
+    :plan [[:kubectl "ctx" "--namespace=apps" "delete" "persistentvolumeclaims" "data-db-0" "--ignore-not-found" "--interactive=false" "--wait=false"]]
     :verify [{:description "persistentvolumeclaims apps/data-db-0 is gone" :timeout 180 :interval 5}]}
    {:items ["delete every Helm revision Secret of podinfo in apps, so the next action is an install"]
-    :plan [[:kubectl "ctx" "-n" "apps" "delete" "secrets" "--selector=owner=helm,name=podinfo" "--ignore-not-found"]]
+    :plan [[:kubectl "ctx" "--namespace=apps" "delete" "secrets" "--selector=owner=helm,name=podinfo" "--ignore-not-found" "--interactive=false"]]
     :verify [{:description "the release's Helm storage is empty" :timeout 180 :interval 5}]}
    {:items ["resume HelmRelease apps/podinfo and request a reconcile, which installs it"]
     :plan [[:kubectl "ctx" "-n" "apps" "patch" helmrelease "podinfo" "--type=merge" resume-patch]

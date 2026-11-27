@@ -17,6 +17,7 @@
    with the fragment keeps its action. A caller saying :destructive? false
    beside such a step is refused when the step is normalized or composed."
   (:require [gumshoe.change :as change]
+            [gumshoe.deletes :as deletes]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]))
 
@@ -31,9 +32,8 @@
   [context objects none]
   (if (empty? objects)
     (effect/plan (effect/note none))
-    (vec (for [{:keys [type namespace name]} objects]
-           (effect/kubectl context "-n" namespace "delete" type name
-                           "--ignore-not-found" "--wait=false")))))
+    (vec (for [object objects]
+           (deletes/effect context (select-keys object [:type :namespace :name]) {:wait false})))))
 
 (defn gone-checks
   "One post-check per object, holding once a read answered and found no such

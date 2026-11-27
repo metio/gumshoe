@@ -145,6 +145,21 @@ copy from one as `KUBERC=off kubectl …` to get the same result. Reproducers an
 recordings start with `export KUBERC=off`, and a shared `upterm` shell
 inherits it.
 
+**Deletes.** Every `kubectl delete` a book issues is built by
+`gumshoe.deletes` and carries `--ignore-not-found --interactive=false`. A book
+judges its target before the confirmation and again after it, so a pick naming
+no object is refused there, and the server-side dry run of
+`runbooks/kubernetes/objects/delete.clj` leaves `--ignore-not-found` out so a
+typo comes back NotFound. An object a controller or another operator removes
+after that judgement no longer fails the step or stops a plan of several
+deletes halfway. `--interactive=false` keeps the book's confirmation the only
+one, also for a command copied from a plan. kubectl registers that flag from
+1.29 on; an older kubectl refuses the delete with `unknown flag:
+--interactive` before deleting anything. A casebook builds its deletes the same
+way: `(gumshoe.deletes/effect context {:type "secrets" :namespace "shop"
+:selector "owner=helm"} {:wait false})`, with `:cascade` and a short allowlist
+of `:extra` flags as the only other options.
+
 **Reproducers.** After a read-only book finishes, it writes the exact sequence
 of CLI calls it made to a throwaway shell script and copies the run command to
 your clipboard (wl-copy on Wayland, xclip/xsel on X11, pbcopy on macOS). Hand

@@ -51,6 +51,7 @@
    positions."
   (:require [clojure.string :as str]
             [gumshoe.change :as change]
+            [gumshoe.deletes :as deletes]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.playbook :as playbook]
@@ -528,9 +529,8 @@
                            (:release-name observed) (:storage-namespace observed))]))
         :effect (fn [{:keys [context observed]}]
                   (effect/plan
-                   (effect/kubectl context "-n" (:storage-namespace observed) "delete" "secrets"
-                                   (str "--selector=owner=helm,name=" (:release-name observed))
-                                   "--ignore-not-found")))
+                   (deletes/effect context {:type "secrets" :namespace (:storage-namespace observed)
+                                            :selector (str "owner=helm,name=" (:release-name observed))})))
         :verify (fn [{:keys [context observed]}]
                   [{:description "the release's Helm storage is empty"
                     :timeout (:deletion (waits observed)) :interval 5 :verifies-absence? true

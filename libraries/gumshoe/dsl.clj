@@ -151,6 +151,7 @@
             [gumshoe.change :as change]
             [gumshoe.dsl.library]
             [gumshoe.dsl.registry :as registry]
+            [gumshoe.deletes :as deletes]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
@@ -616,9 +617,10 @@
                                          (if (nil? v) (str k "-") (str k "=" v)))
                                        (when (:overwrite opts) ["--overwrite"]))))))
         :delete (fn [env]
-                  (let [{:keys [type name] :as r} (ref env)]
-                    (apply effect/kubectl (context env)
-                           (concat (namespace-flag r) ["delete" type name "--wait=false"]))))))))
+                  (let [{:keys [type namespace name]} (ref env)]
+                    (deletes/effect (context env)
+                                    (cond-> {:type type :name name} namespace (assoc :namespace namespace))
+                                    {:wait false})))))))
 
 ;; --- the state -----------------------------------------------------------------------
 

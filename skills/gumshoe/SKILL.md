@@ -191,6 +191,14 @@ prompts. There is no opt-out. The reproducer and the recording's
 out, so a command handed to the human from a plan reads their kuberc unless
 written as `KUBERC=off kubectl …`.
 
+Every `kubectl delete` a book issues comes from `gumshoe.deletes` and carries
+`--ignore-not-found --interactive=false`: an object already gone when the
+delete runs counts as deleted (the post-check still needs a read that answered
+NotFound), and the delete never prompts. A target missing before the
+confirmation is still refused by the book's subject check or dry run. When you
+hand a human a delete from a plan, keep both flags. A casebook builds its own
+deletes with `(gumshoe.deletes/effect context target options)`.
+
 ## Reading findings
 
 ```json

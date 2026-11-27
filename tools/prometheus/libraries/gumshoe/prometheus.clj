@@ -6,6 +6,7 @@
    and validation lives in gumshoe.storage."
   (:require [clojure.string :as str]
             [gumshoe.conditions :as conditions]
+            [gumshoe.deletes :as deletes]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.storage :as storage]))
@@ -194,10 +195,9 @@
                            :storage {:volumeClaimTemplate (storage/claim-patch capacity)}}})]
       (into (storage/resize-claim-steps context namespace plan capacity))
       (conj {:stage :delete
-             :effect (effect/kubectl context (str "--namespace=" namespace)
-                                     "delete" "statefulset"
-                                     (str "--selector=" (statefulset-selector name))
-                                     "--cascade=orphan")}
+             :effect (deletes/effect context {:type "statefulset" :namespace namespace
+                                              :selector (statefulset-selector name)}
+                                     {:cascade :orphan})}
             (patch-step :unpause context namespace name {:spec {:paused false}}))))
 
 (defn resize-recovery

@@ -8,6 +8,7 @@
    confirmation, since a 'Delete' policy also destroys the backing storage."
   (:require [clojure.string :as str]
             [gumshoe.cleanup :as cleanup]
+            [gumshoe.deletes :as deletes]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
@@ -32,7 +33,7 @@
 (defn delete-effect
   [context volumes]
   (apply effect/plan
-         (map #(effect/kubectl context "delete" "persistentvolume" % "--wait=false") volumes)))
+         (map #(deletes/effect context {:type "persistentvolume" :name %} {:wait false}) volumes)))
 
 (defn gone-checks
   [context volumes]

@@ -264,7 +264,7 @@
         (is (zero? (:exit with)) (:text with))
         (is (str/includes? (:text with) "the API server accepted a dry run: configmap \"web\" deleted (server dry run)")
             "the server dry run answered without a prompt")
-        (is (str/includes? (:text with) "would run: kubectl --namespace=shop delete configmaps web --wait=false"))
+        (is (str/includes? (:text with) "would run: kubectl --namespace=shop delete configmaps web --ignore-not-found --interactive=false --wait=false"))
         (is (= (:text without) (:text with)) "byte-identical plans")
         (is (not (str/includes? (:text with) "KUBERC")) "the plan shows the command, not our environment")
         (is (seq (:log with)))

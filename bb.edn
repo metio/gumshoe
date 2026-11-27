@@ -129,6 +129,7 @@
                    [gumshoe.concurrent-test]
                    [gumshoe.pick-test]
                    [gumshoe.deletion-test]
+                   [gumshoe.deletes-test]
                    [gumshoe.workloads-ops-test]
                    [gumshoe.posture-test]
                    [gumshoe.onset-test]
@@ -446,6 +447,7 @@
                                                          'gumshoe.concurrent-test
                                                          'gumshoe.pick-test
                                                          'gumshoe.deletion-test
+                                                         'gumshoe.deletes-test
                                                          'gumshoe.workloads-ops-test
                                                          'gumshoe.posture-test
                                                          'gumshoe.onset-test

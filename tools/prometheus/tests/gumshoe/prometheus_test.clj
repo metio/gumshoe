@@ -83,7 +83,7 @@
            (patch-of pause))
         "the pause also asks for the new capacity in the claim template")
     (is (= [:kubectl "ctx" "--namespace=monitoring" "delete" "statefulset"
-            "--selector=operator.prometheus.io/name=k8s" "--cascade=orphan"]
+            "--selector=operator.prometheus.io/name=k8s" "--ignore-not-found" "--interactive=false" "--cascade=orphan"]
            delete))
     (is (= {:spec {:paused false}} (patch-of unpause))))
   (is (= (storage/resize-claim-effects "ctx" "monitoring" resize-plan "20Gi")

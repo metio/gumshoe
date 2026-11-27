@@ -162,7 +162,7 @@
 
 (deftest the-statefulset-is-resized-claims-first-then-deleted-orphaned-then-applied
   (is (= [:claims :claims :delete :gone :recreate] (mapv :stage steps)))
-  (is (= [:kubectl "ctx" "--namespace=databases" "delete" "statefulset" "postgres" "--cascade=orphan"
+  (is (= [:kubectl "ctx" "--namespace=databases" "delete" "statefulset" "postgres" "--ignore-not-found" "--interactive=false" "--cascade=orphan"
           "--wait=false" "--request-timeout=30s"]
          (:effect (nth steps 2)))
       "the delete returns once the API server accepted it")

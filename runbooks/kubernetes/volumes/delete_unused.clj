@@ -8,6 +8,7 @@
    (see gumshoe.claims)."
   (:require [gumshoe.claims :as claims]
             [gumshoe.cleanup :as cleanup]
+            [gumshoe.deletes :as deletes]
             [gumshoe.effect :as effect]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
@@ -47,8 +48,8 @@
   ;; a pod uses it, and the gone check is the bounded wait
   :effect (fn [{:keys [context target]}]
             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
-              (effect/plan (effect/kubectl context (str "--namespace=" namespace)
-                                           "delete" "persistentvolumeclaim" name "--wait=false"))))
+              (effect/plan (deletes/effect context {:type "persistentvolumeclaim" :namespace namespace :name name}
+                                           {:wait false}))))
   :verify (fn [{:keys [context target]}]
             (let [{:keys [namespace name]} (kubectl/namespace-name-map target)]
               [(gone-check context namespace name target)]))})
