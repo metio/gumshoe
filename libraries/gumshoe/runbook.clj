@@ -139,9 +139,12 @@
    cluster that declares none is not capability-gated (any book runs on it, once
    it is a known cluster), so onboarding stays smooth while labelled clusters get
    the safety of a real match. With a connection, the cluster is the one the
-   run pinned (see gumshoe.kube-context), not the kubeconfig's current one."
+   run pinned (see gumshoe.kube-context), not the kubeconfig's current one.
+   With known-required?, an env.edn that names no cluster fails the check
+   instead of letting every cluster pass (see known-cluster-required?)."
   ([required-capabilities] (cluster-item required-capabilities nil))
-  ([required-capabilities connection]
+  ([required-capabilities connection] (cluster-item required-capabilities connection false))
+  ([required-capabilities connection known-required?]
    ["connected to a suitable Kubernetes cluster"
     #(let [current (if connection (:cluster connection) (kubectl/current-cluster))
            known (config/known-clusters)
@@ -150,6 +153,10 @@
        (cond
          (str/blank? (str current))
          {:ok? false :label "not connected to any Kubernetes cluster"}
+
+         (and known-required? (empty? known))
+         {:ok? false :label (format "env.edn sets :require-known-cluster but names no cluster (:clusters, or an environment's :select :kubernetes-cluster), so %s cannot be checked against one"
+                                    current)}
 
          (and (seq known) (not (some #{current} known)))
          {:ok? false :label (format "current Kubernetes cluster %s is none you configured: %s"
@@ -221,6 +228,67 @@
     :kubectl-can-get :kubectl-can-create :kubectl-can-update :kubectl-can-patch
     :kubectl-can-delete :kubectl-can-exec})
 
+(def ^:private cluster-tools
+  "The tools in :installed-tools that reach a Kubernetes cluster through
+   the kubeconfig; a kubectl plugin (kubectl-<name>) does as well."
+  #{"kubectl" "helm" "flux" "cmctl" "velero"})
+
+(defn- reaches-cluster?
+  "Pure: whether a book's prerequisites show that it reaches a Kubernetes
+   cluster: it gates on the cluster, asks a kubectl permission, or needs a
+   tool that talks to one."
+  [prerequisites]
+  (boolean
+   (or (contains? prerequisites :cluster-capabilities)
+       (contains? prerequisites :kubectl-can-exec)
+       (some #(contains? prerequisites (first %)) prerequisites/kubectl-verbs)
+       (some #(or (contains? cluster-tools %) (str/starts-with? (str %) "kubectl-"))
+             (:installed-tools prerequisites)))))
+
+(defn cluster-access
+  "Pure: how a run of the book described by config reaches a Kubernetes
+   cluster, given the connection it pinned (nil when it pinned none):
+     :pinned     it declares :kube-context and the pinned connection names
+                 a context, so it acts on that one only
+     :unresolved it declares :kube-context, but the kubeconfig names no
+                 current context, so nobody can say which cluster it would
+                 act on
+     :unpinned   it pins nothing, but its prerequisites show it reaches a
+                 cluster, through the kubeconfig's current context as each
+                 call finds it
+     :none       neither. A bespoke book that calls kubectl without
+                 declaring it in its prerequisites is :none as well, since
+                 nothing about it says otherwise."
+  [{:keys [kube-context prerequisites]} connection]
+  (cond
+    (and kube-context (not (str/blank? (str (:context connection))))) :pinned
+    kube-context :unresolved
+    (reaches-cluster? prerequisites) :unpinned
+    :else :none))
+
+(defn pre-hook-context
+  "Pure: the context every pre-hook is called with for a run of the book
+   described by config (see gumshoe.hooks/register-pre-hook!). :connection
+   is the pinned connection when it names a context and nil otherwise, so
+   a hook never reads a connection whose context and cluster are nil as a
+   known one; :cluster-access tells it why."
+  [config {:keys [book opts change? connection]}]
+  (let [access (cluster-access config connection)]
+    {:description (:description config)
+     :book book
+     :opts opts
+     :change? change?
+     :connection (when (= :pinned access) connection)
+     :cluster-access access}))
+
+(defn known-cluster-required?
+  "Whether env.edn asks for every book that reaches a cluster to be checked
+   against the known clusters, as a top-level :require-known-cluster. Any
+   value but absent or false turns it on, so a mistyped value never turns the
+   check off. Read from the top level only, so no environment can lift it."
+  ([] (known-cluster-required? (config/value [:require-known-cluster])))
+  ([value] (not (or (nil? value) (false? value)))))
+
 (defn- unknown-prerequisite-items
   "Fail-closed items for declared prerequisite keys that no built-in handles and
    no plugin registered - so a change gate whose providing plugin is missing (or
@@ -247,50 +315,55 @@
 (defn- prerequisite-items
   "The checklist items of prerequisites for opts. The cluster and permission
    checks ask about the kube context the run pinned (see
-   gumshoe.kube-context/*pinned*), and about the current one when none is."
-  [prerequisites opts]
-  (let [connection kube-context/*pinned*
-        context (:context connection)
-        blank? #(str/blank? (str %))
-        ipv4-hosts (remove blank? (map opts (:can-ping-using-ipv4 prerequisites)))
-        ipv6-hosts (remove blank? (map opts (:can-ping-using-ipv6 prerequisites)))
-        secrets (remove blank? (map opts (:access-gopass-secrets prerequisites)))
-        tools (utils/conj-if-not-empty (:installed-tools prerequisites) secrets (secrets/command-name))
-        ;; a tool brings its own version floor: any book that lists it inherits
-        ;; the min-version its tool-support package registered, the book's own
-        ;; :minimum-tool-versions winning on conflict
-        tool-floors (into {} (keep (fn [t] (when-let [v (command/tool-min-version t)] [t v])) tools))
-        min-versions (merge tool-floors (:minimum-tool-versions prerequisites))]
-    (concat
-     (map tool-item tools)
-     (map min-version-item min-versions)
-     ;; and any extra checks the tool declared it needs (a service to reach, a login)
-     (mapcat (fn [t] (when-let [build (command/tool-prerequisites t)]
-                       (built-items (format "the prerequisites of %s" t) #(build opts))))
-             tools)
-     (map (partial ping-item 4) ipv4-hosts)
-     (map (partial ping-item 6) ipv6-hosts)
-     (map secret-item secrets)
-     (prerequisites/existing-path-items (:existing-paths prerequisites) opts)
-     (when (contains? prerequisites :cluster-capabilities)
-       [(cluster-item (:cluster-capabilities prerequisites) connection)])
-     (mapcat (fn [[key verb]] (map (partial can-i-item context verb) (get prerequisites key)))
-             prerequisites/kubectl-verbs)
-     (map (partial can-exec-item context) (:kubectl-can-exec prerequisites))
-     ;; plugin-registered checks (change windows, tickets, on-call acks) run last
-     ;; one registered check at a time, so a builder that throws fails its
-     ;; own item and the others still run
-     (mapcat (fn [key]
-               (built-items (format "prerequisite %s" key)
-                            #(prerequisites/items (select-keys prerequisites [key]) opts)))
-             (prerequisites/registered-checks))
-     ;; and a fail-closed item for any declared key nothing handles
-     (unknown-prerequisite-items prerequisites))))
+   gumshoe.kube-context/*pinned*), and about the current one when none is.
+   With known-required? (see known-cluster-required?), a book whose access
+   (see cluster-access) is anything but :none is checked against the known
+   clusters even when it declares no :cluster-capabilities."
+  ([prerequisites opts] (prerequisite-items prerequisites opts :none false))
+  ([prerequisites opts access known-required?]
+   (let [connection kube-context/*pinned*
+         known-required? (and known-required? (not= :none access))
+         context (:context connection)
+         blank? #(str/blank? (str %))
+         ipv4-hosts (remove blank? (map opts (:can-ping-using-ipv4 prerequisites)))
+         ipv6-hosts (remove blank? (map opts (:can-ping-using-ipv6 prerequisites)))
+         secrets (remove blank? (map opts (:access-gopass-secrets prerequisites)))
+         tools (utils/conj-if-not-empty (:installed-tools prerequisites) secrets (secrets/command-name))
+         ;; a tool brings its own version floor: any book that lists it inherits
+         ;; the min-version its tool-support package registered, the book's own
+         ;; :minimum-tool-versions winning on conflict
+         tool-floors (into {} (keep (fn [t] (when-let [v (command/tool-min-version t)] [t v])) tools))
+         min-versions (merge tool-floors (:minimum-tool-versions prerequisites))]
+     (concat
+      (map tool-item tools)
+      (map min-version-item min-versions)
+      ;; and any extra checks the tool declared it needs (a service to reach, a login)
+      (mapcat (fn [t] (when-let [build (command/tool-prerequisites t)]
+                        (built-items (format "the prerequisites of %s" t) #(build opts))))
+              tools)
+      (map (partial ping-item 4) ipv4-hosts)
+      (map (partial ping-item 6) ipv6-hosts)
+      (map secret-item secrets)
+      (prerequisites/existing-path-items (:existing-paths prerequisites) opts)
+      (when (or known-required? (contains? prerequisites :cluster-capabilities))
+        [(cluster-item (:cluster-capabilities prerequisites []) connection known-required?)])
+      (mapcat (fn [[key verb]] (map (partial can-i-item context verb) (get prerequisites key)))
+              prerequisites/kubectl-verbs)
+      (map (partial can-exec-item context) (:kubectl-can-exec prerequisites))
+      ;; plugin-registered checks (change windows, tickets, on-call acks) run last
+      ;; one registered check at a time, so a builder that throws fails its
+      ;; own item and the others still run
+      (mapcat (fn [key]
+                (built-items (format "prerequisite %s" key)
+                             #(prerequisites/items (select-keys prerequisites [key]) opts)))
+              (prerequisites/registered-checks))
+      ;; and a fail-closed item for any declared key nothing handles
+      (unknown-prerequisite-items prerequisites)))))
 
 (defn- prerequisites?
-  [prerequisites opts]
+  [prerequisites opts access]
   (stdout/print-section "📋 Prerequisites")
-  (let [items (prerequisite-items prerequisites opts)]
+  (let [items (prerequisite-items prerequisites opts access (known-cluster-required?))]
     (or (empty? items)
         (progress/checklist items {:stop-on-failure? false}))))
 
@@ -441,6 +514,15 @@
         (System/exit 1))
       connection)))
 
+(defn blocked-text
+  "Pure: what the BLOCKED banner says for a pre-hook gate that blocked: its
+   reason, followed by the hook that blocked when the reason does not
+   already name it."
+  [{:keys [reason hook]}]
+  (if (and hook (not (str/includes? (str reason) (str hook))))
+    (format "%s (pre-hook %s)" reason hook)
+    (str reason)))
+
 (defn execute!
   "Runs a runbook described by a config map:
 
@@ -462,9 +544,18 @@
                   from the kubeconfig once, before the prerequisites, and
                   pinned for the whole run (gumshoe.kube-context/*pinned*).
                   The cluster and permission prerequisites, the pre-hooks'
-                  :connection, the announcement data's :cluster and every
-                  change the action runs use it. A name the kubeconfig does
-                  not hold stops the run before anything is checked or read
+                  :connection and :cluster-access (see cluster-access and
+                  gumshoe.hooks/register-pre-hook!), the announcement data's
+                  :cluster and every change the action runs use it. A name
+                  the kubeconfig does not hold stops the run before anything
+                  is checked or read
+
+   env.edn may set :require-known-cluster true, so every book that reaches
+   a cluster (cluster-access other than :none) is checked against the known
+   clusters as if it declared :cluster-capabilities [], and an env.edn that
+   names no cluster fails that check (see known-cluster-required?). Its
+   :pre-hooks :fail-closed names pre-hooks the estate requires to be loaded
+   and to fail closed (see gumshoe.hooks/run-pre-hooks!).
 
    ctx contains :announcement-data when :announce? is true. Under *loading*
    it returns the config untouched."
@@ -499,7 +590,7 @@
           (ui/activate!)
           (doseq [note (cond-> (vec notes) (:note exit-contract) (conj (:note exit-contract)))] (stdout/warn note))
           (binding [kube-context/*pinned* (pinned-connection config opts)]
-            (when-not (prerequisites? prerequisites opts)
+            (when-not (prerequisites? prerequisites opts (cluster-access config kube-context/*pinned*))
               (stdout/print-banner stdout/red (str (theme/token :error) " PREREQUISITES NOT MET - nothing was attempted"))
               (stdout/err-println "Next: install the missing tools, connect to the right cluster/VPN, or fix the")
               (stdout/err-println (str "      access shown with a " (theme/token :check-error) " above, then run this book again."))
@@ -507,13 +598,12 @@
             ;; global pre-execution gates (change freeze, required ack) may veto the
             ;; run before it touches anything - they apply to every book, unlike a
             ;; book's own declared prerequisites
-            (let [gate (hooks/run-pre-hooks! {:description description
-                                              :book (System/getProperty "babashka.file")
-                                              :opts opts
-                                              :change? change?
-                                              :connection kube-context/*pinned*})]
+            (let [gate (hooks/run-pre-hooks! (pre-hook-context config {:book (System/getProperty "babashka.file")
+                                                                       :opts opts
+                                                                       :change? change?
+                                                                       :connection kube-context/*pinned*}))]
               (when-not (:allowed? gate)
-                (stdout/print-banner stdout/red (str (theme/token :error) " BLOCKED - " (:reason gate)))
+                (stdout/print-banner stdout/red (str (theme/token :error) " BLOCKED - " (blocked-text gate)))
                 (System/exit 1)))
             (let [ctx (when announce? {:announcement-data (announcement-data)})]
               (stdout/print-section (book-heading (System/getProperty "babashka.file") description))

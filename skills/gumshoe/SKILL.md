@@ -396,7 +396,13 @@ in the search order (`GUMSHOE_ENV`, `./env.edn`,
 read, even when it is broken: a file that does not read as an EDN map is
 named on stderr with the parse error, nothing of it applies, and the
 "suitable Kubernetes cluster" prerequisite refuses every cluster until it is
-fixed. A part of the wrong
+fixed, and every book that reaches a cluster is blocked before it starts. A
+top-level `:require-known-cluster true` checks every book that reaches a
+cluster against the known clusters, even one that declares no
+`:cluster-capabilities`, and fails that check when env.edn names no cluster.
+`:pre-hooks {:fail-closed [:estate/lock]}` names pre-hooks the estate
+requires: each runs fail-closed, and every book is blocked while one is not
+registered. A part of the wrong
 shape (`:environments` or `:defaults` that is not a map, a `:select` that is
 not a map, `:plugins` that is neither a namespace nor a list of them) is ignored with a warning on
 stderr naming it, and the rest of the file still applies. A part that could
@@ -1048,7 +1054,14 @@ under strict reads, so a read that does not answer is named in the
 drill-down as unread and fails the run, never shown as nothing related. An
 owner kind no plugin registered is offered as an unsupported kind and is
 never read. Hooks and announcers print to
-stderr, because a post-hook runs after a scan printed its report on stdout. In the gumshoe repository,
+stderr, because a post-hook runs after a scan printed its report on stdout.
+A pre-hook sees the run's `:connection` (`{:context :cluster :announce-as}`,
+the kube context the run pinned) and `:cluster-access` (`:pinned`,
+`:unresolved`, `:unpinned` or `:none`). It fails open by default; registered
+as `{:hook f :name :estate/lock :fail-closed? true}` it blocks the book on a
+throw, a timeout or any answer but `true` or `{:allow? true}`, and the
+BLOCKED banner names it. A book refused that way changed nothing; tell the
+operator which hook blocked it rather than looking for a way around it. In the gumshoe repository,
 `bb test` runs the unit and conformance suites; the conformance suite
 requires that every file parses, and a license header, a namespace
 docstring, one harness entry point and a description on every book and

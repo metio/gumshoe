@@ -157,7 +157,8 @@
    the next file would apply another operator's allow-list and hosts without
    a word. A file that cannot be read is named on stderr with the reason and
    yields a config whose cluster allow-list matches no cluster, so every book
-   that checks the cluster refuses until the file is fixed."
+   that checks the cluster refuses until the file is fixed, and that carries
+   the reason under ::unreadable (see unreadable)."
   [paths]
   (if-let [path (first (filter #(and % (fs/exists? %)) paths))]
     (let [{:keys [config problem]} (read-existing path)]
@@ -165,7 +166,7 @@
         (let [reason (format "%s: %s" path problem)]
           (binding [*out* *err*]
             (println (format "warning: %s - no configuration applies, and every cluster is refused until it is fixed" reason)))
-          {::unread-clusters [reason]})
+          {::unread-clusters [reason] ::unreadable reason})
         config))
     {}))
 
@@ -199,6 +200,13 @@
   ([path default]
    (let [v (get-in @loaded path)]
      (if (nil? v) default v))))
+
+(defn unreadable
+  "Why the env.edn in use could not be read, or nil when it was read or none
+   exists. Nothing of such a file applies, so a policy it may declare - the
+   pre-hooks an estate requires - is unknown rather than absent."
+  []
+  (::unreadable (all)))
 
 (defn environments
   "The declared environments, a name -> environment map (empty when none)."
@@ -334,7 +342,7 @@
   ([signals] (active-config (all) (active-environment signals)))
   ([config active]
    (let [layer #(when (map? %) %)]
-     (merge (dissoc config :environments :defaults ::unread-clusters)
+     (merge (dissoc config :environments :defaults ::unread-clusters ::unreadable)
             (layer (:defaults config))
             (layer (when (map? (:environments config)) (get (:environments config) active)))))))
 
@@ -421,7 +429,7 @@
   (str ";; SPDX-FileCopyrightText: The gumshoe Authors\n"
        ";; SPDX-License-Identifier: 0BSD\n\n"
        ";; Written by runbooks/setup/init.clj - edit freely.\n"
-       (with-out-str (pprint/pprint (dissoc config ::unread-clusters)))))
+       (with-out-str (pprint/pprint (dissoc config ::unread-clusters ::unreadable)))))
 ;; REUSE-IgnoreEnd
 
 (defn backup-dir
