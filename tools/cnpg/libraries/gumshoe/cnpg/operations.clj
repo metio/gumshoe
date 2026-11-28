@@ -10,7 +10,8 @@
    \"*\" replaces the list, adding a name while \"*\" stands changes nothing,
    and lifting one name while \"*\" stands is refused, because it cannot be
    expressed. An empty list removes the annotation."
-  (:require [cheshire.core :as json]
+  (:require [briko.json :as briko-json]
+            [cheshire.core :as json]
             [clojure.string :as str]
             [gumshoe.kubectl :as kubectl]))
 
@@ -25,7 +26,7 @@
     (if (str/blank? raw)
       #{}
       (try
-        (let [parsed (json/parse-string raw)]
+        (let [parsed (briko-json/parse-string raw)]
           (when (and (sequential? parsed) (every? string? parsed)) (set parsed)))
         (catch Exception _ nil)))))
 

@@ -2,9 +2,12 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.strict-json-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [gumshoe.http :as http]
             [gumshoe.json :as json]
+            [gumshoe.kubectl :as kubectl]
+            [gumshoe.shell :as shell]
             [gumshoe.loopback-server :refer [recording! response]]))
 
 (deftest whole-documents-parse
@@ -47,3 +50,49 @@
     (is (nil? (:json truncated)) "a truncated array is no JSON, not a lazy seq that throws later"))
   (is (nil? (:json (answered "{\"a\":1} trailing")))))
 
+(defn- nested
+  "A JSON object nesting depth levels of objects and arrays, as a CRD's
+   openAPIV3Schema does, with a value at the bottom."
+  [depth]
+  (str (str/join (take (dec depth) (cycle ["{\"properties\":" "["])))
+       "{\"type\":\"string\"}"
+       (str/join (reverse (take (dec depth) (cycle ["}" "]"]))))))
+
+(deftest nested-builds-the-depth-it-names
+  (is (= {:type "string"} (json/parse-strict (nested 1))))
+  (is (= [{:type "string"}] (:properties (json/parse-strict (nested 3)))))
+  (is (thrown? Exception (json/parse-strict (nested 65))) "65 levels pass the default of 64 by one"))
+
+(deftest a-key-named-twice-throws
+  (is (thrown? Exception (json/parse-strict "{\"a\":1,\"a\":2}")))
+  (is (nil? (json/parse-or-nil "{\"a\":1,\"a\":2}")))
+  (is (nil? (kubectl/parse-json "{\"kind\":\"Pod\",\"kind\":\"Secret\"}"))
+      "two readers keeping different duplicates would read different objects"))
+
+(deftest a-raw-control-character-in-a-string-throws
+  (is (thrown? Exception (json/parse-strict (str "{\"a\":\"x" (char 7) "y\"}"))))
+  (is (= {:a (str "x" (char 7) "y")} (json/parse-strict "{\"a\":\"x\\u0007y\"}"))
+      "the escaped form reads"))
+
+(deftest limits-name-their-source
+  (is (= shell/max-out-bytes (:max-bytes json/command-output))
+      "a command's JSON can be no larger than the stdout gumshoe.shell keeps")
+  (is (= shell/max-out-bytes (:max-bytes json/kubectl-output)))
+  (is (= 128 (:max-depth json/kubectl-output))))
+
+(deftest kubectl-json-nests-as-deep-as-a-crd-listing
+  (testing "the deepest CRD listing measured needed 60 levels; kubectl's limit is 128"
+    (is (some? (kubectl/parse-json (nested 60))))
+    (is (some? (kubectl/parse-json (nested 128))))
+    (is (nil? (kubectl/parse-json (nested 129))) "one level past the limit is no evidence"))
+  (testing "negative control: under the command-output limit the same listing fails"
+    (is (nil? (json/parse-or-nil (nested 65))))
+    (is (some? (json/parse-or-nil (nested 65) json/kubectl-output)))))
+
+(deftest kubectl-parse-json-keeps-its-contract
+  (is (nil? (kubectl/parse-json nil)))
+  (is (nil? (kubectl/parse-json "")))
+  (is (nil? (kubectl/parse-json "null")))
+  (is (nil? (kubectl/parse-json "{\"items\":[")))
+  (is (= {:kind "List" :items [{:metadata {:name "a"}}]}
+         (kubectl/parse-json "{\"kind\":\"List\",\"items\":[{\"metadata\":{\"name\":\"a\"}}]}"))))

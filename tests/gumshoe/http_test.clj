@@ -37,8 +37,7 @@
         (let [[response ms] (elapsed-ms #(http/fetch url {} {:deadline-ms 1500}))]
           (is (< ms 5000) "fetch returns close to its deadline")
           (is (false? (:reachable response)))
-          (is (= 200 (:status response)))
-          (is (str/includes? (:error response) "did not arrive"))
+          (is (str/includes? (:error response) "did not complete within 1500 ms"))
           (is (not (http/ok? response))))
         (finally (close))))))
 
@@ -48,7 +47,7 @@
     (try
       (let [response (http/fetch url {} {:max-bytes 1024})]
         (is (false? (:reachable response)))
-        (is (str/includes? (:error response) "exceeded 1024 bytes")))
+        (is (str/includes? (:error response) "larger than 1024 bytes")))
       (finally (close)))))
 
 (deftest fetch-lines-bounds-an-error-body-that-never-ends
@@ -152,3 +151,40 @@
       (is (string? (:error answer)))
       (is (not (http/ok? answer))))))
 
+(deftest plain-http-to-a-host-that-is-not-loopback-is-refused-before-connecting
+  (let [[answer ms] (elapsed-ms #(http/fetch "http://192.0.2.1:9/api" {} {:timeout-ms 3000 :deadline-ms 3000}))]
+    (is (false? (:reachable answer)))
+    (is (str/includes? (:error answer) "plain http is refused"))
+    (is (< ms 2000) "refused without waiting for a connection")))
+
+(deftest a-url-with-user-info-is-refused-before-connecting
+  (let [{:keys [port requests close]} (recording! (fn [_] (response "200 OK" "{}")))]
+    (try
+      ;; built at runtime, so no credential-shaped literal sits in the source
+      (let [answer (http/fetch (str "http://" "someone" ":" "pw" "@127.0.0.1:" port "/"))]
+        (is (false? (:reachable answer)))
+        (is (str/includes? (:error answer) "user info"))
+        (is (not (str/includes? (:error answer) "pw")))
+        (is (empty? @requests)))
+      (finally (close)))))
+
+(deftest a-redirect-to-another-origin-drops-the-authorization-header
+  (let [other (recording! (fn [_] (response "200 OK" "{}")))
+        first-hop (recording! (fn [_] (response "302 Found" {"Location" (str (:url other) "landing")} "")))]
+    (try
+      (let [answer (http/fetch (:url first-hop) {"Authorization" (str "Bearer " "t0")})]
+        (is (http/ok? answer))
+        (is (= (str "Bearer " "t0") (get-in (first @(:requests first-hop)) [:headers "authorization"])))
+        (is (= "/landing" (:target (first @(:requests other)))))
+        (is (nil? (get-in (first @(:requests other)) [:headers "authorization"]))
+            "another port is another origin, which gets no Authorization"))
+      (finally ((:close first-hop)) ((:close other))))))
+
+(deftest a-redirect-loop-ends-unreachable
+  (let [{:keys [url requests close]} (recording! (fn [_] (response "302 Found" {"Location" "/again"} "")))]
+    (try
+      (let [answer (http/fetch url)]
+        (is (false? (:reachable answer)))
+        (is (str/includes? (:error answer) "more than 5 redirects"))
+        (is (= 6 (count @requests))))
+      (finally (close)))))

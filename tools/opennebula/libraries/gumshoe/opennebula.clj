@@ -5,8 +5,8 @@
   "Talking to OpenNebula over SSH: the one* CLI tools run on the frontend with
    its configured credentials, so nothing but ssh is assumed here. Every list
    command is asked for --json and normalized into a flat seq."
-  (:require [cheshire.core :as json]
-            [gumshoe.concurrent :as concurrent]
+  (:require [gumshoe.concurrent :as concurrent]
+            [gumshoe.json :as json]
             [gumshoe.shell :as shell]
             [gumshoe.ssh :as ssh]
             [gumshoe.stdout :as stdout]))
@@ -30,7 +30,7 @@
    nobody read."
   [{:keys [exit out]} pool-key element-key]
   (when (= 0 exit)
-    (let [parsed (try (json/parse-string (str out) true) (catch Exception _ nil))]
+    (let [parsed (json/parse-or-nil (str out))]
       (when (and (map? parsed) (contains? parsed pool-key))
         (as-seq (get-in parsed [pool-key element-key]))))))
 

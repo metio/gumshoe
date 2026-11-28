@@ -6,7 +6,8 @@
    separator, lone surrogate, unassigned, default-ignorable) as \\uXXXX, in a
    book's :extra as much as anywhere, so evidence reaches a reader whole and
    nothing in it reaches a terminal or an agent raw."
-  (:require [cheshire.core :as json]
+  (:require [briko.json :as briko-json]
+            [cheshire.core :as json]
             [clojure.edn :as edn]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
@@ -141,7 +142,7 @@
     (is (seq (raw-hidden (json/generate-string extra {:pretty true}))))
     (is (seq (raw-hidden (pr-str extra)))))
   (testing "the report without the escapers would fail them"
-    (with-redefs [render/json-escaped identity
+    (with-redefs [briko-json/escape-hidden identity
                   render/edn-text pr-str]
       (is (seq (raw-hidden (report-output "json"))))
       (is (seq (raw-hidden (report-output "edn")))))))
@@ -172,3 +173,19 @@
 (deftest any-string-round-trips-through-json-and-edn-without-raw-hidden-code-points
   (let [result (tc/quick-check 300 round-trips :seed 14)]
     (is (:pass? result) (pr-str (select-keys result [:shrunk :seed])))))
+
+(defn- differing-from-briko
+  "The first code points (up to five) on which pattern, matched against the
+   code point alone, disagrees with briko.json/hidden?, as U+ strings."
+  [pattern]
+  (into [] (comp (remove #(= (boolean (re-matches pattern (String. (Character/toChars (int %)))))
+                             (briko-json/hidden? %)))
+                 (take 5)
+                 (map #(format "U+%04X" %)))
+        (range 0 0x110000)))
+
+(deftest the-edn-escaper-hides-exactly-what-briko-json-hides
+  (testing "render's EDN class and briko.json/hidden? name the same code points, so the json and edn reports escape alike"
+    (is (= [] (differing-from-briko @#'render/hidden-pattern))))
+  (testing "negative control: a class without the format characters differs"
+    (is (seq (differing-from-briko #"[\p{Cc}\p{Zl}\p{Zp}\p{Cs}\p{Cn}]")))))

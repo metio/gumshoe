@@ -3,11 +3,19 @@
 
 (ns gumshoe.http
   "Probing HTTP APIs. A fetch never throws and never hangs: a connection
-   failure, or a body that does not arrive in time, becomes an unreachable
-   result, so detectives judge a map instead of handling exceptions. JSON
-   bodies are parsed opportunistically: :json is nil unless the whole body is
-   one complete JSON value."
+   failure, a refused URL, or a body that does not arrive in time becomes an
+   unreachable result, so detectives judge a map instead of handling
+   exceptions. JSON bodies are parsed opportunistically: :json is nil unless
+   the whole body is one complete JSON value.
+
+   request and fetch go through briko.http, so every request follows its
+   rules: https, or plain http to a loopback host only (a port-forward on
+   127.0.0.1); no user info in the URL; redirects checked hop by hop, never
+   from https to http, and with Authorization dropped when one leaves the
+   origin. fetch-lines! streams a body line by line, which briko.http does
+   not do, and stays on babashka.http-client."
   (:require [babashka.http-client :as http]
+            [briko.http :as briko-http]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [gumshoe.json :as gumshoe-json]
@@ -16,10 +24,9 @@
            [java.nio.charset StandardCharsets]))
 
 (def default-timeouts
-  "How long a fetch waits. :timeout-ms bounds the connection and the response
-   headers, :deadline-ms the whole request including the body, and :max-bytes
-   the body a fetch keeps in memory. java.net.http stops applying its request
-   timeout once the headers arrive, so the body needs a deadline of its own."
+  "How long a fetch waits. :timeout-ms bounds opening the connection,
+   :deadline-ms the whole request including every redirect and the body, and
+   :max-bytes the body a fetch keeps in memory."
   {:timeout-ms 5000
    :deadline-ms 15000
    :max-bytes (* 16 1024 1024)})
@@ -69,35 +76,37 @@
 (defn- remaining-ms [started deadline-ms]
   (- deadline-ms (quot (- (System/nanoTime) started) 1000000)))
 
+(def ^:private max-redirects
+  "How many redirects request follows: the five java.net.http's own
+   redirect policy allows, each checked by briko.http before it is followed."
+  5)
+
 (defn request
   "Sends an HTTP request and returns {:reachable, :status, :body, :json} - or
-   {:reachable false, :error} when the host does not answer at all, or answers
-   the headers but not a whole body within the deadline (:status is then kept
-   for the record). method is :get, :post, ...; opts takes :headers (merged
-   over Accept: application/json), :query-params, and overrides of
-   default-timeouts. It never throws, except inside
-   gumshoe.offline/forbidding, where it refuses before it connects."
+   {:reachable false, :error} when the host does not answer at all, the URL is
+   refused (plain http to a host that is not loopback, user info), or the
+   whole answer does not arrive within the deadline or max-bytes. method is
+   :get, :post, ...; opts takes :headers (merged over Accept:
+   application/json), :query-params, and overrides of default-timeouts:
+   :timeout-ms bounds opening the connection, :deadline-ms the whole
+   request. It never throws, except inside gumshoe.offline/forbidding, where
+   it refuses before it connects."
   [method url opts]
   (offline/check! [(str/upper-case (name method)) url])
-  (let [{:keys [headers query-params timeout-ms deadline-ms max-bytes]} (merge default-timeouts opts)
-        started (System/nanoTime)]
+  (let [{:keys [headers query-params timeout-ms deadline-ms max-bytes]} (merge default-timeouts opts)]
     (try
-      (let [{:keys [status body]} (http/request (cond-> {:method method
-                                                         :uri url
-                                                         :throw false
-                                                         :as :stream
-                                                         :timeout (min timeout-ms deadline-ms)
-                                                         :headers (merge {"Accept" "application/json"}
-                                                                         headers)}
-                                                  query-params (assoc :query-params query-params)))
-            read (read-body body {:deadline-ms (remaining-ms started deadline-ms)
-                                  :max-bytes max-bytes})]
-        (if-let [error (:error read)]
-          {:reachable false :status status :error error}
-          {:reachable true
-           :status status
-           :body (:body read)
-           :json (gumshoe-json/parse-or-nil (:body read))}))
+      (let [{:keys [status body]} (briko-http/request method url
+                                                      (cond-> {:headers (merge {"Accept" "application/json"} headers)
+                                                               :as :text
+                                                               :connect-timeout-ms (min timeout-ms deadline-ms)
+                                                               :timeout-ms deadline-ms
+                                                               :max-bytes max-bytes
+                                                               :max-redirects max-redirects}
+                                                        query-params (assoc :query query-params)))]
+        {:reachable true
+         :status status
+         :body body
+         :json (gumshoe-json/parse-or-nil body)})
       (catch Exception e
         (keep-interrupt! e)
         {:reachable false :error (message-of e)}))))

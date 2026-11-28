@@ -71,13 +71,13 @@
    and kubectl spells one type many ways (deploy, deployment,
    deployments.apps, Deployment). A ref that no item names is :missing, and
    the failure lists each one as <type> <namespace>/<name>."
-  (:require [cheshire.core :as json]
-            [clj-yaml.core :as yaml]
+  (:require [clj-yaml.core :as yaml]
             [clojure.string :as str]
             [clojure.test :as test]
             [gumshoe.change :as change]
             [gumshoe.effect :as effect]
             [gumshoe.http :as http]
+            [gumshoe.json :as json]
             [gumshoe.mutation :as mutation]
             [gumshoe.offline :as offline]
             [gumshoe.shell :as shell]))
@@ -185,7 +185,7 @@
 (defn- manifest-documents
   [stdin]
   (let [text (str stdin)]
-    (or (try (let [doc (json/parse-string text true)] (when (some? doc) [doc]))
+    (or (try (let [doc (json/parse-strict text json/kubectl-output)] (when (some? doc) [doc]))
              (catch Exception _ nil))
         (try (vec (remove nil? (yaml/parse-string text :load-all true :keywords true)))
              (catch Exception _ nil)))))

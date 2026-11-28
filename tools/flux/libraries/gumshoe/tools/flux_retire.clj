@@ -77,6 +77,7 @@
             [gumshoe.deletes :as deletes]
             [gumshoe.effect :as effect]
             [gumshoe.helm-ownership :as own]
+            [gumshoe.json :as gumshoe-json]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.reads :as reads]
             [gumshoe.select :as select]
@@ -164,7 +165,9 @@
        (:too-large inflated) {:problem (format "the release inflates to more than %d bytes" max-bytes)}
        (< max-bytes (alength ^bytes inflated)) {:problem (format "the release is more than %d bytes" max-bytes)}
        :else
-       (let [release (try (json/parse-string (String. ^bytes inflated "UTF-8"))
+       (let [release (try (gumshoe-json/parse-strict (String. ^bytes inflated "UTF-8")
+                                                     (assoc gumshoe-json/kubectl-output
+                                                            :keys :string :max-bytes max-bytes))
                           (catch Exception _ ::unparsable))
              manifest (when (map? release) (get release "manifest"))]
          (cond
