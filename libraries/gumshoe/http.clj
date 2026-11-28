@@ -12,8 +12,16 @@
    rules: https, or plain http to a loopback host only (a port-forward on
    127.0.0.1); no user info in the URL; redirects checked hop by hop, never
    from https to http, and with Authorization dropped when one leaves the
-   origin. fetch-lines! streams a body line by line, which briko.http does
-   not do, and stays on babashka.http-client."
+   origin.
+
+   fetch-lines! stays on babashka.http-client. It reads an endpoint that
+   streams until the deadline and answers with the lines that arrived by
+   then. briko.http hands a body over only once it is complete: in memory,
+   or with {:as {:file}} renamed into place, and a body still open at the
+   deadline is refused and its staged file removed, so a watch stream read
+   through it would yield a timeout and no lines. fetch-lines! therefore
+   keeps babashka.http-client's URL handling, without the https-or-loopback
+   rule."
   (:require [babashka.http-client :as http]
             [briko.http :as briko-http]
             [clojure.java.io :as io]
@@ -50,7 +58,8 @@
    it. Returns {:body s}, or {:error why} when the body did not end in time,
    grew past max-bytes, or failed. A reader blocked on a server that stopped
    sending is interrupted and the stream closed, so this always returns within
-   about deadline-ms."
+   about deadline-ms. It reads the error page of fetch-lines!, whose stream
+   comes from babashka.http-client; briko.http reads its own bodies."
   [^InputStream stream {:keys [deadline-ms max-bytes]}]
   (let [reading (future
                   (try

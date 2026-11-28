@@ -2,7 +2,9 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.http-test
-  (:require [clojure.string :as str]
+  (:require [babashka.fs :as fs]
+            [briko.http :as briko-http]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.http :as http]
             [gumshoe.loopback-server :refer [recording! response serve!]])
@@ -80,6 +82,35 @@
         (is (< ms 5000))
         (is (= ["one" "two"] (:lines response))))
       (finally (close)))))
+
+(deftest fetch-lines-stops-reading-at-max-lines
+  (testing "a stream that keeps sending is cut at max-lines, long before the deadline"
+    (let [{:keys [url close]} (serve! "HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n"
+                                      (map #(str "line-" % "\n") (range 1000)) 5)]
+      (try
+        (let [[response ms] (elapsed-ms #(http/fetch-lines! url {:deadline-ms 10000 :max-lines 3}))]
+          (is (= ["line-0" "line-1" "line-2"] (:lines response)))
+          (is (= 200 (:status response)))
+          (is (< ms 5000) "max-lines ends the read, the deadline does not"))
+        (finally (close))))))
+
+(deftest fetch-lines-keeps-what-briko-file-streaming-discards-at-the-deadline
+  (testing "a stream still open at the deadline yields its lines through fetch-lines!"
+    (let [{:keys [url close]} (serve! "HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n"
+                                      ["one\n" "two\n"] 0)
+          dir (fs/create-temp-dir {:prefix "gumshoe-http-test"})
+          target (str (fs/path dir "stream.txt"))]
+      (try
+        (is (= ["one" "two"] (:lines (http/fetch-lines! url {:deadline-ms 1000}))))
+        (testing "briko.http's {:as {:file}} refuses the same stream at its deadline and writes nothing"
+          (let [refusal (try (briko-http/request :get url {:as {:file target :fsync? false}
+                                                           :timeout-ms 1000})
+                             nil
+                             (catch Exception e (ex-data e)))]
+            (is (= :briko.http/timeout (:type refusal)))
+            (is (not (fs/exists? target)))
+            (is (empty? (fs/list-dir dir)) "the staged file is gone too")))
+        (finally (close) (fs/delete-tree dir))))))
 
 (deftest read-body-interrupts-a-blocked-read
   (let [blocking (PipedInputStream. (PipedOutputStream.))
