@@ -17,4 +17,5 @@
 ;; deadlines, XDG paths, atomic and private writes, digests. babashka carries
 ;; babashka.fs and babashka.process, which briko builds on, itself.
 {:paths ["libraries" "runbooks" "playbooks" "firebooks"]
- :deps {io.github.metio/briko {:git/sha "e1fb8e8495db1a33d805e42f5f7a071eceee037d"}}}
+ :deps {io.github.metio/briko {:git/tag "2026.11.28105006"
+                               :git/sha "e1fb8e8495db1a33d805e42f5f7a071eceee037d"}}}
