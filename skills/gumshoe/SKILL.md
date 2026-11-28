@@ -217,7 +217,15 @@ deletes with `(gumshoe.deletes/effect context target options)`.
   (summary 500 columns, hint 4000, any other field 2000). A text ending in
   `…` was cut, so read the object itself for the full message. A book's
   extra keys beside `findings` (such as `hosts` or `rows`) are evidence and
-  are not cleaned.
+  are not cleaned. In `--output json` and `--output edn`, every control,
+  bidi, zero-width, separator, lone-surrogate or unassigned character in
+  any string is written as a `\uXXXX` escape, and a JSON or EDN reader gets
+  the original text back. Other non-ASCII text such as `Größe` stays as it
+  is. EDN has no escape inside a keyword or symbol, so one holding such a
+  character is written as `#gumshoe/keyword "…"` or `#gumshoe/symbol "…"`;
+  read it with `gumshoe.render/edn-readers` (or `:default tagged-literal`).
+  A plugin format (`report/register-format!`) receives the extra keys
+  unescaped and escapes with `gumshoe.render/json-escaped` or `edn-text`.
 - `parent` marks a finding that follows from another at least as severe,
   and names that finding's object as `Kind namespace/name`: a pod finding
   under its workload or node, a finding under a cause on its own object (a
