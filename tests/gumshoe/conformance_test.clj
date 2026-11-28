@@ -66,8 +66,8 @@
                                                           (for [tool (fs/list-dir "tools")
                                                                 root ["runbooks" "playbooks" "firebooks"]]
                                                             (str (fs/path tool root)))
-                                                          ["tests/edn-books/runbooks"])))]
-    (is (<= 4 (count edn-books)))
+                                                          ["tests/edn-books/runbooks" "tests/edn-books/playbooks"])))]
+    (is (<= 6 (count edn-books)))
     (assert-none (:findings (conformance/report {:books edn-books :libraries [] :license "0BSD" :guards :require})))))
 
 (deftest every-casebook-example-book-loads

@@ -59,10 +59,12 @@ the casebook's book only. A path that names no book exits 1 and prints the
 closest listed paths. An absolute path runs as given.
 
 A listed path ending in `.edn` is a book written in the experimental EDN
-format (`:gumshoe/dsl :v0-experimental`): a change, or a read-only
+format (`:gumshoe/dsl :v0-experimental`): a change, a read-only
 detective when it declares `:kind :detective`, which you run with
-`--output json` like any detective. It runs through the same
-doors and takes the same `--help` and, for a change, `--dry-run`; its first stderr line is
+`--output json` like any detective, or a procedure of several changes,
+pauses and checks under one confirmation when it declares `:kind
+:procedure`, which runs as a playbook. It runs through the same
+doors and takes the same `--help` and, for a change or a procedure, `--dry-run`; its first stderr line is
 a note that the format may change, which is not a failure. Only `bb run`
 or `bb gumshoe` runs one: bare `bb <file>.edn` does not. A file the reader
 or `compile` refuses exits 1 with `refused <file>: <path>: <reason>`
@@ -880,6 +882,25 @@ mostly data:
   and an `:each` over no object is unread too unless it says
   `:empty-is-clean "why"`. `(dsl/register-detective! scope compiled)`
   joins its checks to a scope, refusing a detective that reads a flag.
+  A procedure is data too: `{:gumshoe/dsl :v0-experimental :kind
+  :procedure :description … :target … :prerequisites … :confirm {:action
+  …} :recovery "…" :steps […]}` (or `:phases [{:phase :name :title "…"
+  :steps […]} …]`) compiles with `(gumshoe.dsl/compile-procedure data)`
+  into the spec `playbook/book` takes, and an `.edn` book declaring it runs
+  as a playbook (`tests/edn-books/playbooks/kubernetes/workloads/cold-restart.edn`).
+  A step is a change map without `:gumshoe/dsl` and `:target`, compiled
+  with every safeguard of a change; `[:pause {:says "…" :until [{:read
+  [:get …] :holds … :says …}] :unattended :continue}]`, where
+  `:unattended` requires `:until`; or `[:check {:title … :reads … :checks
+  … :blocking? …}]`, a detective that may read `[:target]`. It asks once,
+  listing every step with what its data says it does and the objects of
+  the change judged before the confirmation, typed yes when any step is
+  destructive; each later change is judged when reached. A stopped run's
+  guidance names the steps finished, the one stopped at and those not run,
+  and a run started again skips the steps that took effect. Steps share no
+  data: naming another step's `:reads` or `:values` is refused, so a step
+  reads again what an earlier one made, and an `:each` snapshot is named
+  for its step (`:gumshoe.dsl/step-2-each-0`) so steps compose.
   Prefer a Clojure book for anything an operator relies on until the
   vocabulary is reviewed. Declare the target with its `:type` (or a registered `:parse`;
   add `:compare :spec` for a target such as `"nodes"` that has no generation), the
@@ -916,7 +937,12 @@ mostly data:
   a change after another change or after a waiting pause is judged only
   when reached, because its evidence is what the run is about to change. A
   driver that confirms a segment itself calls `(playbook/prejudge! steps
-  ctx waits-first?)` before its confirmation;
+  ctx waits-first?)` before its confirmation. A change step's `:outline`
+  (lines) shows under it in the confirmation and `--help`, and its
+  `:outline-now (fn [ctx] lines)` shows under it in the confirmation over
+  the context the judgement before it derived, inside `gumshoe.offline`;
+  `:report-progress true` adds the steps finished, stopped at and not run
+  to the guidance of a run that stopped;
 - a playbook or dispatcher whose select leaves out what is already done or
   not eligible declares, beside its `:select`, a `:subject` that reads a
   named target and a `:done` that judges the whole procedure took effect

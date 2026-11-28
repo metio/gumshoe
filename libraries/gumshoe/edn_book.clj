@@ -15,7 +15,9 @@
    data declaring :kind :detective, compiles with
    gumshoe.dsl/compile-detective and goes to detective/book, so it reads,
    judges and reports as every detective book does, and holds nothing that
-   could change anything.
+   could change anything. A procedure, data declaring :kind :procedure,
+   compiles with gumshoe.dsl/compile-procedure and goes to playbook/book,
+   so its steps run under one confirmation as every playbook's do.
 
    The format is experimental. A book declares :gumshoe/dsl
    :v0-experimental, anything else is refused, and every run prints a
@@ -24,6 +26,7 @@
             [gumshoe.dsl :as dsl]
             [gumshoe.edn-reader :as reader]
             [gumshoe.mutation :as mutation]
+            [gumshoe.playbook :as playbook]
             [gumshoe.plugins :as plugins]
             [gumshoe.stdout :as stdout]))
 
@@ -42,17 +45,19 @@
     (ex-info (str file ": " reason) {::reader/refused true :file (str file) :reason reason})))
 
 (defn load-book
-  "The change a book file holds, compiled by gumshoe.dsl/compile, or the
-   detective, compiled by gumshoe.dsl/compile-detective, or an
+  "The change a book file holds, compiled by gumshoe.dsl/compile, the
+   detective, compiled by gumshoe.dsl/compile-detective, or the procedure,
+   compiled by gumshoe.dsl/compile-procedure, or an
    ex-info carrying gumshoe.edn-reader/refused? naming the file and why it
    is refused: the reader's refusals, compile's (with the path of the
    offending form), and a change too deep for compile to walk."
   [file]
   (let [source (reader/read-book file)]
     (try
-      (if (dsl/detective-source? source)
-        (dsl/compile-detective source)
-        (dsl/compile source))
+      (cond
+        (dsl/procedure-source? source) (dsl/compile-procedure source)
+        (dsl/detective-source? source) (dsl/compile-detective source)
+        :else (dsl/compile source))
       (catch clojure.lang.ExceptionInfo e
         (if (dsl/invalid? e)
           (throw (ex-info (str file ": " (ex-message e))
@@ -65,15 +70,17 @@
         (throw (does-not-compile file e))))))
 
 (defn- book-of
-  "A compiled detective goes to detective/book, a change to mutation/book."
+  "A compiled detective goes to detective/book, a procedure to
+   playbook/book, a change to mutation/book."
   [compiled]
-  (if (dsl/detective? compiled)
-    (detective/book compiled)
-    (mutation/book compiled)))
+  (cond
+    (dsl/detective? compiled) (detective/book compiled)
+    (dsl/procedure? compiled) (playbook/book compiled)
+    :else (mutation/book compiled)))
 
 (defn book
-  "Hands what a book file holds to its builder, detective/book or
-   mutation/book: under gumshoe.runbook/*loading* that returns the book's
+  "Hands what a book file holds to its builder, detective/book,
+   playbook/book or mutation/book: under gumshoe.runbook/*loading* that returns the book's
    config and runs nothing, as loading a Clojure book does; otherwise it
    runs the book with *command-line-args* as its flags."
   [file]

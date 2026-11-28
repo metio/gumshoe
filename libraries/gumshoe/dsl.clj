@@ -245,7 +245,10 @@
 
    A detective - reads, pure checks and findings, and nothing that writes -
    is data declaring :kind :detective, which compile-detective compiles
-   into the spec gumshoe.detective/book takes (see its doc)."
+   into the spec gumshoe.detective/book takes (see its doc). A procedure -
+   changes, pauses and checks in order under one confirmation - is data
+   declaring :kind :procedure, which compile-procedure compiles into the
+   spec gumshoe.playbook/book takes (see its doc)."
   (:refer-clojure :exclude [compile])
   (:require [cheshire.core :as json]
             [clojure.string :as str]
@@ -254,6 +257,7 @@
             [gumshoe.dsl.library]
             [gumshoe.dsl.registry :as registry]
             [gumshoe.deletes :as deletes]
+            [gumshoe.detective :as detective]
             [gumshoe.detectives.registry :as detectives]
             [gumshoe.effect :as effect]
             [gumshoe.kube-context :as kube-context]
@@ -261,6 +265,7 @@
             [gumshoe.mutation :as mutation]
             [gumshoe.offline :as offline]
             [gumshoe.onset :as onset]
+            [gumshoe.playbook :as playbook]
             [gumshoe.reads :as reads]
             [gumshoe.reads.result :as result]
             [gumshoe.select :as select]
@@ -1069,7 +1074,7 @@
    :deletes-only? :absent? :holds :checks :effects}. :holds is every check
    at once; :checks are its post-checks, each {:holds :says :timeout
    :interval}, :holds absent for an absence."
-  [path form i read-forms value-names scope]
+  [path form snapshot read-forms value-names scope]
   (let [[_ source & more] form
         names (cond (keyword? source) [source]
                     (and (vector? source) (seq source) (every? keyword? source)) source
@@ -1136,7 +1141,7 @@
         member-readers (into {} (map (fn [n] [n (members-reader n (get read-forms n))])) names)]
     {:names names
      :members (fn [ctx] (distinct-members (mapcat (fn [n] ((member-readers n) (get ctx n))) names)))
-     :snapshot (keyword "gumshoe.dsl" (str "each-" i))
+     :snapshot snapshot
      :max max
      :verbs verbs
      :deletes-only? (every? kubectl-delete? forms)
@@ -1384,16 +1389,25 @@
     (invalid! [:gumshoe/dsl] (format "the %s declares :gumshoe/dsl %s, and this compiles %s - declare :gumshoe/dsl %s, the experimental vocabulary, whose format may change in any release"
                                      what (pr-str (:gumshoe/dsl dsl)) version version))))
 
+(defn- snapshot-key
+  "The :values name holding the members the confirmation showed of the
+   :each at effect index i. A change compiled alone names it each-<i>; a
+   step of a procedure prefixes its own index, so the snapshots of two
+   steps never share a name when their specs are composed."
+  [prefix i]
+  (keyword "gumshoe.dsl" (str prefix "each-" i)))
+
 (defn- compiled
   [{:keys [description title options prerequisites target reads values state refuse confirm items announce effect recovery opt-out
            pin problems]
-    :as dsl}]
+    :as dsl}
+   & [{:keys [snapshot-prefix] :or {snapshot-prefix ""}}]]
   (when-not (map? dsl)
     (invalid! [] (format "a change is a map, not %s" (pr-str dsl))))
   (check-version! dsl "change")
   (check-no-code! [] dsl)
   (when (contains? dsl :kind)
-    (invalid! [:kind] (format "a change declares no :kind - a detective, :kind :detective, compiles with compile-detective, not %s"
+    (invalid! [:kind] (format "a change declares no :kind - a detective, :kind :detective, compiles with compile-detective, and a procedure, :kind :procedure, with compile-procedure, not %s"
                               (pr-str (:kind dsl)))))
   (check-keys! [] dsl top-keys "a change")
   (non-blank! [:description] description "the :description")
@@ -1465,7 +1479,7 @@
         destructive-effect? (some? destroying)
         parts (vec (map-indexed (fn [i form]
                                   (if (each-form? form)
-                                    {:each (each-of [:effect i] form i (or reads {}) (set (keys values)) scope)}
+                                    {:each (each-of [:effect i] form (snapshot-key snapshot-prefix i) (or reads {}) (set (keys values)) scope)}
                                     {:subject (effect-of [:effect i] form pure #(get-in % [:ctx :ref]))}))
                                 effect))
         eaches (vec (keep :each parts))
@@ -1566,6 +1580,16 @@
       (when-not (or (nil? announce) (false? announce) (string? announce))
         (invalid! [:announce] (format ":announce is a template or false, not %s" (pr-str announce))))
       {:spec spec
+       ;; what a procedure's one confirmation shows of this change once
+       ;; the judgement before it derived the change's context: the objects
+       ;; each :each acts on and what every registered effect will do
+       :outline-now (fn [ctx]
+                      (vec (concat (mapcat #(each-items % ctx) eaches)
+                                   (when registered?
+                                     (->> (plan-of ctx)
+                                          (remove #(effect/built-in-op? (first %)))
+                                          (map effect/describe))))))
+       :destructive? destructive?
        :safeguards (cond-> {:subject-pin :on
                     :strict-reads :on
                     :post-check (cond state :on
@@ -1861,7 +1885,7 @@
               (invalid! (conj path :empty-is-clean) "only an :each check judges objects, so only it may say why none is clean"))
             (non-blank! (conj path :empty-is-clean) empty-is-clean "the reason an empty read is clean"))
         what (format "the check %s" (pr-str (:name check)))
-        place (cond-> (assoc (place scope what (cond-> #{:read :opt :call} names (conj :each)) #{:value})
+        place (cond-> (assoc (place scope what (cond-> #{:read :opt :call} names (conj :each) (:target? scope) (conj :target)) #{:value})
                              :read-states? true)
                 names (assoc :field-root :each)
                 (not names) (assoc :no-field (str "[:field ..] judges the object an :each check judges, and this check has no :each"
@@ -1888,7 +1912,8 @@
                   ;; keeps nothing it concludes once one did not answer; it
                   ;; concludes nothing then, rather than judging a nil
                   (when (every? some? (vals outcomes))
-                    (let [env {:ctx (into {:opts (get evidence "options")} (map (fn [[k o]] [k (:data o)])) outcomes)
+                    (let [env {:ctx (into {:opts (get evidence "options") :target (get evidence ::target)}
+                                          (map (fn [[k o]] [k (:data o)])) outcomes)
                                :states (into {} (map (fn [[k o]] [k (:state o)])) outcomes)}]
                       (if names
                         (vec (for [o (distinct-objects (mapcat #(:items (get outcomes %)) names))
@@ -1918,13 +1943,14 @@
   (format "gumshoe.dsl/read %s %08x" (name k) (hash form)))
 
 (defn- compiled-detective
-  [{:keys [description when-to-run options prerequisites reads checks] :as dsl}]
+  [{:keys [description when-to-run options prerequisites reads checks] :as dsl}
+   & [{:keys [target?]}]]
   (when-not (map? dsl)
     (invalid! [] (format "a detective is a map, not %s" (pr-str dsl))))
   (check-version! dsl "detective")
   (check-no-code! [] dsl)
   (when-not (= :detective (:kind dsl))
-    (invalid! [:kind] (format "the :kind is :detective, not %s - a change declares no :kind and compiles with compile"
+    (invalid! [:kind] (format "the :kind is :detective, not %s - a change declares no :kind and compiles with compile, and a procedure compiles with compile-procedure"
                               (pr-str (:kind dsl)))))
   (doseq [k (sort (filter change-only-keys (keys dsl)))]
     (invalid! [k] (format "%s belongs to a change - a detective is read-only: it declares :reads and :checks, and nothing it declares confirms, pins or changes anything"
@@ -1953,8 +1979,8 @@
   (when-not (and (vector? checks) (seq checks))
     (invalid! [:checks] "a detective declares one or more checks, as :checks [{:name .. :expect .. :says ..} ..]"))
   (let [options (or options {})
-        scope {:reads (set (keys reads)) :values #{} :options (conj (set (keys options)) :output)}
-        read-place (place scope "a detective's read" #{:opt :context :call} #{:value})
+        scope {:reads (set (keys reads)) :values #{} :options (conj (set (keys options)) :output) :target? target?}
+        read-place (place scope "a detective's read" (cond-> #{:opt :context :call} target? (conj :target)) #{:value})
         compiled-reads (into (sorted-map)
                              (for [[k form] reads]
                                [k {:key (evidence-key k form)
@@ -1969,21 +1995,23 @@
         used (set (mapcat :reads compiled-checks))
         _ (doseq [k (keys reads) :when (not (used k))]
             (invalid! [:reads k] (format "no check judges %s, so reading it proves nothing - drop it or judge it" k)))
-        read-all (fn [context opts]
-                   (let [env {:ctx {:context context :opts opts}}
+        read-all (fn [context opts target]
+                   (let [env {:ctx {:context context :opts opts :target target}}
                          ks (vec (keys compiled-reads))
                          outcomes (concurrent/all (mapv (fn [k] #(outcome-of (fn [] ((:read (compiled-reads k)) env)))) ks))]
                      (zipmap ks outcomes)))
+        collect-in (fn [context opts target]
+                     (let [outcomes (read-all context (dissoc opts :output) target)]
+                       (doseq [[k {:keys [state reason]}] outcomes :when (= :unread state)]
+                         (stdout/err-println (format "could not read %s - %s; the checks resting on it are reported as reading nothing"
+                                                     k reason)))
+                       (into {:now (java.time.Instant/now) ::outcomes outcomes ::target target "options" (dissoc opts :output)}
+                             (for [[k o] outcomes]
+                               [(key-of k) (when-not (= :unread (:state o)) o)]))))
         collect (fn [opts]
-                  (let [context (or (:context kube-context/*pinned*)
-                                    (try (kubectl/current-context) (catch Exception _ nil)))
-                        outcomes (read-all context (dissoc opts :output))]
-                    (doseq [[k {:keys [state reason]}] outcomes :when (= :unread state)]
-                      (stdout/err-println (format "could not read %s - %s; the checks resting on it are reported as reading nothing"
-                                                  k reason)))
-                    (into {:now (java.time.Instant/now) ::outcomes outcomes}
-                          (for [[k o] outcomes]
-                            [(key-of k) (when-not (= :unread (:state o)) o)]))))
+                  (collect-in (or (:context kube-context/*pinned*)
+                                  (try (kubectl/current-context) (catch Exception _ nil)))
+                              opts nil))
         extra (fn [evidence]
                 {:reads (vec (for [[k {:keys [state reason items]}] (::outcomes evidence)]
                                (cond-> {:name (name k) :state state}
@@ -2001,6 +2029,7 @@
                     :extra extra}
              when-to-run (assoc :when-to-run when-to-run))
      :collectors collectors
+     :collect-in collect-in
      :options? (uses-options? (select-keys dsl [:reads :checks]))
      :safeguards {:read-only :on
                   :strict-reads :on
@@ -2119,3 +2148,410 @@
     (detectives/register-collector! k collector))
   (detectives/register! scope (:detectives compiled))
   (mapv :name (:detectives compiled)))
+
+;; --- procedures ----------------------------------------------------------------------
+;;
+;; A procedure is an ordered vector of changes, pauses and checks against one
+;; picked target, under one confirmation: data declaring :kind :procedure,
+;; which compile-procedure turns into the spec gumshoe.playbook/book runs.
+;; Each change step is a change of this vocabulary compiled on its own, so it
+;; keeps every safeguard a change gets; the procedure only orders them and
+;; asks once.
+
+(def ^:private procedure-keys
+  #{:gumshoe/dsl :kind :description :title :options :prerequisites :target :confirm :recovery :steps :phases})
+
+(def ^:private pause-keys #{:says :title :unattended :until})
+
+(def ^:private until-keys #{:read :holds :says :timeout :interval})
+
+(def ^:private check-step-keys #{:title :blocking? :prerequisites :reads :checks})
+
+(defn- at
+  "The result of thunk, with the path of every refusal it throws prefixed
+   by prefix, so a refusal inside a step names where the step stands."
+  [prefix thunk]
+  (try (thunk)
+       (catch clojure.lang.ExceptionInfo e
+         (if (invalid? e)
+           (let [{:keys [path reason] :as data} (ex-data e)]
+             (apply invalid! (into prefix path) reason (mapcat identity (dissoc data :path :reason ::invalid))))
+           (throw e)))))
+
+(defn- outline-of
+  "What a change step does, from its data alone, as the one confirmation
+   and --help show it before anything is read."
+  [{:keys [effect]} label]
+  (vec (for [form effect]
+         (if (each-form? form)
+           (let [[_ source & more] form
+                 opts (when (map? (first more)) (first more))
+                 forms (each-effect-forms form)
+                 names (if (keyword? source) [source] source)]
+             (format "%s each object of %s (at most %d)%s"
+                     (str/join ", " (map #(if (keyword? %) (name %) (pr-str %)) (map form-verb forms)))
+                     (str/join ", " (map pr-str names))
+                     (get opts :max default-each-max)
+                     (if (some destructive-form? forms) ", destructive" "")))
+           (if (registered-form? form)
+             (format "%s%s" (pr-str (second form)) (if (destructive-form? form) ", destructive" ""))
+             (format "%s the %s%s" (name (second form)) label (if (destructive-form? form) ", destructive" "")))))))
+
+(defn- change-step-of
+  "A change step at path: the change data compiled with the procedure's
+   target, its snapshot keys unique to step n."
+  [path step target n phase-title description options]
+  (doseq [[k why] [[:gumshoe/dsl "the procedure declares the version, and its steps share it"]
+                   [:target "a step acts on the procedure's target, picked once for every step"]
+                   [:kind "a step is a change map, [:pause {..}] or [:check {..}], and declares no :kind"]]
+          :when (contains? step k)]
+    (invalid! (conj path k) why))
+  (let [{:keys [spec outline-now destructive? safeguards]}
+        (at path #(compiled (assoc step :gumshoe/dsl version :target target
+                                   :prerequisites (get step :prerequisites {})
+                                   :options (merge options (:options step))
+                                   :description (get step :description
+                                                     (or (:title step) (get-in step [:confirm :action]) description)))
+                            {:snapshot-prefix (str "step-" n "-")}))
+        own-title (or (:title step) (get-in step [:confirm :action]))]
+    {:step (-> (change/normalize spec)
+               (assoc :title (if phase-title (str phase-title ": " own-title) own-title)
+                      :outline (outline-of step (:label target))
+                      :outline-now outline-now))
+     :destructive? destructive?
+     :safeguards safeguards}))
+
+(defn- until-check-of
+  "A check of a pause's :until at path, as (fn [ctx] -> post-check)."
+  [path check scope]
+  (check-keys! path check until-keys "a check of a pause's :until")
+  (check-state! path (select-keys check [:holds :says :timeout :interval]))
+  (let [form (:read check)
+        _ (when-not (and (vector? form) (= :get (first form)))
+            (invalid! (conj path :read) "a pause waits on one object, read as [:get \"type\" name {:namespace expr}]"))
+        [_ type object-name opts & more] form
+        _ (when (or (nil? object-name) (seq more))
+            (invalid! (conj path :read) "[:get \"type\" name {:namespace expr}] takes a type, a name and its options"))
+        _ (non-blank! (conj path :read 1) type "a read's type")
+        name-place (place scope "a pause's :until" #{:target :opt :call} #{:value})
+        object-name (expr (conj path :read 2) object-name name-place)
+        namespace (namespace-arg (conj path :read 3) opts name-place)
+        absent? (absent-state? check)
+        holds (when-not absent?
+                (predicate (conj path :holds) (:holds check)
+                           (assoc (place scope "a pause's :until" #{:target :opt :call :each} #{:value}) :field-root :each)))
+        says (template (conj path :says) (:says check) name-place)
+        {:keys [timeout interval] :or {timeout 60 interval 5}} check]
+    (fn [{:keys [context] :as ctx}]
+      (let [env {:ctx ctx}
+            n (object-name env)
+            ns (when namespace (namespace env))
+            fetch #(if ns
+                     (kubectl/get-namespaced-resource context ns type n)
+                     (kubectl/get-cluster-resource context type n))]
+        (cond-> {:description (says env) :timeout timeout :interval interval}
+          absent? (assoc :verifies-absence? true
+                         :check (fn [] (or (some-> (fetch) :metadata :deletionTimestamp some?)
+                                           (kubectl/confirmed-gone? context ns type n))))
+          (not absent?) (assoc :check (fn [] (verify/object-holds? (fetch) #(holds (assoc env :each %))))))))))
+
+(defn- pause-step-of
+  "A [:pause {..}] at path as a gumshoe.playbook pause."
+  [path [_ opts & more :as form] scope phase-title]
+  (when (or (not (map? opts)) (seq more))
+    (invalid! path (format "a pause is [:pause {:says \"what the operator does now\" ..}], not %s" (pr-str form))))
+  (let [path (conj path 1)
+        {:keys [says title unattended until]} opts]
+    (check-keys! path opts pause-keys "a pause")
+    (non-blank! (conj path :says) says "a pause's :says")
+    (when (re-find placeholder says)
+      (invalid! (conj path :says) "a pause's :says is shown before anything is read, so it holds no placeholder"))
+    (when (contains? opts :title) (non-blank! (conj path :title) title "a pause's :title"))
+    (when (contains? opts :unattended)
+      (when-not (= :continue unattended)
+        (invalid! (conj path :unattended) (format ":unattended is :continue, not %s" (pr-str unattended))))
+      (when-not (contains? opts :until)
+        (invalid! (conj path :unattended) "a pause that goes on without a terminal must prove the operator's part happened - declare :until")))
+    (let [checks (when (contains? opts :until)
+                   (when-not (and (vector? until) (seq until))
+                     (invalid! (conj path :until) "the :until is a vector of one or more {:read [:get ..] :holds predicate :says \"template\"}"))
+                   (vec (map-indexed (fn [i c] (until-check-of (conj path :until i) c scope)) until)))]
+      (when checks
+        (reduce (fn [seen [i c]]
+                  (when (seen (:says c))
+                    (invalid! (conj path :until i :says) (format "%s is said by an earlier check of the :until - each says what it checks" (pr-str (:says c)))))
+                  (conj seen (:says c)))
+                #{} (map-indexed vector until)))
+      (cond-> {:pause says}
+        (or title phase-title) (assoc :title (cond (and title phase-title) (str phase-title ": " title)
+                                                   title title
+                                                   :else (str phase-title ": " says)))
+        checks (assoc :verify (fn [ctx] (mapv #(% ctx) checks)))
+        unattended (assoc :unattended :continue)))))
+
+(defn- check-step-of
+  "A [:check {..}] at path: a read-only detective, judged when the run
+   reaches it; a critical finding or nothing checked stops the procedure
+   unless it says :blocking? false."
+  [path [_ opts & more :as form] options phase-title]
+  (when (or (not (map? opts)) (seq more))
+    (invalid! path (format "a check is [:check {:title \"..\" :reads {..} :checks [..]}], not %s" (pr-str form))))
+  (let [path (conj path 1)
+        {:keys [title blocking? prerequisites reads checks]} opts]
+    (check-keys! path opts check-step-keys "a check step")
+    (non-blank! (conj path :title) title "a check step's :title")
+    (when (contains? opts :blocking?)
+      (when-not (boolean? blocking?) (invalid! (conj path :blocking?) ":blocking? is true or false")))
+    (let [{:keys [spec collect-in]}
+          (at path #(compiled-detective {:gumshoe/dsl version :kind :detective :description title
+                                         :options options :prerequisites (or prerequisites {})
+                                         :reads reads :checks checks}
+                                        {:target? true}))
+          detectives (:detectives spec)]
+      {:title (if phase-title (str phase-title ": " title) title)
+       :prerequisites (or prerequisites {})
+       :check (fn [{:keys [context opts target]}]
+                (let [evidence (collect-in context opts target)
+                      checked (detective/mark-unread detectives evidence)
+                      healthy (detective/report! checked (detective/run-detectives checked evidence) "text")]
+                  (or (false? blocking?) healthy)))})))
+
+(defn- step-forms
+  "The steps of a procedure, each {:path :form :phase-title :phase}, in run
+   order, from :steps or from the :steps of each of :phases."
+  [{:keys [steps phases] :as dsl}]
+  (cond
+    (and (contains? dsl :steps) (contains? dsl :phases))
+    (invalid! [:phases] "a procedure declares :steps, or :phases each holding steps, not both")
+
+    (contains? dsl :steps)
+    (do (when-not (and (vector? steps) (seq steps))
+          (invalid! [:steps] "the :steps are a vector of one or more steps"))
+        (vec (map-indexed (fn [i f] {:path [:steps i] :form f}) steps)))
+
+    (contains? dsl :phases)
+    (do (when-not (and (vector? phases) (seq phases))
+          (invalid! [:phases] "the :phases are a vector of one or more {:phase :name :title \"..\" :steps [..]}"))
+        (reduce (fn [acc [p {:keys [phase title] :as ph}]]
+                  (let [path [:phases p]]
+                    (check-keys! path ph #{:phase :title :steps} "a phase")
+                    (when-not (simple-keyword? phase)
+                      (invalid! (conj path :phase) (format "a phase is named by an unqualified keyword, not %s" (pr-str phase))))
+                    (when (some #(= phase (:phase %)) acc)
+                      (invalid! (conj path :phase) (format "%s names an earlier phase - each phase has a name of its own" phase)))
+                    (non-blank! (conj path :title) title "a phase's :title")
+                    (when-not (and (vector? (:steps ph)) (seq (:steps ph)))
+                      (invalid! (conj path :steps) "a phase holds one or more steps"))
+                    (into acc (map-indexed (fn [i f] {:path (conj path :steps i) :form f :phase phase :phase-title title})
+                                           (:steps ph)))))
+                []
+                (map-indexed vector phases)))
+
+    :else (invalid! [:steps] "a procedure declares its :steps, or :phases each holding steps")))
+
+(defn- compiled-procedure
+  [{:keys [description title options prerequisites target confirm recovery] :as dsl}]
+  (when-not (map? dsl)
+    (invalid! [] (format "a procedure is a map, not %s" (pr-str dsl))))
+  (check-version! dsl "procedure")
+  (check-no-code! [] dsl)
+  (when-not (= :procedure (:kind dsl))
+    (invalid! [:kind] (format "the :kind is :procedure, not %s" (pr-str (:kind dsl)))))
+  (check-keys! [] dsl procedure-keys "a procedure")
+  (non-blank! [:description] description "the :description")
+  (when (contains? dsl :title) (non-blank! [:title] title "the :title"))
+  (when-not (map? prerequisites)
+    (invalid! [:prerequisites] (format "the procedure declares its :prerequisites as a map, not %s" (pr-str prerequisites))))
+  (check-target! target)
+  (when (map? (:candidates target))
+    (invalid! [:target :candidates] "a procedure has no :state of its own to offer candidates :unless - name a :candidates function, [:call <:candidates function> [:context]]"))
+  (check-keys! [:confirm] confirm #{:action :destructive?} "the procedure's :confirm")
+  (non-blank! [:confirm :action] (:action confirm) "the confirmation's :action")
+  (when (contains? confirm :destructive?)
+    (when-not (boolean? (:destructive? confirm))
+      (invalid! [:confirm :destructive?] ":destructive? is true or false")))
+  (when (some? options)
+    (when-not (and (map? options) (every? keyword? (keys options)) (every? map? (vals options)))
+      (invalid! [:options] "the :options are a map of flag keyword to its option map")))
+  (let [forms (step-forms dsl)
+        select (select-of target)
+        own-options (try (select/options select (or options {}))
+                         (catch clojure.lang.ExceptionInfo e (invalid! [:options] (ex-message e))))
+        scope {:reads #{} :values #{} :options (set (keys own-options))}
+        compiled-steps (vec (map-indexed
+                             (fn [n {:keys [path form phase phase-title]}]
+                               (let [compiled
+                                     (cond
+                                       (map? form) (assoc (change-step-of path form target n phase-title description options) :kind :change)
+                                       (and (vector? form) (= :pause (first form)))
+                                       {:kind :pause :step (pause-step-of path form scope phase-title)}
+                                       (and (vector? form) (= :check (first form)))
+                                       {:kind :check :step (check-step-of path form own-options phase-title)}
+                                       :else (invalid! path (format "a step is a change map, [:pause {..}] or [:check {..}], not %s" (pr-str form))))]
+                                 (assoc compiled :path path :phase phase)))
+                             forms))
+        _ (when-not (some #(= :change (:kind %)) compiled-steps)
+            (invalid! (if (contains? dsl :phases) [:phases] [:steps])
+                      "a procedure changes something in one or more steps - a procedure that only reads is a detective, :kind :detective"))
+        destroying (first (filter :destructive? compiled-steps))
+        _ (when (and destroying (false? (:destructive? confirm)))
+            (invalid! [:confirm :destructive?]
+                      (format "the step at %s is destructive, and the procedure's :confirm says :destructive? false - drop the false; the one confirmation asks for the typed yes when any step is destructive"
+                              (pr-str (:path destroying)))))
+        steps (mapv :step compiled-steps)
+        all-options (try (playbook/all-options {:steps steps :options own-options})
+                         (catch clojure.lang.ExceptionInfo e (invalid! [:options] (ex-message e))))
+        candidates (candidates-of target nil scope)
+        parse (parse-of target)
+        subject (cond-> {}
+                  (:type target) (assoc :type (:type target))
+                  parse (assoc :parse parse)
+                  (:invalid target) (assoc :invalid (:invalid target))
+                  (:compare target) (assoc :compare (:compare target)))
+        pure (place scope "the procedure's :recovery" #{:target :opt} #{})
+        recovery-of (when (some? recovery)
+                      (let [t (template [:recovery] recovery pure)]
+                        (fn [ctx] (t {:ctx ctx}))))
+        spec (cond-> {:description description
+                      :options all-options
+                      :prerequisites prerequisites
+                      :select (assoc select :candidates candidates)
+                      :subject subject
+                      :confirm {:action (:action confirm)
+                                :destructive? (boolean (or (:destructive? confirm) destroying))}
+                      :report-progress true
+                      :steps steps}
+               title (assoc :title title)
+               recovery-of (assoc :recovery recovery-of))]
+    (at [] #(change/normalize (playbook/pick-spec spec)))
+    {:spec spec
+     :phases (when (contains? dsl :phases)
+               (vec (for [{:keys [phase title]} (:phases dsl)]
+                      {:phase phase :title title
+                       :steps (vec (keep-indexed (fn [i c] (when (= phase (:phase c)) i)) compiled-steps))})))
+     :safeguards {:one-confirmation :on
+                  :destructive-confirmation (if (get-in spec [:confirm :destructive?]) :on :not-destructive)
+                  :each-step-judged-when-reached :on
+                  :progress-report :on
+                  :shared-data :none
+                  :steps (mapv (fn [{:keys [kind path safeguards]}]
+                                 (cond-> {:kind kind :path path}
+                                   safeguards (assoc :safeguards safeguards)))
+                               compiled-steps)}}))
+
+(defn compile-procedure
+  "The playbook spec of a DSL procedure, as gumshoe.playbook/book takes it,
+   with the source, its safeguards, its phases and the kind :procedure in
+   its metadata. Pure: it reads no cluster. Throws ex-info carrying
+   ::invalid and :path for a procedure it refuses.
+
+     {:gumshoe/dsl :v0-experimental
+      :kind :procedure
+      :description \"Adopts a namespace's objects into a Helm release\"
+      :target {:pick :one :label \"namespace\" :type \"namespaces\" :flag :namespace
+               :candidates [:call :my/namespaces [:context]]}
+      :prerequisites {:installed-tools [\"kubectl\"]}
+      :confirm {:action \"adopt the namespace\"}
+      :recovery \"the namespace {target} may hold stamped objects and no release\"
+      :phases [{:phase :prepare :title \"prepare\"
+                :steps [{:confirm {:action \"stamp the adoptees\" :destructive? false}
+                         :reads {..} :effect [[:each :adoptees {..} [:kubectl :patch {..}]]]}]}
+               {:phase :install :title \"install\"
+                :steps [[:pause {:says \"merge the release\" :unattended :continue
+                                 :until [{:read [:get \"helmreleases.helm.toolkit.fluxcd.io\" \"moodle\" {:namespace [:target]}]
+                                          :holds [:field [:status :observedGeneration] :>= 1]
+                                          :says \"the release is reconciled\" :timeout 900 :interval 15}]}]
+                        [:check {:title \"the release is healthy\" :reads {..} :checks [..]}]]}]}
+
+   Keys:
+     :gumshoe/dsl    :v0-experimental, required
+     :kind           :procedure, required
+     :description    required
+     :title          optional
+     :options        extra or reworded flags beside those the target derives
+     :prerequisites  required; joined with every step's
+     :target         picked once, as a change's :target; its :candidates is
+                     a [:call ..], since a procedure has no :state of its
+                     own to offer the objects :unless
+     :confirm        {:action \"..\" :destructive? bool}: the one
+                     confirmation, destructive when any step is
+     :recovery       \"template\" over {target} and {opt.x}: what the
+                     procedure leaves behind when it stops after changing
+                     something, printed after the stopped step's own
+     :steps          [step ..], or
+     :phases         [{:phase :name :title \"..\" :steps [step ..]} ..]:
+                     named groups of steps in run order, each step titled
+                     with its phase, and (phases-of compiled) names which
+                     steps each holds
+
+   A step is one of:
+     {change ..}     a change of this vocabulary without :gumshoe/dsl and
+                     :target, which it takes from the procedure; its
+                     :prerequisites default to {}. It is compiled as compile
+                     compiles a change, with every safeguard: its own pin,
+                     strict reads, refusals, post-checks, skip when done,
+                     typed yes and :recovery when destructive. The snapshot
+                     of an :each is named for the step, so the specs of two
+                     steps compose.
+     [:pause {:says \"what the operator does now\" :title \"..\"
+              :unattended :continue
+              :until [{:read [:get \"type\" name {:namespace expr}]
+                       :holds predicate | :absent :says \"template\"
+                       :timeout s :interval s} ..]}]
+                     waits for the operator's ENTER, then proves the result
+                     with each :until check, fail-closed as a post-check;
+                     :unattended :continue goes on without a terminal and
+                     waits for the checks instead, so it needs :until. :says
+                     is shown before anything is read and holds no
+                     placeholder.
+     [:check {:title \"..\" :blocking? true :prerequisites {..}
+              :reads {..} :checks [..]}]
+                     a read-only detective, judged when the run reaches
+                     it, as compile-detective compiles one; its reads and
+                     templates may name [:target]. A critical finding or a
+                     run that checked nothing stops the procedure, unless
+                     :blocking? false.
+
+   One confirmation. The checks before the first change or pause run first;
+   then the procedure asks once, listing the target and every step - each
+   change with what it acts on and how, from its data, and, for the change
+   judged before the confirmation, the objects it will act on now - and
+   asks for the typed yes when any step is destructive. A :confirm
+   :destructive? false beside a destructive step is refused. A change step
+   whose :confirm says :separately? true asks again when reached.
+
+   Judgement and failure. Each change step is judged right before it runs,
+   over its own fresh reads: its pin, refusals and :each pins after the
+   steps before it ran. A step that is refused, fails or whose post-check
+   does not hold stops the procedure: no later step runs, and the guidance
+   under the FAILED banner names the stopped step's :recovery, the
+   procedure's, and the steps finished, the one stopped at and those not
+   run. Started again from the top, the steps that took effect are judged
+   done and skipped; --from-segment N starts after the pause that opens
+   segment N, as gumshoe.playbook resumes.
+
+   No data passes between steps. A step names only its own :reads and
+   :values, and compile refuses a name another step declares, so a later
+   step that needs what an earlier one produced reads it again itself,
+   after that step ran, and its pin and refusals judge that fresh read."
+  [dsl]
+  (let [{:keys [spec safeguards phases]} (compiled-procedure dsl)]
+    (vary-meta spec assoc ::source dsl ::safeguards safeguards ::kind :procedure ::phases phases)))
+
+(defn procedure?
+  "Whether x is what compile-procedure returns."
+  [x]
+  (= :procedure (::kind (meta x))))
+
+(defn procedure-source?
+  "Whether data declares :kind :procedure, so a book holding it compiles
+   with compile-procedure."
+  [data]
+  (and (map? data) (= :procedure (:kind data))))
+
+(defn phases-of
+  "The phases of a compiled procedure, each {:phase :title :steps [index
+   ..]} naming the indices of its steps in (:steps compiled), or nil for a
+   procedure declared with :steps."
+  [compiled]
+  (::phases (meta compiled)))
