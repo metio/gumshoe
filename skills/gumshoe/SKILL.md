@@ -229,7 +229,8 @@ deletes with `(gumshoe.deletes/effect context target options)`.
   character is written as `#gumshoe/keyword "…"` or `#gumshoe/symbol "…"`;
   read it with `gumshoe.render/edn-readers` (or `:default tagged-literal`).
   A plugin format (`report/register-format!`) receives the extra keys
-  unescaped and escapes with `gumshoe.render/json-escaped` or `edn-text`.
+  unescaped and escapes with `gumshoe.render/json-escaped` (or
+  `briko.json/escape-hidden`, which it wraps) or `edn-text`.
 - `parent` marks a finding that follows from another at least as severe,
   and names that finding's object as `Kind namespace/name`: a pod finding
   under its workload or node, a finding under a cause on its own object (a
@@ -1117,6 +1118,19 @@ mostly data:
   `(promql/query! ep "…")`, which returns `{:ok true :series […]}` or `{:ok
   false :error …}` and never throws; Thanos is asked to refuse partial
   answers, so a missing store fails the query instead of shrinking a count;
+- an HTTP read goes through `gumshoe.http` (`fetch`, `request`), built on
+  `briko.http`, and never throws: the URL must be https, or plain http to a
+  loopback address such as a port-forward on `127.0.0.1`; plain http to any
+  other host, or a URL carrying user info, answers `{:reachable false
+  :error …}` without connecting. Up to five redirects are followed, never
+  from https to http, and `Authorization` is dropped when one leaves the
+  origin. `:json` is nil unless the whole body is one strict JSON value;
+- JSON from a command or kubectl is read with `gumshoe.json/parse-strict`
+  or `parse-or-nil` (on `briko.json`): one RFC 8259 value, read whole, no
+  key named twice, no raw control character, within the limits of its
+  source (`json/command-output`, 256 MiB; `json/kubectl-output`, 256 MiB
+  and 128 levels). `kubectl/parse-json` answers nil for anything else, so
+  such output is no evidence rather than a crash;
 - a book that collects rows passes them to the machine formats with
   `(detective/report! detectives findings output {:hosts rows})`;
 - a gate, refusal or post-check that must tell an absent object from a read

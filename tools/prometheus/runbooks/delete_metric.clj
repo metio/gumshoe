@@ -62,13 +62,14 @@
 
 (defn delete-series!
   "Asks Prometheus on local-port to delete every series of metric, giving the
-   call timeout-seconds before it counts as failed."
+   whole call timeout-seconds before it counts as failed. Prometheus answers
+   a delete with an empty body, so the deadline needs no margin for one."
   [local-port metric timeout-seconds]
   (let [ms (* 1000 timeout-seconds)
         response (http/request :post (format "http://127.0.0.1:%s/api/v1/admin/tsdb/delete_series" local-port)
                                {:query-params {"match[]" metric}
                                 :timeout-ms ms
-                                :deadline-ms (+ ms 10000)})]
+                                :deadline-ms ms})]
     (cond
       (not (:reachable response))
       (do (stdout/error "could not reach Prometheus through the port-forward:" (:error response)) false)

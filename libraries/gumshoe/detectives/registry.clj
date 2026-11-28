@@ -7,8 +7,7 @@
    detectives to a scope (or a brand new scope) with `register!`, and because a
    detective book resolves its scope when it runs (after plugins load), those
    plugin detectives join the scan with no change to the core."
-  (:require [cheshire.core :as cheshire]
-            [gumshoe.apiversions :as apiversions]
+  (:require [gumshoe.apiversions :as apiversions]
             [gumshoe.capabilities :as capabilities]
             [gumshoe.detectives.apiversions :as apiversions-detectives]
             [gumshoe.detectives.autoscaler :as autoscaler]
@@ -45,6 +44,7 @@
             [gumshoe.detectives.tls-secrets :as tls-secrets]
             [gumshoe.detectives.upgrade :as upgrade]
             [gumshoe.detectives.workloads :as controllers]
+            [gumshoe.json :as json]
             [gumshoe.kubectl :as kubectl]))
 
 (defonce ^:private registry (atom {}))
@@ -178,7 +178,7 @@
 (register! :mail mail/detectives)
 ;; The API server's /version document, for the skew checks.
 (register-collector! "server-version"
-                     (fn [context _key] (some-> (kubectl/raw-text context "/version") (cheshire/parse-string true))))
+                     (fn [context _key] (json/parse-strict (kubectl/raw-text context "/version") json/kubectl-output)))
 (register! :platform upgrade/detectives)
 ;; The autoscaler's status ConfigMap, read by name; nil when no autoscaler runs.
 (register-collector! "cluster-autoscaler-status"

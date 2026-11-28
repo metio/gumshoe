@@ -160,6 +160,44 @@
           (when forward (process/shell {:continue true :err :string} "kill" "-KILL" (str forward)))
           (process/destroy-tree book))))))
 
+(deftest sigterm-stops-a-captured-command-in-flight
+  (fs/with-temp-dir [dir {}]
+    (let [pid-file (str (fs/path dir "sleeper.pid"))
+          script (format "(require '[gumshoe.shell :as shell]) (binding [shell/*timeout-ms* nil] (apply shell/execute %s))"
+                         (pr-str (sleeper pid-file 300)))
+          ;; files, not pipes: an orphaned command would hold an inherited
+          ;; pipe open and block reading the book's output past the test
+          book (process/process {:dir (str dir)
+                                 :out :write :out-file (fs/file dir "book.out")
+                                 :err :write :err-file (fs/file dir "book.err")
+                                 :extra-env {"GUMSHOE_ENV" (str (fs/path dir "env.edn"))
+                                             "KUBECONFIG" "/dev/null"
+                                             "NO_COLOR" "1"}}
+                                "bb" "-cp" (absolute-classpath) "-e" script)
+          command (read-pid pid-file)]
+      (try
+        (is (some? command) "the captured command started")
+        (is (alive? command))
+        (.destroy ^Process (:proc book))
+        (is (.waitFor ^Process (:proc book) 10 java.util.concurrent.TimeUnit/SECONDS)
+            "the book ended on SIGTERM")
+        (testing "the captured command did not outlive the book"
+          (is (wait-for 5000 #(not (alive? command)))))
+        (finally
+          (when command (process/shell {:continue true :err :string} "kill" "-KILL" (str command)))
+          (process/destroy-tree book))))))
+
+(deftest a-captured-command-is-tracked-only-while-it-runs
+  (fs/with-temp-dir [dir {}]
+    (let [pid-file (str (fs/path dir "pid"))
+          before (shell/live-children-count)
+          running (future (binding [shell/*timeout-ms* 10000]
+                            (apply shell/execute (sleeper pid-file 2))))]
+      (is (some? (read-pid pid-file)))
+      (is (= (inc before) (shell/live-children-count)) "tracked while it runs")
+      (is (= 0 (:exit (deref running 10000 nil))))
+      (is (= before (shell/live-children-count)) "forgotten once it returned"))))
+
 (defn- recorded-with
   "Whether the reproducer's recording holds a command line containing token."
   [token]

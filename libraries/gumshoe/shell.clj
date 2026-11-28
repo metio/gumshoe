@@ -156,8 +156,13 @@
 (defonce ^:private live-children (atom #{}))
 
 (defn- destroy-quietly
-  [proc]
-  (try (process/destroy-tree proc) (catch Throwable _ nil)))
+  "Tears down a tracked child: a babashka.process process with its
+   descendants, or a captured command through the :stop function of its
+   briko.process handle, which also kills every process holding its output."
+  [child]
+  (try
+    (if (fn? child) (child) (process/destroy-tree child))
+    (catch Throwable _ nil)))
 
 (defonce ^:private reaper
   ;; SIGTERM and SIGHUP run shutdown hooks and then halt the JVM without
@@ -181,6 +186,19 @@
   [proc]
   (swap! live-children disj proc)
   nil)
+
+(defn- run-tracked
+  "briko.process/run with the command's :stop tracked like a child while it
+   runs, so the shutdown hook stops a captured command in flight, its tree
+   and every holder of its output with it."
+  [argv opts]
+  (let [stop (volatile! nil)]
+    (try
+      (briko/run argv (assoc opts :on-start (fn [{f :stop}]
+                                              (vreset! stop f)
+                                              (track-child! f))))
+      (finally
+        (when-let [f @stop] (untrack-child! f))))))
 
 (defn live-children-count
   "How many children are tracked right now."
@@ -232,7 +250,8 @@
    deadline cancelled it - destroys the process tree and rethrows the
    InterruptedException with the interrupt flag set, so the cancelled work
    stops instead of reading the interrupt as a failed launch and running its
-   next command.
+   next command. While it runs the command is tracked like a child of
+   track-child!, so a JVM ended by SIGTERM or SIGHUP stops it too.
 
    Only a command that started is recorded: one refused on a cancelled
    thread, or one that could not be launched, contributed nothing to what the
@@ -247,7 +266,7 @@
   (let [argv (mapv str (flatten args))
         {:keys [exit out err launched? timed-out? out-truncated?]}
         (try
-          (briko/run argv (briko-options opts))
+          (run-tracked argv (briko-options opts))
           (catch clojure.lang.ExceptionInfo e
             (if (briko/refusal? e)
               {:exit 127 :launched? false :err (ex-message e)}

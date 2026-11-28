@@ -16,9 +16,9 @@
   are queried in parallel and a host that cannot be reached becomes evidence
   rather than an aborted scan, because the unreachable host is often the
   symptom being investigated."
-  (:require [cheshire.core :as json]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [gumshoe.concurrent :as concurrent]
+            [gumshoe.json :as json]
             [gumshoe.shell :as shell]
             [gumshoe.ssh :as ssh]))
 
@@ -26,6 +26,11 @@
 (def ^:private ipv4-pattern #"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}")
 (def ^:private flags-pattern #"^[NIPX]+$")
 (def ^:private seq-pattern #"^(\d+)/(\d+)$")
+
+(def ^:private host-json
+  "How FRR's and iproute2's JSON is read: within gumshoe.json/command-output,
+   keys kept as the strings the tools print."
+  (assoc json/command-output :keys :string))
 
 (defn- parse-long-or-nil
   [s]
@@ -375,7 +380,7 @@
   `:read? false`, so a failed read never passes for an absent path."
   [output]
   (let [text (or output "")
-        parsed (try (json/parse-string text) (catch Exception _ ::unparsable))
+        parsed (try (json/parse-strict text host-json) (catch Exception _ ::unparsable))
         paths (fn [m] (let [n (when (map? m) (get m "numPaths"))]
                         (when (integer? n) n)))]
     (cond
@@ -510,11 +515,11 @@
   - one in collect-metadata (`external`) mode, which carries many VNIs - has
   `:vni nil`, because which VNIs it carries was not read. An empty list is a
   read of a host without VXLAN devices; silence or anything that is no JSON
-  list of devices is `:read? false`. The parse is strict: cheshire's lazy
-  `parse-string` would throw from inside the list check, outside the try."
+  list of devices is `:read? false`. The parse is strict and whole, so
+  invalid JSON fails inside the try rather than inside the list check."
   [output]
   (let [text (or output "")
-        parsed (try (json/parse-string-strict text) (catch Exception _ ::unparsable))]
+        parsed (try (json/parse-strict text host-json) (catch Exception _ ::unparsable))]
     (cond
       (str/blank? text) (unread output "no output")
       (not (and (sequential? parsed) (every? map? parsed))) (unread output "unrecognised output")
@@ -617,11 +622,10 @@
   `info_slave_kind` names another master kind (a bond), and each port's flags
   come from its own entry, never from another link's. A flag the output does not print is nil.
   Silence, invalid JSON or anything that is no JSON list is `:read? false`.
-  The parse is strict, so invalid JSON fails inside the try: cheshire's
-  `parse-string` returns a top-level array lazily and would throw later."
+  The parse is strict and whole, so invalid JSON fails inside the try."
   [output]
   (let [text (or output "")
-        parsed (try (json/parse-string-strict text) (catch Exception e {::invalid e}))]
+        parsed (try (json/parse-strict text host-json) (catch Exception e {::invalid e}))]
     (cond
       (str/blank? text) (unread output "no output")
       (and (map? parsed) (::invalid parsed)) {:read? false :error (json-error (::invalid parsed))}

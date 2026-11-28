@@ -16,7 +16,8 @@
    With :color? false an outcome is drawn with its :plain glyph where the
    theme gives one, so a theme whose glyphs differ only by colour still tells
    success from failure in a log file."
-  (:require [clojure.string :as str]
+  (:require [briko.json :as briko-json]
+            [clojure.string :as str]
             [gumshoe.theme :as theme]))
 
 (def ^:private escapes
@@ -284,16 +285,17 @@
     (walk nil 0 data)))
 
 (def ^:private hidden-class
-  "The code points that must not reach a reader raw, as a regex character
-   class: control characters (C0, DEL, C1), format characters (bidirectional
-   controls, zero-width characters, the byte order mark, tags), line and
-   paragraph separators, surrogates standing alone, unassigned code points and
-   noncharacters, and the default-ignorable code points of no such category
-   (the combining grapheme joiner, the Hangul fillers, the Khmer inherent
-   vowels, the Mongolian free variation selectors and the variation
-   selectors). Each is invisible, reorders text, moves a terminal's cursor or
-   cannot be encoded. A regex is matched natively, so a large report is
-   scanned in one pass of the JVM's own code."
+  "The code points briko.json/hidden? names, as a regex character class, for
+   the EDN escaper below, which briko does not provide: control characters
+   (C0, DEL, C1), format characters (bidirectional controls, zero-width
+   characters, the byte order mark, tags), line and paragraph separators,
+   surrogates standing alone, unassigned code points and noncharacters, and
+   the default-ignorable code points of no such category (the combining
+   grapheme joiner, the Hangul fillers, the Khmer inherent vowels, the
+   Mongolian free variation selectors and the variation selectors). A test
+   holds it equal to briko.json/hidden? on every code point, so JSON and EDN
+   reports escape the same characters. A regex is matched natively, so a
+   large report is scanned in one pass of the JVM's own code."
   (str "\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}\\p{Cs}\\p{Cn}"
        "\\x{034F}\\x{115F}-\\x{1160}\\x{17B4}-\\x{17B5}\\x{180B}-\\x{180F}"
        "\\x{3164}\\x{FE00}-\\x{FE0F}\\x{FFA0}\\x{E0100}-\\x{E01EF}"))
@@ -308,11 +310,11 @@
   (re-pattern (str "[" hidden-class "&&[^\\t\\n\\r]]")))
 
 (defn hidden?
-  "Whether the code point cp must not reach a reader raw (see hidden-class):
-   a control, format, separator, lone surrogate, unassigned or other
-   default-ignorable code point."
+  "Whether the code point cp must not reach a reader raw: a control, format,
+   separator, lone surrogate, unassigned or other default-ignorable code
+   point (briko.json/hidden?)."
   [cp]
-  (boolean (re-matches hidden-pattern (String. (Character/toChars (int cp))))))
+  (briko-json/hidden? cp))
 
 (defn- unicode-escape
   "The \\uXXXX escape of the code points in s, a surrogate pair for one above
@@ -326,12 +328,10 @@
    puts nothing but ASCII and whitespace, and inside them it already escapes
    tab, newline and carriage return, so every other hidden code point sits in
    a string, where the escape reads back as the same character. Other
-   non-ASCII text, such as Größe or 日本, stays readable."
+   non-ASCII text, such as Größe or 日本, stays readable
+   (briko.json/escape-hidden)."
   [printed]
-  (let [printed (str printed)]
-    (if (re-find hidden-in-text printed)
-      (str/replace printed hidden-in-text unicode-escape)
-      printed)))
+  (briko-json/escape-hidden printed))
 
 (def ^:private edn-token
   "A string literal, a character literal or a hidden code point of EDN text.

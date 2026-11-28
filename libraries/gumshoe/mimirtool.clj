@@ -5,7 +5,8 @@
   "mimirtool analyze wrappers: every analysis writes its JSON result into a
    working directory and returns the parsed data."
   (:require [babashka.fs :as fs]
-            [cheshire.core :as json]
+            [briko.json :as briko-json]
+            [gumshoe.json :as json]
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
@@ -14,9 +15,15 @@
 (defn prometheus-file [directory] (str (fs/path directory "prometheus-metrics.json")))
 
 (defn- read-json
+  "The JSON file mimirtool wrote, with keyword keys, within
+   gumshoe.json/command-output; nil when it is missing or holds no value."
   [file]
   (when (fs/exists? file)
-    (json/parse-string (slurp file) true)))
+    (try
+      (briko-json/parse-file file (assoc json/command-output :keys :keyword))
+      (catch clojure.lang.ExceptionInfo e
+        (when-not (= :briko.json/no-value (:type (ex-data e)))
+          (throw e))))))
 
 (defn- analyze!
   "Runs one mimirtool analysis. Credentials travel via env, never via

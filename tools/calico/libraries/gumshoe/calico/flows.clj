@@ -13,9 +13,9 @@
    the watch stream the browser UI uses is read instead, for a bounded time.
    Either way the envelope varies - a JSON array, {items: [...]}, or
    newline-delimited objects - and all are tolerated."
-  (:require [cheshire.core :as json]
-            [clojure.string :as str]
-            [gumshoe.http :as http])
+  (:require [clojure.string :as str]
+            [gumshoe.http :as http]
+            [gumshoe.json :as json])
   (:import [java.util Base64]))
 
 (defn basic-auth-header
@@ -52,7 +52,7 @@
     :else (->> (str/split-lines (str body))
                (map #(str/replace % #"^\s*data:\s*" ""))
                (remove str/blank?)
-               (keep #(try (json/parse-string % true) (catch Exception _ nil)))
+               (keep json/parse-or-nil)
                (filter map?)
                vec)))
 
@@ -116,8 +116,7 @@
                           (remove str/blank?)
                           (remove sse-framing?))]
          (and (seq content)
-              (not-any? #(try (some? (json/parse-string % true)) (catch Exception _ false))
-                        content)))))
+              (not-any? #(some? (json/parse-or-nil %)) content)))))
 
 (defn window-flows
   "Pure: the flows of one window as the rows the detectives judge, or nil when

@@ -241,19 +241,9 @@
   "Replaces the home-directory prefix of a path with ~, so a long absolute path
    reads shorter while staying copy-pasteable. A path outside home is unchanged.
    The home is the one a shell expands ~ to, $HOME, then the user.home
-   property (briko.paths/home)."
+   property, matched on a path boundary only (briko.paths/abbreviate-home)."
   [path]
-  (let [p (str path)
-        home (try (paths/home)
-                  (catch clojure.lang.ExceptionInfo e
-                    (if (paths/refusal? e) "" (throw e))))]
-    ;; match the home directory itself or a child under it, on a path boundary -
-    ;; a bare starts-with? would rewrite a sibling like /home/sebastian when home
-    ;; is /home/seb.
-    (if (and (not (str/blank? home))
-             (or (= p home) (str/starts-with? p (str home "/"))))
-      (str "~" (subs p (count home)))
-      p)))
+  (paths/abbreviate-home (str path)))
 
 ;; Colour needs both a colour-capable destination (tty / FORCE_COLOR / not
 ;; NO_COLOR) and a theme that permits it, so a :plain theme is always colourless.

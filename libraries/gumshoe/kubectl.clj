@@ -10,6 +10,7 @@
             [cheshire.core :as cheshire]
             [clojure.string :as str]
             [gumshoe.concurrent :as concurrent]
+            [gumshoe.json :as json]
             [gumshoe.offline :as offline]
             [gumshoe.reads.result :as result]
             [gumshoe.shell :as shell]
@@ -259,16 +260,15 @@
 ;; talking to the cluster
 
 (defn parse-json
-  "Parses kubectl JSON output with keyword keys. Empty output (a missing CRD, a
-   failed command) is nil, and truncated or malformed output is nil rather than
-   an exception - so one unreadable resource type degrades to no-evidence
-   instead of crashing a whole investigation. Every read here keeps this
-   contract; a caller that must tell a failed read from an empty one uses a
-   -result read instead."
+  "Parses kubectl JSON output with keyword keys, strictly and within
+   gumshoe.json/kubectl-output. Empty output (a missing CRD, a failed command)
+   is nil, and truncated, malformed or over-limit output is nil rather than an
+   exception - so one unreadable resource type degrades to no-evidence instead
+   of crashing a whole investigation. Every read here keeps this contract; a
+   caller that must tell a failed read from an empty one uses a -result read
+   instead."
   [json-string]
-  (try
-    (cheshire/parse-string json-string true)
-    (catch Exception _ nil)))
+  (json/parse-or-nil json-string json/kubectl-output))
 
 
 (def current-config-args

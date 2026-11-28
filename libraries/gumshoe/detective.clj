@@ -21,7 +21,8 @@
       :component \"namespace/name\"
       :summary   \"one line of what is wrong\"
       :hint      \"optional: what to do about it\"}"
-  (:require [cheshire.core :as json]
+  (:require [briko.json :as briko-json]
+            [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.walk :as walk]
             [gumshoe.config :as config]
@@ -598,10 +599,10 @@
 (defn json-report
   "The machine-readable report as pretty JSON. A value cheshire cannot encode
    is written as its string form rather than failing the report. Every hidden
-   code point in a string (render/hidden?) is written as \\uXXXX, so text
+   code point in a string (briko.json/hidden?) is written as \\uXXXX, so text
    from a cluster reaches a reader whole but never raw."
   [data]
-  (render/json-escaped
+  (briko-json/escape-hidden
    (try (json/generate-string data {:pretty true})
         (catch Exception _
           (try (json/generate-string (json-safe data) {:pretty true})
