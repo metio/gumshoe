@@ -36,6 +36,14 @@
             [gumshoe.shell :as shell]
             [gumshoe.stdout :as stdout]))
 
+(def ^:dynamic *clock*
+  "The clock a post-check waits by: :now returns the wall clock in
+   milliseconds and :sleep waits for a number of milliseconds. A test binds
+   one that advances without sleeping, so it can show a check is judged
+   within its own window."
+  {:now (fn [] (System/currentTimeMillis))
+   :sleep (fn [ms] (Thread/sleep (long ms)))})
+
 (defn object-holds?
   "Whether object exists and (holds? object) is true. A post-check about the
    state of an object judges it through here, so that an object no read
@@ -96,7 +104,8 @@
   (if-not (and (string? description) (fn? check))
     (do (verdict! :failure "refusing a malformed post-check: it needs a :description string and a :check function")
         false)
-    (let [start (System/currentTimeMillis)
+    (let [{:keys [now sleep]} *clock*
+          start (now)
           deadline (+ start (* 1000 timeout))
           interval-ms (* 1000 (max interval 1))]
       (loop [;; Prime the dedup set with a baseline sample, so the pre-existing
@@ -104,10 +113,10 @@
              ;; tail) is not reported as if it appeared during this wait. Only
              ;; signals that show up after the change are surfaced.
              seen (if watch (try (set (watch)) (catch Exception _ #{})) #{})]
-        (let [result (bounded-attempt check (max interval-ms (- deadline (System/currentTimeMillis))))
+        (let [result (bounded-attempt check (max interval-ms (- deadline (now))))
               unread (when (string? result) (str " - the last read did not answer: " result))
               reason (when-not (true? result) (abort-reason abort))
-              now (System/currentTimeMillis)]
+              at (now)]
           (cond
             (true? result)
             ;; inside a task list the row itself says verified
@@ -118,7 +127,7 @@
             (do (verdict! :failure (format "NOT verified: %s - %s" description reason))
                 false)
 
-            (>= now deadline)
+            (>= at deadline)
             (if soft?
               (do (verdict! :finding (format "could not confirm within %ds (best effort): %s%s" timeout description (str unread)))
                   (print-detail! detail)
@@ -131,8 +140,8 @@
                   false))
 
             :else
-            (do (progress/status! (format "waiting for: %s (%d/%ds)" description (quot (- now start) 1000) timeout))
-                (Thread/sleep (long (min interval-ms (max 0 (- deadline now)))))
+            (do (progress/status! (format "waiting for: %s (%d/%ds)" description (quot (- at start) 1000) timeout))
+                (sleep (min interval-ms (max 0 (- deadline at))))
                 (let [fresh (when watch
                               (try (seq (remove seen (watch))) (catch Exception _ nil)))]
                   (doseq [signal fresh]
@@ -203,10 +212,15 @@
   "Runs every post-check in order, as a task list each row of which fills in
    as its check resolves; all of them must hold. A :soft? check that times out
    still counts as held, draws as a caveat, and is recorded as unconfirmed, so
-   the banner names it instead of claiming verification."
+   the banner names it instead of claiming verification. Every check that did
+   not hold is recorded by its description, so the banner names it."
   [checks]
   (let [results (progress/run-steps (mapv check-step checks) {:stop-on-failure? false})
         held? (every? #(true? (:value %)) results)]
+    (outcome/unverified! (keep (fn [[check result]]
+                                 (when-not (true? (:value result))
+                                   (let [d (:description check)] (if (string? d) d "a malformed post-check"))))
+                               (map vector checks results)))
     (outcome/verified! held?)
     held?))
 

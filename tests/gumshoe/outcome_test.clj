@@ -104,6 +104,26 @@
     (is (false? (:verified (recorded #(do (verify/all [{:held false}])
                                           (verify/all [{:held true}]))))))))
 
+(deftest the-post-checks-that-did-not-hold-are-recorded-by-description
+  (with-redefs [verify/eventually (fn [check] (:held check))]
+    (is (= ["b" "d"]
+           (:unverified (recorded #(verify/all [{:description "a" :held true} {:description "b" :held false}
+                                                {:description "c" :held true} {:description "d" :held false}])))))
+    (is (nil? (:unverified (recorded #(verify/all [{:description "a" :held true}]))))
+        "a run whose checks all held names none")
+    (is (= ["a malformed post-check"] (:unverified (recorded #(verify/all [{:description nil :held false}])))))))
+
+(deftest a-banner-names-the-post-checks-that-did-not-hold
+  (let [run {:changes? true :outcome :failed}]
+    (is (= "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above"
+           (:text (banner run {:applied 1 :verified false}))))
+    (is (= "NOT VERIFIED - the change ran, but a post-check did not hold: the pod is ready - read the messages above"
+           (:text (banner run {:applied 1 :verified false :unverified ["the pod is ready"]}))))
+    (is (= "NOT VERIFIED - the change ran, but 2 post-checks did not hold: a; b - read the messages above"
+           (:text (banner run {:applied 1 :verified false :unverified ["a" "b"]}))))
+    (is (= "7 post-checks did not hold: a; b; c; d; e; and 2 more"
+           (outcome/unverified-phrase ["a" "b" "c" "d" "e" "f" "g"])))))
+
 (deftest recording-outside-a-run-does-nothing
   (is (nil? outcome/*record*))
   (is (nil? (outcome/applied!))))

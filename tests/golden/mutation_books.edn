@@ -49,13 +49,13 @@
     "  ❌ certificate shop/web-tls was reissued (revision above 0) and is Ready"
     "    NOT verified within 0s: certificate shop/web-tls was reissued (revision above 0) and is Ready"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: certificate shop/web-tls was reissued (revision above 0) and is Ready - read the messages above",
    :recovery
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
     "      cmctl renew web-tls --context=ctx --namespace=shop"
-    "    its post-check did not hold"
+    "    a post-check did not hold: certificate shop/web-tls was reissued (revision above 0) and is Ready"
     "  Look at:"
     "    the post-check messages above"
     "    the changelog entry this change posted"
@@ -618,13 +618,13 @@
     "  ❌ CronJob batch/nightly is suspended"
     "    NOT verified within 0s: CronJob batch/nightly is suspended"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: CronJob batch/nightly is suspended - read the messages above",
    :recovery
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
     "      kubectl --namespace=batch patch cronjob nightly --type=merge --patch={\"spec\":{\"suspend\":true}}"
-    "    its post-check did not hold"
+    "    a post-check did not hold: CronJob batch/nightly is suspended"
     "  Look at:"
     "    the post-check messages above"
     "    the changelog entry this change posted"
@@ -1033,13 +1033,13 @@
     "  ❌ namespace stuck is gone"
     "    NOT verified within 0s: namespace stuck is gone"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: namespace stuck is gone - read the messages above",
    :recovery
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
     "      kubectl replace --raw /api/v1/namespaces/stuck/finalize --filename - (with stdin)"
-    "    its post-check did not hold"
+    "    a post-check did not hold: namespace stuck is gone"
     "  Look at:"
     "    the post-check messages above"
     "    the changelog entry this change posted"
@@ -1219,13 +1219,13 @@
     "  ❌ node n1 is unschedulable"
     "    NOT verified within 0s: node n1 is unschedulable"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: node n1 is unschedulable - read the messages above",
    :recovery
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
     "      kubectl cordon n1"
-    "    its post-check did not hold"
+    "    a post-check did not hold: node n1 is unschedulable"
     "  Look at:"
     "    the post-check messages above"
     "    the changelog entry this change posted"
@@ -1381,13 +1381,13 @@
     "  ❌ no evictable pods remain on node n1"
     "    NOT verified within 0s: no evictable pods remain on node n1"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: no evictable pods remain on node n1 - read the messages above",
    :recovery
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
     "      kubectl drain n1 --ignore-daemonsets --delete-emptydir-data --grace-period=30 --timeout=300s"
-    "    its post-check did not hold"
+    "    a post-check did not hold: no evictable pods remain on node n1"
     "  Look at:"
     "    the post-check messages above"
     "    the changelog entry this change posted"
@@ -1674,13 +1674,13 @@
     "  ❌ kube-apiserver was replaced and answers /readyz (was abc123)"
     "    NOT verified within 0s: kube-apiserver was replaced and answers /readyz (was abc123)"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: kube-apiserver was replaced and answers /readyz (was abc123) - read the messages above",
    :recovery
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
     "      ssh cp-1 -- sudo crictl stop abc123"
-    "    its post-check did not hold"
+    "    a post-check did not hold: kube-apiserver was replaced and answers /readyz (was abc123)"
     "  Look at:"
     "    the post-check messages above"
     "    the changelog entry this change posted"
@@ -1908,13 +1908,13 @@
     "  ❌ node n1 is schedulable"
     "    NOT verified within 0s: node n1 is schedulable"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: node n1 is schedulable - read the messages above",
    :recovery
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
     "      kubectl uncordon n1"
-    "    its post-check did not hold"
+    "    a post-check did not hold: node n1 is schedulable"
     "  Look at:"
     "    the post-check messages above"
     "    the changelog entry this change posted"
@@ -2192,13 +2192,13 @@
     "  ❌ invalid order shop/web-1 is cleared"
     "    NOT verified within 0s: invalid order shop/web-1 is cleared"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: invalid order shop/web-1 is cleared - read the messages above",
    :recovery
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
     "      kubectl --namespace=shop delete orders.acme.cert-manager.io web-1 --ignore-not-found --interactive=false --wait=false"
-    "    its post-check did not hold"
+    "    a post-check did not hold: invalid order shop/web-1 is cleared"
     "  Look at:"
     "    the post-check messages above"
     "    the changelog entry this change posted"
@@ -2360,13 +2360,13 @@
     "  ❌ PersistentVolume pv-1 is gone"
     "    NOT verified within 0s: PersistentVolume pv-1 is gone"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: PersistentVolume pv-1 is gone - read the messages above",
    :recovery
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
     "      kubectl delete persistentvolume pv-1 --ignore-not-found --interactive=false --wait=false"
-    "    its post-check did not hold"
+    "    a post-check did not hold: PersistentVolume pv-1 is gone"
     "  Look at:"
     "    the post-check messages above"
     "    the changelog entry this change posted"
@@ -2519,13 +2519,13 @@
     "  ❌ PersistentVolumeClaim shop/data is gone"
     "    NOT verified within 0s: PersistentVolumeClaim shop/data is gone"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: PersistentVolumeClaim shop/data is gone - read the messages above",
    :recovery
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
     "      kubectl --namespace=shop delete persistentvolumeclaim data --ignore-not-found --interactive=false --wait=false"
-    "    its post-check did not hold"
+    "    a post-check did not hold: PersistentVolumeClaim shop/data is gone"
     "  Look at:"
     "    the post-check messages above"
     "    the changelog entry this change posted"
@@ -3176,13 +3176,13 @@
     "  ❌ Deployment shop/web runs 3 ready replica(s)"
     "    NOT verified within 0s: Deployment shop/web runs 3 ready replica(s)"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: Deployment shop/web runs 3 ready replica(s) - read the messages above",
    :recovery
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
     "      kubectl --namespace=shop scale deployment/web --replicas=3"
-    "    its post-check did not hold"
+    "    a post-check did not hold: Deployment shop/web runs 3 ready replica(s)"
     "  Look at:"
     "    the post-check messages above"
     "    the changelog entry this change posted"
@@ -5362,13 +5362,13 @@
     "  ❌ JsonnetSnippet apps/site handled the reconcile request"
     "    NOT verified within 0s: JsonnetSnippet apps/site handled the reconcile request"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: JsonnetSnippet apps/site handled the reconcile request - read the messages above",
    :recovery
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
     "      kubectl --namespace=apps annotate jsonnetsnippets.jaas.metio.wtf site reconcile.fluxcd.io/requestedAt=<instant> --overwrite"
-    "    its post-check did not hold"
+    "    a post-check did not hold: JsonnetSnippet apps/site handled the reconcile request"
     "  Look at:"
     "    the post-check messages above"
     "    the changelog entry this change posted"
@@ -5553,13 +5553,13 @@
     "  ❌ JsonnetSnippet apps/site is no longer suspended"
     "    NOT verified within 0s: JsonnetSnippet apps/site is no longer suspended"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: JsonnetSnippet apps/site is no longer suspended - read the messages above",
    :recovery
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
     "      kubectl --namespace=apps patch jsonnetsnippets.jaas.metio.wtf site --type=merge --patch {\"spec\":{\"suspend\":false}}"
-    "    its post-check did not hold"
+    "    a post-check did not hold: JsonnetSnippet apps/site is no longer suspended"
     "  Look at:"
     "    the post-check messages above"
     "    the changelog entry this change posted"
@@ -5759,13 +5759,13 @@
     "  ❌ JsonnetSnippet apps/site reports itself suspended"
     "    NOT verified within 0s: JsonnetSnippet apps/site reports itself suspended"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: JsonnetSnippet apps/site reports itself suspended - read the messages above",
    :recovery
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
     "      kubectl --namespace=apps patch jsonnetsnippets.jaas.metio.wtf site --type=merge --patch {\"spec\":{\"suspend\":true}}"
-    "    its post-check did not hold"
+    "    a post-check did not hold: JsonnetSnippet apps/site reports itself suspended"
     "  Look at:"
     "    the post-check messages above"
     "    the changelog entry this change posted"
@@ -6154,13 +6154,13 @@
     "  ❌ StageSet apps/site handled the reconcile request and rolled the held update"
     "    NOT verified within 0s: StageSet apps/site handled the reconcile request and rolled the held update"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: StageSet apps/site handled the reconcile request and rolled the held update - read the messages above",
    :recovery
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
     "      kubectl --namespace=apps annotate stagesets.stages.metio.wtf site reconcile.fluxcd.io/requestedAt=<instant> stages.metio.wtf/update-now=<instant> --overwrite"
-    "    its post-check did not hold"
+    "    a post-check did not hold: StageSet apps/site handled the reconcile request and rolled the held update"
     "  Look at:"
     "    the post-check messages above"
     "    the changelog entry this change posted"

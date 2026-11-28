@@ -98,6 +98,33 @@
   [held?]
   (record! update :verified #(if (false? %) false (boolean held?))))
 
+(defn unverified!
+  "Post-checks that did not hold; `descriptions` name them, in the order they
+   ran. The banner of a run that is not verified names them, so a change
+   with several post-checks says which one failed."
+  [descriptions]
+  (when (seq descriptions)
+    (record! update :unverified (fnil into []) descriptions)))
+
+(def ^:private named-unverified
+  "How many failed post-checks a banner names before it counts the rest."
+  5)
+
+(defn unverified-phrase
+  "How a banner or guidance names the post-checks that did not hold: \"a
+   post-check did not hold: <description>\" for one, \"<n> post-checks did
+   not hold: <a>; <b>\" for several, the first few named and the rest
+   counted, and \"its post-check did not hold\" when none was named."
+  [unverified]
+  (let [names (vec unverified)
+        shown (take named-unverified names)
+        more (- (count names) (count shown))]
+    (case (count names)
+      0 "its post-check did not hold"
+      1 (str "a post-check did not hold: " (first names))
+      (str (count names) " post-checks did not hold: " (str/join "; " shown)
+           (when (pos? more) (str "; and " more " more"))))))
+
 (defn unconfirmed!
   "A :soft? post-check ran out its time without holding; `description` names
    it. The run still counts as successful, since the book declared the check
@@ -348,12 +375,13 @@
    were several, so a playbook's banner says which step blocked it.
 
    Only a run whose post-checks all ran and held may claim verification; a
-   :soft? check that ran out its time is named as not confirmed.
+   :soft? check that ran out its time is named as not confirmed, and a run
+   whose post-checks did not hold names the ones that failed.
 
    The tone agrees with `exit-code`: :ok only when it is 0, :error only
    when it is 1."
   [{:keys [dry-run? changes? outcome findings?]} record]
-  (let [{:keys [aborted applied paused stopped thunk verified unmet unrehearsed skipped unconfirmed refused]} record
+  (let [{:keys [aborted applied paused stopped thunk verified unverified unmet unrehearsed skipped unconfirmed refused]} record
         applied (or applied 0)
         failed (failed? outcome record)]
     (cond
@@ -438,7 +466,7 @@
 
       (false? verified)
       {:tone :error
-       :text (str "NOT VERIFIED - the change ran, but its post-check did not hold"
+       :text (str "NOT VERIFIED - the change ran, but " (unverified-phrase unverified)
                   " - read the messages above")}
 
       (= :failed thunk)

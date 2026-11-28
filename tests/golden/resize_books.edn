@@ -529,7 +529,7 @@
     "    NOT verified within 0s: every pod of the StatefulSet is Running"],
    :result false,
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: every pod of the StatefulSet is Running - read the messages above",
    :recovery
    ["Recovery:"
     "  Every effect ran: StatefulSet shop/web was recreated with the new volume claim template."
@@ -1176,7 +1176,7 @@
     "    NOT verified within 0s: every Prometheus pod is Running again under its StatefulSet"],
    :result false,
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but 2 post-checks did not hold: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready; every Prometheus pod is Running again under its StatefulSet - read the messages above",
    :recovery
    ["Recovery:"
     "  Every effect ran: Prometheus monitoring/k8s was unpaused with the new volume claim template."
@@ -1321,7 +1321,7 @@
     "    NOT verified within 0s: every Prometheus pod is Running again under its StatefulSet"],
    :result false,
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: every Prometheus pod is Running again under its StatefulSet - read the messages above",
    :recovery
    ["Recovery:"
     "  Every effect ran: Prometheus monitoring/k8s was unpaused with the new volume claim template."
@@ -1442,7 +1442,7 @@
     "  ✅ verified: every Prometheus pod is Running again under its StatefulSet"],
    :result false,
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: the StatefulSet of Prometheus monitoring/k8s exists again with the new template and every replica is ready - read the messages above",
    :recovery
    ["Recovery:"
     "  Every effect ran: Prometheus monitoring/k8s was unpaused with the new volume claim template."

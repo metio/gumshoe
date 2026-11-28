@@ -163,7 +163,7 @@
     "  ❌ the 2 confirmed crash report(s) are archived"
     "    NOT verified within 0s: the 2 confirmed crash report(s) are archived"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: the 2 confirmed crash report(s) are archived - read the messages above",
    :recovery []},
   :new-crash-meanwhile
   {:result true,
@@ -414,13 +414,13 @@
     "  ❌ osd.3 is marked in"
     "    NOT verified within 0s: osd.3 is marked in"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: osd.3 is marked in - read the messages above",
    :recovery
    ["Recovery:"
     "  This change declares no recovery guidance. What it left behind:"
     "    1 effect of this change stayed applied - nothing was rolled back:"
     "      ssh mgr-1 -- ceph osd in 3"
-    "    its post-check did not hold"
+    "    a post-check did not hold: osd.3 is marked in"
     "  Look at:"
     "    the post-check messages above"
     "    the changelog entry this change posted"
