@@ -9,6 +9,7 @@
 
    Secret-looking option values never touch disk: they are redacted here."
   (:require [babashka.fs :as fs]
+            [briko.fs :as bfs]
             [clojure.pprint :as pprint]
             [clojure.string :as str]
             [gumshoe.interact :as interact]
@@ -43,22 +44,25 @@
 (defn save!
   "Writes the recording directory for one run and returns its path. Never
    throws - a failed recording must not fail the book. meta.edn names the
-   changes the run skipped as already done under :skipped."
+   changes the run skipped as already done under :skipped. Each file is
+   written by briko.fs/atomic-write!, so a recording file holds a whole
+   write or none, and a second run within the same second replaces each
+   file whole."
   [{:keys [book-file description opts outcome meta skipped]}]
   (try
     (let [dir (fs/path base-directory (book-slug book-file) (timestamp))]
       (fs/create-dirs dir)
-      (spit (str (fs/path dir "meta.edn"))
+      (bfs/atomic-write! (str (fs/path dir "meta.edn"))
             (with-out-str (pprint/pprint (merge {:book (book-slug book-file)
                                                  :description description
                                                  :outcome outcome}
                                                 (when (seq skipped) {:skipped (vec skipped)})
                                                 meta))))
-      (spit (str (fs/path dir "input.edn"))
+      (bfs/atomic-write! (str (fs/path dir "input.edn"))
             (with-out-str (pprint/pprint (redact opts))))
-      (spit (str (fs/path dir "selections.edn"))
+      (bfs/atomic-write! (str (fs/path dir "selections.edn"))
             (with-out-str (pprint/pprint (interact/recorded-selections))))
-      (spit (str (fs/path dir "commands.sh"))
+      (bfs/atomic-write! (str (fs/path dir "commands.sh"))
             (str "#!/usr/bin/env sh\n"
                  "# CLI calls made by this run - review before replaying.\n\n"
                  (shell/replay-preamble)

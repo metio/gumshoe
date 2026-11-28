@@ -88,3 +88,54 @@
         elapsed (- (System/currentTimeMillis) started)]
     (is (pos? code))
     (is (< elapsed 10000) "the deadline bounds the wait rather than freezing the caller")))
+
+(deftest a-detached-child-holding-the-output-makes-a-timeout-every-time-test
+  ;; The program exits at once while a background child keeps its stdout
+  ;; open. A JDK process pipe reaches end of file when the program exits,
+  ;; unless the reading thread is already blocked in read, so reading
+  ;; through it answers either exit 0 or the deadline depending on timing,
+  ;; and leaves the child running either way. Through briko.process the
+  ;; answer is the deadline on every run, and the child is killed.
+  (dotimes [_ 5]
+    (let [pids (java.io.File/createTempFile "gumshoe-shell-holder" ".txt")]
+      (try
+        (let [r (binding [shell/*timeout-ms* 1000]
+                  (shell/execute "sh" "-c" (str "echo early; sleep 30 & echo $! > " pids)))
+              id (parse-long (clojure.string/trim (slurp pids)))]
+          (is (= 124 (:exit r)) (pr-str r))
+          (is (clojure.string/includes? (:err r) "did not finish"))
+          (is (wait-for 5000 #(not (alive? id))) "the child holding the output is killed with the command")
+          (when (alive? id)
+            (.destroyForcibly (.get (java.lang.ProcessHandle/of (long id))))))
+        (finally (.delete pids))))))
+
+(deftest a-detached-child-that-lets-go-of-the-output-is-not-waited-for-test
+  (let [r (binding [shell/*timeout-ms* 5000]
+            (shell/execute "sh" "-c" "echo done; sleep 30 >/dev/null 2>&1 &"))]
+    (is (= 0 (:exit r)))
+    (is (= "done\n" (:out r)))))
+
+(deftest a-captured-command-reads-end-of-file-on-stdin-test
+  (testing "a command that reads stdin finishes instead of waiting for the deadline"
+    (let [started (System/currentTimeMillis)
+          r (binding [shell/*timeout-ms* 5000] (shell/execute "cat"))]
+      (is (= 0 (:exit r)))
+      (is (= "" (:out r)))
+      (is (< (- (System/currentTimeMillis) started) 4000))))
+  (testing "execute-with-stdin hands the command its input"
+    (is (= "{}" (:out (shell/execute-with-stdin "{}" "cat"))))))
+
+(deftest output-past-the-bound-is-a-failure-never-a-cut-listing-test
+  (with-redefs [shell/max-out-bytes 1000]
+    (let [r (shell/execute "sh" "-c" "head -c 5000 /dev/zero | tr '\\0' x")]
+      (is (= 125 (:exit r)))
+      (is (= "" (:out r)))
+      (is (clojure.string/includes? (:err r) "more than 1000 bytes"))))
+  (with-redefs [shell/max-out-bytes 1000]
+    (is (= 0 (:exit (shell/execute "sh" "-c" "head -c 1000 /dev/zero | tr '\\0' x")))
+        "output of exactly the bound is whole")))
+
+(deftest a-missing-program-is-named-as-before-test
+  (let [r (shell/execute "this-binary-does-not-exist-xyz" "--flag")]
+    (is (= 127 (:exit r)))
+    (is (clojure.string/starts-with? (:err r) "could not run 'this-binary-does-not-exist-xyz --flag': ") (:err r))))

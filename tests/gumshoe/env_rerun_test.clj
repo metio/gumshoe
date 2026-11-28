@@ -118,6 +118,8 @@
         a (config/backup-path "/state" "/cases/one/env.edn" at)
         b (config/backup-path "/state" "/cases/two/env.edn" at)]
     (is (re-matches #"/state/[0-9a-f]{16}-20261126-093005-123\.edn\.bak" a) a)
+    (is (= "/state/82bf3c611071d134-20261126-093005-123.edn.bak" a)
+        "the prefix is the first 16 hex digits of the path's SHA-256 (coreutils sha256sum), so existing backups keep grouping")
     (is (not= a b) "different casebooks never collide")
     (is (= a (config/backup-path "/state" "/cases/one/../one/env.edn" at)) "the path is compared normalised")
     (is (= (subs a 0 24) (subs (config/backup-path "/state" "/cases/one/env.edn" (.plusSeconds at 1)) 0 24))

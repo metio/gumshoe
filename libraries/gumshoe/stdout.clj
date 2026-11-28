@@ -26,7 +26,8 @@
    outcomes were named; each prints the same as its `line`/`item` outcome.
    The strings these print are rendered by gumshoe.render, pure functions
    of a context, which `context` builds from the active theme and terminal."
-  (:require [clojure.string :as str]
+  (:require [briko.paths :as paths]
+            [clojure.string :as str]
             [gumshoe.render :as render]
             [gumshoe.theme :as theme]))
 
@@ -238,10 +239,14 @@
 
 (defn shorten-path
   "Replaces the home-directory prefix of a path with ~, so a long absolute path
-   reads shorter while staying copy-pasteable. A path outside home is unchanged."
+   reads shorter while staying copy-pasteable. A path outside home is unchanged.
+   The home is the one a shell expands ~ to, $HOME, then the user.home
+   property (briko.paths/home)."
   [path]
   (let [p (str path)
-        home (str (System/getProperty "user.home"))]
+        home (try (paths/home)
+                  (catch clojure.lang.ExceptionInfo e
+                    (if (paths/refusal? e) "" (throw e))))]
     ;; match the home directory itself or a child under it, on a path boundary -
     ;; a bare starts-with? would rewrite a sibling like /home/sebastian when home
     ;; is /home/seb.

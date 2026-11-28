@@ -441,7 +441,9 @@ hosts, VPN interfaces, the secrets provider (`:gopass`, `:pass`, `:passage`,
 file means no configuration and never an error. The first env.edn that exists
 in the search order (`GUMSHOE_ENV`, `./env.edn`,
 `$XDG_CONFIG_HOME/gumshoe/env.edn`, `~/.config/gumshoe/env.edn`) is the one
-read, even when it is broken: a file that does not read as an EDN map is
+read, even when it is broken: a file that does not read as one EDN map (at
+most 1 MiB and 64 levels, nothing after the map, no tag but `#inst` and
+`#uuid`) is
 named on stderr with the parse error, nothing of it applies, and the
 "suitable Kubernetes cluster" prerequisite refuses every cluster until it is
 fixed, and every book that reaches a cluster is blocked before it starts. A
@@ -837,7 +839,8 @@ mostly data:
   else is refused. Saved as an `.edn` file below a book root, it is a book
   that `bb run` lists and runs and `bb verify` judges like a Clojure book,
   so keep data files outside book roots. The file is read as plain EDN
-  only (no tagged literals, at most 64 KiB and 32 levels deep), and
+  only (no tagged literals, at most 64 KiB and 32 levels deep, number
+  literals at most 100 characters), and
   functions a casebook registers load from a plugin named in `env.edn`.
   `[:each <read> {:state … :max n} [:kubectl <verb> …] …]` acts on every
   object a `:reads` entry returned (`[:present [{:type … :name …}]]` reads

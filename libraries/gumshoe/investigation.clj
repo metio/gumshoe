@@ -16,7 +16,8 @@
    in testable helpers; only the fetching, the fzf prompt, and the loop are
    impure."
   (:require [babashka.fs :as fs]
-            [clojure.edn :as edn]
+            [briko.edn :as edn]
+            [briko.fs :as bfs]
             [clojure.string :as str]
             [gumshoe.command :as command]
             [gumshoe.fuzzy-finder :as fuzzy]
@@ -275,19 +276,23 @@
 (def ^:private state-file "recordings/last-investigation.edn")
 
 (defn save-trail!
+  "Writes the trail to path in one atomic rename (briko.fs), unsynced, since
+   losing it costs only the resume."
   ([trail] (save-trail! state-file trail))
   ([path trail]
    (try
      (fs/create-dirs (fs/parent path))
-     (spit path (pr-str {:trail (vec trail)}))
+     (bfs/atomic-write! (str path) (pr-str {:trail (vec trail)}) {:fsync? false})
      (catch Exception _ nil))))
 
 (defn load-trail
+  "The trail save-trail! wrote to path, read by briko.edn within its default
+   bounds, or nil when it is missing or does not read."
   ([] (load-trail state-file))
   ([path]
    (try
      (when (fs/exists? path)
-       (:trail (edn/read-string (slurp path))))
+       (:trail (edn/read-file (str path))))
      (catch Exception _ nil))))
 
 ;; ---------------------------------------------------------------------------

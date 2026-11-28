@@ -38,7 +38,11 @@
    A flat env.edn - no :environments key - is still valid and is read directly:
      {:vpn {:interface \"wg0\"} :ceph {:mgr-hosts [\"mgr-1.example.org\"]}}"
   (:require [babashka.fs :as fs]
-            [clojure.edn :as edn]
+            [briko.digest :as digest]
+            [briko.edn :as edn]
+            [briko.fs :as bfs]
+            [briko.paths :as paths]
+            [clojure.instant :as instant]
             [clojure.pprint :as pprint]
             [clojure.string :as str]))
 
@@ -48,12 +52,24 @@
   "env.edn")
 
 (defn- search-paths
-  []
-  (remove nil?
-          [(System/getenv "GUMSHOE_ENV")
-           "env.edn"
-           (some-> (System/getenv "XDG_CONFIG_HOME") (str "/gumshoe/env.edn"))
-           (some-> (System/getProperty "user.home") (str "/.config/gumshoe/env.edn"))]))
+  "Where env.edn is looked for, first match wins: $GUMSHOE_ENV, ./env.edn,
+   the gumshoe directory of the XDG config home, and ~/.config/gumshoe.
+   briko.paths ignores an XDG_CONFIG_HOME that is empty, blank or relative,
+   as the XDG specification says, and takes the home from $HOME, then the
+   user.home property. ~/.config stays on the list when XDG_CONFIG_HOME
+   names another directory, so a file kept there is still found. opts are
+   briko.paths' :getenv and :getprop, for a test; GUMSHOE_ENV is always
+   read from the environment."
+  ([] (search-paths nil))
+  ([opts]
+   (let [under (fn [f] (try (str (fs/path (f opts) "gumshoe" "env.edn"))
+                            (catch clojure.lang.ExceptionInfo e
+                              (when-not (paths/refusal? e) (throw e)))))]
+     (into [] (comp (remove nil?) (distinct))
+           [(System/getenv "GUMSHOE_ENV")
+            "env.edn"
+            (under paths/config-home)
+            (under #(str (fs/path (paths/home %) ".config")))]))))
 
 (defn clusters-problem
   "Pure: why the top-level :clusters allow-list of config can not be read as
@@ -123,6 +139,33 @@
         config (cond-> config (seq unread) (assoc ::unread-clusters unread))]
     {:config config :warnings (persistent! warnings)}))
 
+(def ^:private edn-readers
+  "The tags env.edn may hold: the two clojure.edn reads by default, so a
+   file written for clojure.edn reads the same. Every other tag is refused."
+  {'inst instant/read-instant-date
+   'uuid (fn [s] (java.util.UUID/fromString s))})
+
+(defn- read-edn
+  "The one form the file at path holds, nil for a file holding none (empty,
+   or comments only), read by briko.edn within its default bounds (1 MiB,
+   64 levels). Throws an ex-info whose message says why it cannot, without
+   the path, which every caller names itself."
+  [path]
+  (try
+    (edn/read-file (str path) {:readers edn-readers})
+    (catch clojure.lang.ExceptionInfo e
+      (if-not (edn/refusal? e)
+        (throw e)
+        (let [{:keys [type]} (ex-data e)
+              refusal (or (ex-cause e) e)
+              cause (ex-cause refusal)]
+          (if (= :briko.edn/no-form type)
+            nil
+            (throw (ex-info (if (and (= :briko.edn/malformed type) cause)
+                              (or (ex-message cause) (str cause))
+                              (ex-message refusal))
+                            {::edn-type type}))))))))
+
 (defn- read-existing
   "Reads the env.edn at an existing path as {:config ..} or {:problem ..}.
    An empty file is an empty config; a file that is not EDN, not a map or not
@@ -130,7 +173,7 @@
    warning on stderr (see normalize), so the rest of the file still applies."
   [path]
   (try
-    (let [data (edn/read-string (slurp (str path)))]
+    (let [data (read-edn path)]
       (cond
         (nil? data) {:config {}}
         (not (map? data)) {:problem (format "the file holds %s, not a map" (pr-str data))}
@@ -178,7 +221,7 @@
   [path]
   (when (and path (fs/exists? path))
     (try
-      (let [data (edn/read-string (slurp (str path)))]
+      (let [data (read-edn path)]
         (cond
           (nil? data) nil
           (not (map? data)) [(format "the file holds %s, not a map" (pr-str data))]
@@ -435,21 +478,17 @@
 (defn backup-dir
   "Where env.edn backups are kept: $XDG_STATE_HOME/gumshoe/env-backups, or
    ~/.local/state/gumshoe/env-backups when XDG_STATE_HOME is unset, empty or
-   relative (the XDG spec says to ignore a relative one). The directory is
+   relative (the XDG spec says to ignore a relative one), through
+   briko.paths/state-home. The two-argument form takes both values instead
+   of the environment, home standing for $HOME. The directory is
    outside every working tree, so a backup of an env.edn holding a webhook
    URL or another secret is never committed by accident, whatever the
    casebook's .gitignore says."
-  ([] (backup-dir (System/getenv "XDG_STATE_HOME") (System/getProperty "user.home")))
+  ([] (str (fs/path (paths/state-home) "gumshoe" "env-backups")))
   ([xdg-state-home home]
-   (let [base (if (and (not (str/blank? xdg-state-home)) (fs/absolute? xdg-state-home))
-                xdg-state-home
-                (str (fs/path home ".local" "state")))]
-     (str (fs/path base "gumshoe" "env-backups")))))
-
-(defn- sha256-hex
-  [^String s]
-  (let [digest (.digest (java.security.MessageDigest/getInstance "SHA-256") (.getBytes s "UTF-8"))]
-    (apply str (map #(format "%02x" (bit-and % 0xff)) digest))))
+   (let [env {"XDG_STATE_HOME" xdg-state-home "HOME" home}]
+     (str (fs/path (paths/state-home {:getenv env :getprop (constantly nil)})
+                   "gumshoe" "env-backups")))))
 
 (defn backup-path
   "Where the env.edn at path is kept before it is rewritten at instant: in
@@ -460,7 +499,7 @@
   ([path instant] (backup-path (backup-dir) path instant))
   ([dir path ^java.time.LocalDateTime instant]
    (let [absolute (str (fs/normalize (fs/absolutize path)))]
-     (str (fs/path dir (str (subs (sha256-hex absolute) 0 16) "-"
+     (str (fs/path dir (str (subs (digest/sha256-hex absolute) 0 16) "-"
                             (.format instant (java.time.format.DateTimeFormatter/ofPattern "yyyyMMdd-HHmmss-SSS"))
                             ".edn.bak"))))))
 
@@ -474,40 +513,55 @@
    "java.nio.file.NotDirectoryException" "%s is not a directory"})
 
 (defn- io-reason
-  "What an IOException from the file system says went wrong, in words."
-  [^java.io.IOException e]
-  (let [message (or (ex-message e) (str e))]
+  "What an IOException from the file system, or a briko.fs refusal, says
+   went wrong, in words. A refusal caused by an IOException reads as that
+   exception, since briko.fs only adds what it was doing to it."
+  [^Exception e]
+  (let [cause (ex-cause e)
+        e (if (and (bfs/refusal? e) (instance? java.io.IOException cause)) cause e)
+        message (or (ex-message e) (str e))]
     (if-let [wording (io-wording (.getName (class e)))]
       (format wording message)
       message)))
 
 (defn backup-refusal
   "Why env.edn was left unchanged when keeping its backup in dir failed with
-   the IOException e."
+   e, an IOException or a briko.fs refusal."
   [dir e]
   (format "could not keep a backup of env.edn in %s: %s. env.edn was not changed. Set XDG_STATE_HOME to a writable directory and run again."
           dir (io-reason e)))
 
-(defn- keep-backup!
-  "Copies the file at path to backup, creating backup with mode 0600 before
-   any content goes in and its directory with mode 0700, so no other user
-   can read a copy of a secret at any moment. Refuses to overwrite an
-   existing file at backup. Throws ex-info with ::backup-refused and
-   backup-refusal as its message when any step fails, after removing a
-   backup file it created but could not fill."
-  [path backup]
-  (let [dir (fs/parent backup)
-        created (volatile! false)]
+(defn- private-directory!
+  "Makes dir a directory only its owner can enter: created rwx------ with
+   its missing parents by briko.fs when it does not exist, its permissions
+   narrowed to rwx------ when it does."
+  [dir]
+  (when-not (fs/directory? dir)
     (try
-      (fs/create-dirs dir {:posix-file-permissions "rwx------"})
-      (fs/set-posix-file-permissions dir "rwx------")
-      (fs/create-file backup {:posix-file-permissions "rw-------"})
-      (vreset! created true)
-      (fs/write-bytes backup (fs/read-all-bytes path))
+      (bfs/create-private-directory! dir)
+      (catch clojure.lang.ExceptionInfo e
+        ;; another run created it in between; narrowed below like any other
+        (when-not (and (bfs/refusal? e) (= :briko.fs/exists (:type (ex-data e))) (fs/directory? dir))
+          (throw e)))))
+  (fs/set-posix-file-permissions dir "rwx------"))
+
+(defn- keep-backup!
+  "Copies the file at path to backup, which briko.fs creates rw------- in
+   the same call that creates it, in a directory narrowed to rwx------, so
+   no other user can read a copy of a secret at any moment. Refuses to
+   overwrite anything at backup, a symbolic link included. Throws ex-info
+   with ::backup-refused and backup-refusal as its message when any step
+   fails; briko.fs removes a backup file it created but could not fill."
+  [path backup]
+  (let [dir (fs/parent backup)]
+    (try
+      (private-directory! dir)
+      (bfs/write-private! backup (fs/read-all-bytes path))
       backup
-      (catch java.io.IOException e
-        (when @created (fs/delete-if-exists backup))
-        (throw (ex-info (backup-refusal (str dir) e) {::backup-refused true :backup backup} e))))))
+      (catch Exception e
+        (if (or (instance? java.io.IOException e) (bfs/refusal? e))
+          (throw (ex-info (backup-refusal (str dir) e) {::backup-refused true :backup backup} e))
+          (throw e))))))
 
 (defn write!
   "Writes an env.edn map to path (the primary path by default) and returns
@@ -516,13 +570,25 @@
    first and never overwritten, so a write can always be undone; when the
    copy fails nothing is written and write! throws ex-info with
    ::backup-refused whose message says so. A caller that names the backup
-   in its confirmation passes the same backup here."
+   in its confirmation passes the same backup here.
+
+   env.edn is replaced in one atomic rename by briko.fs, so a reader sees
+   the old file or the new one and never half of it. It keeps the
+   permissions of the file it replaces; a new env.edn, which may hold a
+   webhook URL or another secret, is created rw-------. A symbolic link at
+   path is followed and the file it ends at is written, as a plain write
+   through the link would. A write briko.fs refuses throws its ex-info and
+   leaves env.edn as it was."
   ([config] (write! config primary-path))
   ([config path] (write! config path (backup-path path (java.time.LocalDateTime/now))))
   ([config path backup]
-   (let [kept (when (fs/exists? path)
+   (let [existing? (fs/exists? path)
+         kept (when existing?
                 (keep-backup! path backup))]
-     (spit path (render config))
+     (bfs/atomic-write! (str path) (render config)
+                        (if existing?
+                          {:mode :keep :symlink :follow}
+                          {:private? true :symlink :follow}))
      {:path path :backup kept})))
 
 (defn exists?

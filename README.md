@@ -93,7 +93,14 @@ is unset), outside any working tree and readable only by you; the
 confirmation and the result name the backup. Or copy
 `env.edn.example` to `env.edn` and edit by hand. The first file found is
 used: the one `GUMSHOE_ENV` points to, then `./env.edn`, then
-`$XDG_CONFIG_HOME/gumshoe/env.edn`, then `~/.config/gumshoe/env.edn`. It
+`$XDG_CONFIG_HOME/gumshoe/env.edn`, then `~/.config/gumshoe/env.edn`. An
+`XDG_CONFIG_HOME` or `XDG_STATE_HOME` that is empty, blank or relative is
+ignored, as the XDG specification says, and `~` is `$HOME`, or the
+`user.home` property when `HOME` is unset or not absolute. The file is read
+as one EDN map of at most 1 MiB and 64 levels; a second form after the map,
+or a tag other than `#inst` and `#uuid`, makes the file unreadable. A
+rewrite replaces env.edn in one atomic rename, keeping the permissions of
+the file it replaces, and creates a new env.edn readable only by you. It
 lets you name your VPN interface and your ceph mgr hosts without touching
 code. When set, the
 storage-resize books tail the ceph cluster log over SSH while they wait (gated
@@ -125,8 +132,13 @@ and the red FAILED banner - never a raw stack trace - and the exit code stays
 honest. A single broken detective reports itself and the rest of the
 investigation still runs. A resource type the cluster does not have simply
 yields no findings. Every quick read is time-bounded so a wedged API server or
-DNS server slows a book by seconds instead of hanging it - while genuinely
-long-running work (port-forwards, drains, `exec`, upgrade watches, interactive
+DNS server slows a book by seconds instead of hanging it. A captured command
+counts as finished once it has exited and every process holding its output
+has let go of it: a background child left holding the output turns the read
+into a timeout, every time, and is killed with it. A captured command reads
+end of file on stdin unless it is given input, and one that writes more than
+256 MiB to stdout fails with exit 125 instead of handing on a cut listing.
+Genuinely long-running work (port-forwards, drains, `exec`, upgrade watches, interactive
 sessions) streams without a timeout and keeps running for as long as it needs.
 Every terminal state ends with a banner and a next step: what to install, what
 to fix, or what to run.
@@ -1261,11 +1273,14 @@ every transcript its book keeps in the golden harness.
 A book file may come from anywhere on disk, and reading one never runs
 code from it:
 
-- it is read with `clojure.edn`, so `#=` read-eval, reader conditionals,
-  syntax quote, regexes and anonymous functions are refused as syntax;
+- it is read with `briko.edn` over `clojure.edn`, so `#=` read-eval, reader
+  conditionals, syntax quote, regexes and anonymous functions are refused as
+  syntax;
 - every tagged literal is refused, `#inst` and `#uuid` included;
-- a file over 64 KiB, nested over 32 collections deep, holding more than
-  one form, or not valid UTF-8 is refused before it is compiled;
+- a file over 64 KiB, nested over 32 levels deep (a collection, a
+  discard or a metadata prefix each count one, judged before the reader
+  runs), holding more than one form, holding a number literal over 100
+  characters, or not valid UTF-8 is refused before it is compiled;
 - `compile` refuses every symbol, unknown key and word, and calls only
   functions registered in `gumshoe.dsl.registry`. The plugins named in
   `env.edn` load before the book compiles, so a casebook registers its own

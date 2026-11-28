@@ -14,7 +14,8 @@
    DeleteBackupRequest, as `velero backup delete` does it: deleting the Backup
    object alone leaves its data in object storage, and the backup sync puts the
    object back."
-  (:require [cheshire.core :as json]
+  (:require [briko.digest :as digest]
+            [cheshire.core :as json]
             [clojure.string :as str]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.pick :as pick]
@@ -171,9 +172,7 @@
   [name]
   (if (<= (count name) 63)
     name
-    (let [digest (.digest (java.security.MessageDigest/getInstance "SHA-256") (.getBytes ^String name "UTF-8"))
-          hex (apply str (map #(format "%02x" (bit-and % 0xff)) digest))]
-      (str (subs name 0 57) (subs hex 0 6)))))
+    (str (subs name 0 57) (subs (digest/sha256-hex name) 0 6))))
 
 (defn delete-request-manifest
   [backup]

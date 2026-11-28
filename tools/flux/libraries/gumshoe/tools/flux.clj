@@ -8,7 +8,8 @@
    flux's detectives, its :flux cluster capability, the flux CLI tool profile, and
    the drill-down (its CRD kinds plus a reconcile-status probe). Nothing about
    flux lives in the engine any more."
-  (:require [clojure.string]
+  (:require [briko.digest :as digest]
+            [clojure.string]
             [gumshoe.conditions :as conditions]
             [gumshoe.effect :as effect]
             [gumshoe.evidence :as evidence]
@@ -47,10 +48,7 @@
   [release-name]
   (if (<= (count release-name) 53)
     release-name
-    (let [digest (.digest (java.security.MessageDigest/getInstance "SHA-256")
-                          (.getBytes ^String release-name "UTF-8"))
-          hex (apply str (map #(format "%02x" (bit-and % 0xff)) digest))]
-      (str (subs release-name 0 40) "-" (subs hex 0 12)))))
+    (str (subs release-name 0 40) "-" (subs (digest/sha256-hex release-name) 0 12))))
 
 (defn- last-snapshot
   [release]
