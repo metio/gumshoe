@@ -1,0 +1,20 @@
+;; SPDX-FileCopyrightText: The gumshoe Authors
+;; SPDX-License-Identifier: 0BSD
+
+;; The cordoned-node findings of the nodes detective
+;; (gumshoe.detectives.nodes), written as a DSL detective.
+{:gumshoe/dsl :v0-experimental
+ :kind :detective
+ :description "Reports every cordoned node, which takes no new pods"
+ :when-to-run "A node was cordoned for maintenance and you want to know whether it was uncordoned again."
+ :prerequisites {:installed-tools ["kubectl"]
+                 :cluster-capabilities []
+                 :kubectl-can-get ["nodes"]}
+ :reads {:nodes [:list "nodes" {:namespace :cluster}]}
+ :checks [{:name "cordoned-nodes"
+           :description "Nodes that are cordoned (unschedulable)"
+           :severity :info
+           :each :nodes
+           :expect [:not [:field [:spec :unschedulable] := true]]
+           :says "node is cordoned (unschedulable)"
+           :hint "uncordon with runbooks/kubernetes/nodes/uncordon.clj when the work on it is done"}]}
