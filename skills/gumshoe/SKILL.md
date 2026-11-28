@@ -1268,7 +1268,13 @@ mostly data:
   resource may name the subresource the effect writes through, which RBAC
   authorises apart from its resource: `:kubectl-can-create ["pods/eviction"]`
   for a drain, `:kubectl-can-patch ["deployments/scale"]` for `kubectl
-  scale`, `:kubectl-can-update ["namespaces/finalize"]`;
+  scale`, `:kubectl-can-update ["namespaces/finalize"]`. A type only some
+  clusters serve (a CRD such as the Flux Operator's ResourceSets) goes in
+  `:kubectl-can-get-if-served`, which passes when the role may get it and
+  also when discovery confirms the cluster does not serve it, and fails
+  when discovery does not answer. `gumshoe.testing.prerequisites/undeclared-reads`
+  compares the `kubectl get` calls a test run recorded with the get
+  permissions a book declares, as flux/retire's test does;
 - a `namespace/name` target splits with `(kubectl/namespace-name-map
   target)`, which returns the map `{:namespace … :name …}`, so a book
   destructures it by key, `(let [{:keys [namespace name]} …])`. A vector

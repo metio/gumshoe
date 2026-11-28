@@ -206,16 +206,42 @@
          {:ok? true :label heading}
          {:ok? false :label (format "Kubernetes: cannot EXEC into %s" target)})])))
 
+(defn- can-get-if-served-item
+  "The checklist item for a type a book reads where the cluster serves it:
+   met when the user may get it across every namespace, and met as well
+   when discovery confirms the cluster does not serve the type, because a
+   read of a type that is not served answers that nothing exists. A
+   discovery that does not answer is no confirmation, so the item fails
+   then, as it does for a served type the user may not get. context is the
+   kube context to ask on, nil for the current one."
+  [context resource]
+  (let [target (resource-label context resource)
+        heading (format "Kubernetes: can GET %s where served" target)]
+    [heading
+     #(cond
+        (if context (kubectl/can-i? context "get" resource) (kubectl/can-i? "get" resource))
+        {:ok? true :label (format "Kubernetes: can GET %s" target)}
+
+        (when-let [ctx (or context (kubectl/current-context))]
+          (kubectl/type-unserved? ctx resource))
+        {:ok? true :label (format "Kubernetes: %s not served - nothing to GET" target)}
+
+        :else
+        {:ok? false :label (format "Kubernetes: cannot GET %s" target)})]))
+
 (defn permission-checks
   "The `kubectl auth can-i` questions the permission prerequisites ask, as
    [verb resource] pairs in the order they are checked: one per resource of
-   each key of gumshoe.prerequisites/kubectl-verbs, and create on the exec
-   subresource for each of :kubectl-can-exec."
+   each key of gumshoe.prerequisites/kubectl-verbs, get for each of
+   :kubectl-can-get-if-served (asked first, before its discovery), and
+   create on the exec subresource for each of :kubectl-can-exec."
   [prerequisites]
   (concat
    (for [[key verb] prerequisites/kubectl-verbs
          resource (get prerequisites key)]
      [verb resource])
+   (for [resource (:kubectl-can-get-if-served prerequisites)]
+     ["get" resource])
    (for [resource (:kubectl-can-exec prerequisites)]
      ["create" (str resource "/exec")])))
 
@@ -226,7 +252,7 @@
   #{:can-ping-using-ipv4 :can-ping-using-ipv6 :access-gopass-secrets
     :installed-tools :minimum-tool-versions :existing-paths :cluster-capabilities
     :kubectl-can-get :kubectl-can-create :kubectl-can-update :kubectl-can-patch
-    :kubectl-can-delete :kubectl-can-exec})
+    :kubectl-can-delete :kubectl-can-exec :kubectl-can-get-if-served})
 
 (def ^:private cluster-tools
   "The tools in :installed-tools that reach a Kubernetes cluster through
@@ -241,6 +267,7 @@
   (boolean
    (or (contains? prerequisites :cluster-capabilities)
        (contains? prerequisites :kubectl-can-exec)
+       (contains? prerequisites :kubectl-can-get-if-served)
        (some #(contains? prerequisites (first %)) prerequisites/kubectl-verbs)
        (some #(or (contains? cluster-tools %) (str/starts-with? (str %) "kubectl-"))
              (:installed-tools prerequisites)))))
@@ -349,6 +376,7 @@
         [(cluster-item (:cluster-capabilities prerequisites []) connection known-required?)])
       (mapcat (fn [[key verb]] (map (partial can-i-item context verb) (get prerequisites key)))
               prerequisites/kubectl-verbs)
+      (map (partial can-get-if-served-item context) (:kubectl-can-get-if-served prerequisites))
       (map (partial can-exec-item context) (:kubectl-can-exec prerequisites))
       ;; plugin-registered checks (change windows, tickets, on-call acks) run last
       ;; one registered check at a time, so a builder that throws fails its

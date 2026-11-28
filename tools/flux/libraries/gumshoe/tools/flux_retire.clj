@@ -706,13 +706,20 @@
    :candidates storage/helmrelease-picks})
 
 (def retire-named
-  "Retires the HelmRelease --namespace and --name pick without an uninstall."
+  "Retires the HelmRelease --namespace and --name pick without an uninstall.
+   Its prerequisites name every type the change reads: HelmReleases,
+   Kustomizations, the release's storage Secrets (read-record lists and
+   reads them) and ResourceSets where the cluster serves them (read-owners
+   lists them). The objects the stored manifest claims are read as well;
+   their types are known only once the storage is read, so a claimed object
+   the role cannot read refuses before the confirmation instead."
   (merge {:options (select/options selection
                                    {:writer {:desc "A field manager that has taken over the release's objects, repeatable; when given, only these count as another writer"
                                              :coerce [:string]}})
           :prerequisites {:installed-tools ["kubectl" "fzf"]
                           :cluster-capabilities [:flux]
-                          :kubectl-can-get [flux/helmrelease-type flux/kustomization-type]
+                          :kubectl-can-get [flux/helmrelease-type flux/kustomization-type "secrets"]
+                          :kubectl-can-get-if-served [storage/resourceset-type]
                           :kubectl-can-patch [flux/helmrelease-type]
                           :kubectl-can-delete [flux/helmrelease-type]}
           :select selection
