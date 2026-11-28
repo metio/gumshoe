@@ -8,8 +8,7 @@
             [clojure.test :refer [deftest is testing]]
             [gumshoe.http :as http]
             [gumshoe.loopback-server :refer [recording! response serve!]])
-  (:import [java.io ByteArrayInputStream PipedInputStream PipedOutputStream]
-           [java.net URLDecoder]))
+  (:import [java.net URLDecoder]))
 
 (deftest http-ok-test
   (is (http/ok? {:reachable true :status 200}))
@@ -52,18 +51,28 @@
         (is (str/includes? (:error response) "larger than 1024 bytes")))
       (finally (close)))))
 
-(deftest fetch-lines-bounds-an-error-body-that-never-ends
-  (testing "a 503 whose body keeps the connection open still returns within the deadline"
+(deftest fetch-lines-gives-up-on-an-error-body-that-never-ends
+  (testing "a 503 whose body keeps the connection open is unreachable at the deadline"
     (let [{:keys [url close]} (serve! "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 100000\r\n\r\n"
                                       (repeat 1000 "x") 200)]
       (try
         (let [[response ms] (elapsed-ms #(http/fetch-lines! url {:deadline-ms 1500}))]
           (is (< ms 5000))
-          (is (true? (:reachable response)))
-          (is (= 503 (:status response)))
-          (is (nil? (:body response)))
+          (is (false? (:reachable response)))
+          (is (str/includes? (:error response) "did not complete within 1500 ms") (:error response))
           (is (not (http/ok? response))))
         (finally (close))))))
+
+(deftest fetch-lines-keeps-no-error-body-over-64-kib
+  (let [{:keys [url close]} (recording! (fn [_] (response "500 Internal Server Error"
+                                                          (apply str (repeat (inc (* 64 1024)) "x")))))]
+    (try
+      (let [response (http/fetch-lines! url {:deadline-ms 3000})]
+        (is (true? (:reachable response)))
+        (is (= 500 (:status response)))
+        (is (= [] (:lines response)))
+        (is (nil? (:body response))))
+      (finally (close)))))
 
 (deftest fetch-lines-keeps-a-short-error-body
   (let [{:keys [url close]} (serve! "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 4\r\nConnection: close\r\n\r\n"
@@ -91,6 +100,7 @@
         (let [[response ms] (elapsed-ms #(http/fetch-lines! url {:deadline-ms 10000 :max-lines 3}))]
           (is (= ["line-0" "line-1" "line-2"] (:lines response)))
           (is (= 200 (:status response)))
+          (is (= :max-lines (:truncated response)))
           (is (< ms 5000) "max-lines ends the read, the deadline does not"))
         (finally (close))))))
 
@@ -133,15 +143,16 @@
       (is (= ["/old" "/new"] (map :target @requests)))
       (finally (close)))))
 
-(deftest fetch-lines-keeps-what-briko-file-streaming-discards-at-the-deadline
-  (testing "a stream still open at the deadline yields its lines through fetch-lines!"
+(deftest fetch-lines-hands-over-what-briko-read-by-the-deadline
+  (testing "briko.http :as :lines answers a stream still open at the deadline with its lines"
     (let [{:keys [url close]} (serve! "HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n"
                                       ["one\n" "two\n"] 0)
           dir (fs/create-temp-dir {:prefix "gumshoe-http-test"})
           target (str (fs/path dir "stream.txt"))]
       (try
-        (is (= ["one" "two"] (:lines (http/fetch-lines! url {:deadline-ms 1000}))))
-        (testing "briko.http's {:as {:file}} refuses the same stream at its deadline and writes nothing"
+        (is (= {:reachable true :status 200 :lines ["one" "two"] :truncated :deadline}
+               (http/fetch-lines! url {:deadline-ms 1000})))
+        (testing "{:as {:file}} still refuses the same stream at its deadline and writes nothing"
           (let [refusal (try (briko-http/request :get url {:as {:file target :fsync? false}
                                                            :timeout-ms 1000})
                              nil
@@ -151,14 +162,37 @@
             (is (empty? (fs/list-dir dir)) "the staged file is gone too")))
         (finally (close) (fs/delete-tree dir))))))
 
-(deftest read-body-interrupts-a-blocked-read
-  (let [blocking (PipedInputStream. (PipedOutputStream.))
-        [result ms] (elapsed-ms #(http/read-body blocking {:deadline-ms 200 :max-bytes 10}))]
-    (is (< ms 2000))
-    (is (str/includes? (:error result) "did not arrive within 200 ms")))
-  (is (= {:body "héllo"}
-         (http/read-body (ByteArrayInputStream. (.getBytes "héllo" "UTF-8"))
-                         {:deadline-ms 1000 :max-bytes 100}))))
+(deftest fetch-lines-is-unreachable-when-the-stream-breaks-off
+  (let [{:keys [url close]} (recording! (fn [_] (str "HTTP/1.1 200 OK\r\nContent-Length: 100\r\n"
+                                                     "Connection: close\r\n\r\none\n")))]
+    (try
+      (let [response (http/fetch-lines! url {:deadline-ms 3000})]
+        (is (false? (:reachable response)) (pr-str response))
+        (is (string? (:error response))))
+      (finally (close)))))
+
+(deftest fetch-lines-cuts-a-line-over-one-mib
+  (let [{:keys [url close]} (recording! (fn [_] (response "200 OK" (str (apply str (repeat (inc (* 1024 1024)) "y")) "\nz\n"))))]
+    (try
+      (let [{:keys [lines]} (http/fetch-lines! url {:deadline-ms 5000})]
+        (is (= [(* 1024 1024) 1] (map count lines))))
+      (finally (close)))))
+
+(deftest fetch-lines-follows-the-url-rules-of-briko-http
+  (testing "plain http to a host that is not loopback is refused before connecting"
+    (let [[answer ms] (elapsed-ms #(http/fetch-lines! "http://192.0.2.1:9/flows" {:deadline-ms 3000}))]
+      (is (false? (:reachable answer)))
+      (is (str/includes? (:error answer) "plain http is refused"))
+      (is (< ms 2000))))
+  (testing "a URL with user info is refused before connecting"
+    (let [{:keys [port requests close]} (recording! (fn [_] (response "200 OK" "{}\n")))]
+      (try
+        ;; built at runtime, so no credential-shaped literal sits in the source
+        (let [answer (http/fetch-lines! (str "http://" "someone" ":" "pw" "@127.0.0.1:" port "/") {:deadline-ms 3000})]
+          (is (false? (:reachable answer)))
+          (is (str/includes? (:error answer) "user info"))
+          (is (empty? @requests)))
+        (finally (close))))))
 
 (defn- query-of
   "The decoded query parameters of a request target."

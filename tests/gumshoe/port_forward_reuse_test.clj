@@ -7,7 +7,9 @@
    with-port-forward returns, and one that does not exit in time is reported
    as our own, never as another program holding the port. Each scenario runs
    in a fresh bb against a fake kubectl that binds the port and takes a while
-   to exit once signalled."
+   to exit on SIGTERM. A stopped forward is killed with SIGKILL, which no
+   program can delay, so a forward still alive after its close is simulated
+   by wrapping briko.process/close and alive? in the fresh bb."
   (:require [babashka.fs :as fs]
             [babashka.process :as process]
             [clojure.edn :as edn]
@@ -48,12 +50,28 @@
     (assoc result :value (try (edn/read-string (last (str/split-lines (str/trim (:out result)))))
                               (catch Exception _ nil)))))
 
+(defn- lingering-close
+  "Source that makes the first forward closed in the fresh bb read as alive
+   for linger-ms after its close returned."
+  [linger-ms]
+  (str "(require '[briko.process])"
+       "(def lingered (atom nil))"
+       "(alter-var-root #'briko.process/close"
+       "  (fn [close] (fn [h] (let [exit (close h)]"
+       "    (compare-and-set! lingered nil [(:pid h) (+ (System/nanoTime) (* 1000000 " linger-ms "))])"
+       "    exit))))"
+       "(alter-var-root #'briko.process/alive?"
+       "  (fn [alive?] (fn [h] (or (alive? h)"
+       "    (let [[pid until] @lingered] (boolean (and (= pid (:pid h)) (< (System/nanoTime) until))))))))"))
+
 (defn- forwards-script
   "Runs with-port-forward once per pod on port, pausing pause-ms before
    each pod named in pause-before, and prints each result. exit-ms binds
-   *forward-exit-ms*, nil keeps its default."
-  [port pods exit-ms pause-before pause-ms]
+   *forward-exit-ms*, nil keeps its default. linger-ms, when given, keeps
+   the first forward alive that long after its close."
+  [port pods exit-ms pause-before pause-ms & [linger-ms]]
   (str "(require '[gumshoe.kubectl :as kubectl])"
+       (if linger-ms (lingering-close linger-ms) "")
        "(def results (binding [" (if exit-ms (str "kubectl/*forward-exit-ms* " exit-ms) "") "]"
        "  (mapv (fn [pod]"
        "          (when (contains? " (pr-str (set pause-before)) " pod) (Thread/sleep " pause-ms "))"
@@ -74,12 +92,22 @@
         (is (not (str/includes? err "already in use")) err))
       (finally (fs/delete-tree dir)))))
 
-(deftest a-forward-that-outlives-its-bound-is-reported-as-our-own
+(deftest a-kubectl-slow-to-exit-on-sigterm-is-gone-when-its-forward-returns
   (let [dir (fs/create-temp-dir)
         port (kubectl/free-local-port)]
     (try
       (fake-kubectl! dir 2500)
-      (let [{:keys [value err]} (run-script dir (forwards-script port ["a" "b" "c"] 300 #{"c"} 3500))]
+      (let [{:keys [value err]} (run-script dir (forwards-script port ["a" "b"] 300 #{} 0))]
+        (is (= [["a" :ran] ["b" :ran]] value) err)
+        (is (not (str/includes? err "still held")) err))
+      (finally (fs/delete-tree dir)))))
+
+(deftest a-forward-that-outlives-its-bound-is-reported-as-our-own
+  (let [dir (fs/create-temp-dir)
+        port (kubectl/free-local-port)]
+    (try
+      (fake-kubectl! dir 0)
+      (let [{:keys [value err]} (run-script dir (forwards-script port ["a" "b" "c"] 300 #{"c"} 3500 2500))]
         (testing "the first pod ran and its slow exit is named"
           (is (= ["a" :ran] (first value)) err)
           (is (str/includes? err (format "local port %d is still held by our own forward" port)) err))

@@ -29,7 +29,11 @@
                   ;; captured commands run through briko.process
                   briko/run (fn [_argv opts]
                               (swap! seen conj (get-in opts [:extra-env "KUBERC"]))
-                              {:exit 0 :out "" :err "" :launched? true})]
+                              {:exit 0 :out "" :err "" :launched? true})
+                  ;; and children started alongside through briko.process/start
+                  briko/start (fn [_argv opts]
+                                (swap! seen conj (get-in opts [:extra-env "KUBERC"]))
+                                {:pid nil :launched? false})]
       (shell/execute "kubectl" "get" "pods")
       (shell/execute-with-stdin "{}" "kubectl" "apply" "-f" "-")
       (shell/execute-env {"PGPASSWORD" "x"} "kubectl" "exec" "p")
@@ -39,8 +43,9 @@
       (shell/run-with-output-env {"A" "b"} "kubectl" "port-forward" "svc/s" "1:1")
       (shell/capture-line "gum" "input")
       (shell/pipe-to! "x" "wl-copy")
-      (shell/start {} "kubectl" "port-forward" "svc/s" "1:1"))
-    (is (= 10 (count @seen)))
+      (shell/start {} "kubectl" "port-forward" "svc/s" "1:1")
+      (shell/start-alongside ["kubectl" "port-forward" "svc/s" "1:1"] {:extra-env {"KUBERC" "/home/op/.kube/kuberc"}}))
+    (is (= 11 (count @seen)))
     (is (every? #{"off"} @seen) (pr-str @seen))))
 
 (deftest a-caller-cannot-hand-a-child-its-own-kuberc

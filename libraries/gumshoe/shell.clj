@@ -30,7 +30,8 @@
    kubectl never reads the operator's kuberc: a plan the operator confirmed is
    the command that runs. Spawning through babashka.process anywhere else would
    skip that; spawn through this namespace (start for a child the caller
-   manages itself).
+   manages itself through its streams, start-alongside for one whose output
+   is a log to bound, such as a port-forward).
 
    A warning a child writes to stderr belongs to the step that ran it. Inside
    collecting-warnings every captured command hands its warnings
@@ -304,6 +305,18 @@
   [opts & args]
   (offline/check! args)
   (apply process/process (child-opts opts) args))
+
+(defn start-alongside
+  "Starts argv to run alongside the caller through briko.process/start, with
+   child-env applied, and returns its handle for briko.process's alive?,
+   output, wait-ready and close. opts are start's options; :extra-env is
+   merged under child-env. The program is stopped when the JVM shuts down,
+   also on SIGTERM or SIGHUP, unless it was closed before. Does not throw
+   when the program cannot be launched: the handle answers :launched? false
+   with the reason in the :err of its output. Records nothing."
+  [argv opts]
+  (offline/check! argv)
+  (briko/start (mapv str argv) (child-opts opts)))
 
 (defn execute
   "Runs a command capturing stdout/stderr. Returns the full process map."

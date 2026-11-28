@@ -6,8 +6,7 @@
    behind the service, each through a forward to that pod, reports per pod,
    and verifies only when every pod deleted the metric; set_capacity plans
    against the claims of the Prometheus' own namespace."
-  (:require [babashka.process :as process]
-            [cheshire.core :as json]
+  (:require [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.http :as http]
@@ -82,7 +81,7 @@
 
 (deftest a-forward-to-one-pod-names-that-pod
   (let [argv (atom nil)]
-    (with-redefs [process/process (fn [_ & args] (reset! argv (vec args)) (throw (ex-info "stub" {})))]
+    (with-redefs [shell/start-alongside (fn [args _] (reset! argv (vec args)) (throw (ex-info "stub" {})))]
       (binding [*err* (java.io.StringWriter.)]
         (is (false? (kubectl/with-port-forward {:context "c" :namespace "monitoring" :pod "prometheus-k8s-1"
                                                 :local-port 39999 :remote-port 9090}

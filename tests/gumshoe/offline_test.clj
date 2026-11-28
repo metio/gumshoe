@@ -65,7 +65,8 @@
                          "run-attributed" #(shell/run-attributed "kubectl" "delete" "pod" "p")
                          "capture-line" #(shell/capture-line "gum" "input")
                          "pipe-to!" #(shell/pipe-to! "x" "wl-copy")
-                         "start" #(shell/start {} "kubectl" "port-forward" "pod/p" "80")}]
+                         "start" #(shell/start {} "kubectl" "port-forward" "pod/p" "80")
+                         "start-alongside" #(shell/start-alongside ["kubectl" "port-forward" "pod/p" "80"] {})}]
     (testing label
       (let [[result launched] (launches #(offline/forbidding "the plan reads nothing" thunk))]
         (is (offline/forbidden? result))

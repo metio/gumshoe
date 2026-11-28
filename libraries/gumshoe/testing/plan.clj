@@ -323,6 +323,7 @@
   [#'shell/execute #'shell/execute-with-stdin #'shell/execute-env #'shell/stdout-of
    #'shell/exit-code-of #'shell/run-with-output #'shell/run-with-output-env
    #'shell/run-attributed #'shell/capture-line #'shell/pipe-to! #'shell/start
+   #'shell/start-alongside
    #'http/request #'http/fetch #'http/fetch-lines!])
 
 (defn- guarding

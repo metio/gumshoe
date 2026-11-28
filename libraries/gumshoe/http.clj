@@ -8,28 +8,15 @@
    exceptions. JSON bodies are parsed opportunistically: :json is nil unless
    the whole body is one complete JSON value.
 
-   request and fetch go through briko.http, so every request follows its
-   rules: https, or plain http to a loopback host only (a port-forward on
-   127.0.0.1); no user info in the URL; redirects checked hop by hop, never
-   from https to http, and with Authorization dropped when one leaves the
-   origin.
-
-   fetch-lines! stays on babashka.http-client. It reads an endpoint that
-   streams until the deadline and answers with the lines that arrived by
-   then. briko.http hands a body over only once it is complete: in memory,
-   or with {:as {:file}} renamed into place, and a body still open at the
-   deadline is refused and its staged file removed, so a watch stream read
-   through it would yield a timeout and no lines. fetch-lines! therefore
-   keeps babashka.http-client's URL handling, without the https-or-loopback
-   rule."
-  (:require [babashka.http-client :as http]
-            [briko.http :as briko-http]
-            [clojure.java.io :as io]
+   request, fetch and fetch-lines! go through briko.http, so every request
+   follows its rules: https, or plain http to a loopback host only (a
+   port-forward on 127.0.0.1); no user info in the URL; redirects checked hop
+   by hop, never from https to http, and with Authorization dropped when one
+   leaves the origin."
+  (:require [briko.http :as briko-http]
             [clojure.string :as str]
             [gumshoe.json :as gumshoe-json]
-            [gumshoe.offline :as offline])
-  (:import [java.io ByteArrayOutputStream InputStream]
-           [java.nio.charset StandardCharsets]))
+            [gumshoe.offline :as offline]))
 
 (def default-timeouts
   "How long a fetch waits. :timeout-ms bounds opening the connection,
@@ -49,41 +36,6 @@
   [e]
   (when (instance? InterruptedException e)
     (.interrupt (Thread/currentThread))))
-
-(defn- close-quietly [^java.io.Closeable c]
-  (try (.close c) (catch Exception _ nil)))
-
-(defn read-body
-  "Reads stream to a UTF-8 string within deadline-ms and max-bytes, then closes
-   it. Returns {:body s}, or {:error why} when the body did not end in time,
-   grew past max-bytes, or failed. A reader blocked on a server that stopped
-   sending is interrupted and the stream closed, so this always returns within
-   about deadline-ms. It reads the error page of fetch-lines!, whose stream
-   comes from babashka.http-client; briko.http reads its own bodies."
-  [^InputStream stream {:keys [deadline-ms max-bytes]}]
-  (let [reading (future
-                  (try
-                    (let [out (ByteArrayOutputStream.)
-                          buffer (byte-array 8192)]
-                      (loop []
-                        (let [n (.read stream buffer)]
-                          (cond
-                            (neg? n) {:body (.toString out StandardCharsets/UTF_8)}
-                            (> (+ (.size out) n) max-bytes)
-                            {:error (format "the body exceeded %d bytes" max-bytes)}
-                            :else (do (.write out buffer 0 n) (recur))))))
-                    (catch Exception e {:error (message-of e)})))
-        result (try (deref reading (max 0 deadline-ms) ::timed-out)
-                    (finally
-                      ;; also when the caller is interrupted while it waits
-                      (when-not (realized? reading) (future-cancel reading))
-                      (close-quietly stream)))]
-    (if (= ::timed-out result)
-      {:error (format "the body did not arrive within %d ms" deadline-ms)}
-      result)))
-
-(defn- remaining-ms [started deadline-ms]
-  (- deadline-ms (quot (- (System/nanoTime) started) 1000000)))
 
 (def ^:private max-redirects
   "How many redirects request follows: the five java.net.http's own
@@ -140,44 +92,46 @@
   "How much of a non-2xx body fetch-lines! keeps: an error page, not a stream."
   (* 64 1024))
 
+(def ^:private max-stream-bytes
+  "The most a stream read by fetch-lines! may deliver: 256 MiB, far above
+   max-lines of flow records, so the bound only stops a runaway stream. A
+   stream past it, like an error page past it, is unreachable."
+  (* 256 1024 1024))
+
 (defn fetch-lines!
   "GETs url and reads the response body as lines until the stream ends, max-lines
    arrive, or deadline-ms passes - for an endpoint that streams indefinitely and
    would never satisfy a buffered read. Returns {:reachable, :status, :lines}
-   with whatever arrived before the deadline, {:reachable, :status, :body} for a
-   non-2xx (nil :body when the error page did not end within the deadline or
-   64 KiB), or {:reachable false, :error}; it never throws, except inside
-   gumshoe.offline/forbidding, where it refuses before it connects."
+   with whatever arrived before the deadline, plus :truncated :deadline or
+   :max-lines when the stream was still open; a line still incomplete at the
+   deadline is dropped, and a line longer than 1 MiB is cut there. A non-2xx
+   answers {:reachable, :status, :lines [], :body}, with a nil :body for an
+   error page over 64 KiB. A URL briko.http refuses, a connection that fails
+   (also in the middle of the stream), an error page that does not end
+   within the deadline or a stream over 256 MiB answer {:reachable false,
+   :error}. It never throws, except inside gumshoe.offline/forbidding, where
+   it refuses before it connects."
   ([url] (fetch-lines! url {}))
   ([url {:keys [headers deadline-ms max-lines]
          :or {deadline-ms 15000 max-lines 20000}}]
    (offline/check! ["GET" url])
-   (let [started (System/nanoTime)]
-     (try
-       (let [{:keys [status body]} (http/get url {:throw false
-                                                 :as :stream
-                                                 :timeout deadline-ms
-                                                 :headers (merge {"Accept" "application/json"}
-                                                                 headers)})]
-         (if-not (<= 200 (or status 0) 299)
-           {:reachable true
-            :status status
-            :lines []
-            :body (:body (read-body body {:deadline-ms (remaining-ms started deadline-ms)
-                                          :max-bytes max-error-body-bytes}))}
-           (let [collected (atom [])
-                 reading (future
-                           (try
-                             (with-open [reader (io/reader body)]
-                               (doseq [line (line-seq reader)
-                                       :while (< (count @collected) max-lines)]
-                                 (swap! collected conj line)))
-                             (catch Exception _ nil)))]
-             (try (deref reading (max 0 (remaining-ms started deadline-ms)) nil)
-                  (finally
-                    (future-cancel reading)
-                    (close-quietly body)))
-             {:reachable true :status status :lines @collected})))
-       (catch Exception e
-         (keep-interrupt! e)
-         {:reachable false :error (message-of e)})))))
+   (try
+     (let [{:keys [status body truncated]}
+           (briko-http/request :get url {:headers (merge {"Accept" "application/json"} headers)
+                                         :as :lines
+                                         :max-lines max-lines
+                                         :on-long-line :truncate
+                                         :connect-timeout-ms deadline-ms
+                                         :timeout-ms deadline-ms
+                                         :max-bytes max-stream-bytes
+                                         :max-redirects max-redirects})]
+       (if (<= 200 status 299)
+         (cond-> {:reachable true :status status :lines body}
+           truncated (assoc :truncated truncated))
+         {:reachable true
+          :status status
+          :lines []
+          :body (when (<= (count (.getBytes ^String body "UTF-8")) max-error-body-bytes) body)}))
+     (catch Exception e
+       (keep-interrupt! e)
+       {:reachable false :error (message-of e)}))))

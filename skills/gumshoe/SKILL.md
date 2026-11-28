@@ -1125,10 +1125,12 @@ mostly data:
   :error …}` without connecting. Up to five redirects are followed, never
   from https to http, and `Authorization` is dropped when one leaves the
   origin. `:json` is nil unless the whole body is one strict JSON value.
-  `http/fetch-lines!` reads a stream (a watch endpoint) until `:max-lines`
-  or its deadline and answers with the lines that arrived; it is not built
-  on `briko.http`, so none of those URL rules apply to it, and a book
-  should hand it only an https URL or a loopback one;
+  `http/fetch-lines!` reads a stream (a watch endpoint) through
+  `briko.http` under the same URL rules, until `:max-lines` or its
+  deadline, and answers with the lines that arrived and `:truncated
+  :deadline` or `:max-lines` when the stream was still open. A stream that
+  breaks off, or an error page that does not end by the deadline, answers
+  `{:reachable false :error …}`;
 - JSON from a command or kubectl is read with `gumshoe.json/parse-strict`
   or `parse-or-nil` (on `briko.json`): one RFC 8259 value, read whole, no
   key named twice, no raw control character, within the limits of its
