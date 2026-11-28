@@ -11,7 +11,13 @@
      {:pause \"what the operator does now\"     waits for ENTER, then proves the result
       :verify (fn [ctx] -> post-checks)        optional
       :unattended :continue}                   optional, see below
-   and may carry :title, :prerequisites, :options and :recovery. The playbook's
+   and may carry :title, :prerequisites, :options and :recovery. A change
+   step may also carry :outline, lines the one confirmation and --help show
+   under it (what it acts on and how, known before anything is read), and
+   :outline-now, (fn [ctx] -> lines) over the context the judgement before
+   the confirmation derived for it, shown under it in the confirmation only
+   when that judgement covered it; it runs inside gumshoe.offline, so it
+   shows what was read and reads nothing itself. The playbook's
    prerequisites and options are derived from its steps, joined with its own,
    so the harness checks everything any step needs before the first one runs.
    Steps that declare the same option must agree on its :coerce, :alias and
@@ -27,6 +33,7 @@
       :confirm       {:action \"...\" :destructive? false}
       :recovery      \"...\" or (fn [ctx] -> string)   ; optional, see below
       :kube-context  (fn [opts] -> a kube context name or nil)   ; optional, see below
+      :report-progress true   ; optional, see below
       :steps         [..]}
 
    Each step receives {:context :cluster :target :opts :announcement-data}.
@@ -65,6 +72,11 @@
    system parked or half-owned - a controller suspended, a node cordoned, a
    finalizer stripped - carries one, and so does a playbook whose steps
    leave such a state for the steps after them to undo.
+
+   :report-progress true adds the run's progress to that guidance: the
+   steps this run finished (or skipped as already done), the step it
+   stopped at, and the steps it never reached, so the operator knows what
+   a run started again has left to do.
 
    The checks before the first change or pause run before the confirmation, so
    the operator decides with their report on screen. The confirmation lists
@@ -115,6 +127,7 @@
             [gumshoe.interact :as interact]
             [gumshoe.kube-context :as kube-context]
             [gumshoe.mutation :as mutation]
+            [gumshoe.offline :as offline]
             [gumshoe.outcome :as outcome]
             [gumshoe.prerequisites :as prerequisites]
             [gumshoe.runbook :as runbook]
@@ -257,19 +270,37 @@
   [step]
   (and (= :change (kind step)) (true? (get-in step [:confirm :separately?]))))
 
+(defn- outline-now
+  "The lines a step's :outline-now gives over the context its judgement
+   before the confirmation derived, computed where nothing can be read, or
+   none for a step that judgement did not cover."
+  [step]
+  (when-let [f (:outline-now step)]
+    (when-let [derived (::derived step)]
+      (offline/forbidding "a step's :outline-now shows what its judgement read, and reads nothing itself"
+                          #(vec (f derived))))))
+
+(defn- outline
+  "The lines shown under a change step: its :outline, then what
+   outline-now gives, indented one level further."
+  [step]
+  (concat (map #(str "    " %) (:outline step))
+          (map #(str "      " %) (outline-now step))))
+
 (defn confirmation
   "The one confirmation covering `steps`."
   [{:keys [confirm select]} steps {:keys [cluster target]}]
   {:action (:action confirm)
    :target cluster
    :items (concat (select/items (:mode select) target)
-                  (map (fn [step]
-                         (case (kind step)
-                           :pause (::title step)
-                           (str (::number step) " " (label step)
-                                (when (::done step) " (already done)")
-                                (when (separately? step) " (asks again)"))))
-                       steps))
+                  (mapcat (fn [step]
+                            (case (kind step)
+                              :pause [(::title step)]
+                              (cons (str (::number step) " " (label step)
+                                         (when (::done step) " (already done)")
+                                         (when (separately? step) " (asks again)"))
+                                    (when (= :change (kind step)) (outline step)))))
+                          steps))
    :destructive? (boolean (or (:destructive? confirm)
                               (some #(and (= :change (kind %)) (destructive? %))
                                     steps)))})
@@ -454,6 +485,17 @@
                               (cons (str "  " title ":") (map #(str "    " %) effects)))
                             left-behind))))
 
+(defn progress-text
+  "The progress of a run that stopped, as the guidance under the FAILED
+   banner names it: the steps it finished, the one it stopped at and the
+   ones it never reached. Pure."
+  [{:keys [done stopped not-run]}]
+  (str/join "\n"
+            (concat ["Where the run stopped - start it again from the top once the cause is fixed; steps that took effect are judged done again and skipped:"]
+                    [(str "  finished: " (if (seq done) (str/join "; " done) "none"))]
+                    [(str "  stopped at: " stopped)]
+                    [(str "  not run: " (if (seq not-run) (str/join "; " not-run) "none"))])))
+
 (defn- part-text
   [role {:keys [text error]}]
   (or text (format "The guidance for %s could not be rendered - %s" role error)))
@@ -469,6 +511,8 @@
      :standing    the playbook's :recovery as rendered at the failure
      :left-behind [{:title .. :effects [..]}], the steps before the stopped
                   one that applied effects, in run order
+     :progress    {:done [title ..] :stopped title :not-run [title ..]},
+                  for a playbook that reports its progress, else nil
 
    The step's guidance comes first. Once the run changed something the
    playbook's standing guidance follows it, so a step added at a position
@@ -477,13 +521,15 @@
    effects its earlier steps applied instead, so every change still in
    place reaches the operator. A run that changed nothing prints the step's
    guidance alone. A single part keeps its rendered form; several join into
-   one text, a part that could not be rendered saying so in its place."
-  [{:keys [step changed? standing left-behind]}]
+   one text, a part that could not be rendered saying so in its place. The
+   progress, when given, comes last."
+  [{:keys [step changed? standing left-behind progress]}]
   (let [listed (when (and changed? (nil? standing) (seq left-behind))
                  {:text (left-behind-text left-behind)})
         parts (keep identity [(when step ["the step the run stopped at" step])
                               (when (and changed? standing (not= standing step)) ["the playbook" standing])
-                              (when listed ["the playbook" listed])])]
+                              (when listed ["the playbook" listed])
+                              (when progress ["the progress" {:text (progress-text progress)}])])]
     (case (count parts)
       0 nil
       1 (second (first parts))
@@ -495,7 +541,7 @@
    (a change records its own :recovery or the engine's fallback), else its
    :recovery rendered here. A rehearsal changed nothing and records none,
    and a run stopped at a pause it could not wait at did not fail."
-  [step ctx {:keys [recovery left-behind]}]
+  [step ctx {:keys [recovery left-behind progress]}]
   (when-not (or flow/*dry-run* (:paused (outcome/current)))
     (let [ctx (assoc ctx :applied (outcome/applied-count))
           recorded (outcome/recorded-recovery)
@@ -506,7 +552,8 @@
                                     (:fallback recorded))
                           :changed? changed?
                           :standing (when (and changed? recovery) (outcome/render recovery ctx))
-                          :left-behind left-behind})))))
+                          :left-behind left-behind
+                          :progress progress})))))
 
 (defn- run-steps!
   "Runs the steps in order, stopping at the first that fails. `wait?` says
@@ -522,13 +569,20 @@
    them after that change or pause would judge them over what it left."
   [steps ctx wait? playbook]
   (let [left-behind (volatile! [])
-        rehearsed-ahead? (volatile! false)]
+        finished (volatile! [])
+        rehearsed-ahead? (volatile! false)
+        progress (fn [i step]
+                   (when (:report-progress playbook)
+                     {:done @finished
+                      :stopped (::title step)
+                      :not-run (mapv ::title (drop (inc i) steps))}))]
     (reduce (fn [_ [i step]]
               (let [plan (volatile! nil)
                     skipped (volatile! false)
                     before (outcome/applied-count)
                     wait? (or wait? (pos? i))
-                    stop! #(stopped-at! step ctx {:recovery (:recovery playbook) :left-behind @left-behind})
+                    stop! #(stopped-at! step ctx {:recovery (:recovery playbook) :left-behind @left-behind
+                                                  :progress (progress i step)})
                     step (if @rehearsed-ahead? (dissoc step :done :satisfied?) step)
                     ok? (try (run-step! step ctx wait? plan skipped)
                              (catch Throwable e (stop!) (throw e)))]
@@ -539,6 +593,7 @@
                   (let [effects (applied-effects @plan (- (outcome/applied-count) before))]
                     (when (seq effects)
                       (vswap! left-behind conj {:title (::title step) :effects effects}))
+                    (vswap! finished conj (str (::title step) (when @skipped " (already done)")))
                     true)
                   (do (stop!) (reduced false)))))
             true
@@ -675,6 +730,13 @@
                  (when (or (:done step) (:satisfied? step)) ", skipped when already done")
                  (when (separately? step) ", asks again"))))
 
+(defn- step-lines
+  "What --help says of one step: its line, and under a change the lines
+   of its :outline."
+  [step]
+  (cons (step-line step)
+        (when (= :change (kind step)) (map #(str "      " %) (:outline step)))))
+
 (defn details
   "What --help says a playbook does, generated from its steps."
   [{:keys [select steps] :as playbook}]
@@ -685,11 +747,11 @@
     (concat
      ["What it does:"
       (str "  picks " (mutation/picks select) ", then:")]
-     (map step-line leading)
+     (mapcat step-lines leading)
      (when (seq later)
        [(str "  - asks once to confirm every step below"
              (when destructive? " (destructive - type yes)"))])
-     (map step-line later)
+     (mapcat step-lines later)
      (when (seq needs)
        (concat ["" "Needs:"] (map #(str "  " %) needs))))))
 

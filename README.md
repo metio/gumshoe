@@ -1135,9 +1135,105 @@ a scope's scan judges them beside the Clojure detectives, as a plugin's
 detectives do. A detective that reads a flag is refused there, since the
 scanning book declares its own flags.
 
+### Procedures written as data
+
+A procedure - changes, pauses and checks in order, against one picked
+target, under one confirmation - is data too. It declares `:kind
+:procedure`, and `gumshoe.dsl/compile-procedure` turns it into the spec
+`playbook/book` takes, so it runs, rehearses with `--dry-run`, resumes
+with `--from-segment` and reports as every playbook does. This is
+`tests/edn-books/playbooks/kubernetes/workloads/cold-restart.edn`, two
+scale changes around a pause:
+
+```clojure
+{:gumshoe/dsl :v0-experimental
+ :kind :procedure
+ :description "Restarts a Deployment or StatefulSet cold: scales it to zero, waits for the operator, scales it back"
+ :target {:pick :one :label "Workload" :flag :pick
+          :parse :gumshoe.workloads/parse-pick
+          :candidates [:call :gumshoe.workloads/scalable-picks [:context]]}
+ :options {:replicas {:desc "The replica count to scale back to" :alias :r :coerce :long :require true}}
+ :prerequisites {…}
+ :confirm {:action "restart a workload cold"}
+ :recovery "{target} may be left at zero replicas - scale it back with …"
+ :steps [{:title "scale to zero" :values {:replicas 0} :state {…} :refuse […]
+          :confirm {:action "scale the workload to zero" :destructive? false}
+          :effect [[:kubectl :scale {:replicas [:value :replicas]}]]}
+         [:pause {:says "do what needs the workload stopped, then continue"}]
+         {:title "scale back" :values {:replicas [:opt :replicas]} …}]}
+```
+
+A step is one of three forms:
+
+- **A change**: a map in the change vocabulary above, without
+  `:gumshoe/dsl` and `:target`, which it takes from the procedure. It is
+  compiled as `compile` compiles a change and keeps every safeguard of
+  one: its pin, strict reads, refusals, post-checks, skip when done, and
+  the typed yes and `:recovery` when it is destructive. Its
+  `:prerequisites` default to `{}` and its `:description` to its title.
+- **`[:pause {:says "what the operator does now" …}]`**: waits for ENTER,
+  then proves the operator's part with each check of `:until`, each
+  `{:read [:get "type" name {:namespace expr}] :holds predicate :says
+  "template" :timeout s :interval s}` (or `:holds :absent`), fail-closed as
+  a post-check. `:unattended :continue` goes on without a terminal and
+  waits for those checks instead, so it requires `:until`. `:says` is shown
+  before anything is read and holds no placeholder.
+- **`[:check {:title "…" :reads {…} :checks […]}]`**: a read-only
+  detective, compiled as `compile-detective` compiles one, judged when the
+  run reaches it; its reads and templates may also name `[:target]`. A
+  critical finding, or a check that read nothing, stops the procedure
+  unless it says `:blocking? false`.
+
+`:phases [{:phase :prepare :title "prepare" :steps […]} …]` in place of
+`:steps` groups the steps into named phases in run order: each step's
+title names its phase, and `(gumshoe.dsl/phases-of compiled)` lists the
+step indices of each, so a driver running one phase across many targets
+takes them from there.
+
+**One confirmation.** The checks before the first change or pause run
+first. The procedure then asks once, listing the target and every step:
+each change with what it acts on and how, read from its data (`patch each
+object of :adoptees (at most 25)`, `delete each object of :leftovers (at
+most 25), destructive`, a registered effect's type), and, for the change
+judged before the confirmation, the objects it acts on now. Any
+destructive step makes the confirmation ask for the typed `yes`, and a
+procedure `:confirm {:destructive? false}` beside one is refused. A
+change step whose `:confirm` says `:separately? true` asks again with its
+own items when it is reached. The objects of a later step cannot be
+listed: the steps before it are what make them, so each later change is
+judged right before it runs, over its own fresh reads.
+
+**Failure and resuming.** A step that is refused, fails, or whose
+post-check does not hold stops the procedure, and no later step runs. The
+guidance under the `FAILED` banner names the stopped step's `:recovery`,
+the procedure's own `:recovery`, and the run's progress:
+
+```text
+Recovery:
+  the namespace shop may hold stamped objects and no release file
+  Where the run stopped - start it again from the top once the cause is fixed; steps that took effect are judged done again and skipped:
+    finished: 1/3 stamp
+    stopped at: 2/3 write
+    not run: 3/3 purge
+```
+
+Started again from the top, the confirmation marks each step that took
+effect `(already done)`, and each is skipped when reached if it still is;
+`--from-segment N` starts after the pause that opens segment N, as every
+playbook resumes.
+
+**No data passes between steps.** A step names only its own `:reads` and
+`:values`; naming another step's is refused as an undeclared name, and a
+procedure declares no `:reads` or `:values` of its own. A step that needs
+what an earlier step produced reads it again itself, after that step ran,
+and its pin and refusals judge that fresh read. The snapshot an `:each`
+keeps of the objects it confirmed is named for its step
+(`:gumshoe.dsl/step-2-each-0`), so the specs of two steps compose with
+`gumshoe.change/compose`.
+
 ### Running an EDN book
 
-A file holding such a change or detective is a book. `bb run` (and `bb gumshoe`) runs it
+A file holding such a change, detective or procedure is a book. `bb run` (and `bb gumshoe`) runs it
 by its path, with the flags its target derives, exactly as it runs the
 Clojure book it mirrors:
 
