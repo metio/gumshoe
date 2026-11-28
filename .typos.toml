@@ -13,4 +13,6 @@ criticals = "criticals"
 [default.extend-identifiers]
 
 [files]
-extend-exclude = ["LICENSES/"]
+# Recorded command output stays byte for byte: a DNS token or an EDE
+# (Extended DNS Error) line is no word to correct.
+extend-exclude = ["LICENSES/", "tests/fixtures/dns/"]

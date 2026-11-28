@@ -516,7 +516,14 @@ mostly data:
   `:reason`), which `gumshoe.reads` builds for kubectl and
   `gumshoe.dns/lookup` for dig (NOERROR with records present, NXDOMAIN or
   NOERROR without records absent with the `:status` kept, any other status,
-  no header, a failed dig or a name dig may not be asked about unread). The
+  no header, a failed dig or a name dig may not be asked about unread). An
+  answered DNS result carries `:items`, the record data, and `:records`, one
+  `{:name :ttl :type :data}` per answer line with `:ttl` an integer, `:type`
+  dig's uppercase string and the trailing dots kept; a CNAME chain answers
+  with every link, so filter on `:type`. Read them with `dns/records!`, which
+  throws for an unread result as `items!` does. A SERVFAIL is unread with
+  `:reason` and `:status` "SERVFAIL"; a timeout is unread with a `:reason`
+  starting "dig exited" and no `:status`. The
   engine and `evidence/joined?` count an `:unread` result as a read that did
   not answer, like nil (`joined?` is `evidence/answered?` over each read).
   A read the collection never made because an input was not given is

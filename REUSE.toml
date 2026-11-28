@@ -42,6 +42,15 @@ precedence = "override"
 SPDX-FileCopyrightText = "The gumshoe Authors"
 SPDX-License-Identifier = "0BSD"
 
+# Recorded command output can not carry a comment header without changing it.
+# dig +noall +comments +answer runs against 1.1.1.1 and the unroutable
+# 192.0.2.1, for the DNS reading's tests.
+[[annotations]]
+path = "tests/fixtures/dns/*.txt"
+precedence = "override"
+SPDX-FileCopyrightText = "The gumshoe Authors"
+SPDX-License-Identifier = "0BSD"
+
 # Command output in kubectl's format (api-resources rows and stderr, a
 # namespace's lists as JSON) can not carry a comment header, for the
 # unmanaged-objects detective's tests.
