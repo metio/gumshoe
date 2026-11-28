@@ -241,7 +241,11 @@
    form, with a message naming that path, for every key, word, name or
    argument it does not know. The compiled map carries the source as
    (::source (meta m)) and the safeguards it got as (::safeguards (meta m)),
-   so a reader of the change can judge the data it was written as."
+   so a reader of the change can judge the data it was written as.
+
+   A detective - reads, pure checks and findings, and nothing that writes -
+   is data declaring :kind :detective, which compile-detective compiles
+   into the spec gumshoe.detective/book takes (see its doc)."
   (:refer-clojure :exclude [compile])
   (:require [cheshire.core :as json]
             [clojure.string :as str]
@@ -250,12 +254,17 @@
             [gumshoe.dsl.library]
             [gumshoe.dsl.registry :as registry]
             [gumshoe.deletes :as deletes]
+            [gumshoe.detectives.registry :as detectives]
             [gumshoe.effect :as effect]
+            [gumshoe.kube-context :as kube-context]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
+            [gumshoe.offline :as offline]
+            [gumshoe.onset :as onset]
             [gumshoe.reads :as reads]
             [gumshoe.reads.result :as result]
             [gumshoe.select :as select]
+            [gumshoe.stdout :as stdout]
             [gumshoe.verify :as verify]))
 
 (def version
@@ -515,7 +524,7 @@
    :>= #(and (number? %1) (number? %2) (>= %1 %2))})
 
 (def ^:private predicate-words
-  (into #{:field :some? :nil? :not :and :or :call :state :absent} (keys comparisons)))
+  (into #{:field :some? :nil? :not :and :or :call :state :absent :present} (keys comparisons)))
 
 (defn- predicate
   "x at path, a predicate standing in place, as (fn [env] -> boolean).
@@ -532,7 +541,8 @@
       (invalid! (conj path 0) (format "%s is no predicate - the predicates are %s" op (known-words predicate-words)))
 
       (= :field op)
-      (let [_ (arity! 3 "[:field path op value]")
+      (let [_ (when-let [why (:no-field place)] (invalid! path why))
+            _ (arity! 3 "[:field path op value]")
             [steps cmp v] args
             _ (when-not (vector? steps)
                 (invalid! (conj path 1) (format "a field is a path vector such as [:spec :replicas], not %s" (pr-str steps))))
@@ -572,6 +582,21 @@
       (= :call op)
       (let [f (call-of path x place #{:predicate})]
         (fn [env] (boolean (f env))))
+
+      ;; a detective's check judges the state of a read: [:present :name]
+      ;; holds when the read found something, [:absent :name] when it
+      ;; answered that nothing is there; a read that did not answer leaves
+      ;; the check unread, so neither is judged then
+      (and (#{:present :absent} op) (:read-states? place))
+      (do (arity! 1 (format "[%s :read]" op))
+          (let [k (first args)]
+            (when-not (keyword? k)
+              (invalid! (conj path 1) (format "[%s ..] names a :reads entry as a keyword, not %s" op (pr-str k))))
+            (named! (conj path 1) :read k (:reads place))
+            (fn [env] (= op (get-in env [:states k])))))
+
+      (= :present op)
+      (invalid! path (format "[:present :read] is a detective's check, and is not available in %s" what))
 
       (= :absent op)
       (do (arity! 0 "[:absent]")
@@ -1345,23 +1370,31 @@
   (let [t (template path s place)]
     (fn [ctx] (t {:ctx ctx :object (:object ctx)}))))
 
+(defn- check-version!
+  "Refuses data that declares no :gumshoe/dsl marker or another one than
+   version. The marker is judged first, so data written for another
+   version is refused for that alone, before any word it uses."
+  [dsl what]
+  (cond
+    (not (contains? dsl :gumshoe/dsl))
+    (invalid! [:gumshoe/dsl] (format "the %s declares no version - declare :gumshoe/dsl %s, the experimental vocabulary, whose format may change in any release"
+                                     what version))
+
+    (not= version (:gumshoe/dsl dsl))
+    (invalid! [:gumshoe/dsl] (format "the %s declares :gumshoe/dsl %s, and this compiles %s - declare :gumshoe/dsl %s, the experimental vocabulary, whose format may change in any release"
+                                     what (pr-str (:gumshoe/dsl dsl)) version version))))
+
 (defn- compiled
   [{:keys [description title options prerequisites target reads values state refuse confirm items announce effect recovery opt-out
            pin problems]
     :as dsl}]
   (when-not (map? dsl)
     (invalid! [] (format "a change is a map, not %s" (pr-str dsl))))
-  ;; the marker is judged first, so a change written for another version
-  ;; is refused for that alone, before any word it uses
-  (cond
-    (not (contains? dsl :gumshoe/dsl))
-    (invalid! [:gumshoe/dsl] (format "the change declares no version - declare :gumshoe/dsl %s, the experimental vocabulary, whose format may change in any release"
-                                     version))
-
-    (not= version (:gumshoe/dsl dsl))
-    (invalid! [:gumshoe/dsl] (format "the change declares :gumshoe/dsl %s, and this compiles %s - declare :gumshoe/dsl %s, the experimental vocabulary, whose format may change in any release"
-                                     (pr-str (:gumshoe/dsl dsl)) version version)))
+  (check-version! dsl "change")
   (check-no-code! [] dsl)
+  (when (contains? dsl :kind)
+    (invalid! [:kind] (format "a change declares no :kind - a detective, :kind :detective, compiles with compile-detective, not %s"
+                              (pr-str (:kind dsl)))))
   (check-keys! [] dsl top-keys "a change")
   (non-blank! [:description] description "the :description")
   (when (contains? dsl :title) (non-blank! [:title] title "the :title"))
@@ -1575,3 +1608,514 @@
   "The DSL data a compiled change was compiled from."
   [compiled]
   (::source (meta compiled)))
+
+;; --- detectives ----------------------------------------------------------------------
+;;
+;; A detective is read-only data: {:kind :detective} with :reads and :checks.
+;; compile-detective turns it into the spec gumshoe.detective/book takes, whose
+;; :collect makes the reads and whose detectives judge them, so it runs, lists
+;; and reports as every Clojure detective does. Nothing in its vocabulary can
+;; confirm, pin or change anything: the keys of a change are refused, an
+;; effect is no expression, and the checks run inside gumshoe.offline, so a
+;; registered function a check calls cannot reach outside the process either.
+
+(def ^:private detective-keys
+  #{:gumshoe/dsl :kind :description :when-to-run :options :prerequisites :reads :checks})
+
+(def ^:private change-only-keys
+  "The keys of a change. Each confirms, pins, acts or verifies an action, so
+   a detective, which is read-only, declares none of them."
+  #{:target :values :state :refuse :problems :pin :confirm :items :announce :effect :recovery :opt-out :title})
+
+(def ^:private check-keys
+  #{:name :description :severity :each :expect :says :hint :component :since :empty-is-clean})
+
+(def severities
+  "The severities a detective's check reports, as gumshoe.detective ranks them."
+  #{:critical :warning :info})
+
+(def ^:private reserved-read-names
+  "Names no detective read may take: the keys a check's environment binds
+   beside the reads, and the :now every scan's evidence carries."
+  (into change/context-keys #{:now :states}))
+
+(defn- read-scope
+  "The :namespace option of a detective read at path as (fn [env] ->
+   namespace): nil for {:namespace :cluster}, a cluster-scoped type, :all for
+   {:namespace :all}, which only a [:list ..] takes, else the expression's
+   value. An expression that does not evaluate to a non-blank string
+   throws, so the read is reported unread: a missing flag never falls back
+   to the kube context's default namespace."
+  [path opts place all?]
+  (when-not (contains? opts :namespace)
+    (invalid! (conj path :namespace)
+              (str "a detective's read names where it reads: {:namespace expr} for one namespace, "
+                   "{:namespace :cluster} for a cluster-scoped type"
+                   (when all? ", or {:namespace :all} for every namespace"))))
+  (let [v (:namespace opts)]
+    (cond
+      (= :cluster v) (constantly nil)
+      (= :all v) (if all?
+                   (constantly :all)
+                   (invalid! (conj path :namespace) ":all reads every namespace, which only a [:list ..] does"))
+      :else (let [f (expr (conj path :namespace) v place)]
+              (fn [env]
+                (let [n (f env)]
+                  (if (and (string? n) (not (str/blank? n)))
+                    n
+                    (throw (ex-info (format "its namespace evaluated to %s, so it was not read" (pr-str n)) {})))))))))
+
+(defn- text-arg
+  "The optional option k of a read at path as (fn [env] -> non-blank
+   string), throwing when it evaluates to anything else, so a selector
+   whose flag is missing never widens the read to every object."
+  [path opts k place]
+  (when (contains? opts k)
+    (let [f (expr (conj path k) (get opts k) place)]
+      (fn [env]
+        (let [v (f env)]
+          (if (and (string? v) (not (str/blank? v)))
+            v
+            (throw (ex-info (format "its %s evaluated to %s, so it was not read" (name k) (pr-str v)) {}))))))))
+
+(defn- detective-read-of
+  "A detective's read at path as (fn [env] -> value): a gumshoe.reads
+   result, or a sequence of them."
+  [path [op & args :as form] place]
+  (when-not (vector? form)
+    (invalid! path (format "%s is no read - write [:list ..], [:get ..], [:present ..] or [:call <:read function> ..]" (pr-str form))))
+  (case op
+    :list (let [[type opts] args]
+            (when-not (= 2 (count args))
+              (invalid! path "[:list \"type\" {:namespace ..}] takes a type and its options, which name where it reads"))
+            (non-blank! (conj path 1) type "a read's type")
+            (check-keys! (conj path 2) opts #{:namespace :selector :field-selector} "the options of a detective's [:list ..]")
+            (let [scope (read-scope (conj path 2) opts place true)
+                  selector (text-arg (conj path 2) opts :selector place)
+                  field-selector (text-arg (conj path 2) opts :field-selector place)]
+              (fn [env]
+                (reads/listing (get-in env [:ctx :context])
+                               (cond-> {:type type :namespace (scope env)}
+                                 selector (assoc :selector (selector env))
+                                 field-selector (assoc :field-selector (field-selector env)))))))
+    :get (let [[type object-name opts] args]
+           (when-not (= 3 (count args))
+             (invalid! path "[:get \"type\" name {:namespace ..}] takes a type, a name and its options, which name where it reads"))
+           (non-blank! (conj path 1) type "a read's type")
+           (check-keys! (conj path 3) opts #{:namespace} "the options of a detective's [:get ..]")
+           (let [object-name (expr (conj path 2) object-name place)
+                 scope (read-scope (conj path 3) opts place false)]
+             (fn [env]
+               (let [namespace (scope env)]
+                 (reads/object (get-in env [:ctx :context])
+                               (cond-> {:type type :name (object-name env)} namespace (assoc :namespace namespace)))))))
+    :present (let [[refs opts] args]
+               (when-not (= 2 (count args))
+                 (invalid! path "[:present [{:type \"type\" :name expr} ..] {:namespace ..}] takes the objects and its options"))
+               (when-not (and (vector? refs) (seq refs))
+                 (invalid! (conj path 1) "[:present ..] names one or more objects, as [{:type \"type\" :name expr :namespace expr} ..]"))
+               (check-keys! (conj path 2) opts #{:namespace} "the options of a detective's [:present ..]")
+               (let [scope (read-scope (conj path 2) opts place false)
+                     wanted (vec (map-indexed
+                                  (fn [i r]
+                                    (let [p (conj path 1 i)]
+                                      (check-keys! p r #{:type :name :namespace} "an object of [:present ..]")
+                                      (non-blank! (conj p :type) (:type r) "an object's :type")
+                                      (when-not (contains? r :name)
+                                        (invalid! (conj p :name) "an object of [:present ..] names itself as :name expr"))
+                                      {:type (:type r)
+                                       :name (expr (conj p :name) (:name r) place)
+                                       :scope (when (contains? r :namespace) (read-scope p r place false))}))
+                                  refs))]
+                 (fn [env]
+                   (let [context (get-in env [:ctx :context])
+                         refs (mapv (fn [{own :scope type :type object-name :name}]
+                                      (let [namespace ((or own scope) env)]
+                                        (cond-> {:type type :name (object-name env)} namespace (assoc :namespace namespace))))
+                                    wanted)]
+                     (concurrent/all (mapv (fn [ref] #(reads/object context ref)) refs))))))
+    :call (call-of path form place #{:read})
+    (invalid! path (format "%s is no read - write [:list ..], [:get ..], [:present ..] or [:call <:read function> ..]" (pr-str form)))))
+
+(def ^:private reason-limit
+  "The most characters of a value a reason quotes."
+  200)
+
+(defn- quoted
+  [x]
+  (let [s (pr-str x)]
+    (if (< reason-limit (count s)) (str (subs s 0 reason-limit) "…") s)))
+
+(defn read-outcome
+  "What one detective read established, from the value its read returned:
+   a gumshoe.reads result or a sequence of them.
+
+     {:state :present :items [o ..] :data d}   it found something
+     {:state :absent  :items []     :data d}   it answered: nothing there
+     {:state :unread  :reason \"why\"}         nothing is known
+
+   :items are the objects found; :data is what [:read :name] gives a check:
+   the object of a single object read (nil when absent), else the items. A
+   read is :unread when any result it returned is :unread, when it returned
+   anything that is no result, or an empty sequence, which says nothing
+   about whether it looked."
+  [value]
+  (let [results (if (sequential? value) (vec value) [value])
+        foreign (remove result/result? results)]
+    (cond
+      (empty? results)
+      {:state :unread :reason "it returned no gumshoe.reads result at all"}
+
+      (seq foreign)
+      {:state :unread :reason (format "it returned %s, which is no gumshoe.reads result" (quoted (first foreign)))}
+
+      (some result/unread? results)
+      {:state :unread
+       :reason (str/join "; " (for [r results :when (result/unread? r)]
+                                (str (result/describe (:ref r)) ": " (:reason r))))}
+
+      :else
+      (let [items (vec (mapcat (fn [r] (if (contains? r :items) (:items r) (when-let [o (:object r)] [o]))) results))]
+        {:state (if (seq items) :present :absent)
+         :items items
+         :data (if (and (map? value) (not (contains? value :items))) (:object value) items)}))))
+
+(defn- outcome-of
+  "read-outcome of running thunk, which makes one read under strict reads:
+   a read that throws - a strict reader that did not answer, a ref it
+   cannot read, an expression that evaluated to nothing - is :unread with
+   the exception's message."
+  [thunk]
+  (try
+    (read-outcome (binding [kubectl/*strict-reads* true] (thunk)))
+    (catch Throwable e
+      {:state :unread :reason (or (ex-message e) (str e))})))
+
+(defn- read-names-in
+  "The :reads names x refers to: [:read :name ..], [:present :name] and
+   [:absent :name] forms, and {read.name..} placeholders of its templates."
+  [x]
+  (cond
+    (map? x) (mapcat read-names-in (concat (keys x) (vals x)))
+    (vector? x) (concat (when (and (#{:read :present :absent} (first x)) (keyword? (second x))) [(second x)])
+                        (mapcat read-names-in x))
+    (string? x) (keep (fn [[_ inner]]
+                        (let [[root n] (str/split inner #"\.")]
+                          (when (and (= "read" root) (not (str/blank? n))) (keyword n))))
+                      (re-seq placeholder x))
+    :else nil))
+
+(defn- uses-options?
+  "Whether x reads a flag: an [:opt ..] form or an {opt..} placeholder."
+  [x]
+  (cond
+    (map? x) (boolean (some uses-options? (concat (keys x) (vals x))))
+    (vector? x) (or (= :opt (first x)) (boolean (some uses-options? x)))
+    (string? x) (boolean (re-find #"\{opt[.}]" x))
+    :else false))
+
+(defn- object-key
+  [o]
+  (if-let [n (kubectl/name-of o)]
+    [(:kind o) (kubectl/namespace-of o) n]
+    o))
+
+(defn- distinct-objects
+  [objects]
+  (second (reduce (fn [[seen out] o]
+                    (let [k (object-key o)]
+                      (if (seen k) [seen out] [(conj seen k) (conj out o)])))
+                  [#{} []]
+                  objects)))
+
+(defn- object-component
+  [o]
+  (if-let [namespace (kubectl/namespace-of o)]
+    (str namespace "/" (kubectl/name-of o))
+    (str (kubectl/name-of o))))
+
+(defn- check-of
+  "A detective's check at path as {:check <the gumshoe.detective
+   detective> :reads [name ..]}. key-of maps a read's name to its evidence
+   key."
+  [path check scope key-of]
+  (check-keys! path check check-keys "a check")
+  (non-blank! (conj path :name) (:name check) "a check's :name")
+  (non-blank! (conj path :description) (:description check) "a check's :description")
+  (when-not (severities (:severity check))
+    (invalid! (conj path :severity) (format "%s is no severity - write one of %s" (pr-str (:severity check)) (known-words severities))))
+  (when-not (contains? check :expect)
+    (invalid! (conj path :expect) "a check says what holds when all is well, as :expect predicate, and reports a finding where it does not"))
+  (let [each (:each check)
+        names (when (contains? check :each)
+                (cond (keyword? each) [each]
+                      (and (vector? each) (seq each) (every? keyword? each)) each
+                      :else (invalid! (conj path :each) (format "an :each names the :reads entry whose objects the check judges, as :name or [:name ..], not %s"
+                                                                (pr-str each)))))
+        _ (when (and names (not (apply distinct? names)))
+            (invalid! (conj path :each) "an :each names each :reads entry once"))
+        _ (doseq [n names] (named! (conj path :each) :read n (:reads scope)))
+        empty-is-clean (:empty-is-clean check)
+        _ (when (contains? check :empty-is-clean)
+            (when-not names
+              (invalid! (conj path :empty-is-clean) "only an :each check judges objects, so only it may say why none is clean"))
+            (non-blank! (conj path :empty-is-clean) empty-is-clean "the reason an empty read is clean"))
+        what (format "the check %s" (pr-str (:name check)))
+        place (cond-> (assoc (place scope what (cond-> #{:read :opt :call} names (conj :each)) #{:value})
+                             :read-states? true)
+                names (assoc :field-root :each)
+                (not names) (assoc :no-field (str "[:field ..] judges the object an :each check judges, and this check has no :each"
+                                                  " - read a field as [:read :name & path]")))
+        expect (predicate (conj path :expect) (:expect check) place)
+        says (template (conj path :says) (:says check) place)
+        hint (when (contains? check :hint) (template (conj path :hint) (:hint check) place))
+        component (when (contains? check :component) (template (conj path :component) (:component check) place))
+        since (when (contains? check :since) (expr (conj path :since) (:since check) place))
+        used (vec (distinct (concat names (read-names-in (select-keys check [:expect :says :hint :component :since])))))
+        _ (when (empty? used)
+            (invalid! path "the check reads nothing, so it could judge nothing - name a :reads entry in :each, :expect or a template"))
+        keys-used (mapv key-of used)
+        {check-name :name :keys [severity]} check
+        finding (fn [env default-component]
+                  (cond-> {:severity severity
+                           :component (if component (component env) default-component)
+                           :summary (says env)}
+                    hint (assoc :hint (hint env))
+                    since (onset/since (since env))))
+        judge (fn [evidence]
+                (let [outcomes (zipmap used (map #(get evidence %) keys-used))]
+                  ;; a check rests on every read it names, and run-detectives
+                  ;; keeps nothing it concludes once one did not answer; it
+                  ;; concludes nothing then, rather than judging a nil
+                  (when (every? some? (vals outcomes))
+                    (let [env {:ctx (into {:opts (get evidence "options")} (map (fn [[k o]] [k (:data o)])) outcomes)
+                               :states (into {} (map (fn [[k o]] [k (:state o)])) outcomes)}]
+                      (if names
+                        (vec (for [o (distinct-objects (mapcat #(:items (get outcomes %)) names))
+                                   :let [env (assoc env :each o)]
+                                   :when (not (expect env))]
+                               (finding env (object-component o))))
+                        (if (expect env) [] [(finding env check-name)]))))))]
+    {:reads used
+     :check (cond-> {:name check-name
+                     :description (:description check)
+                     :requires keys-used
+                     ;; any read that did not answer leaves the check unread
+                     :joins keys-used
+                     :detect (fn [evidence]
+                               (offline/forbidding
+                                (format "the check %s judges only what its reads returned" check-name)
+                                #(judge evidence)))}
+              ;; an :each over reads that found nothing judged nothing,
+              ;; unless the detective says why nothing is clean
+              (and names (nil? empty-is-clean)) (assoc :judges (mapv key-of names)))}))
+
+(defn- evidence-key
+  "The evidence key of the read name declares as form: unique to the form,
+   so the reads of two detectives sharing a name never share a collector
+   when both join one scope."
+  [k form]
+  (format "gumshoe.dsl/read %s %08x" (name k) (hash form)))
+
+(defn- compiled-detective
+  [{:keys [description when-to-run options prerequisites reads checks] :as dsl}]
+  (when-not (map? dsl)
+    (invalid! [] (format "a detective is a map, not %s" (pr-str dsl))))
+  (check-version! dsl "detective")
+  (check-no-code! [] dsl)
+  (when-not (= :detective (:kind dsl))
+    (invalid! [:kind] (format "the :kind is :detective, not %s - a change declares no :kind and compiles with compile"
+                              (pr-str (:kind dsl)))))
+  (doseq [k (sort (filter change-only-keys (keys dsl)))]
+    (invalid! [k] (format "%s belongs to a change - a detective is read-only: it declares :reads and :checks, and nothing it declares confirms, pins or changes anything"
+                          k)))
+  (check-keys! [] dsl detective-keys "a detective")
+  (non-blank! [:description] description "the :description")
+  (when (contains? dsl :when-to-run) (non-blank! [:when-to-run] when-to-run "the :when-to-run"))
+  (when-not (map? prerequisites)
+    (invalid! [:prerequisites] (format "the detective declares its :prerequisites as a map, not %s" (pr-str prerequisites))))
+  (when (some? options)
+    (when-not (map? options)
+      (invalid! [:options] "the :options are a map of flag keyword to its option map"))
+    (doseq [[k o] options]
+      (when-not (simple-keyword? k)
+        (invalid! [:options k] (format "a flag is named by an unqualified keyword, not %s" (pr-str k))))
+      (when (= :output k)
+        (invalid! [:options k] "--output is the report format every detective takes - name the flag otherwise"))
+      (when-not (map? o)
+        (invalid! [:options k] (format "an option is a map such as {:desc \"..\" :coerce :string}, not %s" (pr-str o))))
+      (non-blank! [:options k :desc] (:desc o) "an option's :desc")))
+  (when-not (and (map? reads) (seq reads))
+    (invalid! [:reads] "a detective declares what it reads, as :reads {name read}"))
+  (check-names! [:reads] reads #{})
+  (doseq [k (keys reads) :when (reserved-read-names k)]
+    (invalid! [:reads k] (format "%s is a name a check binds itself - name the read otherwise" k)))
+  (when-not (and (vector? checks) (seq checks))
+    (invalid! [:checks] "a detective declares one or more checks, as :checks [{:name .. :expect .. :says ..} ..]"))
+  (let [options (or options {})
+        scope {:reads (set (keys reads)) :values #{} :options (conj (set (keys options)) :output)}
+        read-place (place scope "a detective's read" #{:opt :context :call} #{:value})
+        compiled-reads (into (sorted-map)
+                             (for [[k form] reads]
+                               [k {:key (evidence-key k form)
+                                   :read (detective-read-of [:reads k] form read-place)}]))
+        key-of #(:key (compiled-reads %))
+        compiled-checks (vec (map-indexed (fn [i c] (check-of [:checks i] c scope key-of)) checks))
+        _ (reduce (fn [seen [i c]]
+                    (when (seen (:name c))
+                      (invalid! [:checks i :name] (format "%s names an earlier check - each check has a name of its own" (pr-str (:name c)))))
+                    (conj seen (:name c)))
+                  #{} (map-indexed vector checks))
+        used (set (mapcat :reads compiled-checks))
+        _ (doseq [k (keys reads) :when (not (used k))]
+            (invalid! [:reads k] (format "no check judges %s, so reading it proves nothing - drop it or judge it" k)))
+        read-all (fn [context opts]
+                   (let [env {:ctx {:context context :opts opts}}
+                         ks (vec (keys compiled-reads))
+                         outcomes (concurrent/all (mapv (fn [k] #(outcome-of (fn [] ((:read (compiled-reads k)) env)))) ks))]
+                     (zipmap ks outcomes)))
+        collect (fn [opts]
+                  (let [context (or (:context kube-context/*pinned*)
+                                    (try (kubectl/current-context) (catch Exception _ nil)))
+                        outcomes (read-all context (dissoc opts :output))]
+                    (doseq [[k {:keys [state reason]}] outcomes :when (= :unread state)]
+                      (stdout/err-println (format "could not read %s - %s; the checks resting on it are reported as reading nothing"
+                                                  k reason)))
+                    (into {:now (java.time.Instant/now) ::outcomes outcomes}
+                          (for [[k o] outcomes]
+                            [(key-of k) (when-not (= :unread (:state o)) o)]))))
+        extra (fn [evidence]
+                {:reads (vec (for [[k {:keys [state reason items]}] (::outcomes evidence)]
+                               (cond-> {:name (name k) :state state}
+                                 reason (assoc :reason reason)
+                                 (not= :unread state) (assoc :count (count items)))))})
+        collectors (into {} (for [[k {:keys [key read]}] compiled-reads]
+                              [key (fn [context _key]
+                                     (let [o (outcome-of #(read {:ctx {:context context :opts nil}}))]
+                                       (when-not (= :unread (:state o)) o)))]))]
+    {:spec (cond-> {:description description
+                    :prerequisites prerequisites
+                    :options options
+                    :detectives (mapv :check compiled-checks)
+                    :collect collect
+                    :extra extra}
+             when-to-run (assoc :when-to-run when-to-run))
+     :collectors collectors
+     :options? (uses-options? (select-keys dsl [:reads :checks]))
+     :safeguards {:read-only :on
+                  :strict-reads :on
+                  :unread-is-no-pass :on
+                  :pure-checks :on
+                  :empty-each (into {} (for [c checks :when (contains? c :each)]
+                                         [(:name c) (if (contains? c :empty-is-clean)
+                                                      {:off (:empty-is-clean c)}
+                                                      :on)]))}}))
+
+(defn compile-detective
+  "The detective book spec of a DSL detective, as gumshoe.detective/book
+   takes it: {:description :prerequisites :options :when-to-run
+   :detectives :collect :extra}, with the source, its safeguards and the
+   kind :detective in its metadata. Pure: it reads no cluster. Throws
+   ex-info carrying ::invalid and :path for a detective it refuses.
+
+     {:gumshoe/dsl :v0-experimental
+      :kind :detective
+      :description \"Nodes that are cordoned\"
+      :prerequisites {:installed-tools [\"kubectl\"] :kubectl-can-get [\"nodes\"]}
+      :reads {:nodes [:list \"nodes\" {:namespace :cluster}]}
+      :checks [{:name \"cordoned-nodes\" :description \"nodes that take no new pods\"
+                :severity :info :each :nodes
+                :expect [:not [:field [:spec :unschedulable] := true]]
+                :says \"node is cordoned (unschedulable)\"}]}
+
+   Keys:
+     :gumshoe/dsl    :v0-experimental, required
+     :kind           :detective, required; data without it is a change
+     :description    required
+     :when-to-run    a one-line orientation printed before the run
+     :options        {flag {:desc .. ..}}: the book's flags beside --output
+     :prerequisites  required, as any book declares them
+     :reads          {name read}, required; every read is judged by a check
+     :checks         [check ..], required
+   Every key of a change (:target :values :state :refuse :problems :pin
+   :confirm :items :announce :effect :recovery :opt-out :title) is refused
+   by name, and so is any other key, a symbol, or code anywhere.
+
+   Reads, each made once, all at once, before any check runs:
+     [:list \"type\" {:namespace expr | :cluster | :all
+                    :selector expr :field-selector expr}]
+     [:get \"type\" name {:namespace expr | :cluster}]
+     [:present [{:type \"type\" :name expr :namespace expr} ..] {:namespace ..}]
+     [:call <:read function> arg ..]   returning gumshoe.reads results
+   Their arguments are expressions over [:opt ..], [:context] and :value
+   functions. Each read ends in one of three states (read-outcome):
+   present, absent, or unread - a read that did not answer, one whose
+   namespace or selector flag evaluated to nothing, or a function that
+   returned anything but gumshoe.reads results. :namespace is required, so
+   a namespaced read never falls back to the kube context's default.
+
+   A check:
+     {:name \"..\" :description \"..\" :severity :critical|:warning|:info
+      :each :read | [:read ..]   judge every object those reads found
+      :expect predicate          what holds when all is well
+      :says \"template\"           the finding's summary
+      :hint \"template\" :component \"template\" :since expr   optional
+      :empty-is-clean \"why\"}     an :each over nothing judged is clean
+   A finding is reported where :expect does not hold: for each object of
+   an :each, else once. The polarity fails closed - a field that is
+   missing satisfies no comparison, so it reports rather than passes.
+   Predicates are those of a change, over [:read :name & path] (the object
+   of a [:get ..], the items of any other read), [:opt ..], :value and
+   :predicate functions, [:field path op v] and [:each & path] inside an
+   :each, and [:present :read] / [:absent :read], which judge whether a
+   read found something or answered that nothing is there. The component
+   of a finding is the object's namespace/name inside an :each, else the
+   check's name.
+
+   Three states. A check rests on every read it names. When one of them
+   did not answer, the check is reported as having read nothing (:unread
+   in the report's checked list), concludes nothing, and a run whose every
+   check read nothing fails as nothing checked; the reason is printed on
+   stderr and listed under :reads in the json and edn report. An :each
+   whose reads found no object judged nothing, and is unread the same way,
+   unless the check says why an empty read is clean with :empty-is-clean.
+
+   Read-only. The spec holds no effect, confirmation, pin or post-check;
+   gumshoe.detective/book runs it with :announce? false, so nothing it
+   does is announced, and the checks run inside gumshoe.offline/forbidding,
+   so a registered function that tried to run a command or send a request
+   would crash its check, which fails the run."
+  [dsl]
+  (let [{:keys [spec safeguards collectors options?]} (compiled-detective dsl)]
+    (vary-meta spec assoc ::source dsl ::safeguards safeguards ::kind :detective
+               ::collectors collectors ::reads-options? options?)))
+
+(defn detective?
+  "Whether x is what compile-detective returns."
+  [x]
+  (= :detective (::kind (meta x))))
+
+(defn detective-source?
+  "Whether data declares a :kind, which only a detective does, so a book
+   holding it compiles with compile-detective."
+  [data]
+  (and (map? data) (contains? data :kind)))
+
+(defn register-detective!
+  "Registers the checks of a compiled detective into scope of
+   gumshoe.detectives.registry, and a collector for each of its reads, so a
+   scan of that scope - or of :all, unless the scope is opt-in - reads and
+   judges them beside the Clojure detectives, as a plugin's provide! does.
+   A scope's book declares its own flags, so a detective that reads a flag
+   is refused here: an [:opt ..] would read whatever flag of that name the
+   scanning book has. Returns the names of the checks it registered."
+  [scope compiled]
+  (when-not (detective? compiled)
+    (throw (ex-info "register-detective! takes what compile-detective returns" {::invalid true})))
+  (when (::reads-options? (meta compiled))
+    (throw (ex-info "the detective reads a flag, and a scope's book declares its own - run it as its own book, or read no [:opt ..]"
+                    {::invalid true})))
+  (doseq [[k collector] (::collectors (meta compiled))]
+    (detectives/register-collector! k collector))
+  (detectives/register! scope (:detectives compiled))
+  (mapv :name (:detectives compiled)))

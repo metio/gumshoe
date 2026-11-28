@@ -2,21 +2,26 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.edn-book
-  "Runs a book written as EDN: a change in the gumshoe.dsl vocabulary, in a
-   file of its own. The run door launches one as
+  "Runs a book written as EDN: a change or a detective in the gumshoe.dsl
+   vocabulary, in a file of its own. The run door launches one as
 
      bb -m gumshoe.edn-book <file> [flags]
 
    which reads the file with gumshoe.edn-reader (plain EDN only, bounded,
-   no tags), compiles it with gumshoe.dsl/compile (a closed vocabulary,
-   functions only through gumshoe.dsl.registry) and hands the change to
-   mutation/book, so it gets the --help, --dry-run, prerequisites,
-   confirmation, pin and post-checks every mutation book gets.
+   no tags) and compiles it (a closed vocabulary, functions only through
+   gumshoe.dsl.registry). A change compiles with gumshoe.dsl/compile and
+   goes to mutation/book, so it gets the --help, --dry-run, prerequisites,
+   confirmation, pin and post-checks every mutation book gets. A detective,
+   data declaring :kind :detective, compiles with
+   gumshoe.dsl/compile-detective and goes to detective/book, so it reads,
+   judges and reports as every detective book does, and holds nothing that
+   could change anything.
 
    The format is experimental. A book declares :gumshoe/dsl
    :v0-experimental, anything else is refused, and every run prints a
    one-line note on stderr that the format may change in any release."
-  (:require [gumshoe.dsl :as dsl]
+  (:require [gumshoe.detective :as detective]
+            [gumshoe.dsl :as dsl]
             [gumshoe.edn-reader :as reader]
             [gumshoe.mutation :as mutation]
             [gumshoe.plugins :as plugins]
@@ -37,14 +42,17 @@
     (ex-info (str file ": " reason) {::reader/refused true :file (str file) :reason reason})))
 
 (defn load-book
-  "The change a book file holds, compiled by gumshoe.dsl/compile, or an
+  "The change a book file holds, compiled by gumshoe.dsl/compile, or the
+   detective, compiled by gumshoe.dsl/compile-detective, or an
    ex-info carrying gumshoe.edn-reader/refused? naming the file and why it
    is refused: the reader's refusals, compile's (with the path of the
    offending form), and a change too deep for compile to walk."
   [file]
   (let [source (reader/read-book file)]
     (try
-      (dsl/compile source)
+      (if (dsl/detective-source? source)
+        (dsl/compile-detective source)
+        (dsl/compile source))
       (catch clojure.lang.ExceptionInfo e
         (if (dsl/invalid? e)
           (throw (ex-info (str file ": " (ex-message e))
@@ -56,13 +64,20 @@
       (catch Exception e
         (throw (does-not-compile file e))))))
 
+(defn- book-of
+  "A compiled detective goes to detective/book, a change to mutation/book."
+  [compiled]
+  (if (dsl/detective? compiled)
+    (detective/book compiled)
+    (mutation/book compiled)))
+
 (defn book
-  "Hands the change a book file holds to mutation/book: under
-   gumshoe.runbook/*loading* that returns the book's config and runs
-   nothing, as loading a Clojure book does; otherwise it runs the book
-   with *command-line-args* as its flags."
+  "Hands what a book file holds to its builder, detective/book or
+   mutation/book: under gumshoe.runbook/*loading* that returns the book's
+   config and runs nothing, as loading a Clojure book does; otherwise it
+   runs the book with *command-line-args* as its flags."
   [file]
-  (mutation/book (load-book file)))
+  (book-of (load-book file)))
 
 (defn run
   "Runs the book file with args as its flags. Returns 1 for a refused
@@ -84,7 +99,7 @@
       ;; Clojure book
       (System/setProperty "babashka.file" (str file))
       (binding [*command-line-args* (seq args)]
-        (mutation/book change))
+        (book-of change))
       0)
     1))
 

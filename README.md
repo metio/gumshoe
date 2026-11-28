@@ -1065,9 +1065,79 @@ typed yes and a `:recovery`, as a delete does. Its post-check is the
 confirmation; a type without it fails that check unless the test names
 what it touches.
 
+### Detectives written as data
+
+A detective - reads, pure checks, findings - is data too. It declares
+`:kind :detective`, and `gumshoe.dsl/compile-detective` turns it into the
+spec `detective/book` takes, so it runs, lists and reports as every
+detective book does. This is the cordoned-node finding of the `nodes`
+detective, in `tests/edn-books/runbooks/kubernetes/nodes/cordoned.edn`:
+
+```clojure
+{:gumshoe/dsl :v0-experimental
+ :kind :detective
+ :description "Reports every cordoned node, which takes no new pods"
+ :prerequisites {:installed-tools ["kubectl"] :cluster-capabilities [] :kubectl-can-get ["nodes"]}
+ :reads {:nodes [:list "nodes" {:namespace :cluster}]}
+ :checks [{:name "cordoned-nodes"
+           :description "Nodes that are cordoned (unschedulable)"
+           :severity :info
+           :each :nodes
+           :expect [:not [:field [:spec :unschedulable] := true]]
+           :says "node is cordoned (unschedulable)"
+           :hint "uncordon with runbooks/kubernetes/nodes/uncordon.clj when the work on it is done"}]}
+```
+
+A detective is read-only. Every key of a change (`:target`, `:values`,
+`:state`, `:refuse`, `:problems`, `:pin`, `:confirm`, `:items`,
+`:announce`, `:effect`, `:recovery`, `:opt-out`, `:title`) is refused by
+name, an effect is no expression anywhere in it, the book it builds
+announces nothing, and its checks run inside `gumshoe.offline/forbidding`,
+so a registered function a check calls cannot start a command or send a
+request: it crashes its check, and a crashed check fails the run.
+
+The reads are `[:list "type" {:namespace …}]` (with `:selector` and
+`:field-selector`), `[:get "type" name {:namespace …}]`, `[:present […]
+{:namespace …}]` and `[:call <:read function> …]` returning
+`gumshoe.reads` results. `:namespace` is required and is an expression
+(`[:opt :namespace]`), `:cluster` for a cluster-scoped type, or `:all` for
+a list of every namespace, so a namespaced read never falls back to the
+kube context's default namespace. Their arguments read flags
+(`[:opt …]`), the kube context (`[:context]`) and `:value` functions. Every
+read is made once, all at once, before any check runs, and every read is
+judged by some check.
+
+A check says what holds when all is well, as `:expect`, and reports a
+finding with `:severity`, `:says` and optional `:hint`, `:component` and
+`:since` where it does not: once per object of an `:each`, else once. A
+missing field satisfies no comparison, so it reports rather than passes.
+The predicates are those of a change, over `[:read :name & path]` (the
+object of a `[:get …]`, the items of any other read), `[:opt …]`,
+registered `:value` and `:predicate` functions, `[:field …]` and
+`[:each & path]` inside an `:each`, and `[:present :name]` and
+`[:absent :name]`, which judge whether a read found something or answered
+that nothing is there.
+
+Each read ends present, absent, or unread: a read that did not answer, a
+flag its namespace or selector needed that evaluated to nothing, or a
+`:read` function that returned anything but `gumshoe.reads` results. A
+check rests on every read it names, and one of them unread leaves the check
+unread: it concludes nothing, `checked` marks it `unread`, the reason is
+printed on stderr and listed under `reads` in the json and edn report, and
+a run whose every check is unread fails as nothing checked. An `:each`
+whose reads found no object judged nothing and is unread the same way,
+unless the check says why an empty read is clean with `:empty-is-clean
+"why"`.
+
+`(gumshoe.dsl/register-detective! scope compiled)` adds the checks to a
+scope of `gumshoe.detectives.registry`, with a collector for each read, so
+a scope's scan judges them beside the Clojure detectives, as a plugin's
+detectives do. A detective that reads a flag is refused there, since the
+scanning book declares its own flags.
+
 ### Running an EDN book
 
-A file holding such a change is a book. `bb run` (and `bb gumshoe`) runs it
+A file holding such a change or detective is a book. `bb run` (and `bb gumshoe`) runs it
 by its path, with the flags its target derives, exactly as it runs the
 Clojure book it mirrors:
 

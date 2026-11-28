@@ -9,6 +9,7 @@
    mirrors."
   (:require [babashka.fs :as fs]
             [babashka.process :as process]
+            [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.catalog :as catalog]
@@ -330,6 +331,7 @@
        "  *version*) echo '{\"clientVersion\":{\"gitVersion\":\"v1.31.0\"}}' ;;\n"
        "  *\"get cronjobs --all-namespaces\"*) printf '{\"kind\":\"List\",\"items\":[%s]}' \"$(cat \"$FAKE_DIR/cronjob.json\")\" ;;\n"
        "  *\"get cronjobs nightly\"*) cat \"$FAKE_DIR/cronjob.json\" ;;\n"
+       "  *\"get nodes\"*) printf '{\"kind\":\"List\",\"items\":[{\"kind\":\"Node\",\"metadata\":{\"name\":\"w1\"},\"spec\":{\"unschedulable\":true}},{\"kind\":\"Node\",\"metadata\":{\"name\":\"w2\"}}]}' ;;\n"
        "  *) echo \"unexpected kubectl $*\" >&2; exit 1 ;;\n"
        "esac\n"))
 
@@ -412,6 +414,23 @@
               "stderr is byte-identical beside the note")
           (is (= (:kubectl from-clj) (:kubectl from-edn)) "the same kubectl calls, none of them a patch")
           (is (not-any? #(str/includes? % "--type=merge") (:kubectl from-edn))))))))
+
+(deftest a-fresh-bb-runs-an-edn-detective-and-only-reads
+  (fs/with-temp-dir [dir {}]
+    (scratch-casebook! dir)
+    (let [edn (str (fs/absolutize "tests/edn-books/runbooks/kubernetes/nodes/cordoned.edn"))
+          run (bb-run dir edn "--output" "json")
+          report (json/parse-string (:out run) true)]
+      (is (zero? (:exit run)) (str (:out run) (:err run)))
+      (is (= (edn-book/experimental-note edn) (first (str/split-lines (:err run)))))
+      (is (= [{:severity "info" :component "w1" :summary "node is cordoned (unschedulable)"
+               :hint "uncordon with runbooks/kubernetes/nodes/uncordon.clj when the work on it is done"
+               :detective "cordoned-nodes"}]
+             (:findings report)))
+      (is (= [{:name "nodes" :state "present" :count 2}] (:reads report)))
+      (is (some #(str/includes? % "get nodes") (:kubectl run)))
+      (is (not-any? #(re-find #"\b(patch|delete|annotate|scale|apply|create|label|cordon|drain)\b" %) (:kubectl run))
+          (pr-str (:kubectl run))))))
 
 (deftest a-fresh-bb-refuses-an-edn-book-before-it-reaches-anything
   (fs/with-temp-dir [dir {}]

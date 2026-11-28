@@ -59,8 +59,10 @@ the casebook's book only. A path that names no book exits 1 and prints the
 closest listed paths. An absolute path runs as given.
 
 A listed path ending in `.edn` is a book written in the experimental EDN
-change format (`:gumshoe/dsl :v0-experimental`). It runs through the same
-doors and takes the same `--help` and `--dry-run`; its first stderr line is
+format (`:gumshoe/dsl :v0-experimental`): a change, or a read-only
+detective when it declares `:kind :detective`, which you run with
+`--output json` like any detective. It runs through the same
+doors and takes the same `--help` and, for a change, `--dry-run`; its first stderr line is
 a note that the format may change, which is not a failure. Only `bb run`
 or `bb gumshoe` runs one: bare `bb <file>.edn` does not. A file the reader
 or `compile` refuses exits 1 with `refused <file>: <path>: <reason>`
@@ -857,6 +859,27 @@ mostly data:
   alone. A registered effect type has no post-check of its own; prove a
   file or commit it writes with a `:state` predicate, or keep the book in
   Clojure.
+  A detective is data as well: `{:gumshoe/dsl :v0-experimental :kind
+  :detective :description … :prerequisites … :reads {…} :checks […]}`
+  compiles with `(gumshoe.dsl/compile-detective data)` into the spec
+  `detective/book` takes, and an `.edn` book declaring it runs, lists and
+  reports as any detective book
+  (`tests/edn-books/runbooks/kubernetes/nodes/cordoned.edn`). It is
+  read-only: every key of a change is refused by name, and its checks run
+  inside `gumshoe.offline/forbidding`. Reads are `[:list "type"
+  {:namespace …}]`, `[:get "type" name {:namespace …}]`, `[:present …]`
+  and `[:call <:read function> …]` returning `gumshoe.reads` results;
+  `:namespace` is required (`:cluster`, `:all` for a list, or an
+  expression). A check is `{:name :description :severity :each? :expect
+  :says :hint? :component? :since? :empty-is-clean?}` and reports where
+  `:expect` does not hold, per object of an `:each`, else once; predicates
+  read `[:read :name …]`, `[:opt …]`, `[:field …]`/`[:each …]` inside an
+  `:each`, and `[:present :name]`/`[:absent :name]`. A check resting on a
+  read that did not answer is `unread` in `checked` and concludes nothing,
+  the json and edn report list each read's state and reason under `reads`,
+  and an `:each` over no object is unread too unless it says
+  `:empty-is-clean "why"`. `(dsl/register-detective! scope compiled)`
+  joins its checks to a scope, refusing a detective that reads a flag.
   Prefer a Clojure book for anything an operator relies on until the
   vocabulary is reviewed. Declare the target with its `:type` (or a registered `:parse`;
   add `:compare :spec` for a target such as `"nodes"` that has no generation), the
