@@ -283,6 +283,135 @@
               :else (doall (map #(walk k (inc depth) %) v))))]
     (walk nil 0 data)))
 
+(def ^:private hidden-class
+  "The code points that must not reach a reader raw, as a regex character
+   class: control characters (C0, DEL, C1), format characters (bidirectional
+   controls, zero-width characters, the byte order mark, tags), line and
+   paragraph separators, surrogates standing alone, unassigned code points and
+   noncharacters, and the default-ignorable code points of no such category
+   (the combining grapheme joiner, the Hangul fillers, the Khmer inherent
+   vowels, the Mongolian free variation selectors and the variation
+   selectors). Each is invisible, reorders text, moves a terminal's cursor or
+   cannot be encoded. A regex is matched natively, so a large report is
+   scanned in one pass of the JVM's own code."
+  (str "\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}\\p{Cs}\\p{Cn}"
+       "\\x{034F}\\x{115F}-\\x{1160}\\x{17B4}-\\x{17B5}\\x{180B}-\\x{180F}"
+       "\\x{3164}\\x{FE00}-\\x{FE0F}\\x{FFA0}\\x{E0100}-\\x{E01EF}"))
+
+(def ^:private hidden-pattern
+  (re-pattern (str "[" hidden-class "]")))
+
+(def ^:private hidden-in-text
+  "A hidden code point other than tab, newline and carriage return: the
+   whitespace JSON and EDN read between values, and which their printers
+   already escape inside a string."
+  (re-pattern (str "[" hidden-class "&&[^\\t\\n\\r]]")))
+
+(defn hidden?
+  "Whether the code point cp must not reach a reader raw (see hidden-class):
+   a control, format, separator, lone surrogate, unassigned or other
+   default-ignorable code point."
+  [cp]
+  (boolean (re-matches hidden-pattern (String. (Character/toChars (int cp))))))
+
+(defn- unicode-escape
+  "The \\uXXXX escape of the code points in s, a surrogate pair for one above
+   U+FFFF. JSON and EDN strings both read it back as the same characters."
+  [^String s]
+  (apply str (map #(format "\\u%04X" (int %)) s)))
+
+(defn json-escaped
+  "printed, a text cheshire (or any JSON writer) produced, with every hidden
+   code point (see hidden?) written as \\uXXXX. Outside strings a JSON writer
+   puts nothing but ASCII and whitespace, and inside them it already escapes
+   tab, newline and carriage return, so every other hidden code point sits in
+   a string, where the escape reads back as the same character. Other
+   non-ASCII text, such as Größe or 日本, stays readable."
+  [printed]
+  (let [printed (str printed)]
+    (if (re-find hidden-in-text printed)
+      (str/replace printed hidden-in-text unicode-escape)
+      printed)))
+
+(def ^:private edn-token
+  "A string literal, a character literal or a hidden code point of EDN text.
+   The string's loop is unrolled with possessive quantifiers, so a long string
+   neither backtracks nor deepens the regex engine's stack."
+  (re-pattern (str "\"[^\"\\\\]*+(?:\\\\[\\s\\S][^\"\\\\]*+)*+\""
+                   "|\\\\([\\s\\S])"
+                   "|" hidden-in-text)))
+
+(defn- edn-escaped
+  "printed, a text pr-str produced, with every hidden code point in a string
+   literal written as \\uXXXX, and a character literal of a hidden character
+   as \\uXXXX. One anywhere else, which edn-name-safe keeps from occurring, is
+   escaped the same way, so none is ever written raw."
+  [^String printed]
+  (str/replace printed edn-token
+               (fn [[token literal]]
+                 (cond
+                   (str/starts-with? token "\"")
+                   (if (re-find hidden-pattern token)
+                     (str/replace token hidden-pattern unicode-escape)
+                     token)
+                   literal (if (re-find hidden-pattern literal)
+                             (unicode-escape literal)
+                             token)
+                   :else (unicode-escape token)))))
+
+(def edn-readers
+  "The reader functions for the tags edn-text writes a keyword or symbol
+   holding a hidden code point under, for clojure.edn/read's :readers, so a
+   reader gets back the keyword or symbol that was printed."
+  {'gumshoe/keyword keyword
+   'gumshoe/symbol symbol})
+
+(defn- edn-name-safe
+  "data with every keyword and symbol whose text holds a hidden code point
+   replaced by a gumshoe/keyword or gumshoe/symbol tagged literal over that
+   text, because EDN has no escape inside a keyword or symbol. Records stay
+   records."
+  [data]
+  (letfn [(named [v]
+            (cond
+              (not (re-find hidden-pattern (str v))) v
+              (keyword? v) (tagged-literal 'gumshoe/keyword (subs (str v) 1))
+              :else (tagged-literal 'gumshoe/symbol (str v))))
+          (walk [v]
+            (cond
+              (or (keyword? v) (symbol? v)) (named v)
+              (not (coll? v)) v
+              (map? v) (let [entry (fn [[k mv]] [(walk k) (walk mv)])]
+                         (if (record? v)
+                           (reduce (fn [m [ok :as e]]
+                                     (let [[mk mv] (entry e)]
+                                       (assoc (if (= ok mk) m (dissoc m ok)) mk mv)))
+                                   v v)
+                           (refill v {} (map entry))))
+              (vector? v) (mapv walk v)
+              (set? v) (refill v #{} (map walk))
+              :else (doall (map walk v))))
+          ;; a sorted collection cannot compare a tagged literal with the
+          ;; keywords beside it, so it becomes an unsorted one
+          (refill [v unsorted xf]
+            (try (into (empty v) xf v)
+                 (catch ClassCastException _ (into unsorted xf v))))]
+    (walk data)))
+
+(defn edn-text
+  "data printed as EDN, as pr-str prints it, with every hidden code point (see
+   hidden?) in a string or character literal written as \\uXXXX, so clojure.edn
+   reads back exactly the strings and characters that were printed. A keyword
+   or symbol holding a hidden code point is printed as #gumshoe/keyword or
+   #gumshoe/symbol over its text, since EDN cannot escape one; edn-readers reads
+   those back. Data without a hidden code point prints exactly as pr-str prints
+   it."
+  [data]
+  (let [printed (pr-str data)]
+    (if (re-find hidden-in-text printed)
+      (edn-escaped (pr-str (edn-name-safe data)))
+      printed)))
+
 (defn- one-line
   "text as one line of plain text: colour removed and every control
    character, a newline or an escape included, turned into a space, so it can
