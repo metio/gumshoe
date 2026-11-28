@@ -597,13 +597,22 @@
 
 (defn json-report
   "The machine-readable report as pretty JSON. A value cheshire cannot encode
-   is written as its string form rather than failing the report."
+   is written as its string form rather than failing the report. Every hidden
+   code point in a string (render/hidden?) is written as \\uXXXX, so text
+   from a cluster reaches a reader whole but never raw."
   [data]
-  (try (json/generate-string data {:pretty true})
-       (catch Exception _
-         (try (json/generate-string (json-safe data) {:pretty true})
-              (catch Exception _
-                (json/generate-string (json-plain data) {:pretty true}))))))
+  (render/json-escaped
+   (try (json/generate-string data {:pretty true})
+        (catch Exception _
+          (try (json/generate-string (json-safe data) {:pretty true})
+               (catch Exception _
+                 (json/generate-string (json-plain data) {:pretty true})))))))
+
+(defn edn-report
+  "The machine-readable report as EDN, as prn prints it, with every hidden
+   code point in a string or character written as \\uXXXX (render/edn-text)."
+  [data]
+  (render/edn-text data))
 
 (defn- written?
   "Flushes *out* and whether everything printed to it arrived. A PrintWriter
@@ -649,7 +658,9 @@
 
    `extra` is a map a book adds to the machine-readable formats, such as the
    rows it collected; the report's own keys win over it, and the text report
-   leaves it out. It is evidence and reaches json and edn as the book gave it."
+   leaves it out. It is evidence and keeps its data: json and edn write every
+   hidden code point in it as \\uXXXX, which their readers turn back into the
+   same characters, and a plugin's format receives it as the book gave it."
   ([detectives findings output] (report! detectives findings output nil))
   ([detectives findings output extra]
    (let [findings (mapv (comp printable-finding normalize-finding) findings)
@@ -674,7 +685,7 @@
       (case output
         "json" (do (println (json-report data))
                    healthy)
-        "edn" (do (prn data)
+        "edn" (do (println (edn-report data))
                   healthy)
         ;; a plugin's format (sarif, junit, …), else the rich terminal report
         (if-let [render (report/format-fn output)]

@@ -7,14 +7,23 @@
    are built in. A plugin registers more - sarif so findings flow into code
    scanning, junit so a CI job turns a scan into pass/fail - with register-format!,
    and nothing about those formats lives in the engine. Each format is
-   (fn [report] -> prints to stdout), where report is {:findings :checked :summary}."
+   (fn [report] -> prints to stdout), where report is {:findings :checked :summary}
+   plus the keys a book adds (its :extra).
+
+   The findings a format receives are already cleaned (detective/printable-finding);
+   a book's extra keys are the data as collected and may hold control,
+   bidirectional or zero-width characters from the cluster. A format that
+   writes JSON passes its text through gumshoe.render/json-escaped, one that
+   writes EDN prints with gumshoe.render/edn-text, as the built-in json and edn
+   do, so such characters arrive as \\uXXXX escapes."
   (:require [gumshoe.config :as config]))
 
 (defonce ^:private formats (atom {}))
 
 (defn register-format!
   "Registers a report format under `name` (the --output value that selects it):
-   render is (fn [{:keys [findings checked summary]}] -> prints to stdout)."
+   render is (fn [{:keys [findings checked summary]}] -> prints to stdout). The
+   report's extra keys reach render unescaped (see the namespace docstring)."
   [name render]
   {:pre [(string? name) (fn? render)]}
   (swap! formats assoc name render))

@@ -109,6 +109,7 @@
                    [gumshoe.book-surfaces-test]
                    [gumshoe.select-flags-test]
                    [gumshoe.option-order-test]
+                   [gumshoe.report-escapes-test]
                    [gumshoe.mutation-connect-test]
                    [gumshoe.mutation-subject-test]
                    [gumshoe.change-test]
@@ -432,6 +433,7 @@
                                                          'gumshoe.book-surfaces-test
                                                          'gumshoe.select-flags-test
                                                          'gumshoe.option-order-test
+                                                         'gumshoe.report-escapes-test
                                                          'gumshoe.mutation-connect-test
                                                          'gumshoe.mutation-subject-test
                                                          'gumshoe.change-test
