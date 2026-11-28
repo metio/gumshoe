@@ -14,6 +14,7 @@
    meaning."
   (:require [clojure.string :as str]
             [gumshoe.child-output :as child-output]
+            [gumshoe.offline :as offline]
             [gumshoe.outcome :as outcome]
             [gumshoe.shell :as shell]
             [gumshoe.ssh :as ssh]
@@ -104,24 +105,77 @@
 
 (defonce ^:private effect-types (atom {}))
 
+(def ^:private built-in-ops
+  "The ops perform! interprets itself."
+  #{:kubectl :kubectl-plugin :kubectl-stdin :ssh :cmd :note})
+
+(defn- refuse-type!
+  [op message]
+  (throw (ex-info (format "the effect type %s %s" (pr-str op) message) {:op op})))
+
 (defn register-effect-type!
   "Registers a custom effect verb, so a tool package can add an action to the DSL
    and have it flow through the same run!/dry-run/confirmation machinery as the
    built-ins. `op` is the keyword an effect starts with ([op & args]); handlers is
-   {:describe (fn [args] -> one-line string) :perform (fn [args] -> true on
-   success)}. Both are required: the :describe is what --dry-run and the change
-   preview show, so a custom effect can not act without first being able to say
-   what it will do."
-  [op {:keys [describe perform] :as handlers}]
+
+     {:describe    (fn [args] -> one-line string)   required
+      :perform     (fn [args] -> true on success)   required
+      :args        [\"dir\" \"message\" ..]          one name per argument
+      :destructive? false                           whether it destroys
+      :touches     (fn [args] -> refs or nil)        the cluster objects it acts on
+      :doc         \"what it does\"}
+
+   :describe and :perform are required: the :describe is what --dry-run and
+   the change preview show, so a custom effect can not act without first
+   being able to say what it will do. The :describe renders from its
+   arguments alone; it runs inside gumshoe.offline/forbidding, so one that
+   starts a command or sends a request throws instead of reading.
+
+   The other keys are optional. :args names the positional arguments, and a
+   gumshoe.dsl change can name only a type that declares them, so compile
+   can refuse a wrong count. A type is destructive unless it says
+   :destructive? false: only its own :perform knows what it does, so a
+   type that does not say asks for the typed confirmation a delete asks
+   for. :touches names the {:type :namespace :name} refs of the cluster
+   objects an effect acts on, [] for one that acts on none (a file, a
+   commit), so gumshoe.testing.plan can compare them with the
+   confirmation. A built-in op cannot be registered: perform! interprets
+   it itself and would never call the handlers."
+  [op {:keys [describe perform args destructive? touches doc] :as handlers}]
   {:pre [(keyword? op) (fn? describe) (fn? perform)]}
+  (when (contains? built-in-ops op)
+    (refuse-type! op "is built in, and its handlers would never run"))
+  (when (and (contains? handlers :args)
+             (not (and (vector? args) (every? #(and (string? %) (not (str/blank? %))) args))))
+    (refuse-type! op (format "names its :args as a vector of non-blank strings, not %s" (pr-str args))))
+  (when (and (contains? handlers :destructive?) (not (boolean? destructive?)))
+    (refuse-type! op (format "says :destructive? true or false, not %s" (pr-str destructive?))))
+  (when (and (contains? handlers :touches) (not (fn? touches)))
+    (refuse-type! op (format "names what it touches as a function of its arguments, not %s" (pr-str touches))))
+  (when (and (contains? handlers :doc) (not (and (string? doc) (not (str/blank? doc)))))
+    (refuse-type! op (format "has a non-blank :doc, not %s" (pr-str doc))))
   (swap! effect-types assoc op handlers))
+
+(defn effect-type
+  "What op was registered with, as {:describe :perform :args :destructive?
+   :touches :doc}, :destructive? true where the registration did not say;
+   nil for a built-in op or one nobody registered."
+  [op]
+  (when-let [handlers (get @effect-types op)]
+    (update handlers :destructive? #(if (false? %) false true))))
+
+(defn registered-types
+  "Every registered effect type, by op, as effect-type returns it."
+  []
+  (into {} (map (fn [op] [op (effect-type op)])) (keys @effect-types)))
+
+(defn built-in-op?
+  "Whether op is one perform! interprets itself."
+  [op]
+  (contains? built-in-ops op))
 
 ;; ---------------------------------------------------------------------------
 ;; describing (for dry-run and logs) - pure
-
-(def ^:private built-in-ops
-  "The ops perform! interprets itself."
-  #{:kubectl :kubectl-plugin :kubectl-stdin :ssh :cmd :note})
 
 (defn known-op?
   "Whether an interpreter knows op: a built-in, or one a plugin or book
@@ -151,7 +205,8 @@
     :cmd (str/join " " args)
     :note (str "# " (first args))
     (if-let [render (:describe (get @effect-types op))]
-      (render args)
+      (offline/forbidding (format "the :describe of the effect type %s renders what the effect will do from its arguments alone" (pr-str op))
+                          #(render args))
       (pr-str (into [op] args)))))
 
 ;; ---------------------------------------------------------------------------

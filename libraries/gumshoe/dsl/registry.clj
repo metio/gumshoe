@@ -25,17 +25,25 @@
      :reason      (args..) -> reason or nil         a :refuse entry's :reason
      :items       (args..) -> confirmation lines    :items
      :problems    (args..) -> [message ..]          a :problems entry's :reasons
+     :effect      [op arg..] applied by its :perform  :effect, as [:effect op arg..]
    A function that reads the cluster is a :read or :candidates function, so
    compile can keep reads out of refusals, post-checks and plans, which
    judge only what a declared read returned.
 
+   An :effect is the one kind register! does not take: an effect type is
+   registered once, with gumshoe.effect/register-effect-type!, which also
+   gives it to code that builds plans by hand, and effects lists every
+   type a change may name. Keeping one registry keeps one answer to what
+   an effect does, whether a change or a book's code produced it.
+
    gumshoe.dsl.library registers gumshoe's own functions; a casebook
    registers its own with register! before it compiles a change that names
-   them.")
+   them."
+  (:require [gumshoe.effect :as effect]))
 
 (def kinds
   "Every kind of registered function."
-  #{:parse :candidates :read :value :predicate :reason :items :problems})
+  #{:parse :candidates :read :value :predicate :reason :items :problems :effect})
 
 (defonce ^:private registry (atom {}))
 
@@ -56,6 +64,9 @@
     (refuse! (format "%s registers no :fn" name) {:name name}))
   (when-not (kinds kind)
     (refuse! (format "%s has the kind %s - write one of %s" name (pr-str kind) (pr-str (sort kinds))) {:name name}))
+  (when (= :effect kind)
+    (refuse! (format "%s is an effect type - register it with gumshoe.effect/register-effect-type!, and a change names it as [:effect op arg ..]" name)
+             {:name name}))
   (when-not (and (vector? args) (every? string? args))
     (refuse! (format "%s names its arguments as a vector of strings, not %s" name (pr-str args)) {:name name}))
   (when-not (and (string? doc) (seq doc))
@@ -79,3 +90,15 @@
   "Every registered entry, by name."
   []
   @registry)
+
+(defn effects
+  "Every effect type a change may name in :effect, by op, as
+   {:kind :effect :args [..] :destructive? bool :doc \"..\"}: the types
+   registered with gumshoe.effect/register-effect-type! that name their
+   :args. A type without :args is left out, since compile refuses it."
+  []
+  (into (sorted-map)
+        (for [[op {:keys [args destructive? doc]}] (effect/registered-types)
+              :when (vector? args)]
+          [op (cond-> {:kind :effect :args args :destructive? destructive?}
+                doc (assoc :doc doc))])))

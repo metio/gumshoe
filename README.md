@@ -945,7 +945,8 @@ The vocabulary:
   `[:state]` and `[:absent]`;
 - effects on the picked object: `[:kubectl :patch {:merge {…}}]`,
   `[:kubectl :scale {:replicas e}]`, `[:kubectl :annotate {:annotations
-  {"k" e}}]`, `[:kubectl :delete]`; and `[:each <read> {…} <effect> …]` on
+  {"k" e}}]`, `[:kubectl :delete]`; `[:effect <type> arg …]` for an effect
+  type a library registered (below); and `[:each <read> {…} <effect> …]` on
   every object a read returned (below);
 - `:pin [{:type "type" :namespace e :name e}]`, objects other than the
   subject that are read before and after the confirmation and refuse the
@@ -1005,6 +1006,40 @@ A read that did not answer refuses the change. `<read>` may name several
 reads, `[:a :b]`, taken together; a `[:list …]` whose type the cluster says
 it does not serve refuses as well, because kubectl prints that also when
 discovery failed, so an optional type is read with `[:present …]`.
+
+### Registered effect types
+
+An effect that is no kubectl call - writing a file, committing to a
+checkout - is an effect type registered with
+`gumshoe.effect/register-effect-type!`, and a change names it as
+`[:effect <type> arg …]`, beside the kubectl effects and inside an `:each`:
+
+```clojure
+(effect/register-effect-type!
+ :my.casebook/write-values
+ {:describe (fn [[dir file _]] (str "write " file " in " dir))
+  :perform (fn [[dir file text]] (spit (str dir "/" file) text) true)
+  :args ["dir" "file" "text"]          ; required for a change to name it
+  :destructive? false                  ; destructive unless it says so
+  :touches (fn [_] [])})               ; the cluster objects it acts on
+
+:effect [[:effect :my.casebook/write-values [:value :checkout] "values.yaml" [:value :values]]]
+```
+
+The type must be registered, naming its `:args`, before the change
+compiles; `compile` refuses an unregistered type (listing those
+`gumshoe.dsl.registry/effects` holds), a built-in op such as `:cmd`, and a
+wrong count of arguments. The arguments are expressions over the pick,
+`:reads`, `:values` and, inside an `:each`, `[:each & path]`; they never
+read, so `:perform` gets the values the confirmation showed. The
+confirmation lists every registered effect as its `:describe` renders it,
+which runs inside `gumshoe.offline/forbidding`, and `--dry-run` shows the
+same lines. A type that does not say `:destructive? false` asks for the
+typed yes and a `:recovery`, as a delete does. Its post-check is the
+`:state` of the change or of its `:each`. `:touches` lets
+`gumshoe.testing.plan` compare what the effect acts on with the
+confirmation; a type without it fails that check unless the test names
+what it touches.
 
 ### Running an EDN book
 

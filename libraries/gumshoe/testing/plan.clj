@@ -48,10 +48,14 @@
                              the certificates it names.
      [:ssh connection ..]    the host, as {:type \"host\" :name <host>}.
      [:note ..]              nothing.
-   Anything else is unidentified: another plugin or command, a custom
-   effect, a call selecting by -l, --field-selector, --all or -A, reading a
-   file with -f, naming several types at once, or creating an object by
-   generateName. An unidentified effect fails the
+     [op & args]             for an effect type registered with :touches
+                             (gumshoe.effect/register-effect-type!), the
+                             refs its :touches returns for args; [] for
+                             one acting on no cluster object.
+   Anything else is unidentified: another plugin or command, an effect
+   type registered without :touches, a call selecting by -l,
+   --field-selector, --all or -A, reading a file with -f, naming several
+   types at once, or creating an object by generateName. An unidentified effect fails the
    check, because what it touches cannot be compared with the items. The
    scenario's :touches, (fn [effect] -> refs or nil), names what an effect
    touches before these rules are tried: refs, [] for an effect that
@@ -263,7 +267,8 @@
                   :kubectl-plugin (cnpg-refs (rest args))
                   :cmd (cmd-refs args)
                   :ssh (when-let [host (:host (first args))] [{:type "host" :namespace nil :name (str host)}])
-                  nil)]
+                  (when-let [registered (:touches (effect/effect-type op))]
+                    (some-> (registered (vec args)) vec)))]
        (if (some? refs) {:refs refs} {:unidentified effect})))))
 
 ;; --- what the items list -------------------------------------------------------------
