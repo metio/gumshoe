@@ -920,6 +920,29 @@ From this, `compile` derives:
   `:confirm {:destructive? false}` is refused, as `gumshoe.change/normalize`
   refuses any effect marked destructive beside it.
 
+`:timeout` is at most 3600 seconds and `:interval` at most 300, and an
+`:interval` longer than its `:timeout` (60 by default) is refused.
+
+A change whose effect shows in several ways declares `:state` as a vector,
+one post-check per entry, each with its own `:says`, `:timeout` and
+`:interval`:
+
+```clojure
+:state [{:holds [:field [:spec :replicas] := 3]
+         :says "Deployment {target} asks for 3 replicas" :timeout 30}
+        {:holds [:field [:status :readyReplicas] := 3]
+         :says "Deployment {target} serves 3 ready replicas" :timeout 900 :interval 30}]
+```
+
+Every check runs, in order and within its own window, also after an
+earlier one failed. The target state is all of them at once: the skip,
+`[:state]` in a refusal and `{:unless :state}` hold only when every check
+holds. A run whose check did not hold ends `NOT VERIFIED - the change ran,
+but a post-check did not hold: Deployment shop/web serves 3 ready
+replicas`, naming each check that failed by its `:says`, so two checks of
+one state may not say the same. `:holds :absent` is a state's only check.
+A single map is the same as a vector of one, and an `:each` takes either.
+
 Strict reads have no opt-out. The others do: `:opt-out {:verify "why"}`
 drops the post-check (the change then has no `:state`), `{:done "why"}`
 the skip, `{:destructive "why"}` the typed confirmation of a delete and
@@ -989,7 +1012,7 @@ an `:each`, `[:field …]` and `[:each & path]` read the object acted on.
 For each object, `compile` derives:
 
 - **The confirmation** lists every object the change acts on.
-- **The skip.** An object whose state holds already is not acted on, and a
+- **The skip.** An object whose every check holds already is not acted on, and a
   change acting only through `:each` is done when none is left, so an empty
   read asks nothing.
 - **The pin.** Every object the confirmation showed is compared with the
@@ -999,8 +1022,9 @@ For each object, `compile` derives:
   it.
 - **The bound.** A read returning more than `:max` objects (25 by default)
   refuses the change before the confirmation.
-- **The post-check.** Each object is read again and judged by its state,
-  failing closed.
+- **The post-check.** Each object is read again and judged by every check
+  of its state, failing closed; a failed one is named with the object, as
+  its `:says` renders it.
 
 A read that did not answer refuses the change. `<read>` may name several
 reads, `[:a :b]`, taken together; a `[:list …]` whose type the cluster says

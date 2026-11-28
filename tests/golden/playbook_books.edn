@@ -556,7 +556,7 @@
       "5/5 🔬 Verification"]}],
    :writes ["cordon n1"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: node n1 is unschedulable - read the messages above",
    :recovery
    ["Recovery:"
     "  Cordoning node n1 did not complete or did not hold; no pod was evicted from it."
@@ -1350,7 +1350,7 @@
    :writes
    ["-n flux-system patch kustomizations.kustomize.toolkit.fluxcd.io apps --type=merge --patch={\"spec\":{\"suspend\":true}}"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: Kustomization flux-system/apps is suspended - read the messages above",
    :recovery
    ["Recovery:"
     "  Neither HelmRelease apps/podinfo nor its owner is suspended; Flux reconciles the release again."],
@@ -1451,7 +1451,7 @@
     "-n apps patch helmreleases.helm.toolkit.fluxcd.io podinfo --type=merge --patch={\"spec\":{\"suspend\":false}}"
     "-n apps annotate helmreleases.helm.toolkit.fluxcd.io podinfo --overwrite reconcile.fluxcd.io/requestedAt=<instant>"],
    :banner
-   "NOT VERIFIED - the change ran, but its post-check did not hold - read the messages above",
+   "NOT VERIFIED - the change ran, but a post-check did not hold: the HelmRelease is Ready on a fresh install (revision 1, deployed) - read the messages above",
    :recovery
    ["Recovery:"
     "  Flux does not reconcile HelmRelease apps/podinfo while these stay suspended:"

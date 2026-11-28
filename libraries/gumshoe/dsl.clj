@@ -39,7 +39,8 @@
      :reads          {name read}: live state, read before the confirmation
                      and again after it, where :refuse judges it
      :values         {name expression}: computed once per run, after the reads
-     :state          the state the change brings about, see below
+     :state          the state the change brings about, one post-check or
+                     a vector of them, see below
      :refuse         [{:when predicate :says \"template\"} or {:reason call}]
      :problems       [{:when predicate :says \"template\"} or {:reasons call}],
                      judged as :refuse is, and every message any entry
@@ -128,6 +129,18 @@
                       the post-check fails closed
      :done            the run skips a change whose post-check already holds
      the candidates   with :candidates {:unless :state}
+   :timeout is at most max-timeout seconds and :interval at most
+   max-interval, and never longer than the :timeout it waits within.
+
+   :state [{:holds .. :says .. :timeout .. :interval ..} ..] declares several
+   post-checks, each judged on its own within its own window, in order, and
+   each run even when an earlier one failed. The target state is all of them
+   at once: :done, [:state] in a refusal and {:unless :state} hold only when
+   every check holds. A check that does not hold fails the run, and the
+   banner and the guidance under it name it by its :says, so two checks may
+   not say the same. :holds :absent is a state's only check, since an object
+   that is gone holds no predicate. A single map is the same as a vector of
+   one.
 
    Effects act on the picked object; their arguments are expressions:
      [:kubectl :patch {:merge {..} :resource \"cronjob\"}]   a merge patch;
@@ -162,13 +175,13 @@
    results (an object, a list, or a sequence of them). Inside it the
    effects act on the object, [:each & path] reads it, and [:field ..]
    judges it. :state {:holds predicate | :absent :says \"template\" :timeout
-   :interval} says what holds for each object once the change took effect;
-   it is required unless every effect is a [:kubectl :delete], where it is
-   :absent. :max
+   :interval}, or a vector of them, says what holds for each object once the
+   change took effect, as the change's :state does; it is required unless
+   every effect is a [:kubectl :delete], where it is :absent. :max
    bounds how many objects the read may return (default-each-max). Per
    object, compile derives:
      the confirmation  lists every object the change acts on
-     the skip          an object whose state holds already is not acted
+     the skip          an object whose every check holds already is not acted
                        on; a change acting only through :each is done
                        when no object is left, so an empty read is done
      the pin           every object the confirmation showed is fingerprinted
@@ -181,8 +194,8 @@
                        effect deletes it, since its delete already happened
      the bound         more than :max objects refuses the change before the
                        confirmation
-     the post-check    each object read again, judged by its state, fail-
-                       closed as :state's is
+     the post-check    each object read again, judged by every check of
+                       its state, fail-closed as :state's is
    A list that did not answer refuses the change: a strict read throws, an
    :unread result throws, and a [:list ..] that answered its type does not
    exist proves no absence, so it refuses as well - read objects of an
@@ -822,20 +835,78 @@
 
 (def ^:private state-keys #{:holds :says :timeout :interval})
 
+(def max-timeout
+  "The longest :timeout a post-check may wait, in seconds. A wait beyond an
+   hour is a run nobody watches to its end."
+  3600)
+
+(def max-interval
+  "The longest :interval between two attempts of a post-check, in seconds."
+  300)
+
 (defn- check-state!
   [path state]
-  (do
-    (check-keys! path state state-keys "the :state")
-    (when-not (contains? state :holds)
-      (invalid! (conj path :holds) "the :state says what holds once the change took effect, as :holds predicate or :holds :absent"))
-    (non-blank! (conj path :says) (:says state) "the :state's :says")
-    (doseq [k [:timeout :interval] :when (contains? state k)]
-      (when-not (pos-int? (get state k))
-        (invalid! (conj path k) (format "%s is a whole number of seconds above zero, not %s" k (pr-str (get state k))))))))
+  (check-keys! path state state-keys "the :state")
+  (when-not (contains? state :holds)
+    (invalid! (conj path :holds) "the :state says what holds once the change took effect, as :holds predicate or :holds :absent"))
+  (non-blank! (conj path :says) (:says state) "the :state's :says")
+  (doseq [k [:timeout :interval] :when (contains? state k)]
+    (when-not (pos-int? (get state k))
+      (invalid! (conj path k) (format "%s is a whole number of seconds above zero, not %s" k (pr-str (get state k))))))
+  (let [{:keys [timeout interval] :or {timeout 60 interval 5}} state]
+    (when (< max-timeout timeout)
+      (invalid! (conj path :timeout) (format ":timeout is at most %d seconds, not %d" max-timeout timeout)))
+    (when (< max-interval interval)
+      (invalid! (conj path :interval) (format ":interval is at most %d seconds, not %d" max-interval interval)))
+    (when (< timeout interval)
+      (invalid! (conj path :interval) (format ":interval %d is longer than the :timeout %d it waits within%s"
+                                              interval timeout (if (contains? state :timeout) "" " (the default)"))))))
 
 (defn- absent-state?
   [state]
   (= :absent (:holds state)))
+
+(defn- state-entries
+  "The post-checks a :state at path declares, each {:path :state}: a map is
+   one, at path itself, so a single state keeps the paths it always had; a
+   vector is several, each at its index. Refuses an empty vector, an :absent
+   beside anything else (no object that is gone holds a predicate, so the
+   post-check could never pass) and two entries saying the same, since the
+   :says of a check is what names it when it fails."
+  [path state]
+  (cond
+    (map? state) (do (check-state! path state) [{:path path :state state}])
+
+    (and (vector? state) (seq state))
+    (let [entries (vec (map-indexed (fn [i s]
+                                      (let [p (conj path i)]
+                                        (when-not (map? s)
+                                          (invalid! p (format "each post-check of the :state is a map {:holds .. :says ..}, not %s" (pr-str s))))
+                                        (check-state! p s)
+                                        {:path p :state s}))
+                                    state))]
+      (when (and (< 1 (count entries)) (some (comp absent-state? :state) entries))
+        (let [{p :path} (first (filter (comp absent-state? :state) entries))]
+          (invalid! (conj p :holds) "an object that is gone holds no predicate, so :holds :absent is the :state's only post-check")))
+      (reduce (fn [seen {p :path s :state}]
+                (when (seen (:says s))
+                  (invalid! (conj p :says) (format "%s is said by an earlier post-check of the :state - each says what it checks, which names it when it fails"
+                                                   (pr-str (:says s)))))
+                (conj seen (:says s)))
+              #{} entries)
+      entries)
+
+    :else (invalid! path (format "the :state is {:holds .. :says ..}, or a vector of them for several post-checks, not %s" (pr-str state)))))
+
+(defn- entries-absent?
+  [entries]
+  (boolean (some (comp absent-state? :state) entries)))
+
+(defn- conjunction
+  "(fn [env] -> bool) holding when every one of preds holds; nil without any."
+  [preds]
+  (when (seq preds)
+    (fn [env] (every? #(% env) preds))))
 
 (defn- terminating-or-gone?
   [{:keys [context ref] :as ctx}]
@@ -843,28 +914,31 @@
       (kubectl/confirmed-gone? context (:namespace ref) (:type ref) (:name ref))))
 
 (defn- post-checks-of
-  "The :verify of a :state: one post-check judging it on the object read
-   again."
-  [state holds says]
-  (let [{:keys [timeout interval] :or {timeout 60 interval 5}} state]
-    (if (absent-state? state)
-      (fn [ctx]
-        [{:description (says {:ctx ctx :object (:object ctx)}) :timeout timeout :interval interval
-          :verifies-absence? true
-          :check (fn [] (terminating-or-gone? ctx))}])
-      (fn [ctx]
-        [{:description (says {:ctx ctx :object (:object ctx)}) :timeout timeout :interval interval
-          :check (fn [] (verify/object-holds? (mutation/read-subject ctx) #(holds {:ctx ctx :object %})))}]))))
+  "The :verify of a :state: one post-check per entry, each judging its own
+   predicate on the subject read again, within its own :timeout and
+   :interval. checks are {:state :holds :says}, :holds nil for :absent."
+  [checks]
+  (fn [ctx]
+    (mapv (fn [{:keys [state holds says]}]
+            (let [{:keys [timeout interval] :or {timeout 60 interval 5}} state
+                  description (says {:ctx ctx :object (:object ctx)})]
+              (if (absent-state? state)
+                {:description description :timeout timeout :interval interval
+                 :verifies-absence? true
+                 :check (fn [] (terminating-or-gone? ctx))}
+                {:description description :timeout timeout :interval interval
+                 :check (fn [] (verify/object-holds? (mutation/read-subject ctx) #(holds {:ctx ctx :object %})))})))
+          checks)))
 
 (defn- state-judged
   "The target state as [:state] judges it in a refusal, (fn [env] -> bool)
    over the object read: a predicate holds only for an object that exists,
    and :absent holds for an object that is gone or terminating."
-  [state state-pred]
+  [absent? state-pred]
   (cond
-    (nil? state) nil
-    (absent-state? state) (fn [env] (let [object (:object env)]
-                                      (or (nil? object) (some? (-> object :metadata :deletionTimestamp)))))
+    absent? (fn [env] (let [object (:object env)]
+                        (or (nil? object) (some? (-> object :metadata :deletionTimestamp)))))
+    (nil? state-pred) nil
     :else (fn [env] (verify/object-holds? (:object env) #(state-pred (assoc env :object %))))))
 
 ;; --- effects on each object of a read ------------------------------------------------
@@ -967,7 +1041,9 @@
 
 (defn- each-of
   "An :each form at path, compiled: {:names :members :snapshot :max :verbs
-   :deletes-only? :absent? :holds :says :timeout :interval :effects}."
+   :deletes-only? :absent? :holds :checks :effects}. :holds is every check
+   at once; :checks are its post-checks, each {:holds :says :timeout
+   :interval}, :holds absent for an absence."
   [path form i read-forms value-names scope]
   (let [[_ source & more] form
         names (cond (keyword? source) [source]
@@ -1005,23 +1081,33 @@
         state (:state opts)
         each-place (assoc (place scope "an :each" (conj pure-roots :each) #{:value}) :field-root :each)
         effects (vec (map-indexed (fn [j f] (effect-of (conj path (+ offset j)) f each-place :each-ref)) forms))
-        state (cond
-                (some? state) (do (check-state! (conj path 2 :state) state)
-                                  (when (and deletes? (not (absent-state? state)))
-                                    (invalid! (conj path 2 :state :holds) "an :each that deletes brings about an absence - write :holds :absent, or leave :state out"))
-                                  state)
-                deletes? nil
-                :else (invalid! (conj path 2 :state)
-                                (str "an :each that does not delete says what holds for each object once it took effect, as {:state {:holds predicate :says \"template\"}}"
-                                     " - it is each object's post-check and what skips an object already done")))
-        absent? (or (nil? state) (absent-state? state))
+        entries (cond
+                  (some? state) (let [entries (state-entries (conj path 2 :state) state)]
+                                  (when (and deletes? (not (entries-absent? entries)))
+                                    (invalid! (conj (:path (first entries)) :holds)
+                                              "an :each that deletes brings about an absence - write :holds :absent, or leave :state out"))
+                                  entries)
+                  deletes? nil
+                  :else (invalid! (conj path 2 :state)
+                                  (str "an :each that does not delete says what holds for each object once it took effect, as {:state {:holds predicate :says \"template\"}}"
+                                       " - it is each object's post-check and what skips an object already done")))
+        absent? (or (nil? entries) (entries-absent? entries))
+        checks (if absent?
+                 [{:timeout (get-in (first entries) [:state :timeout] 60)
+                   :interval (get-in (first entries) [:state :interval] 5)
+                   :says (if-let [{p :path s :state} (first entries)]
+                           (template (conj p :says) (:says s) each-place)
+                           (fn [env] (str (mutation/describe-ref (:each-ref env)) " is gone")))}]
+                 (mapv (fn [{p :path s :state}]
+                         {:timeout (get s :timeout 60)
+                          :interval (get s :interval 5)
+                          :holds (predicate (conj p :holds) (:holds s) each-place)
+                          :says (template (conj p :says) (:says s) each-place)})
+                       entries))
         holds (if absent?
                 (fn [env] (some? (get-in env [:each :metadata :deletionTimestamp])))
-                (let [p (predicate (conj path 2 :state :holds) (:holds state) each-place)]
+                (let [p (conjunction (mapv :holds checks))]
                   (fn [env] (verify/object-holds? (:each env) #(p (assoc env :each %))))))
-        says (if (:says state)
-               (template (conj path 2 :state :says) (:says state) each-place)
-               (fn [env] (str (mutation/describe-ref (:each-ref env)) " is gone")))
         member-readers (into {} (map (fn [n] [n (members-reader n (get read-forms n))])) names)]
     {:names names
      :members (fn [ctx] (distinct-members (mapcat (fn [n] ((member-readers n) (get ctx n))) names)))
@@ -1031,9 +1117,7 @@
      :deletes-only? (every? kubectl-delete? forms)
      :absent? absent?
      :holds holds
-     :says says
-     :timeout (get state :timeout 60)
-     :interval (get state :interval 5)
+     :checks checks
      :effects effects}))
 
 (defn- confirmed-members
@@ -1089,21 +1173,22 @@
     (f env)))
 
 (defn- each-checks
-  "One post-check for each object each acts on, judging its state on the
-   object read again; a predicate never holds for an object no read found,
-   and an absence holds only when a read answered NotFound or the object is
-   terminating."
+  "The post-checks of each object each acts on, one per check of its :state,
+   each judging the object read again within its own window; a predicate
+   never holds for an object no read found, and an absence holds only when a
+   read answered NotFound or the object is terminating."
   [each {:keys [context] :as ctx}]
   (for [{:keys [ref] :as m} (acted-on each ctx)
-        :let [env (each-env ctx m)]]
-    (cond-> {:description ((:says each) env) :timeout (:timeout each) :interval (:interval each)}
+        :let [env (each-env ctx m)]
+        {:keys [holds says timeout interval]} (:checks each)]
+    (cond-> {:description (says env) :timeout timeout :interval interval}
       (:absent? each)
       (assoc :verifies-absence? true
              :check (fn [] (or (some-> (mutation/fetch-pinned context ref) :metadata :deletionTimestamp some?)
                                (kubectl/confirmed-gone? context (:namespace ref) (:type ref) (:name ref)))))
       (not (:absent? each))
       (assoc :check (fn [] (verify/object-holds? (mutation/fetch-pinned context ref)
-                                                 #((:holds each) (assoc env :each %))))))))
+                                                 #(holds (assoc env :each %))))))))
 
 ;; --- pins on objects other than the subject ---------------------------------------
 
@@ -1306,15 +1391,21 @@
         object-only (place {:reads #{} :values #{} :options #{}}
                            "the target's :candidates {:unless :state}, which judges each listed object alone"
                            #{:object :call} #{:value})
-        state-pred (when (and state (not (absent-state? state)))
-                     (check-state! [:state] state)
-                     (predicate [:state :holds] (:holds state) pure))
-        _ (when (absent-state? state) (check-state! [:state] state))
-        object-state (when state
+        entries (when (some? state) (state-entries [:state] state))
+        absent? (entries-absent? entries)
+        state-checks (mapv (fn [{p :path s :state}]
+                             {:state s
+                              :holds (when-not (absent-state? s) (predicate (conj p :holds) (:holds s) pure))
+                              :says (template (conj p :says) (:says s) pure)})
+                           entries)
+        ;; the target state holds when every one of its post-checks does
+        state-pred (when-not absent? (conjunction (keep :holds state-checks)))
+        object-state (when entries
                        (fn []
-                         (if (absent-state? state)
+                         (if absent?
                            (fn [env] (some-> (:object env) :metadata :deletionTimestamp some?))
-                           (predicate [:state :holds] (:holds state) object-only))))
+                           (conjunction (mapv (fn [{p :path s :state}] (predicate (conj p :holds) (:holds s) object-only))
+                                              entries)))))
         candidates (candidates-of target object-state scope)
         parse (parse-of target)
         read-place (place scope "a :reads entry" #{:target :ref :object :opt :context :call :list :get} #{:value :read})
@@ -1378,9 +1469,8 @@
                     parse (assoc :parse parse)
                     (:invalid target) (assoc :invalid (:invalid target))
                     (:compare target) (assoc :compare (:compare target)))
-          says (when state (template [:state :says] (:says state) pure))
-          subject-refusal (refusal-of refuse target scope (state-judged state state-pred))
-          subject-verify (when state (post-checks-of state (or state-pred (constantly true)) says))
+          subject-refusal (refusal-of refuse target scope (state-judged absent? state-pred))
+          subject-verify (when entries (post-checks-of state-checks))
           own-items (items-of items scope)
           registered-ops (vec (distinct (for [form effect
                                               f (if (each-form? form) (each-effect-forms form) [form])
@@ -1438,7 +1528,7 @@
                  (and done-able? (not (contains? opt-out :done)) (seq eaches))
                  (assoc :done (fn [ctx] (every? #(empty? (acted-on % ctx)) eaches)))
                  (and (nil? state) (empty? eaches)) (assoc :no-verify (:verify opt-out))
-                 (some? problems) (assoc :problems (problems-of problems scope (state-judged state state-pred)))
+                 (some? problems) (assoc :problems (problems-of problems scope (state-judged absent? state-pred)))
                  (some? recovery) (assoc :recovery (ctx-template [:recovery] recovery pure)))]
       (when-not (or (nil? announce) (false? announce) (string? announce))
         (invalid! [:announce] (format ":announce is a template or false, not %s" (pr-str announce))))

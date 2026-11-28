@@ -393,7 +393,9 @@ and current list.
    was changed - skipped: …` changed nothing because every change was
    already done, and the run's `recordings/…/meta.edn` lists those steps
    under `:skipped`; `DONE - applied; this book has
-   no post-checks` verified nothing, and a `FAILED after N effects` banner
+   no post-checks` verified nothing, `NOT VERIFIED - the change ran, but a
+   post-check did not hold: <check>` (or `N post-checks did not hold: <a>;
+   <b>`) names each post-check that failed, and a `FAILED after N effects` banner
    names where it stopped while the effects before it stay applied. Notes
    in a plan only print and are never counted as applied effects. A banner
    naming `a step whose effects are unknown` means a legacy `:execute!`
@@ -403,7 +405,7 @@ and current list.
    mutation book without its own `:recovery` that fails after applying an
    effect prints generic guidance there instead, starting `This change
    declares no recovery guidance`: which effects stayed applied, where it
-   stopped or that its post-check did not hold, and where to look (those
+   stopped or which post-check did not hold, and where to look (those
    messages, the changelog entry, the object on its cluster). In a
    playbook the stopped step's guidance is followed by the playbook's own,
    which names what the run still leaves parked (a HelmRelease suspended, a
@@ -846,6 +848,15 @@ mostly data:
   `:each`; its arguments are expressions that never read, the confirmation
   and `--dry-run` show its `:describe`, and a type not registered with
   `:destructive? false` asks for the typed yes and a `:recovery`.
+  `:state` (of the change or of an `:each`) is one `{:holds … :says …
+  :timeout … :interval …}` or a vector of them: each is its own post-check
+  with its own window (`:timeout` at most 3600 s, `:interval` at most 300 s
+  and never above the timeout), every one runs, the skip and `[:state]`
+  hold only when all hold, the banner names each that failed by its
+  `:says` (so two may not say the same), and `:holds :absent` stands
+  alone. A registered effect type has no post-check of its own; prove a
+  file or commit it writes with a `:state` predicate, or keep the book in
+  Clojure.
   Prefer a Clojure book for anything an operator relies on until the
   vocabulary is reviewed. Declare the target with its `:type` (or a registered `:parse`;
   add `:compare :spec` for a target such as `"nodes"` that has no generation), the

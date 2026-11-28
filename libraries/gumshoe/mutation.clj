@@ -1068,9 +1068,10 @@
    :recovery and applied an effect before it failed. `applied` are the
    effects that stayed applied, as gumshoe.effect/describe renders them;
    `stopped` the effect it stopped at, when one failed; `post-check-failed?`
-   whether its post-check did not hold; `announced?` whether it posted to the
+   whether its post-check did not hold, and `unverified` the descriptions of
+   the post-checks that did not; `announced?` whether it posted to the
    changelog; `subject` what it acted on and `cluster` where."
-  [{:keys [applied stopped post-check-failed? announced? subject cluster]}]
+  [{:keys [applied stopped post-check-failed? unverified announced? subject cluster]}]
   (str/join "\n"
             (concat ["This change declares no recovery guidance. What it left behind:"
                      (format "  %d %s of this change stayed applied - nothing was rolled back:"
@@ -1078,7 +1079,7 @@
                     (map #(str "    " %) applied)
                     (cond
                       stopped [(str "  it stopped at: " stopped)]
-                      post-check-failed? ["  its post-check did not hold"]
+                      post-check-failed? [(str "  " (outcome/unverified-phrase unverified))]
                       :else ["  an unexpected error stopped it"])
                     ["Look at:"]
                     (cond
@@ -1097,7 +1098,7 @@
    effects that may change something, so the applied effects are the
    plan's first such ones."
   [{:keys [select announce] :as spec} {:keys [cluster target]} plan applied-before]
-  (let [{:keys [applied stopped verified]} (outcome/current)
+  (let [{:keys [applied stopped verified unverified]} (outcome/current)
         changed (->> (when applied plan)
                      (filter effect/changes-state?)
                      (take (- (or applied 0) applied-before))
@@ -1106,6 +1107,7 @@
       (fallback-guidance {:applied changed
                           :stopped stopped
                           :post-check-failed? (false? verified)
+                          :unverified unverified
                           :announced? (boolean announce)
                           :subject (str/join ", " (select/items (:mode select) target))
                           :cluster cluster}))))
