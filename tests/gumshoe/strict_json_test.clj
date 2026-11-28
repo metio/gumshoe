@@ -2,10 +2,10 @@
 ;; SPDX-License-Identifier: 0BSD
 
 (ns gumshoe.strict-json-test
-  (:require [babashka.http-client :as http-client]
-            [clojure.test :refer [deftest is testing]]
+  (:require [clojure.test :refer [deftest is testing]]
             [gumshoe.http :as http]
-            [gumshoe.json :as json]))
+            [gumshoe.json :as json]
+            [gumshoe.loopback-server :refer [recording! response]]))
 
 (deftest whole-documents-parse
   (is (= [{:a 1} {:b [2 3]}] (json/parse-strict "[{\"a\":1},{\"b\":[2,3]}]")))
@@ -34,9 +34,10 @@
 
 (defn- answered
   [body]
-  (with-redefs [http-client/request (fn [_] {:status 200
-                                             :body (java.io.ByteArrayInputStream. (.getBytes ^String body "UTF-8"))})]
-    (http/request :get "http://127.0.0.1:9/api" {})))
+  (let [{:keys [url close]} (recording! (fn [_] (response "200 OK" body)))]
+    (try
+      (http/request :get (str url "api") {})
+      (finally (close)))))
 
 (deftest http-json-is-nil-unless-the-whole-body-parses
   (is (= [{:a 1}] (:json (answered "[{\"a\":1}]"))))
@@ -45,3 +46,4 @@
     (is (= "[{\"a\":1},{\"a\"" (:body truncated)) "the body is kept as it came")
     (is (nil? (:json truncated)) "a truncated array is no JSON, not a lazy seq that throws later"))
   (is (nil? (:json (answered "{\"a\":1} trailing")))))
+

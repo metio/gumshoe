@@ -5,8 +5,9 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.http :as http]
-            [gumshoe.loopback-server :refer [serve!]])
-  (:import [java.io ByteArrayInputStream PipedInputStream PipedOutputStream]))
+            [gumshoe.loopback-server :refer [recording! response serve!]])
+  (:import [java.io ByteArrayInputStream PipedInputStream PipedOutputStream]
+           [java.net URLDecoder]))
 
 (deftest http-ok-test
   (is (http/ok? {:reachable true :status 200}))
@@ -89,3 +90,65 @@
   (is (= {:body "héllo"}
          (http/read-body (ByteArrayInputStream. (.getBytes "héllo" "UTF-8"))
                          {:deadline-ms 1000 :max-bytes 100}))))
+
+(defn- query-of
+  "The decoded query parameters of a request target."
+  [target]
+  (into {} (for [pair (str/split (or (second (str/split target #"\?" 2)) "") #"&")
+                 :when (seq pair)
+                 :let [[k v] (str/split pair #"=" 2)]]
+             [(URLDecoder/decode k "UTF-8") (URLDecoder/decode (or v "") "UTF-8")])))
+
+(deftest request-sends-accept-json-the-caller-headers-and-the-query
+  (let [{:keys [url requests close]} (recording! (fn [_] (response "200 OK" "{\"a\":1}")))]
+    (try
+      (let [answer (http/request :get (str url "api/v1/series")
+                                 {:headers {"X-Scope-OrgID" "tenant"}
+                                  :query-params {"match[]" "up{job=\"a b\"}"}})
+            {:keys [method target headers]} (first @requests)]
+        (is (= {:reachable true :status 200 :body "{\"a\":1}" :json {:a 1}} answer))
+        (is (= "GET" method))
+        (is (str/starts-with? target "/api/v1/series?"))
+        (is (= {"match[]" "up{job=\"a b\"}"} (query-of target)))
+        (is (= "application/json" (get headers "accept")))
+        (is (= "tenant" (get headers "x-scope-orgid"))))
+      (finally (close)))))
+
+(deftest request-posts-to-a-loopback-port
+  (let [{:keys [url requests close]} (recording! (fn [_] (response "204 No Content" "")))]
+    (try
+      (let [answer (http/request :post (str url "api/v1/admin/tsdb/delete_series")
+                                 {:query-params {"match[]" "metric_name"}})]
+        (is (= 204 (:status answer)))
+        (is (true? (:reachable answer)))
+        (is (= "POST" (:method (first @requests))))
+        (is (= {"match[]" "metric_name"} (query-of (:target (first @requests))))))
+      (finally (close)))))
+
+(deftest a-server-error-is-an-answer
+  (let [{:keys [url close]} (recording! (fn [_] (response "503 Service Unavailable" "down")))]
+    (try
+      (let [answer (http/fetch url)]
+        (is (= {:reachable true :status 503 :body "down" :json nil} answer))
+        (is (not (http/ok? answer))))
+      (finally (close)))))
+
+(deftest a-redirect-on-the-same-origin-is-followed
+  (let [{:keys [url requests close]} (recording! (fn [{:keys [target]}]
+                                                   (if (= "/old" target)
+                                                     (response "302 Found" {"Location" "/new"} "")
+                                                     (response "200 OK" "[1]"))))]
+    (try
+      (let [answer (http/fetch (str url "old"))]
+        (is (= {:reachable true :status 200 :body "[1]" :json [1]} answer))
+        (is (= ["/old" "/new"] (map :target @requests))))
+      (finally (close)))))
+
+(deftest a-refused-connection-is-unreachable
+  (let [{:keys [port close]} (recording! (fn [_] (response "200 OK" "")))]
+    (close)
+    (let [answer (http/fetch (str "http://127.0.0.1:" port "/"))]
+      (is (false? (:reachable answer)))
+      (is (string? (:error answer)))
+      (is (not (http/ok? answer))))))
+
