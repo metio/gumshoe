@@ -35,16 +35,21 @@
                  "  (System/exit 1))\n")))
     (fs/set-posix-file-permissions path "rwxr-xr-x")))
 
-(defn- run-forward [dir port]
-  (let [script (str "(require '[gumshoe.kubectl :as kubectl])"
-                    "(println (pr-str {:result (kubectl/with-port-forward"
-                    "  {:context \"c\" :namespace \"n\" :service \"s\" :local-port " port " :remote-port 80}"
-                    "  (fn [] :forwarded))}))")]
-    @(process/process {:dir (str dir) :out :string :err :string :continue true
-                       :extra-env {"PATH" (str dir ":" (System/getenv "PATH"))
-                                   "GUMSHOE_ENV" (str (fs/path dir "env.edn"))
-                                   "NO_COLOR" "1"}}
-                      "bb" "-cp" (absolute-classpath) "-e" script)))
+(defn- run-forward
+  "Runs with-port-forward on port in a fresh bb. body is the source of the
+   function the forward runs, path the PATH the book sees."
+  ([dir port] (run-forward dir port "(fn [] :forwarded)" (str dir ":" (System/getenv "PATH"))))
+  ([dir port body path]
+   (let [script (str "(require '[gumshoe.kubectl :as kubectl])"
+                     "(println (pr-str {:result (kubectl/with-port-forward"
+                     "  {:context \"c\" :namespace \"n\" :service \"s\" :local-port " port " :remote-port 80}"
+                     "  " body ")}))")]
+     @(process/process {:dir (str dir) :out :string :err :string :continue true
+                        :extra-env {"PATH" path
+                                    "GUMSHOE_ENV" (str (fs/path dir "env.edn"))
+                                    "KUBECONFIG" "/dev/null"
+                                    "NO_COLOR" "1"}}
+                       (str (fs/which "bb")) "-cp" (absolute-classpath) "-e" script))))
 
 (deftest port-forward-chatter-stays-off-stdout
   (fs/with-temp-dir [dir {}]
@@ -64,3 +69,21 @@
       (is (= "{:result false}" (str/trim out)) (str out err))
       (is (str/includes? err "exited before the port opened") err)
       (is (< seconds 20) "the wait ends when kubectl exits, not after 30 attempts"))))
+
+(deftest each-connection-kubectl-reports-reaches-the-operator-on-stderr
+  (fs/with-temp-dir [dir {}]
+    (fake-kubectl! dir true)
+    (let [port (free-port)
+          body (str "(fn [] (with-open [_ (java.net.Socket. \"127.0.0.1\" " port ")] (Thread/sleep 300)) :forwarded)")
+          {:keys [out err]} (run-forward dir port body (str dir ":" (System/getenv "PATH")))]
+      (is (= "{:result :forwarded}" (str/trim out)) (str out err))
+      (is (str/includes? err (str "Handling connection for " port)) err))))
+
+(deftest a-kubectl-that-cannot-be-started-fails-the-forward
+  (fs/with-temp-dir [dir {}]
+    ;; mkfifo's directory stays on PATH, so only kubectl is missing
+    (let [tools (str (fs/parent (fs/which "mkfifo")))
+          _ (is (nil? (fs/which "kubectl" {:paths [tools]})) "the PATH the book sees holds no kubectl")
+          {:keys [out err]} (run-forward dir (free-port) "(fn [] :forwarded)" (str dir ":" tools))]
+      (is (= "{:result false}" (str/trim out)) (str out err))
+      (is (str/includes? err "could not start kubectl port-forward") err))))

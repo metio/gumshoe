@@ -94,6 +94,45 @@
           (is (< ms 5000) "max-lines ends the read, the deadline does not"))
         (finally (close))))))
 
+(deftest fetch-lines-drops-a-line-still-open-at-the-deadline
+  (let [{:keys [url close]} (serve! "HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n"
+                                    ["one\n" "tw"] 0)]
+    (try
+      (is (= ["one"] (:lines (http/fetch-lines! url {:deadline-ms 1000}))))
+      (finally (close)))))
+
+(deftest fetch-lines-reads-crlf-lines-and-a-last-line-without-newline
+  (let [{:keys [url close]} (recording! (fn [_] (response "200 OK" "a\r\nb\nc")))]
+    (try
+      (let [response (http/fetch-lines! url {:deadline-ms 3000})]
+        (is (true? (:reachable response)))
+        (is (= 200 (:status response)))
+        (is (= ["a" "b" "c"] (:lines response))))
+      (finally (close)))))
+
+(deftest fetch-lines-sends-accept-json-and-the-caller-headers
+  (let [{:keys [url requests close]} (recording! (fn [_] (response "200 OK" "{}\n")))]
+    (try
+      (let [response (http/fetch-lines! (str url "flows?watch=true") {:headers {"X-Scope-OrgID" "tenant"}
+                                                                      :deadline-ms 3000})
+            {:keys [method target headers]} (first @requests)]
+        (is (= ["{}"] (:lines response)))
+        (is (= "GET" method))
+        (is (= "/flows?watch=true" target))
+        (is (= "application/json" (get headers "accept")))
+        (is (= "tenant" (get headers "x-scope-orgid"))))
+      (finally (close)))))
+
+(deftest fetch-lines-follows-a-redirect-on-the-same-origin
+  (let [{:keys [url requests close]} (recording! (fn [{:keys [target]}]
+                                                   (if (= "/old" target)
+                                                     (response "302 Found" {"Location" "/new"} "")
+                                                     (response "200 OK" "x\n"))))]
+    (try
+      (is (= ["x"] (:lines (http/fetch-lines! (str url "old") {:deadline-ms 3000}))))
+      (is (= ["/old" "/new"] (map :target @requests)))
+      (finally (close)))))
+
 (deftest fetch-lines-keeps-what-briko-file-streaming-discards-at-the-deadline
   (testing "a stream still open at the deadline yields its lines through fetch-lines!"
     (let [{:keys [url close]} (serve! "HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n"
