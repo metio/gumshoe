@@ -147,7 +147,9 @@
    resource may name a subresource, as \"pods/eviction\" or
    \"deployments/scale\": RBAC authorises a subresource apart from its
    resource, so a book lists the one its effect writes through.
-   :kubectl-can-exec stands beside them and asks create on pods/exec."
+   :kubectl-can-exec stands beside them and asks create on pods/exec, and
+   :kubectl-can-get-if-served asks get on a type only some clusters serve
+   (a CRD) and also passes where discovery confirms the type is not served."
   [[:kubectl-can-get "get"]
    [:kubectl-can-create "create"]
    [:kubectl-can-update "update"]
@@ -157,6 +159,7 @@
 (def ^:private summary-rows
   [[:installed-tools "tools"]
    [:kubectl-can-get "kubectl get"]
+   [:kubectl-can-get-if-served "kubectl get, where the cluster serves it"]
    [:kubectl-can-create "kubectl create"]
    [:kubectl-can-update "kubectl replace (update)"]
    [:kubectl-can-patch "kubectl patch"]

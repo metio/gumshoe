@@ -29,6 +29,7 @@
                    [gumshoe.ceph-upgrade-backups-test]
                    [gumshoe.ceph-upgrade-rehearsal-test]
                    [gumshoe.subresource-prerequisites-test]
+                   [gumshoe.served-prerequisites-test]
                    [gumshoe.env-rerun-test]
                    [gumshoe.status-subresource-pin-test]
                    [gumshoe.statefulset-orphan-delete-test]
@@ -357,6 +358,7 @@
                                                          'gumshoe.ceph-upgrade-backups-test
                                                          'gumshoe.ceph-upgrade-rehearsal-test
                                                          'gumshoe.subresource-prerequisites-test
+                                                         'gumshoe.served-prerequisites-test
                                                          'gumshoe.env-rerun-test
                                                          'gumshoe.status-subresource-pin-test
                                                          'gumshoe.statefulset-orphan-delete-test

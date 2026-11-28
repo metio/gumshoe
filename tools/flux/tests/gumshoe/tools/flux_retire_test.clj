@@ -7,16 +7,21 @@
    refusal, the four ordering predicates over the plan with a negative
    control each, and the flux/retire book run through gumshoe.mutation
    against a fake cluster whose helm-controller uninstalls a HelmRelease
-   deleted with its finalizer and without a suspend. The payloads are built
-   from synthetic JSON at test time."
-  (:require [cheshire.core :as json]
+   deleted with its finalizer and without a suspend, and its prerequisites
+   held to every read the change performs. The payloads are built from
+   synthetic JSON at test time."
+  (:require [babashka.fs :as fs]
+            [babashka.process :as process]
+            [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.flow :as flow]
             [gumshoe.kubectl :as kubectl]
             [gumshoe.mutation :as mutation]
+            [gumshoe.runbook :as runbook]
             [gumshoe.shell :as shell]
             [gumshoe.testing.plan :as plan]
+            [gumshoe.testing.prerequisites :as prereqs]
             [gumshoe.testing.refusal :as refusal]
             [gumshoe.tools.flux :as flux]
             [gumshoe.tools.flux-retire :as retire]
@@ -507,3 +512,136 @@
   (polar (refusal/kubectl-get {:type flux/kustomization-type :namespace :all})
          {:items []}
          #"could not read what the change rests on"))
+
+;; --- prerequisites -------------------------------------------------------------------
+
+(def ^:private book-file "tools/flux/runbooks/flux/retire.clj")
+
+(defn- claim-types
+  "The types read-claim reads: the kinds the stored manifest names, which no
+   static prerequisite can know before the storage is read."
+  []
+  (set (map retire/claim-type (:claims (retire/manifest-claims (:manifest (retire/decode-release release-payload)))))))
+
+(defn- reads-of-every-path
+  "The argvs the fake cluster saw while the book retired a HelmRelease and
+   while it found one already gone."
+  []
+  (let [retired (estate)
+        gone (estate)]
+    (swap! gone update :objects dissoc [hr-type "wiki" "wiki"])
+    (is (true? (:result (run-book retired "wiki/wiki" {}))))
+    (is (true? (:result (run-book gone "wiki/wiki" {}))))
+    (concat (:commands @retired) (:commands @gone))))
+
+(deftest every-read-the-change-performs-is-declared
+  (let [commands (reads-of-every-path)
+        declared (:prerequisites retire/retire-named)]
+    (testing "positive control: the run read the storage Secret, the ResourceSets and a claimed object"
+      (is (every? (prereqs/kubectl-reads commands) ["secrets" storage/resourceset-type hr-type "configmap"])))
+    (is (= [] (prereqs/undeclared-reads declared commands (claim-types))))
+    (is (some #{"secrets"} (:kubectl-can-get declared))
+        "the storage Secret is read whatever the cluster serves")
+    (is (= [storage/resourceset-type] (:kubectl-can-get-if-served declared))
+        "ResourceSets are a CRD of the Flux Operator, which a cluster may not run")
+    (testing "negative control: a prerequisite list without secrets or ResourceSets is caught"
+      (is (= ["secrets"] (prereqs/undeclared-reads (update declared :kubectl-can-get #(remove #{"secrets"} %))
+                                                   commands (claim-types))))
+      (is (= [storage/resourceset-type]
+             (prereqs/undeclared-reads (dissoc declared :kubectl-can-get-if-served) commands (claim-types)))))))
+
+(defn- book-config
+  []
+  (binding [runbook/*loading* true] (load-file book-file)))
+
+(deftest the-help-names-every-read
+  (let [help (runbook/help (book-config))]
+    (is (str/includes? help (str "kubectl get: " hr-type ", " flux/kustomization-type ", secrets")) help)
+    (is (str/includes? help (str "kubectl get, where the cluster serves it: " storage/resourceset-type)) help)))
+
+(defn- checklist
+  "Every permission item of the book's prerequisite checklist, checked
+   against a cluster whose `auth can-i` denies the verb and resource pairs
+   in denied, with each label and verdict."
+  [denied]
+  (with-redefs [kubectl/resource-kind (constantly nil)
+                kubectl/current-context (constantly "ctx")
+                shell/execute (fn [& argv]
+                                (let [[verb resource] (rest (drop-while #(not= "can-i" %) argv))]
+                                  (cond
+                                    (not (some #{"can-i"} argv)) {:exit 1 :out "" :err "only can-i is answered"}
+                                    (contains? denied [verb resource]) {:exit 1 :out "no" :err ""}
+                                    :else {:exit 0 :out "yes" :err ""})))]
+    (vec (for [[heading thunk] (#'runbook/prerequisite-items (:prerequisites retire/retire-named) {})
+               :when (str/starts-with? heading "Kubernetes: can")]
+           (select-keys (thunk) [:ok? :label])))))
+
+(deftest a-role-without-get-secrets-fails-the-checklist
+  (is (every? :ok? (checklist #{})) "a role granted every right passes")
+  (is (= [{:ok? false :label "Kubernetes: cannot GET secrets"}]
+         (remove :ok? (checklist #{["get" "secrets"]})))))
+
+(defn- absolute-classpath
+  []
+  (->> (str/split (System/getProperty "java.class.path") #":")
+       (map #(str (fs/absolutize %)))
+       (str/join ":")))
+
+(def ^:private fake-kubectl
+  "A kubectl that logs every call, holds one kube context, answers `auth
+   can-i VERB RESOURCE` no for the \"VERB RESOURCE\" lines of the file DENY
+   names and yes otherwise, and fails every other call as unreachable."
+  (str/join "\n"
+            ["#!/bin/sh"
+             "printf '%s\\n' \"$*\" >> \"$KUBECTL_LOG\""
+             "if [ \"$1 $2\" = 'config view' ]; then"
+             "  printf '%s' '{\"current-context\":\"ctx\",\"contexts\":[{\"name\":\"ctx\",\"context\":{\"cluster\":\"c\"}}]}'"
+             "  exit 0"
+             "fi"
+             "case \" $* \" in *' can-i '*)"
+             "  while [ \"$1\" != can-i ]; do shift; done"
+             "  if grep -qx \"$2 $3\" \"$DENY\"; then echo no; exit 1; fi"
+             "  echo yes; exit 0;;"
+             "esac"
+             "echo 'Unable to connect to the server' >&2"
+             "exit 1"
+             ""]))
+
+(defn- run-retire
+  "Runs the flux/retire book file in a fresh bb against fake-kubectl and an
+   fzf that does nothing, with the kubectl auth can-i pairs in denied
+   refused, from a scratch directory with no env.edn. Returns the process
+   result and every kubectl call it made."
+  [dir denied]
+  (let [bin (fs/create-dirs (fs/path dir "bin"))
+        log (str (fs/path dir "kubectl.log"))
+        deny (str (fs/path dir "deny"))]
+    (spit (str (fs/path bin "kubectl")) fake-kubectl)
+    (spit (str (fs/path bin "fzf")) "#!/bin/sh\nexit 1\n")
+    (doseq [f ["kubectl" "fzf"]] (fs/set-posix-file-permissions (fs/path bin f) "rwx------"))
+    (spit deny (apply str (for [[verb resource] denied] (str verb " " resource "\n"))))
+    (spit log "")
+    (let [result @(process/process {:dir (str dir) :out :string :err :string :continue true :in ""
+                                    :extra-env {"PATH" (str bin ":" (System/getenv "PATH"))
+                                                "KUBECTL_LOG" log "DENY" deny
+                                                "HOME" (str dir) "KUBECONFIG" "/dev/null"
+                                                "GUMSHOE_ENV" (str (fs/path dir "env.edn")) "NO_COLOR" "1"}}
+                                   "bb" "-cp" (absolute-classpath) (str (fs/absolutize book-file))
+                                   "--namespace" "wiki" "--name" "wiki")]
+      (assoc result :calls (mapv #(str/split % #" ") (str/split-lines (slurp log)))))))
+
+(deftest a-role-without-get-secrets-is-refused-before-anything-is-read
+  (fs/with-temp-dir [dir {}]
+    (let [{:keys [exit out err calls]} (run-retire dir #{["get" "secrets"]})
+          output (str out err)]
+      (is (= 1 exit) output)
+      (is (str/includes? output "cannot GET secrets") output)
+      (is (str/includes? output "PREREQUISITES NOT MET - nothing was attempted") output)
+      (is (empty? (prereqs/kubectl-reads calls))
+          (str "no object was read before the refusal: " (pr-str calls)))))
+  (testing "negative control: with get secrets granted the run gets past the checklist and reads"
+    (fs/with-temp-dir [dir {}]
+      (let [{:keys [out err calls]} (run-retire dir #{})
+            output (str out err)]
+        (is (not (str/includes? output "PREREQUISITES NOT MET")) output)
+        (is (contains? (prereqs/kubectl-reads calls) hr-type) (pr-str calls))))))
