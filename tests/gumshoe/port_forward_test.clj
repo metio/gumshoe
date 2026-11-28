@@ -81,9 +81,12 @@
 
 (deftest a-kubectl-that-cannot-be-started-fails-the-forward
   (fs/with-temp-dir [dir {}]
-    ;; mkfifo's directory stays on PATH, so only kubectl is missing
-    (let [tools (str (fs/parent (fs/which "mkfifo")))
+    ;; PATH holds only a link to mkfifo, which briko needs for its pipes,
+    ;; so only kubectl is missing, also where kubectl sits beside mkfifo
+    (let [tools (str (fs/create-dirs (fs/path dir "tools")))
+          _ (fs/create-sym-link (fs/path tools "mkfifo") (fs/which "mkfifo"))
           _ (is (nil? (fs/which "kubectl" {:paths [tools]})) "the PATH the book sees holds no kubectl")
-          {:keys [out err]} (run-forward dir (free-port) "(fn [] :forwarded)" (str dir ":" tools))]
+          {:keys [out err]} (run-forward dir (free-port) "(fn [] :forwarded)" tools)]
       (is (= "{:result false}" (str/trim out)) (str out err))
-      (is (str/includes? err "could not start kubectl port-forward") err))))
+      (is (str/includes? err "could not start kubectl port-forward") err)
+      (is (not (str/includes? err "output pipes")) "briko created its pipes, so kubectl itself was missing"))))
