@@ -8,9 +8,12 @@
    lookup reads one name as a three-state result of gumshoe.reads.result,
    and classify is its pure half over one dig run:
 
-     NOERROR with records        :present, :items the record data
-     NOERROR without records     :absent, :items [], :status \"NOERROR\"
-     NXDOMAIN                    :absent, :items [], :status \"NXDOMAIN\"
+     NOERROR with records        :present, :items the record data,
+                                 :records the parsed answer lines
+     NOERROR without records     :absent, :items [], :records [],
+                                 :status \"NOERROR\"
+     NXDOMAIN                    :absent, :items [], :records [],
+                                 :status \"NXDOMAIN\"
      SERVFAIL, REFUSED, ...      :unread, :reason the status
      no response header          :unread
      dig exited non-zero         :unread
@@ -21,6 +24,15 @@
    (NOERROR, sometimes called NODATA). The ref of a result is
    {:source :dns :type :name :server :transport :reverse?}, described as
    \"TXT _dmarc.example.org at 10.0.0.1\".
+
+   :records holds one map per answer line, {:name :ttl :type :data}, as dig
+   printed it: :name and :data keep their trailing dot (strip-dot removes
+   it), :ttl is an integer, :type is dig's uppercase spelling as a string
+   (\"CNAME\", \"TXT\"), the same spelling a ref's :type uses, and :data is
+   the record data exactly as in :items, a TXT record's quoted strings
+   included. A CNAME chain answers with every link, so a caller that wants
+   the records of the asked type filters on :type. records! reads them and
+   throws for a read that did not answer, as items! does.
 
    query, ptr-records, soa-serial and answer keep the older shape: the
    records, [] for an answer without records, nil for a read that did not
@@ -79,17 +91,37 @@
   (last (keep #(second (re-find #"->>HEADER<<-.*\bstatus: ([A-Z]+)" %))
               (str/split-lines (str out)))))
 
-(defn parse-answer
-  "The record data of each answer line, as +short would print it: the fields
-   after name, TTL, class and type. Every line dig prints besides the answer
-   records - the header, section titles, `;; communications error to …` when
-   one server times out and another answers - starts with `;` and is no
-   record."
+(defn- parse-record
+  "One answer line as {:name :ttl :type :data}, or nil when the line is no
+   record: name, a TTL of digits, a class, a type and the record data,
+   separated by whitespace. The data is everything after the type, so a TXT
+   record of several quoted strings, or one with spaces inside its quotes,
+   stays whole."
+  [line]
+  (let [[name ttl class type data] (str/split (str/trim line) #"\s+" 5)]
+    (when (and data
+               (re-matches #"\d{1,10}" ttl)
+               (re-matches #"[A-Za-z]+[0-9]*" class)
+               (re-matches #"[A-Za-z][A-Za-z0-9]*" type))
+      {:name name :ttl (parse-long ttl) :type (str/upper-case type) :data data})))
+
+(defn parse-records
+  "The answer records dig printed, one {:name :ttl :type :data} per answer
+   line (see the namespace docstring). Every line dig prints besides the
+   answer records - the header, section titles, `;; communications error to
+   …` when one server times out and another answers - starts with `;` and
+   is no record."
   [out]
   (into [] (keep (fn [line]
                    (when-not (or (str/blank? line) (str/starts-with? (str/triml line) ";"))
-                     (nth (str/split (str/trim line) #"\s+" 5) 4 nil))))
+                     (parse-record line))))
         (str/split-lines (str out))))
+
+(defn parse-answer
+  "The record data of each answer line, as +short would print it: the fields
+   after name, TTL, class and type (the :data of parse-records)."
+  [out]
+  (mapv :data (parse-records out)))
 
 (defn- dig-failure
   "Why a dig run that exited non-zero failed: its exit and the last line it
@@ -107,20 +139,21 @@
 (defn classify
   "Pure: the result of one dig run {:exit :out} for ref, as the namespace
    docstring tabulates. NOERROR with records is :present with the record
-   data as :items; NOERROR without records and NXDOMAIN are :absent with
-   :items [] and the :status; every other status is :unread with the status
-   as :reason, and so are a run that printed no response header and one that
-   exited non-zero."
+   data as :items and the parsed answer lines as :records; NOERROR without
+   records and NXDOMAIN are :absent with :items [], :records [] and the
+   :status; every other status is :unread with the status as :reason, and
+   so are a run that printed no response header and one that exited
+   non-zero."
   [ref {:keys [exit out]}]
   (if-not (= 0 exit)
     (result/unread ref (dig-failure exit out))
     (let [status (response-status out)]
       (case status
-        "NOERROR" (let [records (parse-answer out)]
+        "NOERROR" (let [records (parse-records out)]
                     (if (seq records)
-                      (result/present ref {:items records :status status})
-                      (result/absent ref {:items [] :status status})))
-        "NXDOMAIN" (result/absent ref {:items [] :status status})
+                      (result/present ref {:items (mapv :data records) :records records :status status})
+                      (result/absent ref {:items [] :records [] :status status})))
+        "NXDOMAIN" (result/absent ref {:items [] :records [] :status status})
         nil (result/unread ref "dig printed no response header")
         (result/unread ref status {:status status})))))
 
@@ -148,7 +181,8 @@
    :unread and dig never runs. Never throws for a read that did not answer.
 
    Polarity: present? when a record must exist, absent? when none may, and
-   items! for the record data, which throws for a read that did not answer."
+   items! for the record data or records! for the answer lines with their
+   TTL and type, both of which throw for a read that did not answer."
   [connection type name]
   (let [ref (ref-of connection type name)]
     (if-let [args (dig-args connection type name)]
@@ -156,6 +190,17 @@
       (result/unread ref (if (:reverse? connection)
                            "not an address dig can reverse"
                            "not a name dig may be asked about")))))
+
+(defn records!
+  "The parsed answer records of an answered lookup result, [] for :absent
+   (see the namespace docstring). Throws an unread exception for an :unread
+   result, as items! does, and IllegalArgumentException for an answered
+   result that carries no :records, which no lookup or classify returns."
+  [r]
+  (result/items! r)
+  (if (contains? r :records)
+    (vec (:records r))
+    (throw (IllegalArgumentException. "not a DNS result carrying :records"))))
 
 (defn- legacy-answer
   "The older shape of a result: the records, [] when answered without any,

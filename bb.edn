@@ -240,6 +240,7 @@
                    [gumshoe.discovery-test]
                    [gumshoe.dns-test]
                    [gumshoe.dns-result-test]
+                   [gumshoe.dns-records-test]
                    [gumshoe.read-result-test]
                    [gumshoe.etcd-test]
                    [gumshoe.effect-test]
@@ -570,6 +571,7 @@
                                                          'gumshoe.discovery-test
                                                          'gumshoe.dns-test
                                                          'gumshoe.dns-result-test
+                                                         'gumshoe.dns-records-test
                                                          'gumshoe.read-result-test
                                                          'gumshoe.etcd-test
                                                          'gumshoe.effect-test
