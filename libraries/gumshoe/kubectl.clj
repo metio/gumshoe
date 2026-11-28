@@ -6,7 +6,8 @@
 
    Functions that talk to a cluster take an explicit context; everything else
    is a pure transformation over already-fetched data, so it stays testable."
-  (:require [babashka.process :as process]
+  (:require [babashka.fs :as fs]
+            [briko.process :as briko]
             [cheshire.core :as cheshire]
             [clojure.string :as str]
             [gumshoe.concurrent :as concurrent]
@@ -1219,9 +1220,16 @@
   [line]
   (some-> (re-find #"^Forwarding from 127\.0\.0\.1:(\d+) -> " (str line)) second parse-long))
 
+(defn forwarded-line-pattern
+  "The line kubectl port-forward prints once its listener on 127.0.0.1:port
+   is bound, as a regex for briko.process/wait-ready."
+  [port]
+  (re-pattern (str "^Forwarding from 127\\.0\\.0\\.1:" port " ")))
+
 (def ^:dynamic *port-forward*
-  "The kubectl port-forward process with-port-forward runs f under, so a step
-   inside f can check that the forward it talks through is still ours."
+  "The briko.process handle of the kubectl port-forward with-port-forward
+   runs f under, so a step inside f can check that the forward it talks
+   through is still ours."
   nil)
 
 (defn port-forward-alive?
@@ -1229,29 +1237,62 @@
    local port is free for any program to take, so a later request to it may
    reach somebody else's service. False outside with-port-forward."
   []
-  (boolean (some-> *port-forward* process/alive?)))
+  (boolean (some-> *port-forward* briko/alive?)))
 
-(defn- watch-forward-output
-  "Copies each line kubectl port-forward prints to stderr and delivers :bound
-   to bound once kubectl reports local-port forwarded on 127.0.0.1, or :exited
-   when its output ends first. Our stdout carries the book's result (--output
-   json), so the per-connection chatter goes to stderr; it is read
-   continuously, since an unread pipe fills up and blocks the forward."
-  [forward local-port bound]
-  (doto (Thread.
-         ^Runnable
-         (fn []
-           (try
-             (with-open [reader (java.io.BufferedReader. (java.io.InputStreamReader. ^java.io.InputStream (:out forward)))]
-               (loop []
-                 (when-let [line (.readLine reader)]
-                   (binding [*out* *err*] (println line) (flush))
-                   (when (= local-port (forwarded-port line)) (deliver bound :bound))
-                   (recur))))
-             (catch Exception _ nil)
-             (finally (deliver bound :exited)))))
-    (.setDaemon true)
-    (.start)))
+(defn- last-newline
+  "The index of the last newline among the first n bytes of bs, or -1."
+  ^long [^bytes bs ^long n]
+  (loop [i (dec n)]
+    (cond (neg? i) -1
+          (= 10 (aget bs i)) i
+          :else (recur (dec i)))))
+
+(defn- echo-lines!
+  "Copies what is written to the file at path to our stderr, from a daemon
+   thread, a whole line at a time, until stop is delivered, and then
+   whatever is left, a last line without newline included. Returns the
+   thread. Our stdout carries the book's result (--output json), so
+   kubectl's per-connection chatter goes to stderr while it arrives."
+  [path stop]
+  (let [echo! (fn [^bytes bs n]
+                (when (pos? (long n))
+                  (binding [*out* *err*]
+                    (print (String. bs 0 (int n) java.nio.charset.StandardCharsets/UTF_8))
+                    (flush))))]
+    (doto (Thread.
+           ^Runnable
+           (fn []
+             (try
+               (with-open [in (java.io.FileInputStream. (str path))]
+                 (let [buffer (byte-array 8192)
+                       pending (java.io.ByteArrayOutputStream.)]
+                   (loop []
+                     ;; stop is read before the file, so every byte written
+                     ;; before it was delivered is read before the loop ends
+                     (let [stopping? (realized? stop)
+                           n (.read in buffer)]
+                       (cond
+                         (pos? n)
+                         (do (.write pending buffer 0 n)
+                             (let [bs (.toByteArray pending)
+                                   end (inc (last-newline bs (alength bs)))]
+                               (echo! bs end)
+                               (.reset pending)
+                               (.write pending bs (int end) (int (- (alength bs) end))))
+                             (recur))
+
+                         stopping?
+                         (let [bs (.toByteArray pending)]
+                           (echo! bs (alength bs))
+                           (when (and (pos? (alength bs)) (not= 10 (aget bs (dec (alength bs)))))
+                             (binding [*out* *err*] (println) (flush))))
+
+                         :else
+                         (do (deref stop 100 nil)
+                             (recur)))))))
+               (catch Exception _ nil))))
+      (.setDaemon true)
+      (.start))))
 
 (def ^:dynamic *forward-start-ms*
   "How long kubectl port-forward may take to report its listener bound."
@@ -1263,27 +1304,31 @@
   10000)
 
 (defonce ^:private lingering-forwards
-  ;; local port -> our kubectl port-forward that was stopped but had not
-  ;; exited within *forward-exit-ms*, so a later forward on the same port
-  ;; can tell our own leftover apart from another program.
+  ;; local port -> the handle of our kubectl port-forward that was closed
+  ;; but was still alive *forward-exit-ms* later, so a later forward on the
+  ;; same port can tell our own leftover apart from another program.
   (atom {}))
 
 (defn- exited-within?
-  "Whether forward's process exited, waiting at most ms for it."
+  "Whether forward is no longer alive, waiting at most ms for it."
   [forward ms]
-  (.waitFor ^Process (:proc forward) (long ms) java.util.concurrent.TimeUnit/MILLISECONDS))
+  (let [deadline (+ (System/nanoTime) (* 1000000 (long ms)))]
+    (loop []
+      (cond
+        (not (briko/alive? forward)) true
+        (<= deadline (System/nanoTime)) false
+        :else (do (Thread/sleep 50) (recur))))))
 
 (defn- stop-forward!
-  "Takes forward down and waits for it to exit, so the next forward on
-   local-port can bind it at once: kubectl releases the port only when it
-   exits, and destroy-tree only signals it. A forward still running after
-   *forward-exit-ms* is remembered as holding local-port and stays tracked,
-   so the JVM's shutdown still takes it down."
+  "Closes forward, which kills kubectl, its descendants and every holder of
+   its output, and waits for it to exit, so the next forward on local-port
+   can bind it at once: kubectl releases the port only when it exits. A
+   forward still alive *forward-exit-ms* later is remembered as holding
+   local-port."
   [forward resource local-port]
-  (process/destroy-tree forward)
+  (briko/close forward)
   (if (exited-within? forward *forward-exit-ms*)
-    (do (swap! lingering-forwards (fn [m] (if (identical? forward (get m local-port)) (dissoc m local-port) m)))
-        (shell/untrack-child! forward))
+    (swap! lingering-forwards (fn [m] (if (identical? forward (get m local-port)) (dissoc m local-port) m)))
     (do (swap! lingering-forwards assoc local-port forward)
         (stdout/error (format (str "kubectl port-forward to %s did not exit within %d seconds of being stopped;"
                                    " local port %d is still held by our own forward")
@@ -1296,60 +1341,86 @@
   (when-let [forward (get @lingering-forwards local-port)]
     (if (exited-within? forward *forward-exit-ms*)
       (do (swap! lingering-forwards dissoc local-port)
-          (shell/untrack-child! forward)
           nil)
       (format (str "local port %d is still held by our own earlier kubectl port-forward, which has not exited"
                    " since it was stopped - leave --port out to use a free port")
               local-port))))
 
+(defn- await-forward
+  "Waits until forward reported local-port bound on 127.0.0.1 and the port
+   accepts, within *forward-start-ms*. Returns :ready, :exited when kubectl
+   exited first, or :timeout."
+  [forward local-port]
+  (let [deadline (+ (System/currentTimeMillis) *forward-start-ms*)]
+    (try
+      (briko/wait-ready forward {:pattern (forwarded-line-pattern local-port)
+                                 :timeout-ms *forward-start-ms*
+                                 :close-on-refusal? false})
+      (loop []
+        (cond
+          (not (briko/alive? forward)) :exited
+          (port-open? local-port) (if (briko/alive? forward) :ready :exited)
+          (> (System/currentTimeMillis) deadline) :timeout
+          :else (do (Thread/sleep 100) (recur))))
+      (catch clojure.lang.ExceptionInfo e
+        (case (:type (ex-data e))
+          :briko.process/exited-before-ready :exited
+          :briko.process/ready-timeout :timeout
+          (throw e))))))
+
+(defn- run-on-forward
+  "Runs f on a started forward once it is ready, or reports why it never
+   was. Returns f's result, or false."
+  [forward resource local-port f]
+  (case (await-forward forward local-port)
+    :exited
+    (do (stdout/error (format "kubectl port-forward to %s exited before the port opened" resource))
+        false)
+
+    :timeout
+    (do (stdout/error (format "port-forward to %s did not report 127.0.0.1:%d bound within %d seconds"
+                              resource local-port (quot *forward-start-ms* 1000)))
+        false)
+
+    :ready
+    (let [result (binding [*port-forward* forward] (f))]
+      (if (briko/alive? forward)
+        result
+        (do (stdout/error (format (str "kubectl port-forward to %s exited while it was in use;"
+                                       " what went through local port %d afterwards may have reached another program")
+                                  resource local-port))
+            false)))))
+
 (defn- forward-and-run
-  "with-port-forward once local-port passed its checks."
+  "with-port-forward once local-port passed its checks. kubectl's stdout
+   goes to a private file, echoed to our stderr while it grows; its stderr
+   is inherited. briko.process stops the forward when the JVM shuts down,
+   also on SIGTERM, before the finally below could."
   [context namespace resource local-port remote-port f]
-  (let [forward (try
-                  ;; shell/start takes the options first and the
-                  ;; command as separate strings; a vector after the
-                  ;; options would be run as one program named "[kubectl".
-                  ;; Tracked, so a SIGTERM that halts the JVM before the
-                  ;; finally below runs still takes the forward down
-                  ;; instead of leaving it holding local-port.
-                  (shell/track-child!
-                   (apply shell/start {:out :stream :err :inherit}
-                          ["kubectl" (str "--context=" context) (str "--namespace=" namespace)
-                           "port-forward" resource
-                           (str local-port ":" remote-port)]))
-                  (catch Exception e
-                    (stdout/error (format "could not start kubectl port-forward: %s" (ex-message e)))
-                    nil))]
-    (if (nil? forward)
-      false
-      (try
-        (let [bound (promise)
-              deadline (+ (System/currentTimeMillis) *forward-start-ms*)]
-          (watch-forward-output forward local-port bound)
-          (loop []
-            (cond
-              (not (process/alive? forward))
-              (do (stdout/error (format "kubectl port-forward to %s exited before the port opened" resource))
-                  false)
-
-              (and (= :bound (deref bound 0 nil)) (port-open? local-port) (process/alive? forward))
-              (let [result (binding [*port-forward* forward] (f))]
-                (if (process/alive? forward)
-                  result
-                  (do (stdout/error (format (str "kubectl port-forward to %s exited while it was in use;"
-                                                 " what went through local port %d afterwards may have reached another program")
-                                            resource local-port))
-                      false)))
-
-              (> (System/currentTimeMillis) deadline)
-              (do (stdout/error (format "port-forward to %s did not report 127.0.0.1:%d bound within %d seconds"
-                                        resource local-port (quot *forward-start-ms* 1000)))
-                  false)
-
-              :else (do (Thread/sleep 100)
-                        (recur)))))
-        (finally
-          (stop-forward! forward resource local-port))))))
+  (let [dir (fs/create-temp-dir {:prefix "gumshoe-forward-"})
+        out (str (fs/path dir "out"))]
+    (try
+      (let [forward (try
+                      (shell/start-alongside ["kubectl" (str "--context=" context) (str "--namespace=" namespace)
+                                              "port-forward" resource
+                                              (str local-port ":" remote-port)]
+                                             {:inherit-err? true :out {:file out}})
+                      (catch Exception e
+                        {:failure (or (ex-message e) (str e))}))]
+        (if-not (:launched? forward)
+          (do (stdout/error (format "could not start kubectl port-forward: %s"
+                                    (or (:failure forward) (str/trim (str (:err (briko/output forward)))))))
+              false)
+          (let [stop-echo (promise)
+                ^Thread echo (echo-lines! out stop-echo)]
+            (try
+              (run-on-forward forward resource local-port f)
+              (finally
+                (stop-forward! forward resource local-port)
+                (deliver stop-echo true)
+                (.join echo 1000))))))
+      (finally
+        (try (fs/delete-tree dir) (catch Exception _ nil))))))
 
 (defn with-port-forward
   "Runs f while the service's remote-port is forwarded to local-port, then

@@ -253,6 +253,7 @@
     (with-redefs-fn {#'shell/capture capture
                      #'shell/safe-stream (fn [_opts args] (unstubbed! calls (argv-of args)))
                      #'shell/start refuse
+                     #'shell/start-alongside refuse
                      #'process/process refuse
                      #'process/shell refuse
                      #'process/sh refuse

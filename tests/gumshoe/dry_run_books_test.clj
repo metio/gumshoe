@@ -409,6 +409,9 @@
                   http/request (fn [method url _]
                                  (log! {:http {:method method :url url}})
                                  {:reachable false :error "offline: dry-run harness"})
+                  http/fetch-lines! (fn [url & _]
+                                      (log! {:http {:method :get :url url}})
+                                      {:reachable false :error "offline: dry-run harness"})
                   http-client/request (logged-http-client nil)
                   http-client/get (logged-http-client :get)
                   http-client/head (logged-http-client :head)
