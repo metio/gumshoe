@@ -14,6 +14,7 @@
    provider). A legacy `:secrets` with bare templates and no :provider is read as
    :command, so older configs keep working."
   (:require [babashka.fs :as fs]
+            [briko.paths :as paths]
             [clojure.string :as str]
             [gumshoe.config :as config]
             [gumshoe.shell :as shell]
@@ -89,9 +90,17 @@
    :available? (fn [path] (not (str/blank? (run "gopass" "search" path))))})
 
 (defn- home-relative
+  "The store directory env-var names, else default-subpath under the home
+   directory briko.paths finds ($HOME, then user.home), as pass and passage
+   look for it. Without any home the store is looked for relative to the
+   working directory, where it is never found, so lookups come back empty
+   instead of failing while this namespace loads."
   [env-var default-subpath]
   (or (not-empty (System/getenv env-var))
-      (str (fs/path (System/getProperty "user.home") default-subpath))))
+      (str (fs/path (try (paths/home)
+                         (catch clojure.lang.ExceptionInfo e
+                           (if (paths/refusal? e) "" (throw e))))
+                    default-subpath))))
 
 (defn- pass-like
   "pass and passage: `<binary> show <path>` prints the secret (first line the

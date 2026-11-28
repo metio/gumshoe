@@ -17,10 +17,20 @@
 
 (def ^:private config-source "libraries/gumshoe/config.clj")
 
+(def ^:private briko-reads
+  "The XDG variables a briko.paths function reads on gumshoe's behalf, by the
+   call that names it."
+  {"paths/config-home" "XDG_CONFIG_HOME"
+   "paths/state-home" "XDG_STATE_HOME"})
+
 (defn- read-by
-  "The environment variables a source file reads with System/getenv."
+  "The environment variables a source file reads with System/getenv, or
+   through a briko.paths function."
   [file]
-  (set (map second (re-seq #"System/getenv\s+\"([A-Za-z0-9_]+)\"" (slurp (str file))))))
+  (let [text (slurp (str file))]
+    (into (set (map second (re-seq #"System/getenv\s+\"([A-Za-z0-9_]+)\"" text)))
+          (keep (fn [[call variable]] (when (str/includes? text call) variable)))
+          briko-reads)))
 
 (defn- read-by-libraries
   []
@@ -40,13 +50,15 @@
 
 (defn- search-paths-with
   "The search paths gumshoe.config computes in a fresh bb process with
-   GUMSHOE_ENV, XDG_CONFIG_HOME and user.home set to known markers, so a
+   GUMSHOE_ENV, XDG_CONFIG_HOME, HOME and user.home set to known markers, so a
    documented path can be compared with the one the code builds."
   []
-  (let [classpath (str (fs/absolutize "libraries"))
+  (let [classpath (str/join ":" (map #(str (fs/absolutize %))
+                                     (str/split (System/getProperty "java.class.path") #":")))
         {:keys [out]} (process/shell {:out :string :err :string
                                       :extra-env {"GUMSHOE_ENV" "/marker-env/env.edn"
-                                                  "XDG_CONFIG_HOME" "/marker-xdg"}}
+                                                  "XDG_CONFIG_HOME" "/marker-xdg"
+                                                  "HOME" "/marker-home"}}
                                      "bb" "-Duser.home=/marker-home" "-cp" classpath "-e"
                                      "(require 'gumshoe.config) (prn (#'gumshoe.config/search-paths))")]
     (edn/read-string out)))

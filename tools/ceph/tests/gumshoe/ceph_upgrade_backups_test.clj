@@ -5,10 +5,10 @@
   "The ceph upgrade playbook keeps its local backups, auth export and its
    keys among them, owner-only."
   (:require [babashka.fs :as fs]
+            [briko.fs :as bfs]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [gumshoe.ceph :as ceph]
-            [gumshoe.files :as files]
             [gumshoe.runbook :as runbook]
             [gumshoe.stdout :as stdout]))
 
@@ -31,11 +31,11 @@
     (let [directory (str (fs/path dir "ceph-backups" "mon-1-20261125-100000"))
           {:keys [result out]} (backed-up directory #(str "output of " (str/join " " %)))]
       (is (true? result))
-      (is (= "rwx------" (files/mode directory)))
-      (is (= "rwx------" (files/mode (fs/path dir "ceph-backups"))))
+      (is (= "rwx------" (bfs/permissions directory)))
+      (is (= "rwx------" (bfs/permissions (fs/path dir "ceph-backups"))))
       (doseq [file (fs/list-dir directory)]
         (testing (str (fs/file-name file))
-          (is (= "rw-------" (files/mode file)))))
+          (is (= "rw-------" (bfs/permissions file)))))
       (is (= "output of auth export" (slurp (str (fs/path directory "auth-export.txt")))))
       (is (str/includes? out "auth-export.txt holds the keys of every ceph client")))))
 

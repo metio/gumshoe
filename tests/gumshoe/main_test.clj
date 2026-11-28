@@ -118,15 +118,23 @@
     gumshoe {:requires ([gumshoe.main :as main])
              :task (System/exit (main/front-door *command-line-args*))}}")
 
+(defn- briko-source
+  "The directory of this run's classpath holding briko's sources, which
+   gumshoe's libraries require."
+  []
+  (some #(when (fs/exists? (fs/path % "briko" "edn.clj")) %)
+        (str/split (System/getProperty "java.class.path") #":")))
+
 (defn- casebook-edn!
-  "A casebook whose :paths reach gumshoe's libraries and a pinned upstream's
-   books. babashka accepts only relative :paths, so both are written relative
-   to the casebook."
+  "A casebook whose :paths reach gumshoe's libraries, briko and a pinned
+   upstream's books. babashka accepts only relative :paths, so all are
+   written relative to the casebook."
   [casebook upstream]
   (let [relative #(str (fs/relativize (fs/canonicalize casebook) (fs/canonicalize %)))]
     (spit (str (fs/path casebook "bb.edn"))
-          (format "{:paths [%s \"runbooks\" %s]\n :tasks %s}"
+          (format "{:paths [%s %s \"runbooks\" %s]\n :tasks %s}"
                   (pr-str (relative "libraries"))
+                  (pr-str (relative (briko-source)))
                   (pr-str (relative (fs/path upstream "runbooks")))
                   door-tasks))))
 

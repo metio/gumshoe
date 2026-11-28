@@ -12,22 +12,19 @@
      - every tagged literal is refused, #inst and #uuid included, because a
        tag reader is code that runs while the file is read;
      - the file is at most max-bytes long and nests at most max-depth
-       collections deep, so an oversized or deeply nested file is refused
-       before anything else looks at it;
+       levels deep, judged before the reader runs, so an oversized or
+       deeply nested file is refused before anything else looks at it;
      - it holds exactly one form, a map, and is valid UTF-8.
 
    Every refusal is an ex-info carrying ::refused, the :file and the
-   :reason, with a message naming both. What the map means is not judged
-   here: gumshoe.edn-book compiles it with gumshoe.dsl/compile, which
-   refuses any key, word or symbol outside its vocabulary. This namespace
-   requires nothing beyond clojure.edn, so a launcher listing books reads
-   their descriptions without loading the engine."
-  (:require [babashka.fs :as fs]
-            [clojure.edn :as edn]
-            [clojure.java.io :as io])
-  (:import (java.io IOException PushbackReader StringReader)
-           (java.nio ByteBuffer)
-           (java.nio.charset CharacterCodingException CodingErrorAction StandardCharsets)))
+   :reason, with a message naming both. briko.edn does the reading and
+   enforces the bounds; this namespace sets the bounds a book gets, adds
+   the one-map rule and words each refusal for an operator. What the map
+   means is not judged here: gumshoe.edn-book compiles it with
+   gumshoe.dsl/compile, which refuses any key, word or symbol outside its
+   vocabulary. This namespace requires nothing of the engine, so a
+   launcher listing books reads their descriptions without loading it."
+  (:require [briko.edn :as edn]))
 
 (def max-bytes
   "The largest book file read, in bytes. gumshoe's own EDN books are
@@ -39,6 +36,9 @@
    books nest 6 deep."
   32)
 
+(def ^:private read-options
+  {:max-bytes max-bytes :max-depth max-depth})
+
 (defn- refuse!
   [file reason]
   (throw (ex-info (str file ": " reason) {::refused true :file (str file) :reason reason})))
@@ -48,92 +48,46 @@
   [e]
   (boolean (::refused (ex-data e))))
 
-(defn- bounded-bytes
-  "The file's bytes, read up to one past max-bytes, so a file that grows
-   between a size check and the read is still refused. A file that exists
-   and cannot be read (its mode, its owner, an SELinux denial) is refused
-   like every other unreadable book."
-  [file]
-  (let [bytes (try
-                (with-open [in (io/input-stream (fs/file file))]
-                  (.readNBytes in (int (inc max-bytes))))
-                (catch IOException e
-                  (refuse! file (str "cannot be read: " (or (ex-message e) (str e))))))]
-    (when (> (alength bytes) max-bytes)
-      (refuse! file (format "is larger than %d bytes - a book file is at most %d bytes" max-bytes max-bytes)))
-    bytes))
+(defn- underlying-message
+  "The message of the first cause of a briko.edn refusal that is not itself
+   a refusal: the reader's or the file system's own words."
+  [e]
+  (let [cause (some #(when-not (edn/refusal? %) %) (rest (take-while some? (iterate ex-cause e))))]
+    (when cause (or (ex-message cause) (str cause)))))
 
-(defn- utf-8
-  [file bytes]
-  (let [decoder (doto (.newDecoder StandardCharsets/UTF_8)
-                  (.onMalformedInput CodingErrorAction/REPORT)
-                  (.onUnmappableCharacter CodingErrorAction/REPORT))]
-    (try
-      (str (.decode decoder (ByteBuffer/wrap bytes)))
-      (catch CharacterCodingException _
-        (refuse! file "is not valid UTF-8")))))
-
-(defn- tag-refusal
-  [tag]
-  (fn [_]
-    (throw (ex-info (format "holds the tagged literal #%s - a book is plain EDN, and no tag is read" tag)
-                    {::tag tag}))))
-
-(def ^:private read-options
-  ;; :readers shadows the two tags clojure.edn reads by default; :default
-  ;; refuses every other tag.
-  {:readers {'inst (tag-refusal 'inst) 'uuid (tag-refusal 'uuid)}
-   :default (fn [tag _] ((tag-refusal tag) nil))})
-
-(defn- nested-deeper?
-  "Whether x nests collections deeper than limit, a map's keys and values
-   one level below the map. Walks with an explicit stack, so a deep value
-   cannot overflow the call stack here."
-  [x limit]
-  (loop [stack [[x 1]]]
-    (if-let [[v depth] (peek stack)]
-      (cond
-        (> depth limit) true
-        (coll? v) (recur (into (pop stack)
-                               (map (fn [child] [child (inc depth)]))
-                               (if (map? v) (mapcat identity v) v)))
-        :else (recur (pop stack)))
-      false)))
-
-(defn- read-forms
-  "The first form of text and whether another follows it."
-  [file text]
-  (let [eof (Object.)
-        in (PushbackReader. (StringReader. text))
-        read-one #(edn/read (assoc read-options :eof eof) in)]
-    (try
-      (let [form (read-one)]
-        [form eof (when-not (identical? form eof) (read-one))])
-      (catch StackOverflowError _
-        (refuse! file (format "nests too deep to read - a book nests at most %d collections" max-depth)))
-      (catch Exception e
-        (refuse! file (if-let [tagged (some #(when (::tag (ex-data %)) %) (take-while some? (iterate ex-cause e)))]
-                        (ex-message tagged)
-                        (str "is not plain EDN: " (or (ex-message e) (str e)))))))))
+(defn- reason
+  "How a briko.edn refusal reads in a book refusal."
+  [e]
+  (let [{:keys [type tag limit]} (ex-data e)]
+    (case type
+      :briko.edn/not-a-file "is not a file"
+      :briko.edn/unreadable (str "cannot be read: " (underlying-message e))
+      :briko.edn/too-large (format "is larger than %d bytes - a book file is at most %d bytes" max-bytes max-bytes)
+      :briko.edn/invalid-utf8 "is not valid UTF-8"
+      :briko.edn/too-deep (format "nests deeper than %d collections" max-depth)
+      :briko.edn/tag-refused (format "holds the tagged literal #%s - a book is plain EDN, and no tag is read" tag)
+      :briko.edn/number-too-long (format "is not plain EDN: it holds a number literal longer than %d characters" limit)
+      :briko.edn/no-form "holds no form - a book is one map"
+      :briko.edn/trailing-form "holds more than one form - a book is one map"
+      (str "is not plain EDN: " (or (underlying-message e) (ex-message e))))))
 
 (defn read-book
   "The map a book file holds, read as described in the namespace doc, or
    an ex-info carrying ::refused naming the file and why."
   [file]
-  (when-not (fs/regular-file? file)
-    (refuse! file "is not a file"))
-  (let [text (utf-8 file (bounded-bytes file))
-        [form eof more] (read-forms file text)]
-    (cond
-      (identical? form eof) (refuse! file "holds no form - a book is one map")
-      (not (identical? more eof)) (refuse! file "holds more than one form - a book is one map")
-      (not (map? form)) (refuse! file (format "holds %s, not a map - a book is one map"
-                                              (cond (vector? form) "a vector"
-                                                    (seq? form) "a list"
-                                                    (set? form) "a set"
-                                                    :else (pr-str form))))
-      (nested-deeper? form max-depth) (refuse! file (format "nests deeper than %d collections" max-depth))
-      :else form)))
+  (let [form (try
+               (edn/read-file file read-options)
+               (catch clojure.lang.ExceptionInfo e
+                 (if (edn/refusal? e)
+                   (refuse! file (reason e))
+                   (throw e))))]
+    (if (map? form)
+      form
+      (refuse! file (format "holds %s, not a map - a book is one map"
+                            (cond (vector? form) "a vector"
+                                  (seq? form) "a list"
+                                  (set? form) "a set"
+                                  :else (pr-str form)))))))
 
 (defn description-of
   "The :description a book file declares, when it reads and declares one

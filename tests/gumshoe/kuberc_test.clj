@@ -10,6 +10,7 @@
    answers a delete with an interactive prompt."
   (:require [babashka.fs :as fs]
             [babashka.process :as process]
+            [briko.process :as briko]
             [clojure.edn :as edn]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
@@ -17,14 +18,18 @@
             [gumshoe.reproducer :as reproducer]
             [gumshoe.shell :as shell]))
 
-;; --- in process: every wrapper hands babashka.process the setting -----------------------
+;; --- in process: every wrapper hands babashka.process or briko.process the setting -----------------------
 
 (deftest every-shell-wrapper-starts-its-child-with-kuberc-off
   (let [seen (atom [])
         record (fn [opts & _] (swap! seen conj (get-in opts [:extra-env "KUBERC"]))
                  (delay {:exit 0 :out "" :err ""}))]
     (with-redefs [process/process record
-                  process/shell (fn [opts & args] @(apply record opts args))]
+                  process/shell (fn [opts & args] @(apply record opts args))
+                  ;; captured commands run through briko.process
+                  briko/run (fn [_argv opts]
+                              (swap! seen conj (get-in opts [:extra-env "KUBERC"]))
+                              {:exit 0 :out "" :err "" :launched? true})]
       (shell/execute "kubectl" "get" "pods")
       (shell/execute-with-stdin "{}" "kubectl" "apply" "-f" "-")
       (shell/execute-env {"PGPASSWORD" "x"} "kubectl" "exec" "p")
@@ -40,7 +45,7 @@
 
 (deftest a-caller-cannot-hand-a-child-its-own-kuberc
   (let [seen (atom nil)]
-    (with-redefs [process/process (fn [opts & _] (reset! seen (:extra-env opts)) (delay {:exit 0}))]
+    (with-redefs [briko/run (fn [_argv opts] (reset! seen (:extra-env opts)) {:exit 0 :out "" :err "" :launched? true})]
       (shell/execute-env {"KUBERC" "/home/op/.kube/kuberc" "PGPASSWORD" "x"} "kubectl" "get" "pods"))
     (is (= {"KUBERC" "off" "PGPASSWORD" "x"} @seen))))
 

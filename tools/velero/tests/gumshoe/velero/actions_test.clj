@@ -160,7 +160,8 @@
         value (actions/valid-label-value long-name)]
     (is (= 63 (count value)))
     (is (str/starts-with? value (apply str (repeat 57 "a"))))
-    (is (re-matches #"[0-9a-f]{6}" (subs value 57))))
+    (is (re-matches #"[0-9a-f]{6}" (subs value 57)))
+    (is (= "6bd5e5" (subs value 57)) "the first 6 hex digits of the name's SHA-256, as coreutils sha256sum computes them"))
   (is (= 63 (count (actions/valid-label-value (apply str (repeat 63 "b"))))) "63 fits as is"))
 
 (deftest delete-request-mirrors-the-cli

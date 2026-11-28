@@ -16,6 +16,7 @@
    permission checks."
   (:refer-clojure :exclude [check])
   (:require [babashka.fs :as fs]
+            [briko.paths :as paths]
             [clojure.string :as str]
             [gumshoe.command :as command]))
 
@@ -56,11 +57,12 @@
 
 (defn directory-path
   "The absolute, normalized path an option's directory value names: a leading
-   `~` is the home directory and a relative path is resolved against the
-   working directory. A book that hands the value to a process resolves it with
+   `~` is the home directory ($HOME, then user.home, by briko.paths) and a
+   relative path is resolved against the working directory; `~user` is left
+   as written. A book that hands the value to a process resolves it with
    this too, so it uses the directory its prerequisite checked."
   [value]
-  (str (fs/normalize (fs/absolutize (fs/expand-home (str value))))))
+  (str (fs/normalize (fs/absolutize (paths/expand-home (str value))))))
 
 (defn- path-declaration
   "An :existing-paths entry as {:option :writable}, or nil when the entry is

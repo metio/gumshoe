@@ -12,4 +12,9 @@
 ;;
 ;; babashka resolves git deps via tools.deps, which needs a JVM (@jdk25 in
 ;; .breto.edn provides it); the resolution is cached under ~/.gitlibs afterwards.
-{:paths ["libraries" "runbooks" "playbooks" "firebooks"]}
+;;
+;; briko is metio's shared library: bounded EDN reading, subprocesses with
+;; deadlines, XDG paths, atomic and private writes, digests. babashka carries
+;; babashka.fs and babashka.process, which briko builds on, itself.
+{:paths ["libraries" "runbooks" "playbooks" "firebooks"]
+ :deps {io.github.metio/briko {:git/sha "94bb776062a8fb35676600752b1d28d525dedc1c"}}}

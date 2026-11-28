@@ -39,6 +39,7 @@
             [gumshoe.kubectl :as kubectl]
             [gumshoe.outcome :as outcome]
             [gumshoe.runbook :as runbook]
+            [gumshoe.shell :as shell]
             [gumshoe.ui :as ui]
             [gumshoe.verify :as verify]))
 
@@ -157,15 +158,25 @@
 
 (defn- faked
   "A replacement for a babashka.process function that logs the command line
-   and starts the fake executable in its place."
+   and starts the fake executable in its place. briko.process, which runs
+   gumshoe's captured commands, calls it with one map naming the command as
+   :cmd and the whole environment as :env; that call keeps its redirections
+   and gets the fake as its :cmd."
   [original fake]
   (fn [& args]
-    (let [[opts argv] (split-call args)]
-      (log! {:command argv})
-      ;; the fake reads no input, so a string fed to it would only fail to copy
-      (original (update (dissoc opts :in) :extra-env merge {"GUMSHOE_FAKE_OUT" (answer argv)
-                                               "GUMSHOE_FAKE_EXIT" "0"})
-                fake (str "faked:" (first argv))))))
+    (if-let [argv (and (map? (first args)) (empty? (rest args)) (:cmd (first args)))]
+      (let [argv (mapv str argv)]
+        (log! {:command argv})
+        (original (-> (first args)
+                      (assoc :cmd [fake (str "faked:" (first argv))])
+                      (update :env merge {"GUMSHOE_FAKE_OUT" (answer argv)
+                                          "GUMSHOE_FAKE_EXIT" "0"}))))
+      (let [[opts argv] (split-call args)]
+        (log! {:command argv})
+        ;; the fake reads no input, so a string fed to it would only fail to copy
+        (original (update (dissoc opts :in) :extra-env merge {"GUMSHOE_FAKE_OUT" (answer argv)
+                                                 "GUMSHOE_FAKE_EXIT" "0"})
+                  fake (str "faked:" (first argv)))))))
 
 ;; --- what counts as a read ----------------------------------------------------------------
 
@@ -487,6 +498,17 @@
         (is (re-find #"\"name\":\"web\""
                      (:out @(process/process {:out :string} "kubectl" "get" "pods" "-o" "json"))))))
     (is (= [{:command ["upterm" "host"]} {:command ["kubectl" "get" "pods" "-o" "json"]}] @log))))
+
+(deftest the-harness-replaces-every-captured-command
+  (let [process-fn process/process
+        log (atom [])
+        fake (fake-executable!)]
+    (binding [*log* log]
+      (with-redefs [process/process (faked process-fn fake)]
+        (is (re-find #"\"name\":\"web\""
+                     (:out (shell/execute "kubectl" "get" "pods" "-o" "json"))))
+        (is (= 0 (:exit (shell/execute-with-stdin "{}" "kubectl" "apply" "-f" "-"))))))
+    (is (= [{:command ["kubectl" "get" "pods" "-o" "json"]} {:command ["kubectl" "apply" "-f" "-"]}] @log))))
 
 (deftest a-confirmation-alone-never-lets-a-dry-run-act
   (testing "the etcd performance check shows its command and runs nothing"

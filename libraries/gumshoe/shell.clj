@@ -15,7 +15,12 @@
 
    A book must also always return. A captured command - a probe gathering data
    to report - is bounded by *timeout-ms*: if the tool or the network wedges it
-   is killed and surfaced as a non-zero exit, never an endless hang. Streaming
+   is killed and surfaced as a non-zero exit, never an endless hang. Captured
+   commands run through briko.process, which reads the output through named
+   pipes, so a command counts as finished only once it has exited and every
+   process holding its stdout or stderr has closed it: a background child left
+   holding the output makes the command a timeout, every time, and is killed
+   with it. Streaming
    commands (run-with-output) are exempt: those are the deliberately
    long-running, interactive foreground operations - a port-forward, an ssh
    session, a shared upterm terminal - and must run until the operator ends
@@ -33,6 +38,7 @@
    back from its live stderr, so the caller shows them under its own line
    once the step is done."
   (:require [babashka.process :as process]
+            [briko.process :as briko]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [gumshoe.child-output :as child-output]
@@ -190,10 +196,37 @@
             (format "not running '%s': the thread was cancelled"
                     (str/join " " (map str (flatten args))))))))
 
+(def max-out-bytes
+  "The most stdout a captured command keeps: 256 MiB, far above the largest
+   listing a cluster answers, so the bound only stops a runaway program from
+   exhausting memory. Output past it is read and dropped, and the command
+   answers exit 125 with the reason in :err, so a cut listing is never read
+   as a whole one."
+  (* 256 1024 1024))
+
+(def max-err-bytes
+  "The most stderr a captured command keeps: its first 4 MiB."
+  (* 4 1024 1024))
+
+(def ^:private launch-prefix "could not run the program: ")
+
+(defn- briko-options
+  "briko.process/run's options for a capture with babashka.process-style opts
+   (:in, :extra-env), bounded by *timeout-ms*, or by nothing when it is nil."
+  [opts]
+  (cond-> {:timeout-ms (or *timeout-ms* :none)
+           :extra-env (:extra-env (child-opts opts))
+           :max-out-bytes max-out-bytes
+           :max-err-bytes max-err-bytes}
+    (some? (:in opts)) (assoc :in (:in opts))))
+
 (defn- capture
-  "Runs a command capturing its output, bounded by *timeout-ms*. On expiry the
-   whole process tree is destroyed and a timeout result is returned, so a
-   caller waiting on data always gets an answer. A nil bound runs unbounded.
+  "Runs a command capturing its output through briko.process/run, bounded by
+   *timeout-ms*. On expiry the whole process tree, and every process still
+   holding the command's output, is killed and a timeout result is returned,
+   so a caller waiting on data always gets an answer. A nil bound runs
+   unbounded. stdin carries :in, or is closed at once, so a command that
+   reads it sees end of file instead of waiting for the deadline.
 
    A thread interrupted while it waits - a collector or a post-check whose
    deadline cancelled it - destroys the process tree and rethrows the
@@ -203,34 +236,46 @@
 
    Only a command that started is recorded: one refused on a cancelled
    thread, or one that could not be launched, contributed nothing to what the
-   operator saw, and the reproducer would replay it as if it had."
+   operator saw, and the reproducer would replay it as if it had.
+
+   The result is {:exit :out :err}: 127 when the program could not be
+   launched, 124 at the deadline, 125 when stdout outgrew max-out-bytes, the
+   program's own exit otherwise."
   [opts args]
   (offline/check! args)
   (refuse-when-interrupted! args)
-  (let [proc (try (apply process/process (child-opts opts) args)
-                  (catch Exception e e))]
-    (if (instance? Exception proc)
-      (launch-failure args proc)
-      (do
-        (record! args)
-        (track-child! proc)
+  (let [argv (mapv str (flatten args))
+        {:keys [exit out err launched? timed-out? out-truncated?]}
         (try
-          (if-let [ms *timeout-ms*]
-            (let [result (deref (future @proc) ms ::timeout)]
-              (if (= ::timeout result)
-                (do (process/destroy-tree proc)
-                    (timeout-failure args ms))
-                (doto result (-> :err note-warnings!))))
-            (doto @proc (-> :err note-warnings!)))
-          (catch InterruptedException e
-            (destroy-quietly proc)
-            (.interrupt (Thread/currentThread))
-            (throw e))
-          (catch Exception e
-            (destroy-quietly proc)
-            (launch-failure args e))
-          (finally
-            (untrack-child! proc)))))))
+          (briko/run argv (briko-options opts))
+          (catch clojure.lang.ExceptionInfo e
+            (if (briko/refusal? e)
+              {:exit 127 :launched? false :err (ex-message e)}
+              (throw e))))]
+    (cond
+      (not launched?)
+      (launch-failure args (Exception. (let [err (str err)]
+                                         (if (str/starts-with? err launch-prefix)
+                                           (subs err (count launch-prefix))
+                                           err))))
+
+      timed-out?
+      (do (record! args)
+          (timeout-failure args *timeout-ms*))
+
+      out-truncated?
+      (do (record! args)
+          (note-warnings! err)
+          {:exit 125
+           :out ""
+           :err (str err (when-not (str/blank? err) "\n")
+                     (format "'%s' wrote more than %d bytes to stdout; its output was dropped"
+                             (str/join " " argv) max-out-bytes))})
+
+      :else
+      (do (record! args)
+          (note-warnings! err)
+          {:exit exit :out out :err err}))))
 
 (defn start
   "Starts a child the caller manages itself - streams it reads, a lifetime it

@@ -19,9 +19,9 @@
    confirmed. --status just shows the current upgrade progress and changes
    nothing."
   (:require [babashka.fs :as fs]
+            [briko.fs :as bfs]
             [clojure.string :as str]
             [gumshoe.ceph :as ceph]
-            [gumshoe.files :as files]
             [gumshoe.flow :as flow]
             [gumshoe.announce :as announce]
             [gumshoe.runbook :as runbook]
@@ -69,7 +69,7 @@
    The directory is created rwx------ and must not exist yet, and every file
    is created rw-------, because auth-export holds the cluster's keys."
   [connection directory]
-  (if-let [problem (try (files/create-private-directory! directory) nil
+  (if-let [problem (try (bfs/create-private-directory! directory) nil
                         (catch Exception e (or (ex-message e) (str e))))]
     (do (stdout/error (format "could not create the backup directory %s owner-only - refusing to upgrade without backups: %s"
                               directory problem))
@@ -79,7 +79,7 @@
                     (let [output (apply ceph/ceph-stdout connection args)
                           file (str (fs/path directory (str name ".txt")))
                           problem (when-not (str/blank? output)
-                                    (try (files/write-private! file output) nil
+                                    (try (bfs/write-private! file output) nil
                                          (catch Exception e (or (ex-message e) (str e)))))]
                       (cond
                         (str/blank? output)

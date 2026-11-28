@@ -80,6 +80,13 @@
   (testing "every option bb run takes before search terms, bb gumshoe takes too"
     (is (every? (set (keys (:spec @#'main/gumshoe-spec))) (keys (:spec @#'main/run-spec))))))
 
+(defn- briko-source
+  "The directory of this run's classpath holding briko's sources, which
+   gumshoe's libraries require."
+  []
+  (some #(when (fs/exists? (fs/path % "briko" "edn.clj")) %)
+        (str/split (System/getProperty "java.class.path") #":")))
+
 (defn- bb-in
   [dir path & args]
   (let [{:keys [out err exit]} (apply process/shell {:dir (str dir) :out :string :err :string :continue true
@@ -102,8 +109,9 @@
       (spit (str (fs/path bin "fzf")) "#!/bin/sh\nhead -n 1\n")
       (fs/set-posix-file-permissions (fs/path bin "fzf") "rwxr-xr-x")
       (spit (str (fs/path casebook "bb.edn"))
-            (format "{:paths [%s \"runbooks\"]\n :tasks {gumshoe {:requires ([gumshoe.main :as main])\n :task (System/exit (main/front-door *command-line-args*))}}}"
-                    (pr-str (relative "libraries"))))
+            (format "{:paths [%s %s \"runbooks\"]\n :tasks {gumshoe {:requires ([gumshoe.main :as main])\n :task (System/exit (main/front-door *command-line-args*))}}}"
+                    (pr-str (relative "libraries"))
+                    (pr-str (relative (briko-source)))))
       (testing "an option before the search terms"
         (let [{:keys [exit out err]} (bb-in casebook path "gumshoe" "--dry-run" "echo")]
           (is (zero? exit) err)
