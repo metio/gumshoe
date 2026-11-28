@@ -388,7 +388,8 @@
         why #(try (registry/register! %1 %2) nil (catch clojure.lang.ExceptionInfo e (ex-message e)))]
     (is (re-find #"qualified keyword" (why :str ok)))
     (is (re-find #"registers no :fn" (why :gumshoe.dsl-test/a (dissoc ok :fn))))
-    (is (re-find #"has the kind :effect" (why :gumshoe.dsl-test/a (assoc ok :kind :effect))))
+    (is (re-find #"has the kind :frobnicate" (why :gumshoe.dsl-test/a (assoc ok :kind :frobnicate))))
+    (is (re-find #"is an effect type - register it with gumshoe.effect/register-effect-type!" (why :gumshoe.dsl-test/a (assoc ok :kind :effect))))
     (is (re-find #"vector of strings" (why :gumshoe.dsl-test/a (assoc ok :args [:x]))))
     (is (re-find #"has no :doc" (why :gumshoe.dsl-test/a (dissoc ok :doc))))
     (is (nil? (why :gumshoe.dsl-test/joined ok)))

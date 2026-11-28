@@ -840,7 +840,12 @@ mostly data:
   appeared after the confirmation refuses the change, a read past `:max`
   (25) refuses it before asking, and an empty read is done. `:pin [{:type
   … :name …}]` pins objects other than the subject, and `:problems` refuses
-  with every message its entries give.
+  with every message its entries give. `[:effect <type> arg …]` names an
+  effect type registered with `gumshoe.effect/register-effect-type!` and
+  its `:args` (a file write, a commit), on the subject or inside an
+  `:each`; its arguments are expressions that never read, the confirmation
+  and `--dry-run` show its `:describe`, and a type not registered with
+  `:destructive? false` asks for the typed yes and a `:recovery`.
   Prefer a Clojure book for anything an operator relies on until the
   vocabulary is reviewed. Declare the target with its `:type` (or a registered `:parse`;
   add `:compare :spec` for a target such as `"nodes"` that has no generation), the

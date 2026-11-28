@@ -50,9 +50,11 @@
      :confirm        {:action \"...\" :destructive? bool :separately? bool}
      :items          [:call <:items function> ..] or [\"template\" ..]
      :announce       \"template\", or false for a change nobody needs to hear of
-     :effect         [[:kubectl <verb> {..}] ..] on the picked object, and
-                     [:each <read> {..} [:kubectl <verb> {..}] ..] on every
-                     object a read returned, see below; required
+     :effect         [[:kubectl <verb> {..}] ..] on the picked object,
+                     [:effect <registered type> arg ..] for an effect type
+                     registered with gumshoe.effect/register-effect-type!,
+                     and [:each <read> {..} <effect> ..] on every object a
+                     read returned, see below; required
      :recovery       \"template\" printed when the change fails partway
      :opt-out        {safeguard \"why\"}, see below
    Any other key of the change, its target, state, confirmation, refusals,
@@ -135,7 +137,24 @@
                                   a nil value removes the annotation
      [:kubectl :delete]           destructive; does not wait, the post-check does
 
-   [:each <read> {:state {..} :max n} <effect> ..] applies the effects to
+   [:effect <op> arg ..] names an effect type a library registered with
+   gumshoe.effect/register-effect-type!, such as one writing a file or a
+   commit, and hands its :perform the arguments as [op value ..]. The type
+   must be registered, and name its :args, by the time the change
+   compiles; compile refuses a built-in op, an unregistered type (listing
+   the registered ones, gumshoe.dsl.registry/effects) and a wrong count of
+   arguments. The arguments are expressions of this place - inside an
+   :each also [:each & path], the object acted on - and never reads:
+   every value comes from :reads, :values or the pick, computed before the
+   confirmation, so what the confirmation shows is what :perform gets.
+   The confirmation lists each registered effect as its :describe renders
+   it, after the objects, and --dry-run shows the same lines. A type is
+   destructive unless its registration says :destructive? false, so it
+   asks for the typed yes and a :recovery as a delete does. Its post-check
+   is the :state of the change or of its :each, as for a kubectl effect.
+
+   [:each <read> {:state {..} :max n} <effect> ..] applies the effects -
+   kubectl or registered - to
    every object a :reads entry returned, in the order read; <read> is
    :name, or [:name ..] for several reads taken together, each object once.
    The read is a [:list ..], [:get ..] (no object, nothing to act on),
@@ -144,7 +163,8 @@
    effects act on the object, [:each & path] reads it, and [:field ..]
    judges it. :state {:holds predicate | :absent :says \"template\" :timeout
    :interval} says what holds for each object once the change took effect;
-   it is required unless every effect deletes, where it is :absent. :max
+   it is required unless every effect is a [:kubectl :delete], where it is
+   :absent. :max
    bounds how many objects the read may return (default-each-max). Per
    object, compile derives:
      the confirmation  lists every object the change acts on
@@ -188,8 +208,10 @@
                       safeguards report the subject's as :subject-not-acted-on
      skip when done   from :state and each :each's states; opt out with :done
      each object      an :each's pin, bound and post-check, with no opt-out
-     destructive confirmation  a :delete effect, also inside an :each,
-                      makes the confirmation ask for \"yes\" and marks
+     destructive confirmation  a :delete effect or a registered effect
+                      type that does not say :destructive? false, also
+                      inside an :each, makes the confirmation ask for
+                      \"yes\" and marks
                       the compiled :effect destructive
                       (gumshoe.change/destructive);
                       :destructive? false beside one is refused in the
@@ -670,14 +692,80 @@
   [k]
   (if (keyword? k) (subs (str k) 1) k))
 
+(declare kubectl-effect-of)
+
+(defn- registered-effect-type!
+  "The registration of the effect type op names at path, taking n
+   arguments: one registered with gumshoe.effect/register-effect-type!
+   that names its :args."
+  [path op n]
+  (let [{:keys [args] :as entry} (effect/effect-type op)
+        known (keys (registry/effects))]
+    (cond
+      (not (keyword? op))
+      (invalid! path (format "an effect type is named by a keyword, not %s" (pr-str op)))
+      (effect/built-in-op? op)
+      (invalid! path (format "%s is built into gumshoe.effect, and a change names no built-in op - write [:kubectl <verb> {..}], or register an effect type" op))
+      (nil? entry)
+      (invalid! path (format "%s is no registered effect type - register it with gumshoe.effect/register-effect-type! before the change compiles, or name one of %s"
+                             op (if (seq known) (known-words known) "none, since nothing registered one with :args")))
+      (not (vector? args))
+      (invalid! path (format "%s names no :args, so its arguments cannot be counted - register it with :args [\"name\" ..]" op))
+      (not= n (count args))
+      (invalid! path (format "%s takes %d argument(s) (%s), not %d" op (count args) (str/join ", " args) n))
+      :else entry)))
+
+(defn- registered-effect-of
+  "A registered effect form [:effect op arg ..] at path as (fn [env] ->
+   [op value ..]). Its arguments are expressions over what was read and
+   computed before the plan, so the effect gets values: it reads nothing
+   through the change, and the confirmation shows the very arguments its
+   :perform runs with."
+  [path [_ op & args] place]
+  (registered-effect-type! (conj path 1) op (count args))
+  (let [args (vec (map-indexed (fn [i a] (expr (conj path (+ 2 i)) a place)) args))]
+    (fn [env] (into [op] (map #(% env)) args))))
+
+(defn- effect-form?
+  [form]
+  (and (vector? form) (#{:kubectl :effect} (first form))))
+
+(defn- registered-form?
+  [form]
+  (and (vector? form) (= :effect (first form))))
+
+(defn- form-verb
+  "What an effect form does, as the confirmation names it: the kubectl verb,
+   or the registered effect type."
+  [form]
+  (when (vector? form) (second form)))
+
+(defn- destructive-form?
+  "Whether an effect form destroys what it acts on: a kubectl verb of
+   destructive-verbs, or a registered effect type that does not say
+   :destructive? false - including one nobody registered, which compile
+   refuses anyway."
+  [form]
+  (cond
+    (registered-form? form) (:destructive? (effect/effect-type (second form)) true)
+    (and (vector? form) (= :kubectl (first form))) (contains? destructive-verbs (second form))
+    :else false))
+
 (defn- effect-of
-  "A kubectl effect form at path as (fn [env] -> effect), acting on the
-   object (ref env) names: the subject's ref, or inside an :each the ref of
-   the object acted on."
+  "An effect form at path as (fn [env] -> effect). A kubectl effect acts
+   on the object (ref env) names: the subject's ref, or inside an :each
+   the ref of the object acted on. A registered effect acts on what its
+   arguments name."
   [path form place ref]
-  (when-not (and (vector? form) (= :kubectl (first form)))
-    (invalid! path (format "%s is no effect - an effect is [:kubectl <verb> {..}] with a verb of %s, or [:each <read> {..} [:kubectl <verb> {..}] ..]"
+  (when-not (effect-form? form)
+    (invalid! path (format "%s is no effect - an effect is [:kubectl <verb> {..}] with a verb of %s, [:effect <registered type> arg ..], or [:each <read> {..} <effect> ..]"
                            (pr-str form) (known-words (keys verbs)))))
+  (if (registered-form? form)
+    (registered-effect-of path form place)
+    (kubectl-effect-of path form place ref)))
+
+(defn- kubectl-effect-of
+  [path form place ref]
   (let [[_ verb opts & more] form
         opts (or opts {})]
     (when (seq more) (invalid! path (format "%s takes a verb and one map of its options" (pr-str form))))
@@ -794,6 +882,12 @@
    confirmation."
   25)
 
+(defn- kubectl-delete?
+  "Whether an effect form is [:kubectl :delete], whose object is gone once
+   it took effect."
+  [form]
+  (and (vector? form) (= :kubectl (first form)) (= :delete (second form))))
+
 (defn each-form?
   "Whether an effect form is an :each."
   [form]
@@ -897,17 +991,17 @@
         offset (if opts? 3 2)
         _ (check-keys! (conj path 2) opts #{:state :max} "the options of an :each")
         _ (when (empty? forms)
-            (invalid! path "an :each names one or more effects after its read, as [:each :name {..} [:kubectl <verb> {..}] ..]"))
+            (invalid! path "an :each names one or more effects after its read, as [:each :name {..} <effect> ..]"))
         _ (doseq [[j f] (map-indexed vector forms) :when (each-form? f)]
-            (invalid! (conj path (+ offset j)) "an :each acts on objects with kubectl effects, not with another :each"))
+            (invalid! (conj path (+ offset j)) "an :each acts on objects with kubectl or registered effects, not with another :each"))
         max (if (contains? opts :max)
               (let [m (:max opts)]
                 (when-not (pos-int? m)
                   (invalid! (conj path 2 :max) (format ":max is a whole number of objects above zero, not %s" (pr-str m))))
                 m)
               default-each-max)
-        verbs (mapv #(when (vector? %) (second %)) forms)
-        deletes? (some destructive-verbs verbs)
+        verbs (mapv form-verb forms)
+        deletes? (some kubectl-delete? forms)
         state (:state opts)
         each-place (assoc (place scope "an :each" (conj pure-roots :each) #{:value}) :field-root :each)
         effects (vec (map-indexed (fn [j f] (effect-of (conj path (+ offset j)) f each-place :each-ref)) forms))
@@ -934,7 +1028,7 @@
      :snapshot (keyword "gumshoe.dsl" (str "each-" i))
      :max max
      :verbs verbs
-     :deletes-only? (every? destructive-verbs verbs)
+     :deletes-only? (every? kubectl-delete? forms)
      :absent? absent?
      :holds holds
      :says says
@@ -1203,7 +1297,7 @@
   (check-names! [:values] values #{})
   (check-names! [:reads] reads (set (keys values)))
   (when-not (and (vector? effect) (seq effect))
-    (invalid! [:effect] "the change names one or more effects, as [[:kubectl <verb> {..}] ..] or [[:each <read> {..} [:kubectl <verb> {..}] ..] ..]"))
+    (invalid! [:effect] "the change names one or more effects, as [[:kubectl <verb> {..}] ..], [[:effect <registered type> arg ..] ..] or [[:each <read> {..} <effect> ..] ..]"))
   (let [select (select-of target)
         options (try (select/options select (or options {}))
                      (catch clojure.lang.ExceptionInfo e (invalid! [:options] (ex-message e))))
@@ -1239,9 +1333,9 @@
         destroying (first (keep-indexed (fn [i form]
                                           (cond
                                             (each-form? form)
-                                            (when (some #(and (vector? %) (destructive-verbs (second %))) (each-effect-forms form))
+                                            (when (some destructive-form? (each-effect-forms form))
                                               (format "%s at %s" (pr-str form) (pr-str [:effect i])))
-                                            (and (vector? form) (destructive-verbs (second form)))
+                                            (destructive-form? form)
                                             (format "%s at %s" (pr-str form) (pr-str [:effect i]))))
                                         effect))
         destructive-effect? (some? destroying)
@@ -1288,6 +1382,28 @@
           subject-refusal (refusal-of refuse target scope (state-judged state state-pred))
           subject-verify (when state (post-checks-of state (or state-pred (constantly true)) says))
           own-items (items-of items scope)
+          registered-ops (vec (distinct (for [form effect
+                                              f (if (each-form? form) (each-effect-forms form) [form])
+                                              :when (registered-form? f)]
+                                          (second f))))
+          registered? (boolean (seq registered-ops))
+          plan-of (fn [ctx] (let [env {:ctx ctx :object (:object ctx)}]
+                              (apply effect/plan (mapcat (fn [{:keys [subject each]}]
+                                                           (if each (each-effects each ctx) [(subject env)]))
+                                                         parts))))
+          ;; the confirmation lists the subject or the change's own items,
+          ;; every object an :each acts on, and what each registered effect
+          ;; will do as its :describe says it
+          items-fn (when (or own-items (seq eaches) registered?)
+                     (fn [ctx]
+                       (vec (concat (if own-items
+                                      (own-items ctx)
+                                      (select/items (:mode select) (:target ctx)))
+                                    (mapcat #(each-items % ctx) eaches)
+                                    (when registered?
+                                      (->> (plan-of ctx)
+                                           (remove #(effect/built-in-op? (first %)))
+                                           (map effect/describe)))))))
           all-values (into compiled-values
                            (map (fn [each] [(:snapshot each) (fn [ctx] ((:members each) ctx))]))
                            eaches)
@@ -1301,10 +1417,7 @@
                                    subject-refusal)
                         :confirm (cond-> {:action (:action confirm) :destructive? destructive?}
                                    (contains? confirm :separately?) (assoc :separately? (:separately? confirm)))
-                        :effect (cond->> (fn [ctx] (let [env {:ctx ctx :object (:object ctx)}]
-                                                     (apply effect/plan (mapcat (fn [{:keys [subject each]}]
-                                                                                  (if each (each-effects each ctx) [(subject env)]))
-                                                                                parts))))
+                        :effect (cond->> plan-of
                                   ;; the mark keeps the change destructive however it is
                                   ;; composed later; an opted-out delete carries none,
                                   ;; so normalize accepts its :destructive? false
@@ -1312,13 +1425,7 @@
                  title (assoc :title title)
                  (seq compiled-reads) (assoc :reads compiled-reads)
                  (seq all-values) (assoc :values all-values)
-                 (and own-items (empty? eaches)) (assoc :items own-items)
-                 ;; the confirmation lists every object an :each acts on
-                 (seq eaches) (assoc :items (fn [ctx]
-                                              (vec (concat (if own-items
-                                                             (own-items ctx)
-                                                             (select/items (:mode select) (:target ctx)))
-                                                           (mapcat #(each-items % ctx) eaches)))))
+                 items-fn (assoc :items items-fn)
                  (string? announce) (assoc :announce (ctx-template [:announce] announce pure))
                  (false? announce) (assoc :announce false)
                  (and subject-verify (empty? eaches)) (assoc :verify subject-verify)
@@ -1351,6 +1458,8 @@
                                     recovery :on
                                     :else {:off (:recovery opt-out)})}
                    pin (assoc :pins :on)
+                   registered? (assoc :effects (mapv (fn [op] {:type op :destructive? (:destructive? (effect/effect-type op))})
+                                                     registered-ops))
                    (seq eaches) (assoc :each (mapv (fn [{:keys [names max]}]
                                                      {:over names :max max :pin :on :post-check :on :grown :refused})
                                                    eaches)))})))
@@ -1367,7 +1476,8 @@
 
 (defn safeguards-of
   "The safeguards a compiled change got, each :on, :not-destructive, or
-   {:off \"why\"}."
+   {:off \"why\"}, and under :effects every registered effect type it
+   names, as {:type op :destructive? bool}."
   [compiled]
   (::safeguards (meta compiled)))
 
